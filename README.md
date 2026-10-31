@@ -147,6 +147,22 @@ against your own Discord server:
 `/deploy` also needs `GITHUB_REPO` and `GITHUB_DISPATCH_TOKEN` (a fine-grained token with
 Actions write on this repository only); without them it says deploy is not configured.
 
+### Launcher
+
+`realm-launcher` (spec 04) is the one binary a player downloads. It reads the realm's
+`manifest.json` from GitHub Releases, installs the client and the content package
+under `~/.local/share/n3e-realm/`, updates itself, and starts the client. A realm other
+than the default:
+
+```
+cargo build --release -p realm-launcher
+target/release/realm-launcher --add-realm my-fork https://example.org/realm/manifest.json
+target/release/realm-launcher --realm my-fork
+```
+
+`--check` lists what would change; `--no-update` starts what is installed. CD publishes
+the releases it reads (M5); until then `tests/launcher_live.py` serves its own.
+
 ### Admin API
 
 A running server also listens on `N3E_ADMIN_LISTEN` (default `127.0.0.1:7780`; loopback or
@@ -175,8 +191,8 @@ every local client shares one address. Counters are under `connections` in
 The engine arrived by a one-time, history-free import of the n3e engine at the commit
 pinned in `UPSTREAM.md` (spec 09); this repository is now its only home. The realm-specific work follows the roadmap: the admin API
 (M1), connection hardening (M2), Discord login with sessions (M3) and the Discord bot
-(M6, minus the world commands that wait for M5b's catalog) are in; launcher, CD and
-deploy follow.
+(M6, minus the world commands that wait for M5b's catalog) and the launcher (M4,
+Linux; Windows is M4b) are in; CD and deploy follow.
 
 ## Licence
 

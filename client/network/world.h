@@ -67,6 +67,9 @@ struct WorldState {
   uint64_t login_results = 0;
   // Spec 02: why an operator ended the session, shown once the connection closes.
   std::string disconnect;
+  // Spec 04 / Q10: the realm refused this client's protocol or content at the
+  // handshake; the client exits 3 so the launcher updates it.
+  bool update_required = false;
   // PQ-406 (D-209): the last chat, private message, rest or admin refusal, shown
   // in the world on the HUD's message line, and how many have arrived (so the
   // same text again still counts as new).
@@ -78,6 +81,12 @@ struct WorldState {
   uint32_t operator_notice_level = 0;
   uint64_t operator_notices = 0;
 };
+// Spec 04 / Q10 (KO-FINDINGS §5): what the player reads when the realm refuses this
+// client's protocol or content. The realm does not say which version it wants.
+inline std::string update_text(const Release &r, const std::string &detail) {
+  return "This client (protocol " + std::to_string(r.protocol) + ", content " + r.hash.substr(0, 12) +
+         ") does not match the realm (" + detail + "). Close this window and run the launcher to update.";
+}
 // PQ-405 (D-208): show one server refusal. The general status line always takes
 // its detail; once a session exists, only the feature whose request it names in
 // Error.request (that request's Envelope field number) takes it too. A movement,

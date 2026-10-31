@@ -32,6 +32,9 @@ it in the pre-phase.
 Exit `3` on `VERSION`/`CONTENT` handshake refusal, with KO-derived wording
 (`KO-FINDINGS.md` §5). Engine item after migration; until then the Launcher's "any
 non-zero exit within 10 s → refetch once" heuristic applies. **Default:** as stated.
+**Implemented (M4):** the client exits `3` on either refusal and prints the reason and
+"run the launcher to update"; the Launcher recognises only `3`, so the 10 s heuristic
+was never needed.
 ### Q11 — Raw KO asset tarball hosting
 
 Resolved to option C (spec 10): one immutable `.tar.zst` (~740 MB), sha256-pinned,
@@ -247,3 +250,33 @@ call.
 (M6):** twilight 0.16 (gateway, HTTP, model, util), pinned exactly, with the lock
 resolved for 1.85 (`CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback`). Moving to 0.17
 waits for a toolchain bump.
+
+### Q42 — An old launcher run by hand after a self-update
+
+A self-update installs the new binary under `launcher/<v>/` and swaps `current`, but
+the player's shortcut may still point at the binary they downloaded. **Default taken
+(M4):** every run first checks `current`; if it names a newer version, the old binary
+execs it with the same argv (spec 04 "Behaviour" step 0). `--check` hands over too, so
+it reports for the launcher that will actually run.
+
+### Q43 — Plain http for test realms
+
+Spec 04 says TLS; the suites need a file server they can stop and corrupt. **Default
+taken (M4):** manifest, index and artifact URLs must be `https://`, except plain
+`http://` to a host that resolves to loopback. There is no test-only switch, so a
+release build cannot be talked into plain http off the machine.
+
+### Q44 — `--check` when the releases cannot be reached
+
+`--check` "exits 0/1"; acceptance test 8 wants it to fail offline. **Default taken
+(M4):** `0` nothing to change, `1` something to change, `10` (the network code) when the
+manifest or a needed index cannot be fetched. It never falls back to what is installed.
+
+### Q45 — The roadmap's "test Release"
+
+M4 lists "a hand-written manifest in a test Release". Publishing a GitHub Release is
+outward-facing and the default manifest URL is `releases/latest`, which a test Release
+would become. **Default taken (M4):** the suite publishes its releases on a loopback
+file server; a GitHub test Release (a pre-release, so `latest` is untouched) waits for
+the maintainer's go-ahead. The roadmap's done-when (a clean machine downloads one
+binary and connects) needs a real Release, so it closes with M5's first publish.

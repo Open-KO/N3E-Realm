@@ -2,6 +2,7 @@
 name = "realm-launcher"
 version = "0.0.1"
 edition = "2021"
+rust-version = "1.85"
 license = "MIT"
 description = "N3E Realm launcher: keeps the client and content current, starts the game"
 publish = false
@@ -9,6 +10,13 @@ publish = false
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# HTTPS with the operating system's trust store (spec 04 "Security"); pure Rust, so
+# the Linux binary can be static (musl).
+ureq = { version = "3", default-features = false, features = ["rustls", "platform-verifier"] }
+sha2 = "0.10"
+tar = { version = "0.4", default-features = false }
+ruzstd = "=0.8.1"
+fd-lock = "4"
 
 [profile.release]
 lto = true

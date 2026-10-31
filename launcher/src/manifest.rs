@@ -90,6 +90,46 @@ pub const fn platform() -> &'static str {
     }
 }
 
+/// A version names a directory: letters, digits, `.`, `-`, `_`, at most 64, not
+/// starting with `.`.
+pub fn valid_version(v: &str) -> bool {
+    !v.is_empty()
+        && v.len() <= 64
+        && !v.starts_with('.')
+        && v.bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-' || b == b'_')
+}
+
+/// Whether version `a` is newer than `b`: dot-separated numeric parts compared as
+/// numbers (`0.10.0` > `0.9.1`), anything after a `-` compared as text.
+pub fn newer(a: &str, b: &str) -> bool {
+    fn key(v: &str) -> (Vec<u64>, &str) {
+        let (numbers, rest) = v.split_once('-').unwrap_or((v, ""));
+        let parts = numbers
+            .split('.')
+            .map(|p| p.parse::<u64>().unwrap_or(0))
+            .collect();
+        (parts, rest)
+    }
+    let (na, ra) = key(a);
+    let (nb, rb) = key(b);
+    let len = na.len().max(nb.len());
+    let pad = |n: &Vec<u64>| {
+        let mut n = n.clone();
+        n.resize(len, 0);
+        n
+    };
+    (pad(&na), ra) > (pad(&nb), rb)
+}
+
+/// The schema a manifest declares, read before the rest is trusted to parse.
+pub fn schema_of(bytes: &[u8]) -> Option<u64> {
+    serde_json::from_slice::<serde_json::Value>(bytes)
+        .ok()?
+        .get("schema")?
+        .as_u64()
+}
+
 #[derive(Debug, PartialEq)]
 pub enum IndexError {
     UnsafePath(String),
@@ -167,6 +207,22 @@ mod tests {
                 size: 1,
             }],
         }
+    }
+
+    #[test]
+    fn versions() {
+        assert!(newer("0.3.1", "0.3.0"));
+        assert!(newer("0.10.0", "0.9.9"));
+        assert!(newer("1.0", "0.99.99"));
+        assert!(!newer("0.3.0", "0.3.0"));
+        assert!(!newer("0.3", "0.3.0"));
+        assert!(newer("2026.10.31-a", "2026.10.30-z"));
+        assert!(valid_version("2026.10.30-abc1234"));
+        for bad in ["", ".hidden", "a/b", "../x", "a b"] {
+            assert!(!valid_version(bad), "{bad}");
+        }
+        assert_eq!(schema_of(br#"{"schema": 2, "anything": []}"#), Some(2));
+        assert_eq!(schema_of(b"[]"), None);
     }
 
     #[test]

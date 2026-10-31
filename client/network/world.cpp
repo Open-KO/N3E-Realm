@@ -173,6 +173,13 @@ void WorldClient::run(std::stop_token stop) {
     hs->set_content(release.hash);
     t.send(h);
     auto response = t.receive();
+    if (response.has_error() && (response.error().code() == Error::VERSION ||
+                                 response.error().code() == Error::CONTENT)) {
+      std::lock_guard lock(mutex);
+      state.update_required = true;
+      state.status = update_text(release, response.error().detail());
+      return;
+    }
     if (response.has_error())
       throw std::runtime_error(response.error().detail());
     check(response.has_snapshot(), "handshake reply");

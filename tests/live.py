@@ -313,6 +313,11 @@ SUITES = [
           graphical="PASS client expiry: the server says expired, the client drops session.json and runs the browser flow"),
     # Spec 05 (M6): the Discord bot against stand-ins for Discord's gateway/REST and GitHub.
     suite("bot_live", "python", "tests/bot_live.py"),
+    # Spec 04 (M4): the launcher against releases on a loopback file server; the
+    # graphical branch runs the real client from a release against a native server.
+    suite("launcher_live", "python", "tests/launcher_live.py",
+          graphical="PASS graphical update required: the realm refuses other content, the real client exits 3, "
+                    "the launcher exits 20"),
     # PQ-405 (D-208): refusals name their request; the client routes them by it.
     # PQ-406 (D-209): chat and whisper refusals reach the HUD message line;
     # PQ-407 (D-210): its log keeps two rows, each in its kind's colour;

@@ -72,6 +72,13 @@ routes). A real Discord application round trip is the maintainer's manual check
 **Done when:** on a clean machine, downloading one binary and running it ends with the
 game client connected to the realm.
 
+Evidence: `tests/launcher_live.py` (spec 04 tests 1–11 against releases on a loopback
+file server; its graphical branch installs the real test client and the demo package
+from a release and connects to a native server, and a realm with other content makes
+the client exit 3 and the launcher 20). The client's exit 3 is in `client/network/world.cpp`
+and `client/render/viewer.cpp`. Open: the done-when needs a published Release (Q45),
+which M5 produces; the static musl build is unverified here (no musl C compiler).
+
 ## M4b — Windows client (spec 04 §Build, spec 06 §smoke)
 
 - CMake: `find_package(SDL3 CONFIG)` via vcpkg on Windows; keep pkg-config on Linux.

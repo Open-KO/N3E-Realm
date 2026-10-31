@@ -95,25 +95,35 @@ local store.
 Ships with the default profile. `realm-launcher --realm my-fork` or `--add-realm NAME URL`.
 The profile key is the Launcher's name for it; `manifest.realm.id` must match on first
 use and is then pinned (a manifest that changes `id` is refused — it stops a hijacked
-URL from silently re-pointing a profile).
+URL from silently re-pointing a profile). The pin is stored in the profile itself:
+`"my-fork": { "manifest": "…", "id": "fork-realm" }`. Profile names and realm ids are
+`[a-z0-9-]`, at most 64, not starting with `-` (they name directories).
+
+The default profile's URL is compiled in (`REALM_DEFAULT_MANIFEST` at build time; a
+fork builds with its own). Manifest, index and artifact URLs must be `https://`; plain
+`http://` is accepted only when the host resolves to loopback (test realms and the
+suites' file servers).
 
 ### Install layout (Linux)
 
 ```
 $XDG_DATA_HOME/n3e-realm/
-  launcher/current -> launcher/<version>/realm-launcher
+  launcher/current -> launcher/<version>/realm-launcher   # Windows: a file naming <version>
   client/<client.version>/n3e-client
   store/<sha256>                            # content-addressed file store, shared by all realms
   realms/<realm.id>/
     content/<content.hash>/                 # assembled package: hard links into store/
+    content/<content.hash>.index.json       # its verified index, for pruning store/
     realm.json                              # {id, name, host, port, discord_client_id} for the client (id names session.json's folder, spec 02)
     manifest.json                           # last manifest successfully applied
-    state.json                              # {installed: {client, content}, etag, last_check}
+    state.json                              # {installed: {client, content}, etag, last_check, clients, contents}
+  lock                                      # held by the running Launcher
 $XDG_CACHE_HOME/n3e-realm/downloads/        # partial downloads
 ```
 
-Keep the **two** most recent client versions and content hashes per realm; prune
-`store/` entries no assembled package references.
+Keep the **two** most recent client versions and content hashes per realm (`state.json`'s
+`clients` and `contents`, newest first); remove client versions no realm keeps, and
+`store/` entries no kept package's index references.
 
 ### CLI
 
@@ -121,15 +131,22 @@ Keep the **two** most recent client versions and content hashes per realm; prune
 realm-launcher [--realm NAME]       # normal: update if needed, start client
 realm-launcher --check              # print what would change, exit 0/1, no changes
 realm-launcher --no-update          # start whatever is installed (offline play / debugging)
+realm-launcher --no-start           # update everything, start nothing (CI smoke)
+realm-launcher --version            # "realm-launcher <version> (<platform>)"
 realm-launcher --add-realm NAME URL # add a profile
 realm-launcher --manifest URL       # one-off manifest URL (dev realms; not saved)
 realm-launcher --ca PATH            # pass through to the client (dev only)
 ```
 
-Exit codes: `0` client exited normally; `10` network error with nothing installed;
+Exit codes: `0` client exited normally; `2` usage (unknown option, bad profile file);
+`10` network error with nothing installed;
 `11` verification failed; `12` manifest schema unsupported; `20` client exited with
 "update required" and the Launcher could not fetch a newer manifest (realm ahead of
-Releases — this is a CD ordering bug, say so).
+Releases — this is a CD ordering bug, say so). Any other client exit code is passed
+through. `--check` exits `0` when nothing would change, `1` when something would, and
+`10` when the manifest or index cannot be fetched (it never falls back to what is
+installed: it cannot tell). A second Launcher while one runs prints "realm-launcher is
+already running" and exits `0`.
 
 ### Starting the client
 
@@ -143,12 +160,18 @@ keeps `--connect` for dev). The Launcher passes nothing about authentication; th
 client owns `session.json` (spec 02).
 
 Client exit codes the Launcher recognises: `0` normal; `3` "update required"
-(handshake refused with `VERSION` or `CONTENT`) — proposed convention, see Q10. On
-`3`, the Launcher re-fetches the manifest once; if it changed, update and restart the
-client once; if not, exit `20` with a clear message.
+(handshake refused with `VERSION` or `CONTENT`, Q10). The client prints why to stderr
+("This client (protocol N, content <12 hex>) does not match the realm (…). Close this
+window and run the launcher to update.") and closes. On `3`, the Launcher re-fetches
+the manifest once; if it changed, update and restart the client once; if not, exit
+`20` with a clear message.
 
 ## Behaviour
 
+0. **Hand-over.** If `launcher/current` names a version newer than the running binary
+   (an old copy run by hand after a self-update), exec that one with the same argv.
+   `N3E_LAUNCHER_REEXEC` marks a re-executed process, which never hands over or
+   self-updates again.
 1. **Self-check.** Read `state.json`. If the running binary's version < the last
    applied manifest's `launcher.min_version`, do the self-update first (step 3).
 2. **Fetch manifest.** `GET` with `If-None-Match` from `state.json`. On 304 or network
@@ -157,7 +180,11 @@ client once; if not, exit `20` with a clear message.
 3. **Self-update.** If `launcher.version` > running version: download to
    `downloads/`, verify sha256 + size, `chmod 755`, place under `launcher/<v>/`, swap
    the `current` symlink atomically, re-exec the new binary with the same argv. Never
-   update the launcher *and* the client in one process life — re-exec first.
+   update the launcher *and* the client in one process life — re-exec first. Linux
+   `exec`s in place; Windows starts the new binary as a child, waits, and passes its
+   exit code on (the parent keeps the lock; `N3E_LAUNCHER_LOCK_HELD` tells the child).
+   A failed self-update is a warning unless `min_version` requires it (then exit `11`
+   with the manual download URL).
 4. **Client.** If `client.version` not installed: download, verify, extract into
    `client/<v>/` (extract to a temp dir, then rename).
 5. **Content.** If `content.hash` not installed: fetch `index.json`, verify
@@ -171,6 +198,10 @@ client once; if not, exit `20` with a clear message.
 
 Downloads: resume with `Range` if a partial exists and the server supports it; otherwise
 restart. Retry 3× with backoff. Always verify after download; never trust a partial.
+A body longer than the manifest's `size` is cut off and fails; manifests are read up to
+1 MiB, content indexes up to 16 MiB. The client archive is extracted with regular files
+and directories only (no links, devices or absolute/`..` paths); files get mode 755 or
+644.
 Progress to stdout (and a minimal window if a GUI toolkit is cheap — not required).
 
 ## Failure modes
@@ -196,7 +227,11 @@ Progress to stdout (and a minimal window if a GUI toolkit is cheap — not requi
 ## Build
 
 Single static binary per platform: Rust, `x86_64-unknown-linux-musl` and
-`x86_64-pc-windows-msvc`. No runtime deps. Unsigned for now (Q26); the player docs
+`x86_64-pc-windows-msvc`. No runtime deps. HTTP is `ureq` with rustls and the platform
+verifier (the OS trust store); zstd is the pure-Rust `ruzstd` (pinned `=0.8.1`, the
+last release that builds on the pinned 1.85 toolchain). The musl build needs a musl C
+compiler for `ring` (`musl-tools` on Ubuntu). The version is the crate version unless
+`REALM_LAUNCHER_VERSION` is set at build time (CD stamps the release's). Unsigned for now (Q26); the player docs
 explain the SmartScreen prompt. Windows paths: `%LOCALAPPDATA%\n3e-realm\` for data and
 cache, `%APPDATA%\n3e-realm\` for config, replacing the XDG dirs above.
 
@@ -225,6 +260,14 @@ by CI's smoke job).
 10. **Lock.** Two concurrent launches → one client process.
 11. **Profiles.** `--add-realm` a second manifest; `--realm` it; the client receives that
     realm's `realm.json`; a manifest whose `realm.id` changes is refused.
+
+Evidence: `tests/launcher_live.py` (`make live` suite `launcher_live`) runs 1–11 against
+releases on a loopback file server, with a stub client, plus refusals of an unknown
+schema, a client archive entry `../evil`, and plain http off this machine. Its graphical
+branch puts the real test client and the `demo` package in a release, starts a native
+server, and checks the client connects and starts the Discord login; then it publishes
+`demo-alt` content, which the realm refuses: the real client exits `3`, the Launcher
+`20`.
 
 ## Open questions
 

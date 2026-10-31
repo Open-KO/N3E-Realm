@@ -1160,6 +1160,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     ImGui_ImplOpenGL3_Init("#version 330");
 #endif
     bool run = true;
+    int exit_code = 0;
     float offset = 0, light = .85, cx = 0, cy = 0;
 #if TOOLS
     n3e::Editor editor;
@@ -2251,6 +2252,12 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           SDL_StopTextInput(w);
         profile_mark(0);
         world = network->poll();
+        // Spec 04 / Q10: exit 3 so the launcher fetches the realm's release.
+        if (world.update_required && run) {
+          std::cerr << world.status << "\n";
+          exit_code = 3;
+          run = false;
+        }
         if (discord_flow && entry < 4) {
 #if N3E_HARNESS
           // A suite's client starts the Discord flow itself.
@@ -5096,7 +5103,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     SDL_GL_DestroyContext(ctx);
     SDL_DestroyWindow(w);
     SDL_Quit();
-    return 0;
+    return exit_code;
   } catch (const std::exception &e) {
     std::cerr << "viewer: " << e.what() << "\n";
     SDL_Quit();

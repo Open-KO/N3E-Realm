@@ -1,18 +1,13 @@
 //! realm-launcher — see `specs/04-launcher.md`.
-//!
-//! Skeleton: argument surface and manifest types only. Fetch/verify/install, realm
-//! profiles, self-update and the client hand-off are M4.
 
-use realm_launcher::manifest;
-
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+use realm_launcher::{manifest, run, VERSION};
 
 fn usage() -> ! {
     eprintln!(
         "realm-launcher [--realm NAME] [--check] [--no-update] [--no-start] \
          [--add-realm NAME URL] [--manifest URL] [--ca PATH] [--version]"
     );
-    std::process::exit(2)
+    std::process::exit(run::USAGE)
 }
 
 fn main() {
@@ -24,6 +19,12 @@ fn main() {
     if args.iter().any(|a| a == "-h" || a == "--help") {
         usage();
     }
-    eprintln!("realm-launcher {VERSION}: not implemented yet (see specs/04-launcher.md, M4)");
-    std::process::exit(10);
+    let options = match run::parse(&args) {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("realm-launcher: {e}");
+            usage();
+        }
+    };
+    std::process::exit(run::run(options));
 }

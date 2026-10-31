@@ -27,7 +27,7 @@ acting identity recorded in `admin_audit` as the token name (see "Audit identity
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `N3E_ADMIN_LISTEN` | `127.0.0.1:7780` | Must resolve to a loopback or RFC 1918 address; refuse to start otherwise. |
+| `N3E_ADMIN_LISTEN` | `127.0.0.1:7780` | Must resolve to a loopback or RFC 1918 address; refuse to start otherwise (`0.0.0.0` included; in compose, the server's static network address, spec 07, Q29). |
 | `REDIS_ADDRESS` | *(existing)* | Also used for `realm:events` and `realm:deploy:pending`. |
 
 ### Permissions
@@ -100,6 +100,11 @@ Talks to Postgres directly; needs no token. `mint` on an existing name → exit 
 - Unknown route `404`; method mismatch `405`; body limit 16 KiB; read timeout 5 s.
 - Token cache: verified tokens are cached in memory for 10 s so `status` polling is not
   a DB query per call; `revoke` therefore takes ≤ 10 s to bite (acceptable; documented).
+  An uncached token is looked up one at a time, bounded at 2 s; past that it is `401`, so
+  a database that stops answering holds one blocking thread, not one per request.
+- A route in this contract whose milestone has not landed (account routes: M3/M6; world
+  routes and `motd`: M5) answers `501 {"error":"not_implemented"}` after the permission
+  check, so the Bot can be written against the full table.
 
 ### Routes
 
@@ -114,10 +119,12 @@ Talks to Postgres directly; needs no token. `mint` on an existing name → exit 
   "uptime_s": 86400,
   "connections": { "...": "spec 01" },
   "deploy_pending": null,
-  "redis": true
+  "redis": true,
+  "events_dropped": 0
 }
 ```
-`players` = sockets past login (including character select). `ready` = the same
+`players` = sockets past login (including character select). `events_dropped` = events
+not written to `realm:events` (queue full or Redis down) since start. `ready` = the same
 predicate as `/ready`. `version` = build version baked at compile time (`git describe`,
 spec 06). `content_hash` = loaded package hash (`sha256(release.bin)`).
 
@@ -131,7 +138,10 @@ Emits `notice` (Discord via the Bot). With `in_game: true` (default) the server 
 broadcasts the text to every in-world session. `level` selects KO's two presentations
 (`KO-FINDINGS.md` §1–2): `info` → yellow **public notice** chat line (`#### NOTICE : %s
 ####`, the shutdown-countdown style); `warn` → bold **centre-screen banner** (the
-event-start style). The engine carries this as `Chat.notice` = 1 (line) or 2 (banner). `text` ≤ 500 chars (in-game
+event-start style). The engine carries this as `Chat.notice` = 1 (line) or 2 (banner).
+The client draws the text as sent: a notice line in yellow on the HUD's message line
+(or above the chat panel without a package HUD), and for 2 also a centre banner for 6 s;
+KO's `####` framing would be package data and is not drawn yet. `text` ≤ 500 chars (in-game
 copy truncated to 256 to fit the chat bound), no control characters. The CD countdown
 calls this once per minute (spec 06).
 
@@ -194,8 +204,9 @@ a preset; not exposed by the Bot in v1.
 
 `administration::execute` today authorises against an authenticated **character**'s
 roles and writes `admin_audit(account_id, character_id, …)`. Admin-token calls have no
-character. Add a nullable `token_name text` column to `admin_audit` and make
-`character_id` nullable **only for rows with `token_name` set** (CHECK). Authorisation
+character and no account. Add a nullable `token_name text` column to `admin_audit` and
+make `account_id` and `character_id` null **exactly for rows with `token_name` set**
+(CHECK; migration 024), with `(realm, token_name, request)` unique among them. Authorisation
 for token calls is the permission check at the route; the existing role check is
 bypassed, the existing audit and result-idempotency (`admin_results`) are **not**.
 
@@ -230,7 +241,7 @@ bounded queue (256); overflow drops with a counter, never blocks a tick.
 
 | Situation | Behaviour |
 |---|---|
-| Postgres down | Tokens not in the 10 s cache → `401`. CD treats non-200 `status` as "do not deploy". |
+| Postgres down | Tokens not in the 10 s cache → `401` within the 2 s lookup bound. CD treats non-200 `status` as "do not deploy". The realm itself fences once its 3 s lease lapses (D-142) and exits, so a cached token never outlives a real outage by much. |
 | Redis down | `status` `200` with `redis:false`, `deploy_pending:null`; events dropped with a counter; mutations still succeed. |
 | `N3E_ADMIN_LISTEN` public | Refuse to start. |
 | World op while draining | Allowed (a mod may want to clear a boss before restart). |
@@ -255,14 +266,15 @@ bounded queue (256); overflow drops with a counter, never blocks a tick.
    `admin_audit` row has `token_name`, null `character_id`. Muted client's chat is not
    relayed; the client receives one notice line explaining it.
 6b. `realm/notice` with `in_game: true` → every connected test client receives a
-   `Chat{notice:true}` with the text; `motd` PUT → a freshly selected character
+   `Chat{notice: 1|2}` with the text; `motd` PUT → a freshly selected character
    receives `Notice{lines}` including the active preset's announce line.
 7. `spawn` by name → `202`, `world.spawn.result{status:"spawn_authorized", announce}`,
    NPC visible to a test client. Unknown name → `404`. Invalid index → `invalid_spawn`.
 7b. `catalog` lists the package's named spawns and presets; `event` activates one,
    `catalog.active_event` reflects it, a second `event` → 409, `stop` reverts.
 8. `N3E_ADMIN_LISTEN=0.0.0.0:7780` → refuses to start.
-9. Stop Postgres → 401 after cache expiry. Stop Redis → 200 with `redis:false`.
+9. Stop Postgres → an uncached token gets 401 within the lookup bound; the realm fences
+   and exits without a panic. Stop Redis → 200 with `redis:false`.
 10. Tick time under 1,000 `status` calls/s is unchanged (admin listener is off-tick).
 
 ## Open questions

@@ -38,7 +38,9 @@ message World { uint64 tick = 1; uint64 session = 2; uint64 self = 3; repeated E
 // current and, for a private line, the sender is in the recipient's interest
 // area and, since PQ-184, the recipient may see the sender (D-152). Clients only
 // style a marked line; a request's value is ignored.
-message Chat { string text = 1; uint64 sender = 2; string sender_name = 3; bool private_message = 4; bool from_operator = 5; }
+// notice (specs/03-admin-api.md) is set only by the server for an operator notice to
+// every in-world session: 1 a yellow notice line, 2 a centre banner; 0 is ordinary chat.
+message Chat { string text = 1; uint64 sender = 2; string sender_name = 3; bool private_message = 4; bool from_operator = 5; uint32 notice = 6; }
 message PrivateMessage { string recipient = 1; string text = 2; }
 message Logout {}
 message LoggedOut {}

@@ -59,7 +59,7 @@ DISCORD_GUILD_ID=… DISCORD_CHANNEL_ANNOUNCE=… DISCORD_CHANNEL_OPS=…
 DISCORD_ROLE_MOD=… DISCORD_ROLE_OPS=…
 REALM_ADMIN_TOKEN=…            # the `bot` token
 GITHUB_DISPATCH_TOKEN=…        # fine-grained PAT, actions:write, 90-day expiry → renewal date in HOST.md
-N3E_ADMIN_LISTEN=0.0.0.0:7780  # inside the compose network only; compose publishes it to 127.0.0.1 on the host
+N3E_ADMIN_LISTEN=172.31.77.10:7780  # the server's static compose-network address; compose publishes it to 127.0.0.1 on the host
 ```
 
 Not in `.env`: the ops token (file above), TLS keys (files above), VPS ssh key (GitHub
@@ -76,8 +76,10 @@ Secrets only).
 - `N3E_CERT`/`N3E_KEY` mount `/etc/n3e-realm/tls/fullchain.pem` / `privkey.pem`
   read-only. The container runs as `1000:1000`; `privkey.pem` is `0640 root:n3e` with
   gid 1000 — or copy with the right owner in the renewal hook.
-- `N3E_REALM=prod`. `N3E_ADMIN_LISTEN=0.0.0.0:7780` (compose network; the publish rule
-  restricts the host side to loopback).
+- `N3E_REALM=prod`. The compose network has a fixed subnet (`172.31.77.0/24`) and
+  `server` the static `ipv4_address` `172.31.77.10`; `N3E_ADMIN_LISTEN=172.31.77.10:7780`
+  (RFC 1918, which spec 03 requires — it refuses `0.0.0.0`; the publish rule restricts
+  the host side to loopback). Q29.
 - `content-init`: `ghcr.io/<org>/realm-content:<hash>` copies `/package` into the
   `content` named volume and exits; `server` depends on it
   `service_completed_successfully`.

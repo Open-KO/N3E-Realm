@@ -304,6 +304,8 @@ SUITES = [
           graphical="two graphical clients: shared kill XP, owner drop and keyboard claim/result/inventory: pass"),
     suite("progression_live", "python", "tests/progression_live.py", holds=["progression-lab"]),
     suite("readiness_live", "python", "tests/readiness_live.py"),
+    # specs/03-admin-api.md (M1): tokens, bearer auth, drain/notice/deploy-pending, realm:events.
+    suite("admin_api_live", "python", "tests/admin_api_live.py"),
     # PQ-405 (D-208): refusals name their request; the client routes them by it.
     # PQ-406 (D-209): chat and whisper refusals reach the HUD message line;
     # PQ-407 (D-210): its log keeps two rows, each in its kind's colour;
@@ -496,7 +498,9 @@ def run(command, log, env=None, timeout=TIMEOUT, procs=None, started=None):
     with log.open("w") as out:
         out.write("$ " + " ".join(command) + "\n")
         out.flush()
-        merged = {**os.environ, **reads_env(), **(env or {})}
+        # Spec 03: every server opens an admin listener, 127.0.0.1:7780 unless told
+        # otherwise; parallel suites take an ephemeral loopback port instead.
+        merged = {"N3E_ADMIN_LISTEN": "127.0.0.1:0", **os.environ, **reads_env(), **(env or {})}
         p = subprocess.Popen(command, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT,
                              env={k: v for k, v in merged.items() if v is not None}, start_new_session=True)
         if procs is not None:

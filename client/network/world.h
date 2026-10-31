@@ -64,6 +64,11 @@ struct WorldState {
   // same text again still counts as new).
   std::string notice;
   uint64_t notices = 0;
+  // Spec 03: the last operator notice (Chat.notice 1, a notice line; 2, also a
+  // centre banner) and how many have arrived.
+  std::string operator_notice;
+  uint32_t operator_notice_level = 0;
+  uint64_t operator_notices = 0;
 };
 // PQ-405 (D-208): show one server refusal. The general status line always takes
 // its detail; once a session exists, only the feature whose request it names in

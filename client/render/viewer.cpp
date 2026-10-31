@@ -470,6 +470,11 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     // PQ-406 (D-209): the world notices (chat, whisper, rest and admin refusals)
     // already copied to the HUD's message line.
     uint64_t notices_seen = 0;
+    // Spec 03: operator notices already shown; the last one, for a HUD without a
+    // message line, and a level-2 notice's centre banner until it lapses.
+    uint64_t operator_notices_seen = 0;
+    std::string operator_line, banner;
+    std::chrono::steady_clock::time_point banner_until{};
 #if N3E_HARNESS
     // PQ-355: the camera a scene capture drew, printed after its capture line.
     auto capture_camera=[&](double at){
@@ -2064,6 +2069,9 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
                                                            endpoint, ca);
               world = {};
               notices_seen = 0;
+              operator_notices_seen = 0;
+              operator_line.clear();
+              banner_until = {};
               walking_to = false;
               auto_move.active = false;
               running = release.movement.has_value();
@@ -2224,6 +2232,18 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
         if (world.notices != notices_seen) {
           notices_seen = world.notices;
           if (hud) hud->post_refusal(world.notice);
+        }
+        if (world.operator_notices != operator_notices_seen) {
+          operator_notices_seen = world.operator_notices;
+          operator_line = world.operator_notice;
+          if (hud) hud->post_operator_notice(world.operator_notice);
+          if (world.operator_notice_level == 2) {
+            banner = world.operator_notice;
+            banner_until = std::chrono::steady_clock::now() + std::chrono::seconds(6);
+          }
+#if N3E_HARNESS
+          std::cout << "OPERATOR_NOTICE level=" << world.operator_notice_level << " text='" << world.operator_notice << "'" << std::endl;
+#endif
         }
         // PQ-469 (D-235): the server refused a skill this client sent
         // `out_of_range`: post the policy's failed line, its %s the skill's
@@ -4698,6 +4718,12 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
 #endif
         } else
           play_hud(world, target, entry, bank_secret?std::string():text_entry, width, height, legacy_key_hint, release.names.operator_chat);
+        if (entry >= 4 && !hud && !operator_line.empty())
+          hud_text(operator_line.substr(0, 42), 28, height - 230, height, 1, 1, 0);
+        if (entry >= 4 && std::chrono::steady_clock::now() < banner_until) {
+          const auto line = banner.substr(0, size_t(std::max(1, (width - 32) / 12)));
+          hud_text(line, (width - int(line.size()) * 12) / 2, height / 3, height, 1, .85f, .2f);
+        }
         if (!uif_dialogs && release.melee && entry == 4)
           hud_text(std::string("Melee: ") + melee.state +
                        " | " + input_map.labels(n3e::input::Action::attack_toggle) + ": start-stop",

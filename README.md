@@ -89,11 +89,24 @@ ship, from inputs only an operator can supply (`specs/QUESTIONS.md` Q27). Each
 `tools/play-*` scripts cover the demo and feature scenes. The login path is still
 account/password (`n3e-server account-create`) until spec 02 lands.
 
+### Admin API
+
+A running server also listens on `N3E_ADMIN_LISTEN` (default `127.0.0.1:7780`; loopback or
+RFC 1918 only) for the Bot and CD (spec 03). Tokens are minted against the realm's
+database and printed once:
+
+```sh
+n3e-server admin mint --name ops --perm 'realm.*'    # prints the token; keep it
+n3e-server admin list                                 # names and permissions, never secrets
+n3e-server admin revoke --name ops                    # bites within 10 s
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7780/v1/realm/status
+```
+
 ## Status
 
 The engine arrived by a one-time, history-free import of the n3e engine at the commit
-pinned in `UPSTREAM.md` (spec 09); this repository is now its only home. The realm-specific work — connection hardening, Discord login,
-admin API, launcher, bot, CD, deploy — follows the roadmap.
+pinned in `UPSTREAM.md` (spec 09); this repository is now its only home. The realm-specific work follows the roadmap: the admin API
+(M1) is in; connection hardening, Discord login, launcher, bot, CD and deploy follow.
 
 ## Licence
 

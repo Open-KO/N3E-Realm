@@ -25,6 +25,7 @@ mod coin_loot_tests;
 mod item_drop_tests;
 mod reward_upgrades;
 mod administration;
+mod admin_api;
 mod cache;
 mod clock;
 mod content;
@@ -493,6 +494,11 @@ async fn main() -> Result<()> {
         return tokio::task::spawn_blocking(move || accounts::provision(&db, &name, &password))
             .await?;
     }
+    if args.get(1).map(String::as_str) == Some("admin") {
+        let rest = args[2..].to_vec();
+        let code = tokio::task::spawn_blocking(move || admin_api::cli(&db, &rest)).await??;
+        std::process::exit(code);
+    }
     if args.get(1).map(String::as_str) == Some("role") {
         if args.len() != 7 || !["grant", "revoke"].contains(&args[2].as_str()) {
             return Err(bad(
@@ -591,6 +597,10 @@ async fn main() -> Result<()> {
             clock::TICK_MS
         );
     }
+    // Refuse a public admin listener before taking anything (spec 03).
+    let admin_address = env("N3E_ADMIN_LISTEN", admin_api::DEFAULT_LISTEN);
+    admin_api::check_listen(&admin_address).await?;
+    let admin_db = db.clone();
     let h = Arc::new(persistence::Health::new());
     let ticks = Arc::new(AtomicU64::new(0));
     let metrics = Arc::new(simulation::Metrics::new());
@@ -774,6 +784,7 @@ async fn main() -> Result<()> {
             tokio::time::sleep(Duration::from_millis(300)).await;
         }
     });
+    let admin_realm = Arc::new(admin_api::Realm::new(admin_api::Events::start(redis_endpoint.clone())));
     let (commands, rx) = tokio::sync::mpsc::channel(256);
     tokio::spawn(simulation::run(
         h.clone(),
@@ -791,13 +802,25 @@ async fn main() -> Result<()> {
         commands: commands.clone(),
         cache: redis_endpoint,
         hashing: Arc::new(tokio::sync::Semaphore::new(2)),
+        realm: admin_realm.clone(),
     };
+    let admin = Arc::new(admin_api::Service::new(
+        admin_db,
+        admin_realm,
+        h.clone(),
+        world.cache.clone(),
+        commands.clone(),
+        r.hash.clone(),
+    ));
+    let admin_listener = TcpListener::bind(&admin_address).await?;
+    tokio::spawn(admin_api::watch_readiness(admin.clone()));
+    let admin_task = tokio::spawn(admin_api::serve(admin_listener, admin));
     let address = env("N3E_LISTEN", "127.0.0.1:7777");
     let cert = env("N3E_CERT", "deploy/local/server.pem");
     let key = env("N3E_KEY", "deploy/local/server.key");
     // A lease failure stops admission immediately and terminates for operator restart.
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    let outcome = tokio::select! {r=network::serve(&address,&cert,&key,r,h.clone(),world)=>r,r=worker=>r?,r=health_task=>r?,_=tokio::signal::ctrl_c()=>Ok(()),_=terminate.recv()=>Ok(())};
+    let outcome = tokio::select! {r=network::serve(&address,&cert,&key,r,h.clone(),world)=>r,r=worker=>r?,r=health_task=>r?,r=admin_task=>r?,_=tokio::signal::ctrl_c()=>Ok(()),_=terminate.recv()=>Ok(())};
     // Drain tick state and commit final positions while renewal remains alive.
     let (tx, rx) = tokio::sync::oneshot::channel();
     if commands

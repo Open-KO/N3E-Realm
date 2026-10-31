@@ -220,6 +220,7 @@ pub const MIGRATIONS: &[(i32, &str)] = &[
     (21, include_str!("../../deploy/021-realm-fence.sql")),
     (22, include_str!("../../deploy/022-npc-credit.sql")),
     (23, include_str!("../../deploy/023-npc-xp.sql")),
+    (24, include_str!("../../deploy/024-admin-tokens.sql")),
 ];
 pub fn migrate(url: &str, migrations: &[(i32, &str)]) -> Result<()> {
     let mut c = connect(url)?;

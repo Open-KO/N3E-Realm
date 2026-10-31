@@ -144,3 +144,20 @@ assets; watch the count.
 ## Raised during implementation
 
 *(Agents append here. Format: `### Qnn — title`, context, options, default taken.)*
+
+### Q29 — Admin listen address inside compose
+
+Spec 03 refuses any `N3E_ADMIN_LISTEN` that is not loopback or RFC 1918 (test 8 names
+`0.0.0.0:7780`); spec 07 set `0.0.0.0:7780` in compose so the Bot and the host publish
+could reach it. Options: allow `0.0.0.0` behind a flag; bind the container's address
+discovered at start; give the server a static compose-network address. **Default taken
+(M1):** the static address — compose network subnet `172.31.77.0/24`, `server` at
+`172.31.77.10`, `N3E_ADMIN_LISTEN=172.31.77.10:7780`. The rule stays one line with no
+escape hatch; spec 07 updated. Revisit if the subnet collides on the VPS.
+
+### Q30 — Motd and account routes in M1
+
+M1 is spec 03 minus world operations, but the motd route needs the revision property
+store (M5) and the account routes need sessions and moderation (M3/M6). **Default
+taken:** M1 ships status, drain, resume, notice and deploy-pending; every other route is
+routed and permission-checked and answers `501 not_implemented` until its milestone.

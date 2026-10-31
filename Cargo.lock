@@ -414,6 +414,8 @@ dependencies = [
  "postgres",
  "prost",
  "prost-build",
+ "realm-bot",
+ "serde_json",
  "socket2",
  "tokio",
  "tokio-openssl",

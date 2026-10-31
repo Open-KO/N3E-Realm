@@ -243,6 +243,8 @@ pub struct WorldService {
     pub commands: tokio::sync::mpsc::Sender<crate::simulation::Command>,
     pub cache: Arc<crate::cache::Endpoint>,
     pub hashing: Arc<Semaphore>,
+    /// Drain state and the logged-in count the admin API reports (spec 03).
+    pub realm: Arc<crate::admin_api::Realm>,
 }
 async fn peer(
     t: TcpStream,
@@ -304,6 +306,8 @@ async fn peer(
         }
     });
     let mut account = None;
+    // Counted in status.players from login until the socket ends.
+    let mut _counted: Option<crate::admin_api::Player> = None;
     let mut selected: Option<accounts::Selected> = None;
     let mut window = Instant::now();
     let mut frames = 0;
@@ -357,6 +361,7 @@ async fn peer(
                                     match accounts::login(&world.db, l.account, l.password).await {
                                         Ok(id) => {
                                             account = Some(id);
+                                            _counted = Some(crate::admin_api::Player::new(world.realm.clone()));
                                             Some(Envelope {
                                                 body: Some(Body::Characters(
                                                     world

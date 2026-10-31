@@ -29,6 +29,8 @@ struct HudView : HudLayout {
 #endif
     messages.post(std::move(text),n3e::MessageKind::notice);}
   void post_refusal(std::string text){messages.post(std::move(text),n3e::MessageKind::refusal);}
+  // Spec 03: an operator notice, in the notice yellow whatever the package's notice colour.
+  void post_operator_notice(std::string text){messages.post(std::move(text),n3e::MessageKind::notice,0xffffff00u);}
   // PQ-469 (D-235): a server refusal drawn in the colour its caller gives.
   void post_refusal(std::string text,uint32_t color){messages.post(std::move(text),n3e::MessageKind::refusal,color);}
   // PQ-408 (D-211): the message line's scroll bar (N3HS), its track and thumb

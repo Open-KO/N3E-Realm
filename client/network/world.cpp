@@ -353,7 +353,11 @@ void WorldClient::run(std::stop_token stop) {
         state.action_outcomes.push_back({++state.action_outcome_count, e.action_result().seq(), e.action_result().status()});
         if (state.action_outcomes.size() > 32) state.action_outcomes.pop_front();
       }
-      if (e.has_chat()) {
+      if (e.has_chat() && e.chat().notice()) {
+        state.operator_notice = e.chat().text();
+        state.operator_notice_level = e.chat().notice();
+        ++state.operator_notices;
+      } else if (e.has_chat()) {
         state.chat = (e.chat().private_message() ? "[Whisper] " : "") +
                      (e.chat().sender_name().empty() ? std::to_string(e.chat().sender()) : e.chat().sender_name()) +
                      ": " + e.chat().text();

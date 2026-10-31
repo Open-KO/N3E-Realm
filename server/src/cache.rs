@@ -119,6 +119,34 @@ pub async fn command(e: &Endpoint, args: &[&str]) -> Result<String> {
     })
     .await
 }
+/// GET of a key whose value is at most `limit` bytes; None when it is absent.
+pub async fn get(e: &Endpoint, key: &str, limit: usize) -> Result<Option<String>> {
+    e.request(async |stage| {
+        let mut s = e.connect(stage).await?;
+        s.write_all(format!("*2\r\n$3\r\nGET\r\n${}\r\n{}\r\n", key.len(), key).as_bytes()).await?;
+        let mut head = Vec::new();
+        while !head.ends_with(b"\r\n") {
+            if head.len() >= 32 {
+                return Err(bad("cache response bound"));
+            }
+            head.push(s.read_u8().await?);
+        }
+        let head = String::from_utf8(head)?;
+        let length: i64 = head.strip_prefix('$').ok_or_else(|| bad("cache GET reply"))?.trim_end().parse()?;
+        if length < 0 {
+            return Ok(None);
+        }
+        let length = usize::try_from(length)?;
+        if length > limit {
+            return Err(bad("cache value bound"));
+        }
+        let mut value = vec![0; length + 2];
+        s.read_exact(&mut value).await?;
+        value.truncate(length);
+        Ok(Some(String::from_utf8(value)?))
+    })
+    .await
+}
 pub async fn login_allowed(address: &Endpoint, realm: &str, account: &str, ip: &str) -> Result<bool> {
     let digest: String = openssl::sha::sha256(account.as_bytes())
         .iter()

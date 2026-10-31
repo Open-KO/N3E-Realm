@@ -32,7 +32,9 @@ The Bot, CD and sessions all depend on it, so it goes first.
 - Redis Stream `realm:events` writer.
 
 **Done when:** `curl` with a `realm.*` token can drain/resume/status a running stack;
-a `world.*` token gets `403` on those routes; `revoke` takes effect on the next request.
+a `world.*` token gets `403` on those routes; `revoke` takes effect within the 10 s token
+cache (spec 03; corrected from "the next request", which the cache rules out).
+Evidence: `tests/admin_api_live.py` (spec 03 tests 1–5, 6b notice, 8, 9, 10).
 
 ## M2 — Connection hardening (spec 01)
 

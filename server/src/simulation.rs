@@ -84,6 +84,9 @@ pub enum Command {
         oneshot::Sender<Option<crate::commerce::Admission>>,
     ),
     Chat(i64, i64, String, Option<String>),
+    /// An admin-API notice (specs/03-admin-api.md) to every in-world session:
+    /// text already within the chat bound, and Chat.notice 1 (line) or 2 (banner).
+    Notice(String, u32),
     Leave(i64, i64, oneshot::Sender<Option<Selected>>),
     Shutdown(oneshot::Sender<Vec<Selected>>),
 }
@@ -1862,6 +1865,19 @@ pub async fn run(
                         }
                     }
                 }
+                Command::Notice(text, level) => {
+                    if !health.owned() {
+                        continue;
+                    }
+                    let message = Envelope {
+                        body: Some(Body::Chat(wire::Chat { text, notice: level, ..Default::default() })),
+                    };
+                    for other in players.values_mut() {
+                        if !other.failed {
+                            deliver(other, message.clone());
+                        }
+                    }
+                }
                 Command::Chat(id, g, text, recipient) => {
                     if !health.owned() {
                         continue;
@@ -1948,6 +1964,7 @@ pub async fn run(
                                 sender_name: actor.name.clone(),
                                 private_message: destination.is_some(),
                                 from_operator,
+                                notice: 0,
                             })),
                         };
                         for (other_id, other) in players.iter_mut() {

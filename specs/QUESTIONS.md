@@ -132,7 +132,7 @@ assets; watch the count.
 |---|---|
 | Q1 | **In-process, in `N3E-Realm`.** The engine migrates into `N3E-Realm` (spec 09); the realm service (01–03) is implemented inside `n3e-server`/`n3e-client` there. No gateway. `n3e` freezes as reference/research. |
 | Q2 | **Client runs the OAuth flow** (architecture ① stands); `discord_client_id` comes from the realm config via the manifest, not compiled in. |
-| Q3 | **Windows is a v1 requirement; the client stays C++.** Port in M4b (CMake/vcpkg, POSIX audit, Windows cert-store → OpenSSL, `%APPDATA%` paths). Tested by (d2) a client-local `--smoke-local` CI job on both `ubuntu-latest` and `windows-latest` plus (a) a Discord canary role for early releases; a Windows test machine is the upgrade path. macOS not v1. A Rust client is explicitly deferred (arguments on record: cross-compile ergonomics, shared collision crate with the server) — not before launch. |
+| Q3 | **Windows is a v1 requirement; the client stays C++.** Port in M4b (CMake/vcpkg, POSIX audit, Windows cert-store → OpenSSL, `%APPDATA%` paths). Tested by (d2) a client-local `--smoke-local` CI job on both `ubuntu-latest` and `windows-latest` plus (a) a Discord canary role for early releases; a real-GPU Windows run is manual: the maintainer runs the client on their own Windows machine periodically (2026-10-30); automating it is the upgrade path. macOS not v1. A Rust client is explicitly deferred (arguments on record: cross-compile ergonomics, shared collision crate with the server) — not before launch. |
 | Q9 | `realm.restart` removed from `architecture.md`; restart is a CD/compose action. |
 | Q5 | Moot (Launcher does not hold the token). |
 | Q7 | Moot (no gateway). `N3E_MAX_CONNECTIONS` replaces the hardcoded 64. |

@@ -75,7 +75,8 @@ game client connected to the realm.
 - Launcher `x86_64-pc-windows-msvc` build; player docs with the SmartScreen note (Q26).
 
 **Done when:** `windows-latest` and `ubuntu-latest` both produce artifacts and pass
-`--smoke-local`; a canary player on Windows logs in end-to-end.
+`--smoke-local`; a canary player on Windows logs in end-to-end. Real-GPU Windows
+testing stays manual: the maintainer runs it on their own Windows machine, periodically.
 
 ## M5 — CD (spec 06)
 

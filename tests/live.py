@@ -311,6 +311,8 @@ SUITES = [
     # Spec 02 (M3): Discord login against a loopback stand-in, sessions, kick, ban, mute.
     suite("discord_login_live", "python", "tests/discord_login_live.py",
           graphical="PASS client expiry: the server says expired, the client drops session.json and runs the browser flow"),
+    # Spec 05 (M6): the Discord bot against stand-ins for Discord's gateway/REST and GitHub.
+    suite("bot_live", "python", "tests/bot_live.py"),
     # PQ-405 (D-208): refusals name their request; the client routes them by it.
     # PQ-406 (D-209): chat and whisper refusals reach the HUD message line;
     # PQ-407 (D-210): its log keeps two rows, each in its kind's colour;

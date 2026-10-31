@@ -210,3 +210,40 @@ Spec 02 sends `LoginResult` on success of either login message but only mints a 
 for `DiscordLogin`. **Default taken (M3):** a `SessionLogin`'s `LoginResult` has an
 empty `token`, the session's `expires_at_unix`, and the account's Discord id and name;
 the client keeps the token it holds.
+
+### Q37 — Pending stream entries when the bot's host name changes
+
+Spec 05 names the consumer after the host name and drains its own pending entries at
+start; a recreated container gets a new host name, so entries it left unacknowledged
+would sit in the old consumer's list forever. **Default taken (M6):** at start the bot
+takes over every pending entry of the `bot` group (`XAUTOCLAIM … 0`) before reading its
+own; there is one bot per realm. The production compose file also fixes `hostname`.
+
+### Q38 — Who an `account.*` message names
+
+The stream's `by` is the admin token's name, so every moderator action taken through
+Discord would read "bot kicked Nelly". **Default taken (M6):** the bot remembers, for 2
+minutes and in memory only, which moderator it called each account route for, and
+names them; anything else (curl, a restart in between) shows the token name.
+
+### Q39 — Testing the bot without Discord or GitHub
+
+Spec 05 asks for Discord "mocked at the library boundary where practical". **Default
+taken (M6):** the bot takes test-only stand-in addresses for Discord's REST API and
+gateway (`DISCORD_API_PROXY`, `DISCORD_GATEWAY_PROXY`, through the library's own proxy
+settings) and for GitHub (`GITHUB_API`), all refused unless they are on loopback.
+`tests/bot_live.py` runs a minimal gateway (HELLO, IDENTIFY, READY, INTERACTION_CREATE)
+and REST API, so the real library code parses the interactions and sends the replies.
+
+### Q40 — `/motd`'s lines in a slash command
+
+A slash command's string option is a single line. **Default taken (M6):** `/motd` takes
+one string and splits it on `|`; 1-20 lines of at most 127 bytes are checked before the
+call.
+
+### Q41 — Discord library and the pinned toolchain
+
+`rust-toolchain.toml` pins Rust 1.85.1; twilight 0.17 needs 1.89. **Default taken
+(M6):** twilight 0.16 (gateway, HTTP, model, util), pinned exactly, with the lock
+resolved for 1.85 (`CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback`). Moving to 0.17
+waits for a toolchain bump.

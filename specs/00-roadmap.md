@@ -119,6 +119,12 @@ Launcher downloads only the new files, and `/event` activates the preset live.
 **Done when:** `/deploy` from Discord triggers a CD run that announces, drains, restarts,
 and posts "realm is back" from the event stream.
 
+Evidence: `tests/bot_live.py` (spec 05 tests 1-4 and 6-10 against stand-ins for Discord
+and GitHub; 5/5b partial until M5b) and a session against a real test guild (commands
+registered, events posted). The done-when needs CD (M5, spec 06): `/deploy` dispatches
+the workflow and "Realm is up" is posted after a drain, but the CD run between them
+does not exist yet.
+
 ## M7 — Production cutover (spec 07)
 
 - VPS provisioned at a provider with always-on L3/L4 scrubbing.

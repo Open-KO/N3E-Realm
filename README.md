@@ -114,6 +114,39 @@ your own Discord application:
 4. Operators act through the admin API: `n3e-server admin mint --name mod --perm
    'account.*'`, then `POST /v1/accounts/{id}/kick|ban|unban|mute|unmute` (spec 03).
 
+### Discord bot
+
+`realm-bot` (spec 05) gives moderators slash commands (`/status`, `/whois`, `/kick`,
+`/ban`, `/mute`, `/notice`, `/deploy`, …) that call the admin API, and posts realm
+events (restarts, notices, moderation, pending deploys) to two channels. To run it
+against your own Discord server:
+
+1. In the Developer Portal, open (or create) an application. Under **Installation** set
+   the install link to **None**; under **Bot** reset and copy the token, leave the
+   privileged intents off and turn **Public Bot** off.
+2. Invite it with scopes `bot` and `applications.commands` and permissions View
+   Channels, Send Messages and Embed Links:
+   `https://discord.com/oauth2/authorize?client_id=<application id>&scope=bot+applications.commands&permissions=19456`.
+3. With Developer Mode on (User Settings → Advanced), copy the ids of the server, an
+   announcements channel, an ops channel, a moderator role and an ops role into `.env`:
+   `DISCORD_BOT_TOKEN`, `DISCORD_GUILD_ID`, `DISCORD_CHANNEL_ANNOUNCE`,
+   `DISCORD_CHANNEL_OPS`, `DISCORD_ROLE_MOD`, `DISCORD_ROLE_OPS`.
+4. Mint the bot's admin token and add it to `.env` as `REALM_ADMIN_TOKEN`, then start
+   the bot (Compose profile `bot`):
+
+   ```sh
+   docker compose exec server n3e-server admin mint --name bot --perm world.catalog \
+     --perm world.spawn --perm world.kill --perm world.event --perm 'account.*' \
+     --perm realm.status --perm realm.notice
+   docker compose --profile bot up -d bot
+   ```
+
+   Natively, `cargo run -p realm-bot` with the same variables plus `REALM_ADMIN_URL`
+   (`http://127.0.0.1:7780`) and `REALM_REDIS` (`127.0.0.1:6379`).
+
+`/deploy` also needs `GITHUB_REPO` and `GITHUB_DISPATCH_TOKEN` (a fine-grained token with
+Actions write on this repository only); without them it says deploy is not configured.
+
 ### Admin API
 
 A running server also listens on `N3E_ADMIN_LISTEN` (default `127.0.0.1:7780`; loopback or
@@ -141,8 +174,9 @@ every local client shares one address. Counters are under `connections` in
 
 The engine arrived by a one-time, history-free import of the n3e engine at the commit
 pinned in `UPSTREAM.md` (spec 09); this repository is now its only home. The realm-specific work follows the roadmap: the admin API
-(M1), connection hardening (M2) and Discord login with sessions (M3) are in; launcher,
-bot, CD and deploy follow.
+(M1), connection hardening (M2), Discord login with sessions (M3) and the Discord bot
+(M6, minus the world commands that wait for M5b's catalog) are in; launcher, CD and
+deploy follow.
 
 ## Licence
 

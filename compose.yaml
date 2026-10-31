@@ -75,5 +75,35 @@ services:
       timeout: 3s
       retries: 30
     stop_grace_period: 5s
+  # Spec 05: the Discord bot, started only with `--profile bot`. It shares the server's
+  # network namespace, so the admin API stays on the server's loopback (the production
+  # stack gives the server a static address instead, spec 07). Needs DISCORD_BOT_TOKEN,
+  # DISCORD_GUILD_ID, the two channel and two role ids, and REALM_ADMIN_TOKEN (a `bot`
+  # token: `docker compose exec server n3e-server admin mint ...`, README "Discord bot").
+  bot:
+    profiles: [bot]
+    image: "${N3E_BOT_IMAGE:-n3e-bot:local}"
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+      target: bot
+    network_mode: "service:server"
+    environment:
+      DISCORD_BOT_TOKEN: "${DISCORD_BOT_TOKEN:-}"
+      DISCORD_GUILD_ID: "${DISCORD_GUILD_ID:-}"
+      DISCORD_CHANNEL_ANNOUNCE: "${DISCORD_CHANNEL_ANNOUNCE:-}"
+      DISCORD_CHANNEL_OPS: "${DISCORD_CHANNEL_OPS:-}"
+      DISCORD_ROLE_MOD: "${DISCORD_ROLE_MOD:-}"
+      DISCORD_ROLE_OPS: "${DISCORD_ROLE_OPS:-}"
+      REALM_ADMIN_URL: http://127.0.0.1:7780
+      REALM_ADMIN_TOKEN: "${REALM_ADMIN_TOKEN:-}"
+      REALM_REDIS: redis:6379
+      GITHUB_REPO: "${GITHUB_REPO:-}"
+      GITHUB_DISPATCH_TOKEN: "${GITHUB_DISPATCH_TOKEN:-}"
+      REALM_NAG_HOUR_UTC: "${REALM_NAG_HOUR_UTC:-18}"
+    depends_on:
+      server: {condition: service_healthy}
+    restart: unless-stopped
+    stop_grace_period: 5s
 volumes:
   pg:

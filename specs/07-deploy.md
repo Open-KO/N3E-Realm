@@ -58,6 +58,7 @@ DISCORD_CLIENT_SECRET=…
 DISCORD_GUILD_ID=… DISCORD_CHANNEL_ANNOUNCE=… DISCORD_CHANNEL_OPS=…
 DISCORD_ROLE_MOD=… DISCORD_ROLE_OPS=…
 REALM_ADMIN_TOKEN=…            # the `bot` token
+GITHUB_REPO=<owner>/N3E-Realm
 GITHUB_DISPATCH_TOKEN=…        # fine-grained PAT, actions:write, 90-day expiry → renewal date in HOST.md
 N3E_ADMIN_LISTEN=172.31.77.10:7780  # the server's static compose-network address; compose publishes it to 127.0.0.1 on the host
 ```
@@ -89,8 +90,12 @@ Secrets only).
 - `content-init`: `ghcr.io/<org>/realm-content:<hash>` copies `/package` into the
   `content` named volume and exits; `server` depends on it
   `service_completed_successfully`.
-- `bot`: no ports; `depends_on: redis, server`; `restart: unless-stopped`;
-  `REALM_ADMIN_URL=http://server:7780`.
+- `bot`: image `deploy/Dockerfile` `--target bot`; no ports; drop the local stack's
+  `profiles: [bot]` and `network_mode: service:server` (the server has its static
+  address here); `depends_on: redis, server`; `restart: unless-stopped`;
+  `REALM_ADMIN_URL=http://server:7780`, `REALM_REDIS=redis:6379`; `hostname: realm-bot`
+  (the stream consumer's name; a recreated container would otherwise get a new one,
+  which the bot tolerates, Q37).
 - `restart: unless-stopped` on everything long-running; `server` `stop_grace_period`
   raised from `5s` to `30s` so SIGTERM drain can save positions.
 - Postgres/Redis images stay pinned by digest as in n3e.
@@ -161,8 +166,10 @@ pinned message.
 7. First deploy by hand: `IMAGE_TAG=<latest deploy tag's sha> … ./deploy/remote.sh`
    with `FORCE=true` (there are no players).
 8. Mint tokens: `docker compose exec server n3e-server admin mint --name ops --perm 'realm.*'`
-   → `/etc/n3e-realm/ops.token`; `… --name bot --perm 'world.*' --perm 'account.*'
-   --perm realm.status --perm realm.notice` → `.env` `REALM_ADMIN_TOKEN`; `docker compose
+   → `/etc/n3e-realm/ops.token`; `… --name bot --perm world.catalog --perm world.spawn
+   --perm world.kill --perm world.event --perm 'account.*' --perm realm.status --perm
+   realm.notice` (not `world.*`: that would include `world.set`, which spec 03 keeps from
+   the bot) → `.env` `REALM_ADMIN_TOKEN`; `docker compose
    up -d bot`.
 9. (reserved)
 10. Restore a backup if this is a rebuild (`zstd -d | psql`), **before** step 7's

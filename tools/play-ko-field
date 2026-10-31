@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source tools/env.sh
+make client
+python tools/assetc/test_field.py
+bash deploy/local-ca.sh
+export N3E_UID="$(id -u)" N3E_GID="$(id -g)"
+export N3E_PACKAGE_PATH="$PWD/build/packages/ko-field" N3E_REALM=ko-field N3E_PORT=7778
+docker compose -p n3e-ko-field up --build -d --wait --force-recreate server
+exec python tools/play_field.py "$@"

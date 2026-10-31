@@ -1,0 +1,7 @@
+{
+  "source": "Misc/Co_targetsymbol.n3shape",
+  "skeletons": ["Chr/upc_ka_tu.n3joint", "Chr/mob_worm.n3joint"],
+  "diameter_scale": 2,
+  "height_scale": 1.3,
+  "ground_lift": 0.1
+}

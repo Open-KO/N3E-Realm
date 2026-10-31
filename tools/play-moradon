@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# The Moradon feature demo on its own persistent local stack:
+#   tools/play-moradon                   the default Moradon (Zones.tbl key 210, Moradon_xmas)
+#   tools/play-moradon --layout classic  the install's own unnamed Zones/moradon.* (PQ-223)
+#   tools/play-moradon --layout 1097     the 2003 Moradon of your KnightOnline_1097.exe (PQ-224)
+#   tools/play-moradon --glow-2233       with the 2233 client's equipment glow from your
+#                                        2145 install, a 2233/2145 addition (PQ-315); its
+#                                        bow's archery damage reads your MAGIC_TYPE2
+#                                        export (inspect_db.py --table MAGIC_TYPE2, PQ-422)
+#   tools/play-moradon --preview         the map preview (tools/play-moradon-preview)
+# Options: tools/moradon_session.py --help.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source tools/env.sh
+if [[ "${1:-}" == "--preview" ]]; then
+  shift
+  exec tools/play-moradon-preview "$@"
+fi
+exec python tools/moradon_session.py "$@"

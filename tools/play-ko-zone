@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Play a KO homeland map on its own persistent local stack (PQ-218):
+#   tools/play-ko-zone karus     Breth (zone 1)
+#   tools/play-ko-zone elmorad   Piana (zone 2)
+# Options and client arguments after --: tools/ko_zone_session.py --help.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source tools/env.sh
+exec python tools/ko_zone_session.py "$@"

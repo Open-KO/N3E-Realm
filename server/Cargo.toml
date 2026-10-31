@@ -1,0 +1,14 @@
+[package]
+name = "n3e-server"
+version = "0.1.0"
+edition = "2021"
+build = "build.rs"
+[dependencies]
+prost = "=0.13.5"
+openssl = "=0.10.72"
+tokio = { version = "=1.53.1", features = ["rt-multi-thread", "net", "io-util", "time", "sync", "signal", "macros"] }
+tokio-openssl = "=0.6.5"
+postgres = "=0.19.10"
+socket2 = "=0.6.5"
+[build-dependencies]
+prost-build = "=0.13.5"

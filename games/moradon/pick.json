@@ -1,0 +1,6 @@
+{
+  "box": "joints",
+  "min_extent": 0.5,
+  "pad": 0.25,
+  "mesh_lod": 1
+}

@@ -1,0 +1,154 @@
+{
+  "clips": {
+    "heal-target": {
+      "fx": 601,
+      "duration": 2
+    },
+    "resource-target": {
+      "fx": 701,
+      "duration": 2
+    },
+    "heal-cast": {
+      "fx": 2601,
+      "duration": 10
+    },
+    "strike-cast": {
+      "fx": 3101,
+      "duration": 2
+    },
+    "strike-target": {
+      "fx": 1101,
+      "duration": 1
+    },
+    "impact-10002": {
+      "fx": 10002,
+      "duration": 2
+    },
+    "impact-10048": {
+      "fx": 10048,
+      "duration": 2
+    },
+    "impact-10049": {
+      "fx": 10049,
+      "duration": 2
+    },
+    "impact-10050": {
+      "fx": 10050,
+      "duration": 2
+    },
+    "impact-10051": {
+      "fx": 10051,
+      "duration": 2
+    },
+    "impact-10052": {
+      "fx": 10052,
+      "duration": 2
+    },
+    "impact-10053": {
+      "fx": 10053,
+      "duration": 2
+    },
+    "impact-10054": {
+      "fx": 10054,
+      "duration": 2
+    }
+  },
+  "bindings": [
+    {
+      "kind": 1,
+      "key": "demo:item/potion",
+      "selector": 0,
+      "clips": [
+        "heal-target"
+      ],
+      "anchor": 0
+    },
+    {
+      "kind": 1,
+      "key": "demo:item/mana_potion",
+      "selector": 0,
+      "clips": [
+        "resource-target"
+      ],
+      "anchor": 0
+    },
+    {
+      "kind": 2,
+      "key": "*",
+      "selector": 1,
+      "clips": [
+        "impact-10002",
+        "impact-10048"
+      ],
+      "anchor": 1
+    },
+    {
+      "kind": 2,
+      "key": "*",
+      "selector": 2,
+      "clips": [
+        "impact-10049",
+        "impact-10050"
+      ],
+      "anchor": 1
+    },
+    {
+      "kind": 2,
+      "key": "*",
+      "selector": 3,
+      "clips": [
+        "impact-10051",
+        "impact-10052",
+        "impact-10053",
+        "impact-10054"
+      ],
+      "anchor": 1
+    },
+    {
+      "kind": 2,
+      "key": "*",
+      "selector": 4,
+      "clips": [
+        "impact-10002",
+        "impact-10048"
+      ],
+      "anchor": 1
+    },
+    {
+      "kind": 3,
+      "key": "demo:item/potion",
+      "selector": 0,
+      "anchor": 14,
+      "clips": [
+        "heal-cast"
+      ]
+    },
+    {
+      "kind": 3,
+      "key": "demo:item/potion",
+      "selector": 0,
+      "anchor": 9,
+      "clips": [
+        "heal-cast"
+      ]
+    },
+    {
+      "kind": 3,
+      "key": "demo:item/mana_potion",
+      "selector": 0,
+      "anchor": 14,
+      "clips": [
+        "heal-cast"
+      ]
+    },
+    {
+      "kind": 3,
+      "key": "demo:item/mana_potion",
+      "selector": 0,
+      "anchor": 9,
+      "clips": [
+        "heal-cast"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,52 @@
+name: ci
+on:
+  push: { branches: [master] }
+  pull_request:
+jobs:
+  rust:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        crate: [realm-launcher, realm-bot]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      # rust-toolchain.toml pins 1.85.1 (minimal profile); install that one with the
+      # components the checks need, or rustup would pick it up without them.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85.1"
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.crate }}
+      # launcher/ and bot/ are members of the root workspace: run from the root, per package.
+      - run: cargo fmt --check -p ${{ matrix.crate }}
+      - run: cargo clippy --locked -p ${{ matrix.crate }} --all-targets -- -D warnings
+      - run: cargo test --locked -p ${{ matrix.crate }}
+  policy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: No KO native files in content
+        run: |
+          if git ls-files 'games/**' | grep -Ei '\.(n3[a-z0-9]*|gtd|opd|tbl|dxt|uif)$'; then
+            echo "KO native files are a pinned build input, not repo content"; exit 1; fi
+      - name: Relative links in docs/specs resolve
+        run: |
+          python3 - <<'PY'
+          import re, os, sys
+          bad = 0
+          for root in ("specs", "docs"):
+              for dp, _, fs in os.walk(root):
+                  for f in fs:
+                      if not f.endswith(".md"): continue
+                      p = os.path.join(dp, f)
+                      for m in re.finditer(r'\]\(([^)#\s]+)(#[^)]*)?\)', open(p).read()):
+                          t = m.group(1)
+                          if t.startswith(("http", "mailto:")) or "…" in t: continue
+                          if not os.path.exists(os.path.normpath(os.path.join(dp, t))):
+                              print(f"{p}: broken link {t}"); bad += 1
+          sys.exit(1 if bad else 0)
+          PY

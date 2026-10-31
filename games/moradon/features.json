@@ -1,0 +1,832 @@
+{
+  "inventory": {
+    "capacity": 32,
+    "currency": "demo:currency/coin",
+    "currency_limit": 2100000000,
+    "items": [
+      {
+        "durability": 0,
+        "id": "demo:item/token",
+        "label": "Token",
+        "stack_limit": 1,
+        "starting": 0
+      },
+      {
+        "durability": 80,
+        "id": "demo:item/blade",
+        "label": "Practice blade",
+        "stack_limit": 1,
+        "starting": 1
+      },
+      {
+        "durability": 0,
+        "id": "demo:item/potion",
+        "label": "Water of life",
+        "stack_limit": 20,
+        "starting": 5
+      },
+      {
+        "durability": 80,
+        "id": "demo:item/shield",
+        "label": "Shield",
+        "stack_limit": 1,
+        "starting": 1
+      },
+      {
+        "durability": 80,
+        "id": "demo:item/twohand",
+        "label": "Two hand blade",
+        "stack_limit": 1,
+        "starting": 1
+      },
+      {
+        "durability": 80,
+        "id": "demo:item/ring",
+        "label": "Ring",
+        "stack_limit": 1,
+        "starting": 1
+      },
+      {
+        "durability": 80,
+        "id": "demo:item/other_race",
+        "label": "Restricted race",
+        "stack_limit": 1,
+        "starting": 1
+      },
+      {
+        "durability": 80,
+        "id": "demo:item/strong",
+        "label": "High strength",
+        "stack_limit": 1,
+        "starting": 1
+      },
+      {
+        "durability": 80,
+        "id": "demo:item/titled",
+        "label": "High title",
+        "stack_limit": 1,
+        "starting": 1
+      },
+      {
+        "id": "demo:item/armor",
+        "label": "Practice armor",
+        "durability": 80,
+        "stack_limit": 1,
+        "starting": 1
+      },
+      {
+        "id": "demo:item/mana_potion",
+        "label": "Potion of spirit",
+        "durability": 0,
+        "stack_limit": 20,
+        "starting": 0
+      }
+    ],
+    "starting_currency": 10000
+  },
+  "commerce": {
+    "bulk_price": 100000,
+    "bulk_quantity": 10,
+    "items": [
+      {
+        "id": "demo:item/token",
+        "price": 1,
+        "sell_divisor": 6,
+        "weight": 0
+      },
+      {
+        "id": "demo:item/blade",
+        "price": 120,
+        "sell_divisor": 6,
+        "weight": 20
+      },
+      {
+        "id": "demo:item/potion",
+        "price": 13,
+        "sell_divisor": 6,
+        "weight": 2
+      },
+      {
+        "id": "demo:item/shield",
+        "price": 120,
+        "sell_divisor": 6,
+        "weight": 2
+      },
+      {
+        "id": "demo:item/twohand",
+        "price": 120,
+        "sell_divisor": 6,
+        "weight": 2
+      },
+      {
+        "id": "demo:item/ring",
+        "price": 120,
+        "sell_divisor": 6,
+        "weight": 2
+      },
+      {
+        "id": "demo:item/other_race",
+        "price": 120,
+        "sell_divisor": 6,
+        "weight": 2
+      },
+      {
+        "id": "demo:item/strong",
+        "price": 120,
+        "sell_divisor": 6,
+        "weight": 2
+      },
+      {
+        "id": "demo:item/titled",
+        "price": 120,
+        "sell_divisor": 6,
+        "weight": 2
+      },
+      {
+        "id": "demo:item/armor",
+        "price": 120,
+        "sell_divisor": 6,
+        "weight": 2
+      },
+      {
+        "id": "demo:item/mana_potion",
+        "price": 20,
+        "sell_divisor": 6,
+        "weight": 2
+      }
+    ],
+    "max_quantity": 9998,
+    "shops": [
+      {
+        "id": "demo:shop/supplies",
+        "items": [
+          "demo:item/blade",
+          "demo:item/potion",
+          "demo:item/shield",
+          "demo:item/twohand",
+          "demo:item/ring",
+          "demo:item/other_race",
+          "demo:item/strong",
+          "demo:item/titled",
+          "demo:item/armor",
+          "demo:item/mana_potion"
+        ],
+        "label": "Supplies and repair",
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "radius": 5,
+        "remote_sell": false
+      }
+    ],
+    "weight_limit": 36
+  },
+  "repair": {
+    "items": [
+      "demo:item/blade",
+      "demo:item/shield",
+      "demo:item/twohand",
+      "demo:item/armor"
+    ],
+    "linear": 0.0001,
+    "multiplier": 1,
+    "offset": 10,
+    "power": 0.82
+  },
+  "equipment": {
+    "attributes": [
+      60,
+      60,
+      60,
+      50,
+      50
+    ],
+    "items": [
+      {
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "blocks": [],
+        "id": "demo:item/blade",
+        "race": 0,
+        "slots": [
+          0,
+          1
+        ],
+        "swappable": true,
+        "title": 0
+      },
+      {
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "blocks": [],
+        "id": "demo:item/shield",
+        "race": 1,
+        "slots": [
+          1
+        ],
+        "swappable": false,
+        "title": 0
+      },
+      {
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "blocks": [
+          1
+        ],
+        "id": "demo:item/twohand",
+        "race": 0,
+        "slots": [
+          0
+        ],
+        "swappable": false,
+        "title": 0
+      },
+      {
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "blocks": [],
+        "id": "demo:item/ring",
+        "race": 0,
+        "slots": [
+          2,
+          3
+        ],
+        "swappable": false,
+        "title": 0
+      },
+      {
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "blocks": [],
+        "id": "demo:item/other_race",
+        "race": 2,
+        "slots": [
+          0
+        ],
+        "swappable": false,
+        "title": 0
+      },
+      {
+        "attributes": [
+          61,
+          0,
+          0,
+          0,
+          0
+        ],
+        "blocks": [],
+        "id": "demo:item/strong",
+        "race": 0,
+        "slots": [
+          0
+        ],
+        "swappable": false,
+        "title": 0
+      },
+      {
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "blocks": [],
+        "id": "demo:item/titled",
+        "race": 0,
+        "slots": [
+          0
+        ],
+        "swappable": false,
+        "title": 1
+      },
+      {
+        "id": "demo:item/armor",
+        "race": 0,
+        "title": 0,
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "slots": [
+          4
+        ],
+        "blocks": [],
+        "swappable": false
+      }
+    ],
+    "race": 1,
+    "slots": [
+      "Right hand",
+      "Left hand",
+      "Right ring",
+      "Left ring",
+      "Upper body"
+    ],
+    "title": 0
+  },
+  "stats": {
+    "accuracy_coefficient": 0.01,
+    "attack_base": 3,
+    "attack_linear": 0.005,
+    "attack_offset": 40,
+    "broken_raw_divisor": 2,
+    "broken_weapon_divisor": 10,
+    "categories": [
+      {
+        "coefficient": 0.00013,
+        "dexterity": 0,
+        "id": "demo:weapon/sword",
+        "offhand": 0
+      },
+      {
+        "coefficient": 0.0001,
+        "dexterity": 1,
+        "id": "demo:weapon/dagger",
+        "offhand": 1
+      },
+      {
+        "coefficient": 0.0002,
+        "dexterity": 1,
+        "id": "demo:weapon/bow",
+        "offhand": 2
+      },
+      {
+        "coefficient": 0,
+        "dexterity": 0,
+        "id": "demo:weapon/none",
+        "offhand": 0
+      }
+    ],
+    "defense_coefficient": 1,
+    "dexterity_attack": 0,
+    "dual_wield": 1,
+    "evasion_coefficient": 0.01,
+    "health": {
+      "attribute": 1,
+      "base": 200,
+      "coefficient": 0.0015,
+      "divisor": 5,
+      "linear": 0.1,
+      "offset": 0
+    },
+    "items": [
+      {
+        "accuracy": 0,
+        "attack": 40,
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "category": "demo:weapon/sword",
+        "defense": 0,
+        "evasion": 0,
+        "health": 0,
+        "id": "demo:item/blade",
+        "resource": 0
+      },
+      {
+        "accuracy": 0,
+        "attack": 0,
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "category": "demo:weapon/none",
+        "defense": 12,
+        "evasion": 0,
+        "health": 0,
+        "id": "demo:item/shield",
+        "resource": 0
+      },
+      {
+        "accuracy": 0,
+        "attack": 40,
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "category": "demo:weapon/sword",
+        "defense": 0,
+        "evasion": 0,
+        "health": 0,
+        "id": "demo:item/twohand",
+        "resource": 0
+      },
+      {
+        "accuracy": 10,
+        "attack": 0,
+        "attributes": [
+          0,
+          10,
+          0,
+          0,
+          0
+        ],
+        "category": "demo:weapon/none",
+        "defense": 0,
+        "evasion": 5,
+        "health": 200,
+        "id": "demo:item/ring",
+        "resource": 20
+      },
+      {
+        "accuracy": 0,
+        "attack": 0,
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "category": "demo:weapon/none",
+        "defense": 0,
+        "evasion": 0,
+        "health": 0,
+        "id": "demo:item/other_race",
+        "resource": 0
+      },
+      {
+        "accuracy": 0,
+        "attack": 0,
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "category": "demo:weapon/none",
+        "defense": 0,
+        "evasion": 0,
+        "health": 0,
+        "id": "demo:item/strong",
+        "resource": 0
+      },
+      {
+        "accuracy": 0,
+        "attack": 0,
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "category": "demo:weapon/none",
+        "defense": 0,
+        "evasion": 0,
+        "health": 0,
+        "id": "demo:item/titled",
+        "resource": 0
+      },
+      {
+        "accuracy": 0,
+        "attack": 0,
+        "attributes": [
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "category": "demo:weapon/none",
+        "defense": 20,
+        "evasion": 0,
+        "health": 0,
+        "id": "demo:item/armor",
+        "resource": 0
+      }
+    ],
+    "mana": {
+      "attribute": 3,
+      "base": 20,
+      "coefficient": 0,
+      "divisor": 5,
+      "linear": 0.2,
+      "offset": 30
+    },
+    "primary": 0,
+    "rate_base": 1,
+    "rate_initial": 100,
+    "rate_scale": 0.01,
+    "secondary": 1,
+    "secondary_scale": 0.5,
+    "stamina_defense": 1,
+    "stamina_resource": {
+      "attribute": 1,
+      "base": 0,
+      "coefficient": 0.0015,
+      "divisor": 5,
+      "linear": 0.1,
+      "offset": 0
+    },
+    "stamina_threshold": 100,
+    "strength_attack": 1,
+    "strength_threshold": 150,
+    "weapon_floor": 3,
+    "weight_scale": 2
+  },
+  "wear": {
+    "items": [
+      {
+        "attack_slots": [
+          0,
+          1
+        ],
+        "defense_slots": [],
+        "id": "demo:item/blade"
+      },
+      {
+        "attack_slots": [],
+        "defense_slots": [
+          1
+        ],
+        "id": "demo:item/shield"
+      },
+      {
+        "attack_slots": [
+          0
+        ],
+        "defense_slots": [],
+        "id": "demo:item/twohand"
+      },
+      {
+        "attack_slots": [],
+        "defense_slots": [],
+        "id": "demo:item/ring"
+      },
+      {
+        "attack_slots": [],
+        "defense_slots": [],
+        "id": "demo:item/other_race"
+      },
+      {
+        "attack_slots": [],
+        "defense_slots": [],
+        "id": "demo:item/strong"
+      },
+      {
+        "attack_slots": [],
+        "defense_slots": [],
+        "id": "demo:item/titled"
+      },
+      {
+        "id": "demo:item/armor",
+        "attack_slots": [],
+        "defense_slots": [
+          4
+        ]
+      }
+    ],
+    "scale": 0.1
+  },
+  "storage": {
+    "capacity": 192,
+    "coin_limit": 2100000000,
+    "services": [
+      {
+        "id": "demo:bank/test",
+        "label": "Account warehouse",
+        "open_fee": 0,
+        "position": [
+          0,
+          0,
+          0
+        ],
+        "radius": 5,
+        "remote": false
+      }
+    ]
+  },
+  "storage_auth": {
+    "alphabet": "0123456789:;ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz",
+    "comparison": "ascii-insensitive",
+    "forbidden": [
+      "SyntheticDenied"
+    ],
+    "maximum": 16,
+    "minimum": 6
+  },
+  "friends": {
+    "capacity": 24,
+    "name_bytes": 20,
+    "refresh_ticks": 60
+  },
+  "party": {
+    "capacity": 8,
+    "level_gap": 8,
+    "level_maximum": 1.5,
+    "level_minimum": 0.6666666666666666,
+    "name_bytes": 20,
+    "repeat_ticks": 60
+  },
+  "progression": {
+    "author": "n3e original Moradon feature demo",
+    "base_xp": 100,
+    "capacity": 8,
+    "claim_radius": 3,
+    "coins": {
+      "base": 1000,
+      "bonus_cap": 32700,
+      "currency": "demo:currency/coin",
+      "event_percent": 0,
+      "maximum": 32766,
+      "maximum_percent": 100,
+      "minimum_percent": 70,
+      "overflow": 32000,
+      "party_bonus_percent": 20,
+      "pickup_bonus_percent": 30
+    },
+    "curve": "demo:curve/normal",
+    "item": "demo:item/token",
+    "model": "contribution_items_v5",
+    "npc_level": 5,
+    "origin": "original synthetic",
+    "party_loot": {
+      "radius": 50
+    },
+    "party_rewards": {
+      "bonus_tenths": 8,
+      "level_gap": 8,
+      "level_maximum": 1.5,
+      "level_minimum": 0.6666666666666666,
+      "level_xp": [
+        200,
+        300,
+        400,
+        500,
+        600,
+        700,
+        800,
+        900,
+        1000,
+        1100
+      ]
+    },
+    "radius": 50,
+    "revision": 1,
+    "starting": 0,
+    "stat_policy": "equipment_v1",
+    "thresholds": [
+      0,
+      200,
+      500,
+      900,
+      1400,
+      2000,
+      2700,
+      3500,
+      4400,
+      5400
+    ],
+    "ttl": 20,
+    "items": {
+      "multiplier": 28761,
+      "increment": 57522,
+      "seed": 23432,
+      "group_bound": 10000,
+      "event_percent": 0,
+      "event_unit": 0.01,
+      "premium_rate": 0.3,
+      "items": [
+        {
+          "id": "demo:item/blade",
+          "quantity": 1,
+          "durability": 80
+        },
+        {
+          "id": "demo:item/potion",
+          "quantity": 2,
+          "durability": 0
+        }
+      ],
+      "rows": [
+        {
+          "chance": 10000,
+          "level_penalty": 0,
+          "premium": false,
+          "group": true,
+          "slots": [
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1,
+            1
+          ]
+        },
+        {
+          "chance": 10000,
+          "level_penalty": 0,
+          "premium": false,
+          "group": false,
+          "slots": [
+            2
+          ]
+        }
+      ]
+    }
+  },
+  "damage": {
+    "model": "contested_melee_v1",
+    "npc": {
+      "accuracy": 100,
+      "attack": 25,
+      "defense": 0,
+      "evasion": 1
+    },
+    "player": {
+      "accuracy": 50,
+      "attack": 36,
+      "defense": 20,
+      "evasion": 100
+    }
+  },
+  "melee": {
+    "actor_radius": 1,
+    "facing_dot": 0.7,
+    "reach": 0,
+    "target_radius": 1
+  },
+  "consumables": [
+    {
+      "item": "demo:item/potion",
+      "health": 90,
+      "resource": 0,
+      "delay_ms": 500,
+      "cooldown_ms": 2000
+    },
+    {
+      "item": "demo:item/mana_potion",
+      "health": 0,
+      "resource": 120,
+      "delay_ms": 500,
+      "cooldown_ms": 2000
+    }
+  ]
+}

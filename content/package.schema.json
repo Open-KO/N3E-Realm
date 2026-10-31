@@ -1,0 +1,811 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "$id": "n3e:package-schema-v1",
+  "required": [
+    "game_id",
+    "package_version",
+    "content_schema_version",
+    "engine_version",
+    "protocol_version",
+    "assets",
+    "properties",
+    "gameplay"
+  ],
+  "properties": {
+    "game_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+    },
+    "package_version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "content_schema_version": {
+      "const": 1
+    },
+    "engine_version": {
+      "enum": [
+        1,
+        2,
+        3,
+        4,
+        9
+      ]
+    },
+    "protocol_version": {
+      "enum": [
+        1,
+        2,
+        4
+      ]
+    },
+    "assets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1,
+      "items": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "source",
+          "metadata",
+          "dependencies"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_-]{0,31}:[a-z][a-z0-9_/-]{0,95}$"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "metadata": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "dependencies": {
+            "type": "array",
+            "maxItems": 256,
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "properties": {
+      "type": "array",
+      "maxItems": 128,
+      "items": {
+        "$ref": "property.schema.json"
+      }
+    },
+    "gameplay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "item",
+        "npc",
+        "health",
+        "resource",
+        "damage",
+        "cost",
+        "cooldown_ticks",
+        "regen_ticks",
+        "npc_health",
+        "npc_damage",
+        "npc_cooldown_ticks",
+        "respawn_ticks",
+        "slots",
+        "starting_items",
+        "reward_items",
+        "reward_xp",
+        "level_xp",
+        "speed",
+        "range",
+        "npc_speed",
+        "npc_range",
+        "aggro_range",
+        "leash_range",
+        "spawn_x",
+        "spawn_z"
+      ],
+      "properties": {
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}:[a-z][a-z0-9_/-]{0,95}$"
+        },
+        "item": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}:[a-z][a-z0-9_/-]{0,95}$"
+        },
+        "npc": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}:[a-z][a-z0-9_/-]{0,95}$"
+        },
+        "health": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "resource": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "damage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "cost": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100000
+        },
+        "cooldown_ticks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1200
+        },
+        "regen_ticks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1200
+        },
+        "npc_health": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "npc_damage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "npc_cooldown_ticks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1200
+        },
+        "respawn_ticks": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1200
+        },
+        "slots": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "starting_items": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "reward_items": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "reward_xp": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "level_xp": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        },
+        "speed": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 6
+        },
+        "range": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 10
+        },
+        "npc_speed": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 3
+        },
+        "npc_range": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 10
+        },
+        "aggro_range": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 10
+        },
+        "leash_range": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 20
+        },
+        "spawn_x": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000
+        },
+        "spawn_z": {
+          "type": "number",
+          "minimum": -1000000,
+          "maximum": 1000000
+        },
+        "spawns": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2048,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number",
+              "minimum": -1000000,
+              "maximum": 1000000
+            }
+          }
+        },
+        "interest_cell": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "movement": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "run_speed",
+            "backward_speed",
+            "radius",
+            "height",
+            "step_height"
+          ],
+          "properties": {
+            "run_speed": {
+              "type": "number",
+              "minimum": 0.01,
+              "maximum": 6
+            },
+            "backward_speed": {
+              "type": "number",
+              "minimum": 0.01,
+              "maximum": 6
+            },
+            "radius": {
+              "type": "number",
+              "minimum": 0.1,
+              "maximum": 1
+            },
+            "height": {
+              "type": "number",
+              "minimum": 0.5,
+              "maximum": 3
+            },
+            "step_height": {
+              "type": "number",
+              "minimum": 0.05,
+              "maximum": 0.5
+            }
+          }
+        }
+      }
+    },
+    "presentation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "player-idle.bin",
+        "player-walk.bin",
+        "player-attack.bin",
+        "player-death.bin",
+        "hud.bin"
+      ],
+      "properties": {
+        "player-idle.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "player-walk.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "player-attack.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "player-death.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "hud.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "player-run.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "player-backward.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "player-ready.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "loot-model.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "loot-policy.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "target-marker.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        }
+      },
+      "dependentRequired": {
+        "player-run.bin": [
+          "player-backward.bin"
+        ],
+        "player-backward.bin": [
+          "player-run.bin"
+        ]
+      }
+    },
+    "melee": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "actor_radius",
+        "target_radius",
+        "reach",
+        "facing_dot"
+      ],
+      "properties": {
+        "actor_radius": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 5
+        },
+        "target_radius": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 5
+        },
+        "reach": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "facing_dot": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 0.99
+        }
+      }
+    },
+    "camera": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pitch",
+        "pitch_min",
+        "pitch_max",
+        "distance",
+        "distance_min",
+        "distance_max",
+        "focus_height",
+        "focus_scale",
+        "yaw_per_pixel",
+        "pitch_per_pixel",
+        "zoom_per_step",
+        "clearance",
+        "turn_rate",
+        "hold_delay",
+        "facing_relative"
+      ],
+      "properties": {
+        "pitch": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1.4
+        },
+        "pitch_min": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1.4
+        },
+        "pitch_max": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1.4
+        },
+        "distance": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 32
+        },
+        "distance_min": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 32
+        },
+        "distance_max": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 32
+        },
+        "focus_height": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "focus_scale": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "yaw_per_pixel": {
+          "type": "number",
+          "minimum": 0.0001,
+          "maximum": 0.05
+        },
+        "pitch_per_pixel": {
+          "type": "number",
+          "minimum": 0.0001,
+          "maximum": 0.05
+        },
+        "zoom_per_step": {
+          "type": "number",
+          "minimum": 0.01,
+          "maximum": 4
+        },
+        "clearance": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 0.5
+        },
+        "turn_rate": {
+          "type": "number",
+          "minimum": 0.1,
+          "maximum": 6.3
+        },
+        "hold_delay": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "facing_relative": {
+          "type": "boolean"
+        },
+        "drag_vertical": {
+          "enum": [
+            "pitch",
+            "distance"
+          ]
+        },
+        "distance_per_pixel": {
+          "type": "number",
+          "minimum": 0.0001,
+          "maximum": 0.5
+        },
+        "key_pitch_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 6.3
+        },
+        "edge_yaw_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 6.3
+        }
+      },
+      "dependentRequired": {
+        "drag_vertical": [
+          "drag_vertical",
+          "distance_per_pixel",
+          "key_pitch_rate",
+          "edge_yaw_rate"
+        ],
+        "distance_per_pixel": [
+          "drag_vertical",
+          "distance_per_pixel",
+          "key_pitch_rate",
+          "edge_yaw_rate"
+        ],
+        "key_pitch_rate": [
+          "drag_vertical",
+          "distance_per_pixel",
+          "key_pitch_rate",
+          "edge_yaw_rate"
+        ],
+        "edge_yaw_rate": [
+          "drag_vertical",
+          "distance_per_pixel",
+          "key_pitch_rate",
+          "edge_yaw_rate"
+        ]
+      }
+    },
+    "progression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "stat_policy",
+        "origin",
+        "curve",
+        "item",
+        "author",
+        "thresholds",
+        "revision",
+        "capacity",
+        "starting",
+        "npc_level",
+        "base_xp",
+        "radius",
+        "claim_radius",
+        "ttl"
+      ],
+      "properties": {
+        "model": {
+          "const": "contribution_claim_v1"
+        },
+        "stat_policy": {
+          "const": "fixed_v1"
+        },
+        "origin": {
+          "const": "original synthetic"
+        },
+        "curve": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "item": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "author": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "thresholds": {
+          "type": "array",
+          "minItems": 10,
+          "maxItems": 10,
+          "items": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9223372036854775807
+          }
+        },
+        "revision": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "capacity": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "starting": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 64
+        },
+        "npc_level": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10
+        },
+        "base_xp": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1000000
+        },
+        "radius": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "claim_radius": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 10
+        },
+        "ttl": {
+          "type": "integer",
+          "minimum": 10,
+          "maximum": 600
+        }
+      }
+    },
+    "world": {
+      "type": "string",
+      "description": "Package file holding the cooked N3W1 static world asset; requires engine_version 12."
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": [
+          "progression"
+        ]
+      },
+      "then": {
+        "properties": {
+          "engine_version": {
+            "const": 9
+          },
+          "protocol_version": {
+            "const": 4
+          }
+        }
+      },
+      "else": {
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "gameplay": {
+                  "required": [
+                    "movement"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "protocol_version": {
+                  "const": 2
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "protocol_version": {
+                  "const": 1
+                },
+                "gameplay": {
+                  "properties": {
+                    "speed": {
+                      "maximum": 3
+                    }
+                  }
+                },
+                "presentation": {
+                  "not": {
+                    "anyOf": [
+                      {
+                        "required": [
+                          "player-run.bin"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "player-backward.bin"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "required": [
+                "melee"
+              ]
+            },
+            "then": {
+              "properties": {
+                "engine_version": {
+                  "const": 4
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "gameplay": {
+                  "properties": {
+                    "cost": {
+                      "minimum": 1
+                    }
+                  }
+                }
+              },
+              "if": {
+                "required": [
+                  "camera"
+                ]
+              },
+              "then": {
+                "properties": {
+                  "engine_version": {
+                    "const": 3
+                  }
+                }
+              },
+              "else": {
+                "if": {
+                  "properties": {
+                    "gameplay": {
+                      "required": [
+                        "movement"
+                      ]
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "engine_version": {
+                      "const": 2
+                    }
+                  }
+                },
+                "else": {
+                  "properties": {
+                    "engine_version": {
+                      "const": 1
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "if": {
+        "required": [
+          "presentation"
+        ],
+        "properties": {
+          "presentation": {
+            "required": [
+              "player-ready.bin"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "melee"
+        ]
+      }
+    }
+  ]
+}

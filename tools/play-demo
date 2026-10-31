@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source tools/env.sh
+make client server assets
+if [[ "${1:-}" == "--ko" ]]; then
+  shift
+  python tools/assetc/demo_variants.py --ko
+  set -- --package demo-ko "$@"
+fi
+bash deploy/local-ca.sh
+python tools/demo_session.py "$@"

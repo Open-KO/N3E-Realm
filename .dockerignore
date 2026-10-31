@@ -1,0 +1,17 @@
+*
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!protocol/
+!protocol/**
+!server/
+!server/**
+!launcher/Cargo.toml
+!launcher/src/
+!launcher/src/**
+!bot/Cargo.toml
+!bot/src/
+!bot/src/**
+!deploy/
+!deploy/001-foundation.sql
+!deploy/Dockerfile

@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# Walk the imported Moradon map: cook it, stand a disposable local server on it
+# and enter at the surveyed spawn.
+#
+# This is a map preview: the imported terrain with its own tile textures, every
+# static placement, the real male Tuarek player and the collision the server
+# enforces. There are no creatures — NPC clips have to share the instanced
+# scene's atlas, so that section is dropped.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source tools/env.sh
+
+# The Zones.tbl key of the zone to walk (210 is Moradon); its row names the files.
+ZONE="${1:-210}"
+PORT="${N3E_PORT:-7779}"
+# Supplied KO startup 0064b9b0 accepts these viewport modes.
+WINDOW_SIZE="${N3E_WINDOW_SIZE:-1280x1024}"
+case "$WINDOW_SIZE" in
+  1024x768|1280x1024|1600x1200) ;;
+  *) echo "N3E_WINDOW_SIZE must be 1024x768, 1280x1024 or 1600x1200" >&2; exit 1 ;;
+esac
+# N3E_FULLSCREEN=1 takes that mode fullscreen, scaling the whole frame like the
+# supplied client's display-mode change.
+FULLSCREEN=()
+if [ "${N3E_FULLSCREEN:-0}" = 1 ]; then FULLSCREEN=(--fullscreen); fi
+case "$ZONE" in
+  ''|*[!0-9]*) echo "The zone is a Zones.tbl key such as 210 (Moradon), not '$ZONE'." >&2; exit 1 ;;
+esac
+if ! test -f "assets/ko/Data/Zones.tbl.csv"; then
+  echo "Local zone assets are absent; run tools/fetch-ko-assets.sh." >&2
+  exit 1
+fi
+
+echo "== building =="
+make client server
+# The bake names the package it wrote: moradon-preview for Moradon, ko-zone-KEY-preview
+# for any other zone (PQ-217).
+PACKAGE="$(python3 tools/assetc/ko_bake.py "$ZONE" --preview | tee /dev/stderr | sed -n 's/^package //p')"
+test -f "$PACKAGE/release.sha256"
+
+echo "== certificate and server =="
+bash deploy/local-ca.sh
+export N3E_UID="$(id -u)" N3E_GID="$(id -g)"
+# A realm is bound to one release hash, and re-cooking the map changes it, so
+# the realm follows the package instead of failing with incompatible_base.
+RELEASE="$(cut -c1-8 "$PACKAGE/release.sha256")"
+export N3E_PORT="$PORT" N3E_REALM="${N3E_REALM:-test-$ZONE-$RELEASE}"
+echo "realm $N3E_REALM"
+export N3E_PACKAGE_PATH="$PWD/$PACKAGE"
+# The server runs from an image, so a server change only reaches the realm if
+# the image is rebuilt first. Every step below uses it, including migrate.
+docker compose build server
+docker compose up -d --wait postgres redis
+docker compose run --rm --no-deps migrate
+# The conversion is one-time per realm: a second run reports "realm already
+# owned", which means it is already done. Tolerate exactly that and nothing
+# else, so a real conversion failure still stops the launch.
+convert_log="$(mktemp)"
+if ! docker compose run --rm --no-deps -e N3E_TEST_PROGRESSION=disposable \
+      server convert-progression >"$convert_log" 2>&1; then
+  if grep -q "realm already owned" "$convert_log"; then
+    echo "progression already converted for $N3E_REALM"
+  else
+    cat "$convert_log" >&2
+    rm -f "$convert_log"
+    exit 1
+  fi
+fi
+rm -f "$convert_log"
+docker compose up -d --wait --force-recreate server
+
+CREDS=build/kx/moradon-login.json   # account is global; characters are per realm
+if ! test -f "$CREDS"; then
+  ACCOUNT="walk$(openssl rand -hex 3)"
+  PASSWORD="$(openssl rand -base64 18 | tr -d '/+=')"
+  printf '%s\n' "$PASSWORD" | docker compose exec -T server n3e-server account-create "$ACCOUNT"
+  umask 077
+  mkdir -p build/kx
+  printf '{"account":"%s","password":"%s"}\n' "$ACCOUNT" "$PASSWORD" > "$CREDS"
+fi
+ACCOUNT="$(python3 -c "import json;print(json.load(open('$CREDS'))['account'])")"
+PASSWORD="$(python3 -c "import json;print(json.load(open('$CREDS'))['password'])")"
+
+python3 - "$PORT" "$CREDS" "$PACKAGE" <<'PROVISION'
+import json, pathlib, sys, subprocess
+sys.path.insert(0, "tests")
+from world_peer import Peer
+port, creds_path = int(sys.argv[1]), sys.argv[2]
+creds = json.loads(pathlib.Path(creds_path).read_text())
+package = pathlib.Path(sys.argv[3])
+recipe = json.loads((package / "recipe.json").read_text())["manifest"]
+peer = Peer(port, creds["account"], creds["password"],
+            content=(package / "release.sha256").read_text().strip(),
+            game=recipe["game_id"], protocol=recipe["protocol_version"])
+if not peer.characters:
+    peer.create("Walker")
+    print("created character Walker")
+character_id = peer.characters[0][0]
+peer.s.close()
+subprocess.run(["docker", "compose", "exec", "-T", "server", "n3e-server", "role", "grant",
+                creds["account"], str(character_id), __import__('os').environ['N3E_REALM'],
+                "movement.turbo"], check=True)
+print("Walker has server-authorized hold-Q turbo")
+PROVISION
+
+echo "== entering the map ($WINDOW_SIZE) =="
+echo "WASD to move, V to toggle walk/run, hold Q for turbo, right-drag to orbit, Esc to leave."
+# Automatic login is a test-client hook (PQ-006); the player n3e-client refuses it.
+exec env N3E_TEST_ACCOUNT="$ACCOUNT" N3E_TEST_PASSWORD="$PASSWORD" \
+  build/client/n3e-test-client "$PACKAGE" \
+  --connect "localhost:$PORT" --ca deploy/local/ca.pem --auto-login --fixed-window "$WINDOW_SIZE" "${FULLSCREEN[@]}" "${@:2}"

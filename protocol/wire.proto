@@ -1,0 +1,127 @@
+syntax = "proto3";
+package n3e;
+message Handshake { uint32 version = 1; string game = 2; bytes content = 3; }
+message Input { uint64 id = 1; string text = 2; float movement = 3; optional uint64 optional_id = 4; }
+message Snapshot { uint64 tick = 1; Input echo = 2; }
+// PQ-405 (D-208): request is the Envelope body field number of the client message
+// this Error refuses (9 Move, 32 BagRequest, ...), 0 when it answers none of them
+// (handshake, connection limits). A client shows a refusal only on that feature.
+message Error { enum Code { MALFORMED = 0; VERSION = 1; CONTENT = 2; INVALID_MOVEMENT = 3; RATE_LIMITED = 4; UNAUTHENTICATED = 5; DEPENDENCY_UNAVAILABLE = 6; FORBIDDEN = 7; CONFLICT = 8; } Code code = 1; string detail = 2; uint32 request = 3; }
+message Envelope { oneof body { Handshake handshake = 1; Input input = 2; Snapshot snapshot = 3; Error error = 4; Login login = 5; Characters characters = 6; CreateCharacter create_character = 7; SelectCharacter select_character = 8; Move move = 9; World world = 10; Chat chat = 11; Logout logout = 12; LoggedOut logged_out = 13; Ping ping = 14; Action action = 15; ActionResult action_result = 16; RewardStatus reward_status = 17; RewardResult reward_result = 18; Respawn respawn = 19; RespawnResult respawn_result = 20; SettlementStatus settlement_status = 21; SettlementResult settlement_result = 22; LootList loot_list = 23; LootPage loot_page = 24; Claim claim = 25; ClaimResult claim_result = 26; ClaimStatus claim_status = 27; AdminRequest admin_request = 28; AdminResult admin_result = 29; Registry registry = 30; PrivateMessage private_message = 31; BagRequest bag_request = 32; BagResult bag_result = 33; StorageRequest storage_request = 34; StorageResult storage_result = 35; StorageAuthRequest storage_auth_request = 36; StorageAuthResult storage_auth_result = 37;
+    FriendRequest friend_request = 38; FriendResult friend_result = 39;
+    FriendPresenceQuery friend_presence_query = 40; FriendPresence friend_presence = 41;
+    PartyRequest party_request = 42; PartyState party_state = 43; PartyResult party_result = 44; Rest rest = 45; } }
+
+// Phase 2 world protocol. Legacy Input/Snapshot remain golden fixtures only.
+// Movement is one 50ms step; seq starts at 1, strictly increases, never wraps.
+// Server accepts at most one pending step per tick and never client time/position.
+message Login { string account = 1; string password = 2; }
+message Characters { repeated Character characters = 1; }
+message Character { uint64 id = 1; string name = 2; }
+message CreateCharacter { string name = 1; }
+message SelectCharacter { uint64 id = 1; }
+message Move { uint64 session = 1; uint64 seq = 2; float x = 3; float z = 4; uint32 mode = 5; bool turbo = 6; uint64 entity = 7; uint64 permission_generation = 8; }
+// Wire22 appearance keys derive only from committed equipment; private bags stay private.
+// Wire30 (PQ-249): an NPC spawned from an N3N3 template carries the template's looks
+// key and maximum health; both are absent for every other entity and package.
+// PQ-272: such an NPC also carries its template's drawn scale in percent (1-1000)
+// when it is not 100; 0 (absent) means 100. Output-only; no wire version change.
+message Entity { uint64 id = 1; string name = 2; float x = 3; float y = 4; float z = 5; uint64 ack = 6; uint32 health = 7; uint32 resource = 8; bool npc = 9; uint64 strike_tick = 10; uint64 respawn_tick = 11; string behavior = 12; uint32 movement_mode = 13; string strike_result = 14; uint32 strike_damage = 15; LifeState life_state = 16; uint64 corpse_until_tick = 17; uint64 definition_revision = 18; bool turbo = 19; repeated uint32 appearance = 20; bool sitting = 21; uint32 combat_style = 22; uint32 strike_style = 23; bool strike_moving = 24; uint64 strike_target = 25; string cast_skill = 26; uint64 cast_start = 27; uint64 cast_end = 28; uint64 cast_target = 29; uint64 strike_sequence = 30; string looks = 31; uint32 max_health = 32; uint32 scale = 33; }
+// Every view is an atomic complete interest baseline. Missing IDs despawn;
+// present IDs spawn before position application. Coalescing cannot lose lifecycle.
+// Entity IDs come from a noncycling Postgres sequence, unique across reconnects
+// and restarts. Selection resets ALL client state.
+message World { uint64 tick = 1; uint64 session = 2; uint64 self = 3; repeated Entity entities = 4; Inventory inventory = 5; string action = 6; float speed = 7; uint32 max_health = 8; uint32 max_resource = 9; Revision revision = 10; bool turbo_allowed = 11; uint64 permission_generation = 12; DerivedStats stats = 13; repeated PresentationEvent events = 14; uint64 event_cursor = 15; repeated SkillCooldown skill_cooldowns = 16; repeated NpcTrace traces = 17; }
+// Chat requests remain local. Private intent has a distinct envelope, so older
+// servers reject it instead of silently broadcasting confidential text.
+// from_operator (PQ-178) is server-derived: the sender's server.inspect lease was
+// current and, for a private line, the sender is in the recipient's interest
+// area and, since PQ-184, the recipient may see the sender (D-152). Clients only
+// style a marked line; a request's value is ignored.
+message Chat { string text = 1; uint64 sender = 2; string sender_name = 3; bool private_message = 4; bool from_operator = 5; }
+message PrivateMessage { string recipient = 1; string text = 2; }
+message Logout {}
+message LoggedOut {}
+message Ping {}
+
+// Strictly increasing action sequence per authenticated session. Repeats never damage.
+message Action { uint64 session = 1; uint64 seq = 2; uint64 target = 3; string action = 4; }
+message ActionResult { uint64 seq = 1; string status = 2; uint64 target = 3; uint32 damage = 4; }
+message Inventory { string item = 1; uint32 count = 2; uint32 capacity = 3; uint64 xp = 4; uint64 level = 5; uint64 pending = 6; uint64 last_operation = 7; string reward_status = 8; uint64 curve_xp = 9; uint64 revision = 10; uint64 latest_settlement = 11; string settlement_status = 12; }
+// Read-only status: cannot manufacture a reward; authenticated recipient only.
+message RewardStatus { uint64 operation = 1; }
+message RewardResult { uint64 operation = 1; string status = 2; uint32 count = 3; uint64 xp = 4; }
+
+// Protocol 3 lifecycle. State 0 is reserved for legacy packages.
+enum LifeState { LEGACY = 0; ALIVE = 1; DEAD_WAITING = 2; DEAD_READY = 3; CORPSE = 4; DORMANT = 5; }
+// entity is the expected dead runtime instance, never an actor authority selector.
+message Respawn { uint64 session = 1; uint64 seq = 2; uint64 entity = 3; }
+message RespawnResult { uint64 seq = 1; string status = 2; uint64 entity = 3; }
+
+// Protocol 4: separate operation family; no client settlement mutation message.
+message SettlementStatus { uint64 encounter = 1; }
+message SettlementResult { uint64 encounter = 1; string status = 2; uint64 awarded_xp = 3; uint64 xp = 4; uint64 curve_xp = 5; uint32 level = 6; uint64 revision = 7; uint32 reason = 8; }
+
+// Protocol 5: owner-only bounded discovery and server-created claim identities.
+message LootList { uint64 after = 1; }
+message LootDrop { uint64 operation = 1; uint64 encounter = 2; string item = 3; string zone = 4; float x = 5; float y = 6; float z = 7; uint64 expires_ms = 8; uint32 quantity = 9; uint32 kind = 10; }
+message LootPage { repeated LootDrop drops = 1; uint64 next = 2; }
+message Claim { uint64 session = 1; uint64 seq = 2; uint64 entity = 3; uint64 operation = 4; uint64 encounter = 5; string item = 6; uint32 quantity = 7; }
+message ClaimStatus { uint64 operation = 1; }
+message ClaimResult { uint64 operation = 1; string status = 2; uint32 count = 3; uint64 revision = 4; uint64 recipient = 5; string recipient_name = 6; repeated CoinAward coins = 7; }
+message CoinAward { uint64 character = 1; string name = 2; uint32 nominal = 3; uint32 added = 4; uint32 balance = 5; uint64 bag_revision = 6; }
+
+// Phase 4: no client actor, role or tools flag is authoritative.
+message Property { string key = 1; string type = 2; float min = 3; float max = 4; string scope = 5; string capability = 6; string persistence = 7; string activation = 8; uint32 schema = 9; uint32 kind = 10; uint32 target = 11; float initial = 12; }
+message Registry { repeated Property properties = 1; repeated string capabilities = 2; uint64 generation = 3; string base = 4; }
+message PropertyValue { string key = 1; float value = 2; }
+message Revision { string base = 1; uint64 revision = 2; uint64 tick = 3; repeated PropertyValue values = 4; }
+message AdminRequest { uint64 session = 1; string id = 2; string operation = 3; uint64 expected = 4; string base = 5; repeated PropertyValue patch = 6; string reason = 7; uint64 revision = 8; uint32 spawn = 9; uint64 entity = 10; }
+message AdminResult { string id = 1; string status = 2; uint64 revision = 3; uint64 tick = 4; Revision state = 5; string detail = 6; }
+
+// Engine15/wire8 item state. Indexes are zero-based; actor comes from the session.
+message ItemStack { uint64 instance = 1; string item = 2; uint32 quantity = 3; uint32 durability = 4; }
+message BagState { uint64 revision = 1; uint32 capacity = 2; string currency = 3; uint32 coins = 4; repeated ItemStack slots = 5; repeated ItemStack equipment = 6; }
+// 0=list; 1=compatible stack merge/overflow or whole-record swap; wire9: 2=buy, 3=sell; wire10: 4=bag repair.
+// Wire11: 5=equip, 6=unequip, 7=equipment move, 8=equipped-item repair.
+message BagRequest { uint32 operation = 1; string request = 2; uint64 expected_revision = 3; uint32 source = 4; uint32 destination = 5; uint64 instance = 6; string service = 7; string item = 8; uint32 quantity = 9; }
+message BagResult { string request = 1; string status = 2; BagState state = 3; }
+
+message DerivedStats { uint32 attack = 1; uint32 defense = 2; float accuracy = 3; float evasion = 4; uint32 max_health = 5; uint32 max_resource = 6; uint32 carry_limit = 7; repeated uint32 attributes = 8; uint64 equipment_revision = 9; }
+
+// Engine21/wire14: account ownership comes from the selected authenticated character.
+message StorageState { uint64 revision = 1; uint32 capacity = 2; uint32 coins = 3; repeated ItemStack slots = 4; }
+// 0=open (may charge a fee), 1=deposit item, 2=withdraw item, 3=move storage record,
+// 4=deposit coins, 5=withdraw coins. Every request has an immutable operation ID.
+message StorageRequest { uint32 operation = 1; string request = 2; uint64 bag_revision = 3; uint64 storage_revision = 4; string service = 5; uint32 source = 6; uint32 destination = 7; uint64 instance = 8; uint32 quantity = 9; }
+message StorageResult { string request = 1; string status = 2; BagState bag = 3; StorageState storage = 4; Inventory inventory = 5; }
+
+// Wire15. Passwords are transport-only: never recorded in a plaintext operation ledger.
+// 0=status (no request/password), 1=unlock, 2=change (old password + replacement).
+message StorageAuthRequest { uint32 operation = 1; string request = 2; string service = 3; string password = 4; string replacement = 5; }
+// Original operation outcome/revision; authorized_revision reflects the current session grant.
+message StorageAuthResult { string request = 1; string status = 2; uint64 revision = 3; uint64 authorized_revision = 4; }
+
+// N3F1: directed owner-only durable roster. Presence is current, separate from history.
+message FriendRequest { uint32 operation=1; string request=2; uint64 expected_revision=3; string name=4; }
+message FriendEntry { uint32 slot=1; uint64 character=2; string name=3; }
+message FriendResult { string request=1; string status=2; uint64 revision=3; uint32 capacity=4; repeated FriendEntry entries=5; }
+message FriendPresenceQuery { uint64 sequence=1; repeated string names=2; }
+message FriendOnline { string name=1; uint64 character=2; uint64 entity=3; bool online=4; bool in_party=5; }
+message FriendPresence { uint64 sequence=1; uint64 tick=2; repeated FriendOnline entries=3; }
+message PartyRequest { uint64 sequence=1; uint32 operation=2; string name=3; uint64 invitation=4; }
+message PartyMember { uint32 slot=1; uint64 character=2; uint64 entity=3; string name=4; uint32 level=5; uint32 health=6; uint32 max_health=7; uint32 resource=8; uint32 max_resource=9; }
+message PartyState { uint64 tick=1; uint64 group=2; uint64 leader=3; repeated PartyMember members=4; uint64 invitation=5; uint64 inviter=6; string inviter_name=7; }
+message PartyResult { uint64 sequence=1; string status=2; }
+
+// Wire23: explicit desired posture, sequenced and bound to the current actor.
+message Rest { uint64 session=1; uint64 seq=2; uint64 entity=3; bool sitting=4; }
+
+// Cosmetic recent events: complete bounded history, independent of reliable rewards.
+// Initial baselines establish the cursor without replaying pre-join events.
+message PresentationEvent { uint64 sequence=1; uint64 tick=2; uint64 actor=3; uint64 target=4; uint32 kind=5; string key=6; uint32 style=7; bool moving=8; bool hit=9; bool npc=10; float x=11; float y=12; float z=13; float target_x=14; float target_y=15; float target_z=16; uint64 request_sequence=17; }
+
+message SkillCooldown { string skill = 1; uint64 ready_tick = 2; }
+// PQ-186: the server AI state of an NPC an operator traced, sent only to sessions
+// whose server.inspect lease is current, for traced NPCs in their interest area.
+message NpcTrace { uint64 entity = 1; string state = 2; }

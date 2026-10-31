@@ -1,0 +1,198 @@
+{
+  "profiles": [
+    {
+      "name": "unarmed",
+      "ready": 86,
+      "attacks": [
+        87,
+        88
+      ],
+      "interval_ms": 1000,
+      "moving": 15
+    },
+    {
+      "name": "light-sword",
+      "ready": 32,
+      "attacks": [
+        33,
+        34
+      ],
+      "interval_ms": 1140,
+      "moving": 14
+    },
+    {
+      "name": "dual-light",
+      "ready": 44,
+      "attacks": [
+        45,
+        46
+      ],
+      "interval_ms": 1140,
+      "moving": 14
+    },
+    {
+      "name": "two-hand-sword",
+      "ready": 50,
+      "attacks": [
+        51,
+        52
+      ],
+      "interval_ms": 1390,
+      "moving": 14
+    },
+    {
+      "name": "shield-only",
+      "ready": 98,
+      "attacks": [
+        99,
+        100
+      ],
+      "interval_ms": 1000,
+      "moving": 15
+    },
+    {
+      "name": "bow",
+      "ready": 92,
+      "attacks": [
+        26
+      ],
+      "interval_ms": 1450,
+      "moving": 26
+    }
+  ],
+  "slots": [
+    0,
+    1
+  ],
+  "rows": [
+    {
+      "items": [
+        null,
+        null
+      ],
+      "profile": 1
+    },
+    {
+      "items": [
+        null,
+        "demo:item/blade"
+      ],
+      "profile": 1
+    },
+    {
+      "items": [
+        "demo:item/blade",
+        null
+      ],
+      "profile": 2
+    },
+    {
+      "items": [
+        "demo:item/blade",
+        "demo:item/shield"
+      ],
+      "profile": 2
+    },
+    {
+      "items": [
+        "demo:item/blade",
+        "demo:item/blade"
+      ],
+      "profile": 3
+    },
+    {
+      "items": [
+        "demo:item/twohand",
+        null
+      ],
+      "profile": 4
+    },
+    {
+      "items": [
+        null,
+        "demo:item/shield"
+      ],
+      "profile": 5
+    },
+    {
+      "items": [
+        "demo:item/other_race",
+        null
+      ],
+      "profile": 2
+    },
+    {
+      "items": [
+        "demo:item/strong",
+        null
+      ],
+      "profile": 2
+    },
+    {
+      "items": [
+        "demo:item/titled",
+        null
+      ],
+      "profile": 2
+    },
+    {
+      "items": [
+        "demo:item/other_race",
+        "demo:item/blade"
+      ],
+      "profile": 3
+    },
+    {
+      "items": [
+        "demo:item/other_race",
+        "demo:item/shield"
+      ],
+      "profile": 2
+    },
+    {
+      "items": [
+        "demo:item/strong",
+        "demo:item/blade"
+      ],
+      "profile": 3
+    },
+    {
+      "items": [
+        "demo:item/strong",
+        "demo:item/shield"
+      ],
+      "profile": 2
+    },
+    {
+      "items": [
+        "demo:item/titled",
+        "demo:item/blade"
+      ],
+      "profile": 3
+    },
+    {
+      "items": [
+        "demo:item/titled",
+        "demo:item/shield"
+      ],
+      "profile": 2
+    }
+  ],
+  "upper_nodes": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15
+  ]
+}

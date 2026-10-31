@@ -1,0 +1,44 @@
+{
+  "items": [
+    {
+      "id": "demo:item/azagai",
+      "ko_2145_item": 1110532000,
+      "source": "Item/11_1042_50_0.n3chrplug",
+      "slot": 1,
+      "joint": 7,
+      "group": 0
+    },
+    {
+      "id": "demo:item/azagai_normal10",
+      "ko_2145_item": 1110432510,
+      "source": "Item/11_1042_50_0.n3chrplug",
+      "slot": 1,
+      "joint": 7,
+      "group": 0
+    },
+    {
+      "id": "demo:item/azagai_reverse1",
+      "ko_2145_item": 1110532501,
+      "source": "Item/11_1042_50_0.n3chrplug",
+      "slot": 1,
+      "joint": 7,
+      "group": 0
+    },
+    {
+      "id": "demo:item/azagai_reverse10",
+      "ko_2145_item": 1110532510,
+      "source": "Item/11_1042_50_0.n3chrplug",
+      "slot": 1,
+      "joint": 7,
+      "group": 0
+    },
+    {
+      "id": "demo:item/azagai_reverse30",
+      "ko_2145_item": 1110532600,
+      "source": "Item/11_1042_50_0.n3chrplug",
+      "slot": 1,
+      "joint": 7,
+      "group": 0
+    }
+  ]
+}

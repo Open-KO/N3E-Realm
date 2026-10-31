@@ -1,0 +1,41 @@
+[
+  {
+    "item": "demo:item/blade",
+    "slot": 0,
+    "source": "Item/1_2011_00_0.n3cplug",
+    "joint": 12,
+    "ko_item": 120110048
+  },
+  {
+    "item": "demo:item/blade",
+    "slot": 1,
+    "source": "Item/1_2011_00_0.n3cplug",
+    "joint": 7,
+    "ko_item": 120110048
+  },
+  {
+    "item": "demo:item/shield",
+    "slot": 1,
+    "source": "Item/1_7025_00_0.n3cplug",
+    "joint": 5,
+    "glow_2145_item": 170251015
+  },
+  {
+    "item": "demo:item/twohand",
+    "slot": 0,
+    "source": "Item/1_2531_00_0.n3cplug",
+    "joint": 12,
+    "glow_2233_source": "Item/1_2631_00_0.n3cplug",
+    "glow_2233_label": "Durandal",
+    "glow_2233_icon": 12631000,
+    "glow_2145_item": 126311011
+  },
+  {
+    "item": "demo:item/armor",
+    "slot": 4,
+    "source": "Item/2_4102_10_0.n3cpart",
+    "parts": [
+      0
+    ]
+  }
+]

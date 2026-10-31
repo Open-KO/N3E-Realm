@@ -1,0 +1,26 @@
+{
+  "character": {"race": 2, "class": 108},
+  "slots": [
+    {"name": "Head", "area": 1},
+    {"name": "Lower body", "area": 10},
+    {"name": "Hands", "area": 12},
+    {"name": "Feet", "area": 13}
+  ],
+  "items": [
+    {"id": "demo:item/krowaz_upper_normal10", "ko_2145_item": 248001020},
+    {"id": "demo:item/krowaz_lower_normal10", "ko_2145_item": 248002020},
+    {"id": "demo:item/krowaz_helmet_normal10", "ko_2145_item": 248003020},
+    {"id": "demo:item/krowaz_gauntlets_normal10", "ko_2145_item": 248004020},
+    {"id": "demo:item/krowaz_boots_normal10", "ko_2145_item": 248005020},
+    {"id": "demo:item/krowaz_upper_reverse1", "ko_2145_item": 258001001},
+    {"id": "demo:item/krowaz_lower_reverse1", "ko_2145_item": 258002001},
+    {"id": "demo:item/krowaz_helmet_reverse1", "ko_2145_item": 258003001},
+    {"id": "demo:item/krowaz_gauntlets_reverse1", "ko_2145_item": 258004001},
+    {"id": "demo:item/krowaz_boots_reverse1", "ko_2145_item": 258005001},
+    {"id": "demo:item/krowaz_upper_reverse30", "ko_2145_item": 258001030},
+    {"id": "demo:item/krowaz_lower_reverse30", "ko_2145_item": 258002030},
+    {"id": "demo:item/krowaz_helmet_reverse30", "ko_2145_item": 258003030},
+    {"id": "demo:item/krowaz_gauntlets_reverse30", "ko_2145_item": 258004030},
+    {"id": "demo:item/krowaz_boots_reverse30", "ko_2145_item": 258005030}
+  ]
+}

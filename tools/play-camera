@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source tools/env.sh
+make client
+python tools/assetc/camera_fixture.py "$@"
+bash deploy/local-ca.sh
+export N3E_UID="$(id -u)" N3E_GID="$(id -g)"
+export N3E_PACKAGE_PATH="$PWD/build/packages/camera" N3E_REALM=camera N3E_PORT=7781
+camera_project=n3e-camera
+if [[ "${1:-}" == "--ko" ]]; then
+  export N3E_PACKAGE_PATH="$PWD/build/packages/camera-ko" N3E_REALM=camera-ko N3E_PORT=7782
+  camera_project=n3e-camera-ko
+fi
+docker compose -p "$camera_project" up --build -d --wait --force-recreate server
+exec python tools/play_movement.py --camera "$@"

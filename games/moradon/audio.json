@@ -1,0 +1,8 @@
+{
+ "listener": "character",
+ "effect_distance": 48,
+ "effect_distance_min": 20,
+ "effect_distance_max": 48,
+ "cutoff": 30,
+ "reference": 2
+}

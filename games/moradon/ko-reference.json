@@ -1,0 +1,65 @@
+{
+  "provenance": {
+    "source": "ref/ko-db/OpenKO-v0.1.2.bak (local-asset; OpenKO database, not a binary-matched release)",
+    "backup_sha256": "db11af06b262698c873d2025fd9abac32bbfb0e808a8ff652625e9dbab488679",
+    "exported_with": "tools/ko-reference/inspect_db.py (isolated read-only restore)",
+    "tables": [
+      "K_MONSTER",
+      "K_NPCPOS",
+      "START_POSITION"
+    ],
+    "selection": "K_MONSTER sSid 750; K_NPCPOS ZoneID 21 NpcID 750; START_POSITION ZoneID 21; adopted columns only (sPid added by PQ-174 and sSize by PQ-288 from the same export)",
+    "coordinates": "KO (x, z) -> n3e (x - 256, 256 - z) for the centred 512 m Moradon bake (tools/assetc/ko_bake.py)",
+    "binary_meaning": "AI Server-official.exe: column bindings 0041737b, table copy 00437fb4, spawn template copy 0043893e, spawn areas 00419489, respawn 0041b89c, attack delay 0041de51/004183c2; see docs/ko/investigations/c-npc-timing-sync.md and i-reference-database.md",
+    "record": "docs/implementation/evidence/ko-moradon-npc-data.md"
+  },
+  "monster": {
+    "sSid": 750,
+    "strName": "Worm",
+    "sPid": 700,
+    "sSize": 120,
+    "byActType": 1,
+    "sLevel": 1,
+    "iHpPoint": 7,
+    "sAttackDelay": 2000,
+    "bySpeed1": 1,
+    "bySpeed2": 3,
+    "sStandtime": 1000,
+    "bySearchRange": 3,
+    "byAttackRange": 5,
+    "byTracingRange": 40
+  },
+  "spawns": [
+    {
+      "NpcID": 750,
+      "ActType": 1,
+      "RegenType": 0,
+      "LeftX": 221,
+      "TopZ": 318,
+      "RightX": 236,
+      "BottomZ": 302,
+      "NumNPC": 5,
+      "RegTime": 30
+    },
+    {
+      "NpcID": 750,
+      "ActType": 1,
+      "RegenType": 0,
+      "LeftX": 265,
+      "TopZ": 279,
+      "RightX": 286,
+      "BottomZ": 257,
+      "NumNPC": 5,
+      "RegTime": 20
+    }
+  ],
+  "start_position": {
+    "ZoneID": 21,
+    "sKarusX": 306,
+    "sKarusZ": 352,
+    "sElmoradX": 306,
+    "sElmoradZ": 352,
+    "bRangeX": 10,
+    "bRangeZ": 10
+  }
+}

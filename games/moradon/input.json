@@ -1,0 +1,382 @@
+{
+ "bindings": [
+  {
+   "action": "hotbar_use_1",
+   "keys": [
+    "1"
+   ]
+  },
+  {
+   "action": "hotbar_use_2",
+   "keys": [
+    "2"
+   ]
+  },
+  {
+   "action": "hotbar_use_3",
+   "keys": [
+    "3"
+   ]
+  },
+  {
+   "action": "hotbar_use_4",
+   "keys": [
+    "4"
+   ]
+  },
+  {
+   "action": "hotbar_use_5",
+   "keys": [
+    "5"
+   ]
+  },
+  {
+   "action": "hotbar_use_6",
+   "keys": [
+    "6"
+   ]
+  },
+  {
+   "action": "hotbar_use_7",
+   "keys": [
+    "7"
+   ]
+  },
+  {
+   "action": "hotbar_use_8",
+   "keys": [
+    "8"
+   ]
+  },
+  {
+   "action": "hotbar_page_1",
+   "keys": [
+    "F1"
+   ],
+   "forbid": [
+    "Alt"
+   ],
+   "typing": true
+  },
+  {
+   "action": "hotbar_page_2",
+   "keys": [
+    "F2"
+   ],
+   "forbid": [
+    "Alt"
+   ],
+   "typing": true
+  },
+  {
+   "action": "hotbar_page_3",
+   "keys": [
+    "F3"
+   ],
+   "forbid": [
+    "Alt"
+   ],
+   "typing": true
+  },
+  {
+   "action": "hotbar_page_4",
+   "keys": [
+    "F4"
+   ],
+   "forbid": [
+    "Alt"
+   ],
+   "typing": true
+  },
+  {
+   "action": "hotbar_page_5",
+   "keys": [
+    "F5"
+   ],
+   "forbid": [
+    "Alt"
+   ],
+   "typing": true
+  },
+  {
+   "action": "hotbar_page_6",
+   "keys": [
+    "F6"
+   ],
+   "forbid": [
+    "Alt"
+   ],
+   "typing": true
+  },
+  {
+   "action": "hotbar_page_7",
+   "keys": [
+    "F7"
+   ],
+   "forbid": [
+    "Alt"
+   ],
+   "typing": true
+  },
+  {
+   "action": "hotbar_page_8",
+   "keys": [
+    "F8"
+   ],
+   "forbid": [
+    "Alt"
+   ],
+   "typing": true
+  },
+  {
+   "action": "hotbar_page_prev",
+   "keys": [
+    "PageUp"
+   ]
+  },
+  {
+   "action": "hotbar_page_next",
+   "keys": [
+    "PageDown"
+   ]
+  },
+  {
+   "action": "move_forward",
+   "keys": [
+    "W",
+    "Up"
+   ]
+  },
+  {
+   "action": "move_backward",
+   "keys": [
+    "S",
+    "Down"
+   ]
+  },
+  {
+   "action": "turn_left",
+   "keys": [
+    "A",
+    "Left"
+   ]
+  },
+  {
+   "action": "turn_right",
+   "keys": [
+    "D",
+    "Right"
+   ]
+  },
+  {
+   "action": "turbo",
+   "keys": [
+    "Q"
+   ]
+  },
+  {
+   "action": "camera_pitch_up",
+   "keys": [
+    "Home"
+   ]
+  },
+  {
+   "action": "camera_pitch_down",
+   "keys": [
+    "End"
+   ]
+  },
+  {
+   "action": "auto_move",
+   "keys": [
+    "E"
+   ]
+  },
+  {
+   "action": "attack_toggle",
+   "keys": [
+    "R"
+   ]
+  },
+  {
+   "action": "run_toggle",
+   "keys": [
+    "T"
+   ]
+  },
+  {
+   "action": "target_enemy",
+   "keys": [
+    "Z"
+   ]
+  },
+  {
+   "action": "target_party",
+   "keys": [
+    "X"
+   ]
+  },
+  {
+   "action": "target_npc",
+   "keys": [
+    "B"
+   ]
+  },
+  {
+   "action": "hide_hud",
+   "keys": [
+    "C"
+   ],
+   "require": [
+    "LeftShift"
+   ]
+  },
+  {
+   "action": "rest_toggle",
+   "keys": [
+    "C"
+   ],
+   "forbid": [
+    "LeftShift"
+   ]
+  },
+  {
+   "action": "inventory",
+   "keys": [
+    "I"
+   ]
+  },
+  {
+   "action": "character",
+   "keys": [
+    "U"
+   ]
+  },
+  {
+   "action": "skills",
+   "keys": [
+    "K"
+   ]
+  },
+  {
+   "action": "command_list",
+   "keys": [
+    "H"
+   ]
+  },
+  {
+   "action": "minimap",
+   "keys": [
+    "M"
+   ]
+  },
+  {
+   "action": "names_toggle",
+   "keys": [
+    "O"
+   ]
+  },
+  {
+   "action": "camera_mode",
+   "keys": [
+    "F9"
+   ],
+   "typing": true
+  },
+  {
+   "action": "help",
+   "keys": [
+    "F10"
+   ]
+  },
+  {
+   "action": "chat_size",
+   "keys": [
+    "9"
+   ]
+  },
+  {
+   "action": "message_size",
+   "keys": [
+    "0"
+   ]
+  },
+  {
+   "action": "screenshot",
+   "keys": [
+    "KeypadMinus"
+   ],
+   "typing": true
+  },
+  {
+   "action": "respawn",
+   "keys": [
+    "Return",
+    "KeypadEnter"
+   ]
+  },
+  {
+   "action": "chat",
+   "keys": [
+    "Return",
+    "KeypadEnter"
+   ]
+  },
+  {
+   "action": "cancel",
+   "keys": [
+    "Escape"
+   ]
+  },
+  {
+   "action": "attack_pick",
+   "keys": [
+    "MouseLeft"
+   ],
+   "require": [
+    "Ctrl"
+   ]
+  },
+  {
+   "action": "attack_target",
+   "keys": [
+    "MouseLeftDouble"
+   ]
+  }
+ ],
+ "names": {
+  "shown": true,
+  "hides": [
+   "self",
+   "players"
+  ],
+  "lifetime": {
+   "from": "self",
+   "acquire": 10,
+   "release": 20,
+   "exempt": [
+    "party"
+   ]
+  },
+  "party": {
+   "while_hidden": true,
+   "beyond_distance": true,
+   "color": 16776960
+  },
+  "npc_lifetime": {
+   "from": "self",
+   "acquire": 10,
+   "release": 20,
+   "rule": "band",
+   "always": false,
+   "drop_dead": true
+  },
+  "npc_info": {
+   "color": 65280,
+   "text": "ID({id}) : TYPE({state:0})"
+  },
+  "operator_chat": {
+   "color": 13474815
+  }
+ }
+}

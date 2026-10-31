@@ -1,0 +1,14 @@
+{
+ "pitch": 0.4363323129985824,
+ "pitch_min": 0.17453292519943295,
+ "pitch_max": 1.2217304763960306,
+ "distance": 7,
+ "distance_min": 2,
+ "distance_max": 10,
+ "focus_scale": 0.8,
+ "yaw_per_pixel": 0.0020943951023931957,
+ "drag_vertical": "distance",
+ "distance_per_pixel": 0.008377580409572783,
+ "key_pitch_rate": 0.7853981633974483,
+ "edge_yaw_rate": 2
+}

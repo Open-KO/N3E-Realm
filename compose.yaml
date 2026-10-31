@@ -1,0 +1,69 @@
+name: n3e-local
+x-runtime: &runtime
+  image: "${N3E_IMAGE:-n3e-foundation:local}"
+  build:
+    context: .
+    dockerfile: deploy/Dockerfile
+  user: "${N3E_UID:-1000}:${N3E_GID:-1000}"
+  environment: &environment
+    DATABASE_URL: "host=postgres user=n3e password=${N3E_DB_PASSWORD:-n3e-local} dbname=n3e"
+    REDIS_ADDRESS: redis:6379
+    N3E_PACKAGE: /package
+    N3E_REALM: "${N3E_REALM:-local}"
+    N3E_LISTEN: 0.0.0.0:7777
+    N3E_HEALTH: 0.0.0.0:8080
+    N3E_CERT: /tls/server.pem
+    N3E_KEY: /tls/server.key
+services:
+  postgres:
+    image: postgres:17.4-bookworm@sha256:304ab813518754228f9f792f79d6da36359b82d8ecf418096c636725f8c930ad
+    environment:
+      POSTGRES_USER: n3e
+      POSTGRES_PASSWORD: "${N3E_DB_PASSWORD:-n3e-local}"
+      POSTGRES_DB: n3e
+    volumes: ["pg:/var/lib/postgresql/data"]
+    # PID 1 is an init that reaps orphans, never the postmaster: the postmaster
+    # takes any child it reaps that exits with status 2 or more for a crashed
+    # backend and restarts the cluster. Docker killing a health probe's shell
+    # (timeout, or a pause mid-probe) used to orphan pg_isready to it, which
+    # then exited 2, "no response" (D-140, PQ-155).
+    init: true
+    healthcheck:
+      # Over TCP: on a fresh volume the image's temporary init server answers on
+      # the Unix socket only, before the real server accepts TCP (PQ-001).
+      # Exec form: no shell between Docker and pg_isready to leave it orphaned.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "n3e", "-d", "n3e"]
+      interval: 1s
+      timeout: 2s
+      retries: 40
+  redis:
+    image: redis:7.4.2-bookworm@sha256:fbdbaea47b9ae4ecc2082ecdb4e1cea81e32176ffb1dcf643d422ad07427e5d9
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 2s
+      retries: 40
+  migrate:
+    <<: *runtime
+    command: ["migrate"]
+    depends_on:
+      postgres: {condition: service_healthy}
+  server:
+    <<: *runtime
+    volumes:
+      - "${N3E_PACKAGE_PATH:-./build/packages/demo}:/package:ro"
+      - "${N3E_TLS_PATH:-./deploy/local}/server.pem:/tls/server.pem:ro"
+      - "${N3E_TLS_PATH:-./deploy/local}/server.key:/tls/server.key:ro"
+    ports:
+      - "127.0.0.1:${N3E_PORT:-7777}:7777"
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "n3e-server", "health"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    stop_grace_period: 5s
+volumes:
+  pg:

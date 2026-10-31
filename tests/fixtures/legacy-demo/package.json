@@ -1,0 +1,56 @@
+{
+  "game_id": "demo",
+  "package_version": "0.1.0",
+  "content_schema_version": 1,
+  "engine_version": 1,
+  "protocol_version": 1,
+  "assets": [
+    {
+      "id": "demo:scene/meadow",
+      "source": "fixture.gltf",
+      "metadata": "scene.json",
+      "dependencies": []
+    }
+  ],
+  "properties": [
+    {
+      "key": "demo:lighting.intensity",
+      "type": "number",
+      "scope": "zone",
+      "min": 0,
+      "max": 1,
+      "capability": "world.edit",
+      "persistence": "durable",
+      "activation": "next_tick",
+      "schema_version": 1
+    }
+  ],
+  "gameplay": {
+    "action": "demo:action/strike",
+    "item": "demo:item/token",
+    "npc": "demo:creature/sentinel",
+    "health": 30,
+    "resource": 6,
+    "damage": 10,
+    "cost": 2,
+    "cooldown_ticks": 10,
+    "regen_ticks": 20,
+    "npc_health": 30,
+    "npc_damage": 6,
+    "npc_cooldown_ticks": 20,
+    "respawn_ticks": 60,
+    "slots": 8,
+    "starting_items": 1,
+    "reward_items": 1,
+    "reward_xp": 10,
+    "level_xp": 20,
+    "speed": 3,
+    "range": 1.1,
+    "npc_speed": 0.6,
+    "npc_range": 0.65,
+    "aggro_range": 1.5,
+    "leash_range": 3,
+    "spawn_x": -0.8,
+    "spawn_z": 0
+  }
+}

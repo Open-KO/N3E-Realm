@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source tools/env.sh
+make client
+python tools/assetc/life_fixture.py "$@"
+bash deploy/local-ca.sh
+export N3E_UID="$(id -u)" N3E_GID="$(id -g)"
+export N3E_PACKAGE_PATH="$PWD/build/packages/life" N3E_REALM=life N3E_PORT=7789
+life_project=n3e-life
+if [[ "${1:-}" == "--ko" ]]; then
+  export N3E_PACKAGE_PATH="$PWD/build/packages/life-ko" N3E_REALM=life-ko N3E_PORT=7790
+  life_project=n3e-life-ko
+fi
+docker compose -p "$life_project" up --build -d --wait --force-recreate server
+exec python tools/play_movement.py --life "$@"

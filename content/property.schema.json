@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "$id": "n3e:property-schema-v1",
+  "required": [
+    "key",
+    "type",
+    "scope",
+    "min",
+    "max",
+    "capability",
+    "persistence",
+    "activation",
+    "schema_version"
+  ],
+  "properties": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}:[a-z][a-z0-9_.]{0,95}$"
+    },
+    "type": {
+      "const": "number"
+    },
+    "scope": {
+      "enum": [
+        "realm",
+        "zone"
+      ]
+    },
+    "min": {
+      "type": "number"
+    },
+    "max": {
+      "type": "number"
+    },
+    "capability": {
+      "enum": [
+        "world.edit",
+        "config.edit"
+      ]
+    },
+    "persistence": {
+      "const": "durable"
+    },
+    "activation": {
+      "enum": [
+        "next_tick",
+        "next_spawn",
+        "restart"
+      ]
+    },
+    "schema_version": {
+      "const": 1
+    }
+  }
+}

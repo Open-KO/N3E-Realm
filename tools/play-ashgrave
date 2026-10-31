@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# Ashgrave: an original occult-noir borough built without KO assets (exploration).
+#
+# Generates every asset procedurally (tools/assetc/ashgrave.py), cooks the
+# package, stands up an isolated local realm and enters the square at night.
+# Imps haunt the graveyard to the south-east.
+#
+#   ./tools/play-ashgrave                 # build, provision and play
+#   ./tools/play-ashgrave --provision-only
+#   N3E_WINDOW_SIZE=1600x1200 N3E_FULLSCREEN=1 ./tools/play-ashgrave
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source tools/env.sh
+
+PROVISION_ONLY=0
+if [ "${1:-}" = "--provision-only" ]; then PROVISION_ONLY=1; shift; fi
+PORT="${N3E_PORT:-7781}"
+WINDOW_SIZE="${N3E_WINDOW_SIZE:-1280x1024}"
+case "$WINDOW_SIZE" in
+  1024x768|1280x1024|1600x1200) ;;
+  *) echo "N3E_WINDOW_SIZE must be 1024x768, 1280x1024 or 1600x1200" >&2; exit 1 ;;
+esac
+FULLSCREEN=()
+if [ "${N3E_FULLSCREEN:-0}" = 1 ]; then FULLSCREEN=(--fullscreen); fi
+
+echo "== building =="
+make client server
+python3 tools/assetc/ashgrave.py
+
+echo "== certificate and server =="
+bash deploy/local-ca.sh
+export N3E_UID="$(id -u)" N3E_GID="$(id -g)"
+# An isolated Compose project, so the Moradon realms and volumes are untouched.
+export COMPOSE_PROJECT_NAME=n3e-ashgrave
+RELEASE="$(cut -c1-8 build/packages/ashgrave/release.sha256)"
+export N3E_PORT="$PORT" N3E_REALM="${N3E_REALM:-test-ashgrave-$RELEASE}"
+export N3E_PACKAGE_PATH="$PWD/build/packages/ashgrave"
+echo "realm $N3E_REALM"
+docker compose build server
+docker compose up -d --wait postgres redis
+docker compose run --rm --no-deps migrate
+convert_log="$(mktemp)"
+if ! docker compose run --rm --no-deps -e N3E_TEST_PROGRESSION=disposable \
+      server convert-progression >"$convert_log" 2>&1; then
+  if grep -q "realm already owned" "$convert_log"; then
+    echo "progression already converted for $N3E_REALM"
+  else
+    cat "$convert_log" >&2; rm -f "$convert_log"; exit 1
+  fi
+fi
+rm -f "$convert_log"
+docker compose up -d --wait --force-recreate server
+
+CREDS=build/ashgrave/login.json   # the account is global; characters are per realm
+if ! test -f "$CREDS"; then
+  ACCOUNT="ash$(openssl rand -hex 3)"
+  PASSWORD="$(openssl rand -base64 18 | tr -d '/+=')"
+  printf '%s\n' "$PASSWORD" | docker compose exec -T server n3e-server account-create "$ACCOUNT"
+  umask 077; mkdir -p build/ashgrave
+  printf '{"account":"%s","password":"%s"}\n' "$ACCOUNT" "$PASSWORD" > "$CREDS"
+fi
+ACCOUNT="$(python3 -c "import json;print(json.load(open('$CREDS'))['account'])")"
+PASSWORD="$(python3 -c "import json;print(json.load(open('$CREDS'))['password'])")"
+
+python3 - "$PORT" "$CREDS" <<'PROVISION'
+import json, os, pathlib, subprocess, sys
+sys.path.insert(0, "tests")
+from world_peer import Peer
+port, creds_path = int(sys.argv[1]), sys.argv[2]
+creds = json.loads(pathlib.Path(creds_path).read_text())
+package = pathlib.Path("build/packages/ashgrave")
+recipe = json.loads((package / "recipe.json").read_text())["manifest"]
+peer = Peer(port, creds["account"], creds["password"],
+            content=(package / "release.sha256").read_text().strip(),
+            game=recipe["game_id"], protocol=recipe["protocol_version"])
+if not peer.characters:
+    peer.create("Exorcist")
+    print("created character Exorcist")
+character_id = peer.characters[0][0]
+peer.s.close()
+subprocess.run(["docker", "compose", "exec", "-T", "server", "n3e-server", "role", "grant",
+                creds["account"], str(character_id), os.environ["N3E_REALM"], "movement.turbo"], check=True)
+json.dump({"port": port, "realm": os.environ["N3E_REALM"], "account": creds["account"],
+           "password": creds["password"]}, open("build/ashgrave/session.json", "w"))
+PROVISION
+if [ "$PROVISION_ONLY" = 1 ]; then exit 0; fi
+
+echo "== entering Ashgrave ($WINDOW_SIZE) =="
+echo "WASD to move, V walk/run, hold Q to hasten, Tab to target, R/Space to hex, right-drag to orbit."
+# Automatic login is a test-client hook (PQ-006); the player n3e-client refuses it.
+exec env N3E_TEST_ACCOUNT="$ACCOUNT" N3E_TEST_PASSWORD="$PASSWORD" \
+  build/client/n3e-test-client build/packages/ashgrave \
+  --connect "localhost:$PORT" --ca deploy/local/ca.pem --auto-login --fixed-window "$WINDOW_SIZE" "${FULLSCREEN[@]}" "$@"

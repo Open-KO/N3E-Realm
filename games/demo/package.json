@@ -1,0 +1,595 @@
+{
+  "game_id": "demo",
+  "package_version": "0.2.0",
+  "content_schema_version": 1,
+  "engine_version": 11,
+  "protocol_version": 6,
+  "assets": [
+    {
+      "id": "demo:scene/meadow",
+      "source": "fixture.gltf",
+      "metadata": "scene.json",
+      "dependencies": []
+    }
+  ],
+  "properties": [
+    {
+      "key": "demo:lighting.intensity",
+      "type": "number",
+      "scope": "zone",
+      "min": 0,
+      "max": 1,
+      "capability": "world.edit",
+      "persistence": "durable",
+      "activation": "next_tick",
+      "schema_version": 1
+    }
+  ],
+  "gameplay": {
+    "action": "demo:action/strike",
+    "item": "demo:item/token",
+    "npc": "demo:creature/sentinel",
+    "health": 100,
+    "resource": 20,
+    "damage": 10,
+    "cost": 0,
+    "cooldown_ticks": 20,
+    "regen_ticks": 20,
+    "npc_health": 60,
+    "npc_damage": 6,
+    "npc_cooldown_ticks": 20,
+    "respawn_ticks": 60,
+    "slots": 8,
+    "starting_items": 0,
+    "reward_items": 1,
+    "reward_xp": 10,
+    "level_xp": 20,
+    "speed": 1.5,
+    "range": 1.1,
+    "npc_speed": 3,
+    "npc_range": 1.0,
+    "aggro_range": 3,
+    "leash_range": 8,
+    "spawn_x": -5,
+    "spawn_z": -5,
+    "movement": {
+      "run_speed": 4.5,
+      "backward_speed": 1.5,
+      "radius": 0.2,
+      "height": 1.6,
+      "step_height": 0.25
+    },
+    "spawns": [
+      [
+        -5,
+        -5
+      ],
+      [
+        5,
+        -5
+      ]
+    ],
+    "interest_cell": 32
+  },
+  "camera": {
+    "pitch": 0.4363323129985824,
+    "pitch_min": 0.17453292519943295,
+    "pitch_max": 1.2217304763960306,
+    "distance": 7,
+    "distance_min": 2,
+    "distance_max": 10,
+    "focus_height": 0,
+    "focus_scale": 0.8,
+    "yaw_per_pixel": 0.006,
+    "pitch_per_pixel": 0.005,
+    "zoom_per_step": 0.7,
+    "clearance": 0.2,
+    "turn_rate": 1.0471975511965976,
+    "hold_delay": 0.1,
+    "facing_relative": true
+  },
+  "melee": {
+    "actor_radius": 1,
+    "target_radius": 1,
+    "reach": 0,
+    "facing_dot": 0.7
+  },
+  "damage": {
+    "model": "contested_melee_v1",
+    "player": {
+      "attack": 36,
+      "defense": 20,
+      "accuracy": 50,
+      "evasion": 100
+    },
+    "npc": {
+      "attack": 18,
+      "defense": 40,
+      "accuracy": 50,
+      "evasion": 100
+    }
+  },
+  "npc": {
+    "model": "hostile_melee_v1",
+    "scan_ticks": 10,
+    "acquire_ticks": 10,
+    "stuck_ticks": 40,
+    "chase_ticks": 400,
+    "return_ticks": 200,
+    "recovery_ticks": 40
+  },
+  "life": {
+    "model": "requested_v1",
+    "player_delay_ticks": 60,
+    "npc_corpse_ticks": 40,
+    "npc_respawn_ticks": 120
+  },
+  "animation": [
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        -1,
+        -1
+      ]
+    },
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        -1,
+        -1
+      ]
+    },
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        0.5,
+        -1
+      ]
+    },
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        -1,
+        -1
+      ]
+    },
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        -1,
+        -1
+      ]
+    },
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        -1,
+        -1
+      ]
+    },
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        -1,
+        -1
+      ]
+    },
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        -1,
+        -1
+      ]
+    },
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        -1,
+        -1
+      ]
+    },
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        0.5,
+        -1
+      ]
+    },
+    {
+      "duration": 1,
+      "blend": 0.2,
+      "loop_blend": false,
+      "markers": [
+        -1,
+        -1
+      ]
+    }
+  ],
+  "presentation": {
+    "player-idle.bin": "player-idle.bin",
+    "player-walk.bin": "player-walk.bin",
+    "player-attack.bin": "player-attack.bin",
+    "player-death.bin": "player-death.bin",
+    "player-run.bin": "player-run.bin",
+    "player-backward.bin": "player-backward.bin",
+    "player-ready.bin": "player-ready.bin",
+    "npc-idle.bin": "npc-idle.bin",
+    "npc-walk.bin": "npc-walk.bin",
+    "npc-attack.bin": "npc-attack.bin",
+    "npc-death.bin": "npc-death.bin",
+    "hud.bin": "hud.bin"
+  },
+  "progression": {
+    "model": "contribution_claim_v1",
+    "stat_policy": "fixed_v1",
+    "curve": "demo:curve/normal",
+    "item": "demo:item/token",
+    "origin": "original synthetic",
+    "author": "n3e KO-11 demo",
+    "revision": 1,
+    "thresholds": [
+      0,
+      20,
+      50,
+      90,
+      140,
+      200,
+      270,
+      350,
+      440,
+      540
+    ],
+    "capacity": 8,
+    "starting": 0,
+    "npc_level": 1,
+    "base_xp": 10,
+    "radius": 50,
+    "claim_radius": 3,
+    "ttl": 120
+  },
+  "editing": {
+    "lighting": 0.85,
+    "decorations": [
+      {
+        "id": "banner",
+        "position": [
+          0,
+          0,
+          -3
+        ],
+        "yaw": 0,
+        "scale": 1,
+        "visual": "scene.bin"
+      }
+    ]
+  },
+  "pick": {
+    "box": "vertices",
+    "min_extent": 0.5,
+    "pad": 0.25,
+    "mesh_lod": 1
+  },
+  "input": {
+    "bindings": [
+      {
+        "action": "hotbar_use_1",
+        "keys": [
+          "1"
+        ]
+      },
+      {
+        "action": "hotbar_use_2",
+        "keys": [
+          "2"
+        ]
+      },
+      {
+        "action": "hotbar_use_3",
+        "keys": [
+          "3"
+        ]
+      },
+      {
+        "action": "hotbar_use_4",
+        "keys": [
+          "4"
+        ]
+      },
+      {
+        "action": "hotbar_use_5",
+        "keys": [
+          "5"
+        ]
+      },
+      {
+        "action": "hotbar_use_6",
+        "keys": [
+          "6"
+        ]
+      },
+      {
+        "action": "hotbar_use_7",
+        "keys": [
+          "7"
+        ]
+      },
+      {
+        "action": "hotbar_use_8",
+        "keys": [
+          "8"
+        ]
+      },
+      {
+        "action": "hotbar_page_1",
+        "keys": [
+          "F1"
+        ],
+        "forbid": [
+          "Alt"
+        ],
+        "typing": true
+      },
+      {
+        "action": "hotbar_page_2",
+        "keys": [
+          "F2"
+        ],
+        "forbid": [
+          "Alt"
+        ],
+        "typing": true
+      },
+      {
+        "action": "hotbar_page_3",
+        "keys": [
+          "F3"
+        ],
+        "forbid": [
+          "Alt"
+        ],
+        "typing": true
+      },
+      {
+        "action": "hotbar_page_4",
+        "keys": [
+          "F4"
+        ],
+        "forbid": [
+          "Alt"
+        ],
+        "typing": true
+      },
+      {
+        "action": "hotbar_page_5",
+        "keys": [
+          "F5"
+        ],
+        "forbid": [
+          "Alt"
+        ],
+        "typing": true
+      },
+      {
+        "action": "hotbar_page_6",
+        "keys": [
+          "F6"
+        ],
+        "forbid": [
+          "Alt"
+        ],
+        "typing": true
+      },
+      {
+        "action": "hotbar_page_7",
+        "keys": [
+          "F7"
+        ],
+        "forbid": [
+          "Alt"
+        ],
+        "typing": true
+      },
+      {
+        "action": "hotbar_page_8",
+        "keys": [
+          "F8"
+        ],
+        "forbid": [
+          "Alt"
+        ],
+        "typing": true
+      },
+      {
+        "action": "hotbar_page_prev",
+        "keys": [
+          "PageUp"
+        ]
+      },
+      {
+        "action": "hotbar_page_next",
+        "keys": [
+          "PageDown"
+        ]
+      },
+      {
+        "action": "move_forward",
+        "keys": [
+          "W",
+          "Up"
+        ]
+      },
+      {
+        "action": "move_backward",
+        "keys": [
+          "S",
+          "Down"
+        ]
+      },
+      {
+        "action": "turn_left",
+        "keys": [
+          "A",
+          "Left"
+        ]
+      },
+      {
+        "action": "turn_right",
+        "keys": [
+          "D",
+          "Right"
+        ]
+      },
+      {
+        "action": "turbo",
+        "keys": [
+          "Q"
+        ]
+      },
+      {
+        "action": "auto_move",
+        "keys": [
+          "E"
+        ]
+      },
+      {
+        "action": "attack_toggle",
+        "keys": [
+          "R"
+        ]
+      },
+      {
+        "action": "run_toggle",
+        "keys": [
+          "T"
+        ]
+      },
+      {
+        "action": "target_enemy",
+        "keys": [
+          "Z"
+        ]
+      },
+      {
+        "action": "target_party",
+        "keys": [
+          "X"
+        ]
+      },
+      {
+        "action": "target_npc",
+        "keys": [
+          "B"
+        ]
+      },
+      {
+        "action": "rest_toggle",
+        "keys": [
+          "C"
+        ]
+      },
+      {
+        "action": "inventory",
+        "keys": [
+          "I"
+        ]
+      },
+      {
+        "action": "character",
+        "keys": [
+          "U"
+        ]
+      },
+      {
+        "action": "skills",
+        "keys": [
+          "K"
+        ]
+      },
+      {
+        "action": "minimap",
+        "keys": [
+          "M"
+        ]
+      },
+      {
+        "action": "help",
+        "keys": [
+          "F10"
+        ]
+      },
+      {
+        "action": "loot_nearest",
+        "keys": [
+          "F"
+        ]
+      },
+      {
+        "action": "window_page_prev",
+        "keys": [
+          "LeftBracket"
+        ]
+      },
+      {
+        "action": "window_page_next",
+        "keys": [
+          "RightBracket"
+        ]
+      },
+      {
+        "action": "respawn",
+        "keys": [
+          "Return",
+          "KeypadEnter"
+        ]
+      },
+      {
+        "action": "chat",
+        "keys": [
+          "Return",
+          "KeypadEnter"
+        ]
+      },
+      {
+        "action": "cancel",
+        "keys": [
+          "Escape"
+        ]
+      },
+      {
+        "action": "attack_pick",
+        "keys": [
+          "MouseLeft"
+        ],
+        "require": [
+          "Ctrl"
+        ]
+      },
+      {
+        "action": "attack_target",
+        "keys": [
+          "MouseLeftDouble"
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "distance": 48,
+  "zone_distance": {"320": {"players": 33}},
+  "height_padding": 0.1,
+  "pixel_gap": 5,
+  "seated_height_fraction": 0.5,
+  "colors": [15135487, 15135487, 15135487],
+  "font_pixels": 16,
+  "fonts": ["/usr/share/fonts/liberation/LiberationSans-Regular.ttf", "/usr/share/fonts/liberation/LiberationSans-Bold.ttf"],
+  "skeletons": ["Chr/upc_ka_tu.n3joint", "Chr/mob_worm.n3joint"]
+}

@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Moradon with Demon's Souls characters from the user's own dump (exploration).
+# A separate package (build/packages/moradon-des), Compose project and port 7782;
+# the Moradon demo is untouched. Arguments pass through to moradon_session.py.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source tools/env.sh
+exec python tools/moradon_session.py --des "$@"

@@ -1,0 +1,16 @@
+# Disposable test clusters only (tests/isolation.py DISPOSABLE_COMPOSE, PQ-205,
+# D-155): initdb writes fsync = off into the new cluster's postgresql.conf and
+# skips its own sync. Never part of a deployment; compose.yaml keeps the defaults.
+services:
+  postgres:
+    environment:
+      POSTGRES_INITDB_ARGS: "--no-sync --set fsync=off"
+# PQ-457 (D-229): under tests/live.py (and make live-ko) the project's default
+# network is the test network the runner claimed for this suite, created once and
+# kept, so `up` creates and `down` removes no bridge (tests/isolation.py
+# claim_network, network_env). Without the variables (a suite run by hand) it is
+# the project's own <project>_default network, as Compose would name it.
+networks:
+  default:
+    name: ${N3E_TEST_NETWORK:-${COMPOSE_PROJECT_NAME}_default}
+    external: ${N3E_TEST_NETWORK_EXTERNAL:-false}

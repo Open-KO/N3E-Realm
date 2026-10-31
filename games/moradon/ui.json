@@ -1,0 +1,291 @@
+{
+  "sources": [
+    "ka_inventory_us",
+    "ka_warehouse_us",
+    "ka_page_state_us",
+    "ka_page_friends_us",
+    "Ka_Transaction_us",
+    "Co_Party_us",
+    "ka_various_frame_us",
+    "co_tradecount_us",
+    "Co_Help_us"
+  ],
+  "inventory_fields": {
+    "text_gold": "coins",
+    "text_weight": "weight"
+  },
+  "state_fields": {
+    "text_id": "name",
+    "text_level": "level",
+    "text_hp": "health",
+    "text_mp": "resource",
+    "text_exp": "xp",
+    "text_ap": "attack",
+    "text_gp": "defense",
+    "text_weight": "weight",
+    "text_strength": "strength",
+    "text_stamina": "stamina",
+    "text_dexterity": "dexterity",
+    "text_intelligence": "intelligence",
+    "text_magicattack": "magic",
+    "text_class": "class",
+    "text_race": "race",
+    "text_nation": "unsupported",
+    "text_realmpoint": "unsupported",
+    "text_bonuspoint": "unsupported",
+    "text_manner": "unsupported",
+    "text_registpoison": "unsupported",
+    "text_registcurse": "unsupported",
+    "text_registmagic": "unsupported",
+    "text_registfire": "unsupported",
+    "text_registice": "unsupported",
+    "text_registlightr": "unsupported"
+  },
+  "friend_fields": {
+    "list_friends": "friend:",
+    "string_page": "friend_page"
+  },
+  "friend_actions": {
+    "btn_add": "friend_add",
+    "btn_delete": "friend_remove",
+    "btn_whisper": "whisper",
+    "btn_party": "invite",
+    "btn_refresh": "friend_refresh",
+    "btn_page_up": "friend_prev",
+    "btn_page_down": "friend_next"
+  },
+  "warehouse_fields": {
+    "string_item_name": "coins",
+    "string_wareitem_name": "bank_coins",
+    "string_page": "bank_page",
+    "text_weight": "weight"
+  },
+  "warehouse_actions": {
+    "btn_close": "close",
+    "btn_gold": "deposit_coins",
+    "btn_gold_warehouse": "withdraw_coins",
+    "btn_page_up": "bank_prev",
+    "btn_page_down": "bank_next"
+  },
+  "menu": [
+    [
+      [
+        "Bag",
+        "inventory"
+      ],
+      [
+        "Stats",
+        "equipment"
+      ],
+      [
+        "Shop",
+        "shop"
+      ],
+      [
+        "Bank",
+        "bank"
+      ],
+      [
+        "Friends",
+        "friends"
+      ]
+    ],
+    [
+      [
+        "Party",
+        "party"
+      ],
+      [
+        "Unlock",
+        "unlock"
+      ],
+      [
+        "Help",
+        "features"
+      ]
+    ]
+  ],
+  "actions": {
+    "1": [
+      [
+        "Prev",
+        "bag_prev"
+      ],
+      [
+        "Next",
+        "bag_next"
+      ],
+      [
+        "Repair",
+        "repair"
+      ],
+      [
+        "Unequip",
+        "unequip"
+      ],
+      [
+        "Close",
+        "close"
+      ]
+    ],
+    "3": [
+      [
+        "Bag prev",
+        "bag_prev"
+      ],
+      [
+        "Bag next",
+        "bag_next"
+      ],
+      [
+        "Buy",
+        "buy"
+      ],
+      [
+        "Sell",
+        "sell"
+      ],
+      [
+        "Repair",
+        "repair"
+      ]
+    ],
+    "4": [
+      [
+        "Bag prev",
+        "bag_prev"
+      ],
+      [
+        "Bag next",
+        "bag_next"
+      ],
+      [
+        "Unlock",
+        "unlock"
+      ],
+      [
+        "Password",
+        "password"
+      ],
+      [
+        "Close",
+        "close"
+      ]
+    ],
+    "5": [
+      [
+        "Close",
+        "close"
+      ]
+    ],
+    "6": [
+      [
+        "Invite",
+        "invite"
+      ],
+      [
+        "Accept",
+        "accept"
+      ],
+      [
+        "Decline",
+        "decline"
+      ],
+      [
+        "Leave",
+        "leave"
+      ],
+      [
+        "Disband",
+        "disband"
+      ],
+      [
+        "Kick",
+        "kick"
+      ],
+      [
+        "Close",
+        "close"
+      ]
+    ]
+  },
+  "help": "Inventory\nDrag items to move or stack.\nRight-click gear equips; potions heal.\nBag to gear equips; reverse removes.\nPrev / Next changes bag page.\n\nShop\nSelect offer and Buy; bag item to\nSell / Repair. Arrows page stock.\n\nWarehouse\nUnlock first. Select source, then\ndestination. Coin icons transfer gold.\n\nFriends / Party\nSelect a name for social actions.\nAccept / Decline responds to invites.\n\nEnter chat | Esc cancel | I bag | U char\nZ/X/B target | R attack | T walk/run\nE auto-run | click a chest to loot",
+  "equipment_slots": {
+    "6": 0,
+    "8": 1,
+    "9": 2,
+    "11": 3,
+    "4": 4
+  },
+  "shop_fields": {
+    "string_item_name": "coins",
+    "text_weight": "weight",
+    "string_page": "offer_page"
+  },
+  "shop_actions": {
+    "btn_close": "close",
+    "btn_page_up": "offer_prev",
+    "btn_page_down": "offer_next"
+  },
+  "shop_hidden": [
+    "img_blacksmith",
+    "img_inn"
+  ],
+  "item_icons": {
+    "demo:item/token": {
+      "base": 90001000,
+      "extension": 0
+    },
+    "demo:item/blade": {
+      "base": 12011000,
+      "extension": 0
+    },
+    "demo:item/potion": {
+      "base": 38901100,
+      "extension": 0
+    },
+    "demo:item/shield": {
+      "base": 17025000,
+      "extension": 0
+    },
+    "demo:item/twohand": {
+      "base": 12531000,
+      "extension": 0
+    },
+    "demo:item/ring": {
+      "base": 33011000,
+      "extension": 0
+    },
+    "demo:item/other_race": {
+      "base": 12021000,
+      "extension": 0
+    },
+    "demo:item/strong": {
+      "base": 12081000,
+      "extension": 0
+    },
+    "demo:item/titled": {
+      "base": 12151000,
+      "extension": 0
+    },
+    "demo:item/armor": {
+      "base": 20020021,
+      "extension": 0
+    },
+    "demo:currency/coin": {
+      "base": 90001000,
+      "extension": 0
+    },
+    "demo:item/mana_potion": {
+      "base": 38901600,
+      "extension": 0
+    }
+  },
+  "portraits": {
+    "player": {
+      "yaw": -20,
+      "pitch": 11.309932,
+      "framing": 1.15
+    }
+  }
+}

@@ -4,7 +4,7 @@
 #include <functional>
 #include <span>
 #include "orbit.h"
-#include <GL/gl.h>
+#include "platform/gl.h"
 #include <stdexcept>
 
 GLuint shader(GLenum type,const char* source);

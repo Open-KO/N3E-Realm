@@ -84,12 +84,14 @@ which M5 produces; the static musl build is unverified here (no musl C compiler)
 - CMake: `find_package(SDL3 CONFIG)` via vcpkg on Windows; keep pkg-config on Linux.
 - POSIX audit of `client/`; `%APPDATA%` paths; `ShellExecute` for the browser.
 - TLS: load the Windows `ROOT` store into OpenSSL's trust store at startup.
-- `n3e-client --smoke-local`: load package, init SDL/GL (software GL ok), parse
-  `realm.json`, build the OAuth URL, exit 0. Platform-independent; used by CI on both OSes.
+- `n3e-client --self-test --realm realm.json` (first planned as `--smoke-local`; the
+  player build carries no `smoke` string, PQ-006): load package, init SDL/GL (software
+  GL ok), parse `realm.json`, build the OAuth URL, exit 0. Platform-independent; used by
+  CI on both OSes.
 - Launcher `x86_64-pc-windows-msvc` build; player docs with the SmartScreen note (Q26).
 
 **Done when:** `windows-latest` and `ubuntu-latest` both produce artifacts and pass
-`--smoke-local`; a canary player on Windows logs in end-to-end. Real-GPU Windows
+`--self-test`; a canary player on Windows logs in end-to-end. Real-GPU Windows
 testing stays manual: the maintainer runs it on their own Windows machine, periodically.
 
 ## M5 — CD (spec 06)

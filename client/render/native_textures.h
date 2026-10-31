@@ -1,6 +1,6 @@
 #pragma once
 #include "assets/assets.h"
-#include <GL/gl.h>
+#include "platform/gl.h"
 #include <algorithm>
 #include <map>
 #include <stdexcept>

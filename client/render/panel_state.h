@@ -1,4 +1,5 @@
 #pragma once
+#include "platform/dirs.h"
 #include <array>
 #include <filesystem>
 #include <fstream>
@@ -18,10 +19,7 @@ struct PanelState {
   bool context(const std::string &scope) {
     if (identity == scope) return false;
     identity = scope; file.clear();
-    const char *base = std::getenv("XDG_STATE_HOME");
-    std::filesystem::path root;
-    if (base && *base && std::filesystem::path(base).is_absolute()) root = base;
-    else if (const char *home = std::getenv("HOME"); home && *home) root = std::filesystem::path(home) / ".local/state";
+    const auto root = n3e::dirs::state();
     if (root.empty()) return true;
     unsigned char digest[SHA256_DIGEST_LENGTH];
     SHA256(reinterpret_cast<const unsigned char *>(scope.data()), scope.size(), digest);

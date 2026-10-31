@@ -1,4 +1,5 @@
 #pragma once
+#include "platform/dirs.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -13,7 +14,8 @@
 // one INI file at start and has no in-game options page (PQ-048). Never server
 // state, and never a privilege: it only switches local presentation.
 //
-// The file is $XDG_CONFIG_HOME/n3e/Option.ini, else ~/.config/n3e/Option.ini.
+// The file is $XDG_CONFIG_HOME/n3e/Option.ini, else ~/.config/n3e/Option.ini;
+// %APPDATA%\n3e\Option.ini on Windows (platform/dirs.h).
 // Keys this client reads, with KO's defaults:
 //   [WeaponEffect] EffectVisible=1   equipped-item effects (PQ-211, 006e268e)
 // and one of n3e's own, for a later client's addition (KO 1298 has no such key):
@@ -38,10 +40,8 @@ struct ClientOptions {
   bool wing = true;
 
   static std::filesystem::path path() {
-    const char *base = std::getenv("XDG_CONFIG_HOME");
-    if (base && *base && std::filesystem::path(base).is_absolute()) return std::filesystem::path(base) / "n3e/Option.ini";
-    if (const char *home = std::getenv("HOME"); home && *home) return std::filesystem::path(home) / ".config/n3e/Option.ini";
-    return {};
+    auto base = n3e::dirs::config();
+    return base.empty() ? base : base / "n3e/Option.ini";
   }
   // GetPrivateProfileInt's reading: section and key names compare without
   // case, the value is its leading decimal integer (0 when it has none), and a

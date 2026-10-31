@@ -1,17 +1,12 @@
 #include <set>
 #include "world.h"
-#include <arpa/inet.h>
+#include "platform/net.h"
+#include "platform/tls.h"
 #include <chrono>
 #include <cmath>
-#include <csignal>
-#include <fcntl.h>
 #include <memory>
-#include <netdb.h>
-#include <netinet/tcp.h>
 #include <openssl/ssl.h>
-#include <poll.h>
 #include <stdexcept>
-#include <unistd.h>
 namespace n3e {
 namespace {
 using Clock = std::chrono::steady_clock;
@@ -23,7 +18,7 @@ void check(bool b, const char *m) {
     throw std::runtime_error(m);
 }
 struct Transport {
-  int fd = -1;
+  net::Socket fd = net::BAD_SOCKET;
   SSL_CTX *ctx = nullptr;
   SSL *ssl = nullptr;
   ~Transport() {
@@ -31,14 +26,13 @@ struct Transport {
       SSL_free(ssl);
     if (ctx)
       SSL_CTX_free(ctx);
-    if (fd >= 0)
-      close(fd);
+    if (fd != net::BAD_SOCKET)
+      net::close(fd);
   }
   void wait(int error, double end) {
     int ms = int((end - now()) * 1000);
     check(ms > 0, "TLS deadline");
-    pollfd p{fd, short(error == SSL_ERROR_WANT_WRITE ? POLLOUT : POLLIN), 0};
-    check(::poll(&p, 1, ms) > 0, "TLS deadline");
+    check(net::wait(fd, short(error == SSL_ERROR_WANT_WRITE ? POLLOUT : POLLIN), ms) > 0, "TLS deadline");
   }
   void open(const std::string &endpoint, const std::string &ca) {
     auto colon = endpoint.rfind(':');
@@ -51,34 +45,29 @@ struct Transport {
     std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> addresses(raw,
                                                                  freeaddrinfo);
     for (auto *a = raw; a; a = a->ai_next) {
-      fd = socket(a->ai_family, a->ai_socktype | SOCK_NONBLOCK, a->ai_protocol);
-      if (fd < 0)
+      fd = ::socket(a->ai_family, a->ai_socktype, a->ai_protocol);
+      if (fd == net::BAD_SOCKET)
         continue;
-      int r = ::connect(fd, a->ai_addr, a->ai_addrlen);
-      if (r == 0 || errno == EINPROGRESS) {
-        pollfd p{fd, POLLOUT, 0};
-        int err = 0;
-        socklen_t n = sizeof(err);
-        if (::poll(&p, 1, 2000) > 0 &&
-            getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &n) == 0 && err == 0)
+      if (net::nonblocking(fd)) {
+        int r = ::connect(fd, a->ai_addr, int(a->ai_addrlen));
+        if ((r == 0 || net::would_block()) && net::wait(fd, POLLOUT, 2000) > 0 &&
+            net::pending_error(fd) == 0)
           break;
       }
-      close(fd);
-      fd = -1;
+      net::close(fd);
+      fd = net::BAD_SOCKET;
     }
-    check(fd >= 0, "connect failed");
-    int no_delay = 1;
-    check(setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &no_delay,
-                     sizeof(no_delay)) == 0,
-          "TCP_NODELAY failed");
+    check(fd != net::BAD_SOCKET, "connect failed");
+    check(net::no_delay(fd), "TCP_NODELAY failed");
     ctx = SSL_CTX_new(TLS_client_method());
     check(ctx, "TLS context");
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
-    check(SSL_CTX_load_verify_locations(ctx, ca.c_str(), nullptr) == 1,
-          "CA failed");
+    // --ca for dev and test realms; the system's roots otherwise (spec 04).
+    check(tls::trust(ctx, ca), ca.empty() ? "no system CA certificates" : "CA failed");
     ssl = SSL_new(ctx);
     check(ssl, "TLS allocation");
-    SSL_set_fd(ssl, fd);
+    // OpenSSL takes a Winsock SOCKET as an int (its documented convention).
+    SSL_set_fd(ssl, int(fd));
     SSL_set_tlsext_host_name(ssl, host.c_str());
     check(SSL_set1_host(ssl, host.c_str()) == 1, "hostname policy");
     double end = now() + 2;
@@ -116,8 +105,7 @@ struct Transport {
     transfer(b.data(), b.size(), true, end);
   }
   bool available() {
-    pollfd p{fd, POLLIN, 0};
-    return SSL_pending(ssl) > 0 || ::poll(&p, 1, 5) > 0;
+    return SSL_pending(ssl) > 0 || net::wait(fd, POLLIN, 5) > 0;
   }
   Envelope receive() {
     uint32_t n;
@@ -162,8 +150,8 @@ void WorldClient::send(Envelope e) {
   outgoing.push_back(std::move(e));
 }
 void WorldClient::run(std::stop_token stop) {
-  std::signal(SIGPIPE, SIG_IGN);
   try {
+    net::start();
     Transport t;
     t.open(endpoint, ca);
     Envelope h;

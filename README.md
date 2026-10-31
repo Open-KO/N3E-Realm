@@ -46,6 +46,26 @@ make test                      # CPU suite, ~6 min
 
 Bootstrap touches nothing outside `.cache/tools`. Cargo builds use `--locked`.
 
+### Windows client
+
+The client and launcher build on Windows with Visual Studio 2022, CMake and
+[vcpkg](https://github.com/microsoft/vcpkg) at the commit `vcpkg.json` pins
+(`builtin-baseline`); the libraries link statically, so `n3e-client.exe` needs nothing
+installed. From Git Bash, as CI's `client` job does:
+
+```bash
+cmake -S . -B build/client -A x64 -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
+  -DVCPKG_TARGET_TRIPLET=x64-windows-static
+cmake --build build/client --config Release --target n3e-client n3e-test-client
+cargo build --release --locked -p realm-launcher
+build/client/Release/n3e-client.exe build/packages/demo --self-test --realm realm.json
+```
+
+`--self-test` checks an install without a server: the package, `realm.json`, the
+Discord login address, the system certificates and an OpenGL 3.3 window. Settings and
+the session token are under `%APPDATA%`, hotbars and panels under `%LOCALAPPDATA%\n3e`.
+Only the client runs on Windows; the server, tests and tools are Linux.
+
 ### The realm package
 
 ```bash

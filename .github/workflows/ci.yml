@@ -50,3 +50,117 @@ jobs:
                               print(f"{p}: broken link {t}"); bad += 1
           sys.exit(1 if bad else 0)
           PY
+  # specs/06-cd.md 3/3b for the client (M4b): build each platform's player client
+  # and launcher, package them as a release would, and run the release smoke
+  # (tests/release_smoke.py: launcher --no-start from a loopback release, then the
+  # installed client's --self-test) on software OpenGL. The archives are kept as
+  # artifacts. CD (M5) publishes the same archives.
+  client:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            platform: linux-x86_64
+          - os: windows-2025
+            platform: windows-x86_64
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      SDL3_VERSION: "3.4.12"
+      SDL3_SHA256: f07b958a9ac5020fb7a44cadb957f658b2149c3c8abb4f63145fac9303249db7
+      VCPKG_COMMIT: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+      MESA_VERSION: "26.2.4"
+      MESA_SHA256: 351fc8c8b695878ffb3eaa044b3ead08672a48b1a045e3c3e3975811df0f6695
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.85.1"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: launcher-release
+      - run: cargo build --release --locked -p realm-launcher
+
+      - name: System libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build g++ pkg-config libprotobuf-dev \
+            protobuf-compiler libssl-dev libgl-dev libegl-dev libx11-dev libxext-dev libxrandr-dev \
+            libxcursor-dev libxi-dev libxss-dev libxfixes-dev libxtst-dev libwayland-dev libxkbcommon-dev \
+            wayland-protocols libdecor-0-dev libgl1-mesa-dri libegl-mesa0
+      - name: SDL3 cache (Linux; Ubuntu 24.04 packages none)
+        if: runner.os == 'Linux'
+        id: sdl3
+        uses: actions/cache@v4
+        with:
+          path: ~/sdl3
+          key: sdl3-${{ env.SDL3_VERSION }}-${{ matrix.os }}
+      - name: SDL3 from source (Linux)
+        if: runner.os == 'Linux' && steps.sdl3.outputs.cache-hit != 'true'
+        run: |
+          curl -fsSL -o sdl3.tar.gz "https://github.com/libsdl-org/SDL/releases/download/release-$SDL3_VERSION/SDL3-$SDL3_VERSION.tar.gz"
+          echo "$SDL3_SHA256  sdl3.tar.gz" | sha256sum -c
+          tar xf sdl3.tar.gz
+          cmake -S "SDL3-$SDL3_VERSION" -B sdl3-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DCMAKE_INSTALL_PREFIX="$HOME/sdl3"
+          cmake --build sdl3-build
+          cmake --install sdl3-build
+      - name: Client (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          export PKG_CONFIG_PATH="$HOME/sdl3/lib/pkgconfig"
+          cmake -S . -B build/client -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build/client --target n3e-client n3e-test-client
+          echo "CLIENT_BUILD=build/client" >> "$GITHUB_ENV"
+          echo "LAUNCHER=target/release/realm-launcher" >> "$GITHUB_ENV"
+          echo "SDL_VIDEO_DRIVER=offscreen" >> "$GITHUB_ENV"
+
+      # vcpkg at the pinned commit (vcpkg.json's builtin-baseline); its binary cache
+      # keeps the static libraries between runs.
+      - name: vcpkg binary cache (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/vcpkg-cache
+          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}-x64-windows-static
+      - name: Client (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          git clone --quiet https://github.com/microsoft/vcpkg "$RUNNER_TEMP/vcpkg"
+          git -C "$RUNNER_TEMP/vcpkg" checkout --quiet "$VCPKG_COMMIT"
+          "$RUNNER_TEMP/vcpkg/bootstrap-vcpkg.bat" -disableMetrics
+          mkdir -p "$RUNNER_TEMP/vcpkg-cache"
+          export VCPKG_BINARY_SOURCES="clear;files,$(cygpath -w "$RUNNER_TEMP/vcpkg-cache"),readwrite"
+          cmake -S . -B build/client -A x64 \
+            -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DVCPKG_TARGET_TRIPLET=x64-windows-static
+          cmake --build build/client --config Release --target n3e-client n3e-test-client
+          echo "CLIENT_BUILD=build/client/Release" >> "$GITHUB_ENV"
+          echo "LAUNCHER=target/release/realm-launcher.exe" >> "$GITHUB_ENV"
+      - name: Mesa software OpenGL (Windows; the runner has no GPU)
+        if: runner.os == 'Windows'
+        run: |
+          curl -fsSL -o mesa.7z "https://github.com/pal1000/mesa-dist-win/releases/download/$MESA_VERSION/mesa3d-$MESA_VERSION-release-msvc.7z"
+          echo "$MESA_SHA256 *mesa.7z" | sha256sum -c
+          7z x -y -omesa mesa.7z x64 > /dev/null
+          echo "GL_ARGS=--gl mesa/x64" >> "$GITHUB_ENV"
+          echo "GALLIUM_DRIVER=llvmpipe" >> "$GITHUB_ENV"
+
+      - name: Package and smoke
+        run: |
+          python tools/assetc/main.py games/demo build/packages/demo
+          python tools/package_client.py "$CLIENT_BUILD" "dist/n3e-client-${{ matrix.platform }}.tar.zst"
+          cp "$LAUNCHER" dist/
+          python tests/release_smoke.py --launcher "$LAUNCHER" \
+            --client "dist/n3e-client-${{ matrix.platform }}.tar.zst" --package build/packages/demo $GL_ARGS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: client-${{ matrix.platform }}
+          path: dist/

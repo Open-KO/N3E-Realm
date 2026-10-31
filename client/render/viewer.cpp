@@ -26,7 +26,6 @@
 #include "window_stack.h"
 #include <deque>
 #include <set>
-#define GL_GLEXT_PROTOTYPES
 #include "assets/assets.h"
 #include "assets/world_lod.h"
 #include "assets/world_stream.h"
@@ -40,7 +39,7 @@
 #include "play.h"
 #include "network/discord_login.h"
 #include "presentation.h"
-#include <GL/gl.h>
+#include "platform/gl.h"
 #include <SDL3/SDL.h>
 #include "native_textures.h"
 #include "terrain_overlay.h"

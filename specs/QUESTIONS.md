@@ -135,7 +135,7 @@ assets; watch the count.
 |---|---|
 | Q1 | **In-process, in `N3E-Realm`.** The engine migrates into `N3E-Realm` (spec 09); the realm service (01–03) is implemented inside `n3e-server`/`n3e-client` there. No gateway. `n3e` freezes as reference/research. |
 | Q2 | **Client runs the OAuth flow** (architecture ① stands); `discord_client_id` comes from the realm config via the manifest, not compiled in. |
-| Q3 | **Windows is a v1 requirement; the client stays C++.** Port in M4b (CMake/vcpkg, POSIX audit, Windows cert-store → OpenSSL, `%APPDATA%` paths). Tested by (d2) a client-local `--smoke-local` CI job on both `ubuntu-latest` and `windows-latest` plus (a) a Discord canary role for early releases; a real-GPU Windows run is manual: the maintainer runs the client on their own Windows machine periodically (2026-10-30); automating it is the upgrade path. macOS not v1. A Rust client is explicitly deferred (arguments on record: cross-compile ergonomics, shared collision crate with the server) — not before launch. |
+| Q3 | **Windows is a v1 requirement; the client stays C++.** Port in M4b (CMake/vcpkg, POSIX audit, Windows cert-store → OpenSSL, `%APPDATA%` paths). Tested by (d2) a client-local `--self-test` CI job (named `--smoke-local` here first; Q46) on both `ubuntu-latest` and `windows-latest` plus (a) a Discord canary role for early releases; a real-GPU Windows run is manual: the maintainer runs the client on their own Windows machine periodically (2026-10-30); automating it is the upgrade path. macOS not v1. A Rust client is explicitly deferred (arguments on record: cross-compile ergonomics, shared collision crate with the server) — not before launch. |
 | Q9 | `realm.restart` removed from `architecture.md`; restart is a CD/compose action. |
 | Q5 | Moot (Launcher does not hold the token). |
 | Q7 | Moot (no gateway). `N3E_MAX_CONNECTIONS` replaces the hardcoded 64. |
@@ -280,3 +280,33 @@ would become. **Default taken (M4):** the suite publishes its releases on a loop
 file server; a GitHub test Release (a pre-release, so `latest` is untouched) waits for
 the maintainer's go-ahead. The roadmap's done-when (a clean machine downloads one
 binary and connects) needs a real Release, so it closes with M5's first publish.
+
+### Q46 — `--smoke-local` in the player build
+
+Spec 06's smoke runs the player `n3e-client --smoke-local`, but PQ-006
+(`tests/player_build.py`) forbids `-smoke` in the player binary, so a smoke mode there
+would have to move the rule. **Default taken (M4b):** the player's install check is
+`--self-test --realm realm.json` (package and scene, realm.json, the authorize address
+on a loopback callback port, the system CA certificates, the settings directory, a
+hidden OpenGL 3.3 core window with every loaded function). It prints no harness marker.
+
+### Q47 — The Windows client's form
+
+Spec 06 had `n3e-client-windows-x86_64.zip` (exe + DLLs). **Default taken (M4b):** one
+static `n3e-client.exe` (vcpkg `x64-windows-static`, static C runtime: nothing for a
+player to install), in a `.tar.zst` like Linux's, so the Launcher has one extractor.
+Console subsystem: the Discord address it prints stays visible.
+
+### Q48 — The client without `--ca`
+
+Spec 07 and O1 say the client trusts the system CA store, but the client required
+`--ca` ("CA failed" without it), so a player client could not have connected to a
+Let's Encrypt realm. **Default taken (M4b):** without `--ca`, OpenSSL's default paths on
+Linux, the Windows `ROOT` store on Windows; `--ca` still replaces them for dev realms.
+
+### Q49 — Which Linux systems the client archive runs on
+
+The Linux client links the build system's glibc and libstdc++. **Default taken (M4b):**
+the archive bundles SDL3, protobuf and abseil (`tools/package_client.py`), and is built
+on Ubuntu 24.04, so it runs on distributions at least that new. An older baseline would
+need the builder image (spec 06) on an older base.

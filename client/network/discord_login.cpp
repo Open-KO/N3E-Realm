@@ -1,25 +1,25 @@
 #include "network/discord_login.h"
-#include <arpa/inet.h>
-#include <cerrno>
+#include "platform/dirs.h"
 #include <cstring>
 #include <ctime>
-#include <fcntl.h>
 #include <fstream>
 #include <iostream>
-#include <netinet/in.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
-#include <poll.h>
-#include <spawn.h>
 #include <sstream>
 #include <stdexcept>
-#include <sys/socket.h>
+#include <thread>
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#else
+#include <fcntl.h>
+#include <spawn.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
-#include <thread>
-#include <unistd.h>
 extern char **environ;
+#endif
 namespace n3e::login {
 namespace {
 constexpr int FIRST_PORT = 49152, LAST_PORT = 49155;
@@ -199,13 +199,13 @@ RealmConfig read_realm(const std::filesystem::path &path) {
 }
 
 std::filesystem::path session_path(const std::string &realm_id) {
-  std::filesystem::path base;
-  if (const char *x = std::getenv("XDG_CONFIG_HOME"); x && *x)
-    base = x;
-  else if (const char *h = std::getenv("HOME"); h && *h)
-    base = std::filesystem::path(h) / ".config";
-  else
+  auto base = dirs::config();
+  if (base.empty())
+#ifdef _WIN32
+    throw std::runtime_error("no APPDATA for session.json");
+#else
     throw std::runtime_error("no XDG_CONFIG_HOME or HOME for session.json");
+#endif
   return base / "n3e-realm" / realm_id / "session.json";
 }
 
@@ -241,7 +241,11 @@ std::string unbase64url(const std::string &text) {
 std::string rfc3339(int64_t t) {
   std::time_t v = std::time_t(t);
   std::tm tm{};
+#ifdef _WIN32
+  gmtime_s(&tm, &v);
+#else
   gmtime_r(&v, &tm);
+#endif
   char b[32];
   std::strftime(b, sizeof b, "%Y-%m-%dT%H:%M:%SZ", &tm);
   return b;
@@ -254,7 +258,11 @@ std::optional<int64_t> parse_rfc3339(const std::string &text) {
     return std::nullopt;
   tm.tm_year -= 1900;
   tm.tm_mon -= 1;
+#ifdef _WIN32
+  return int64_t(_mkgmtime(&tm));
+#else
   return int64_t(timegm(&tm));
+#endif
 }
 
 std::optional<Session> load_session(const std::filesystem::path &path, int64_t now) {
@@ -281,21 +289,36 @@ std::optional<Session> load_session(const std::filesystem::path &path, int64_t n
 bool save_session(const std::filesystem::path &path, const Session &s) {
   std::error_code e;
   std::filesystem::create_directories(path.parent_path(), e);
-  ::chmod(path.parent_path().c_str(), 0700);
   auto temporary = path;
   temporary += ".tmp";
+  std::string text = "{\"token\": " + json_string(base64url(s.token)) + ", \"expires_at\": " +
+                     json_string(rfc3339(s.expires_at)) + ", \"discord_name\": " + json_string(s.discord_name) + "}\n";
+#ifdef _WIN32
+  // %APPDATA% is the user's own; the file replaces the old one in one move.
+  HANDLE f = ::CreateFileW(temporary.c_str(), GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+  if (f == INVALID_HANDLE_VALUE)
+    return false;
+  DWORD written = 0;
+  bool ok = ::WriteFile(f, text.data(), DWORD(text.size()), &written, nullptr) && written == text.size() &&
+            ::FlushFileBuffers(f);
+  ok = ::CloseHandle(f) && ok;
+  if (!ok || !::MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+    ::DeleteFileW(temporary.c_str());
+    return false;
+  }
+#else
+  ::chmod(path.parent_path().c_str(), 0700);
   int fd = ::open(temporary.c_str(), O_CREAT | O_WRONLY | O_TRUNC | O_CLOEXEC, 0600);
   if (fd < 0)
     return false;
   ::fchmod(fd, 0600);
-  std::string text = "{\"token\": " + json_string(base64url(s.token)) + ", \"expires_at\": " +
-                     json_string(rfc3339(s.expires_at)) + ", \"discord_name\": " + json_string(s.discord_name) + "}\n";
   bool ok = ::write(fd, text.data(), text.size()) == ssize_t(text.size()) && ::fsync(fd) == 0;
   ok = ::close(fd) == 0 && ok;
   if (!ok || ::rename(temporary.c_str(), path.c_str()) != 0) {
     ::unlink(temporary.c_str());
     return false;
   }
+#endif
   return true;
 }
 void forget_session(const std::filesystem::path &path) {
@@ -305,7 +328,12 @@ void forget_session(const std::filesystem::path &path) {
 
 std::string client_label() {
   char host[256] = {};
-  if (::gethostname(host, sizeof host - 1) != 0)
+  try {
+    net::start();
+  } catch (const std::exception &) {
+    return "client";
+  }
+  if (::gethostname(host, int(sizeof host - 1)) != 0)
     return "client";
   std::string out;
   for (unsigned char c : std::string(host))
@@ -352,49 +380,61 @@ std::string player_text(const std::string &detail) {
 }
 
 Callback::~Callback() {
-  if (listener >= 0)
-    ::close(listener);
+  if (listener != net::BAD_SOCKET)
+    net::close(listener);
 }
 bool Callback::open() {
+  try {
+    net::start();
+  } catch (const std::exception &) {
+    return false;
+  }
   for (int port = FIRST_PORT; port <= LAST_PORT; ++port) {
-    int fd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
-    if (fd < 0)
+#ifdef _WIN32
+    // Not inherited by the browser ShellExecute starts.
+    auto fd = ::WSASocketW(AF_INET, SOCK_STREAM, IPPROTO_TCP, nullptr, 0, WSA_FLAG_OVERLAPPED | WSA_FLAG_NO_HANDLE_INHERIT);
+#else
+    auto fd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);
+#endif
+    if (fd == net::BAD_SOCKET)
       return false;
     sockaddr_in a{};
     a.sin_family = AF_INET;
     a.sin_port = htons(uint16_t(port));
     a.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-    // A previous attempt's answered request leaves TIME_WAIT on its port; on Linux
-    // SO_REUSEADDR binds past that and still fails if something listens there.
-    int on = 1;
-    ::setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on);
+    // A previous attempt's answered request leaves TIME_WAIT on its port; the
+    // port must still be ours alone (platform/net.h).
+    net::exclusive_port(fd);
     if (::bind(fd, reinterpret_cast<sockaddr *>(&a), sizeof a) == 0 && ::listen(fd, 4) == 0 &&
-        ::fcntl(fd, F_SETFL, O_NONBLOCK) == 0) {
+        net::nonblocking(fd)) {
       listener = fd;
       port_ = port;
       return true;
     }
-    ::close(fd);
+    net::close(fd);
   }
   return false;
 }
 std::string Callback::redirect_uri() const { return "http://127.0.0.1:" + std::to_string(port_) + "/callback"; }
 Callback::Result Callback::poll(std::string &code) {
-  if (listener < 0)
+  if (listener == net::BAD_SOCKET)
     return Result::failed;
-  int c = ::accept4(listener, nullptr, nullptr, SOCK_CLOEXEC);
-  if (c < 0)
-    return errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR ? Result::waiting : Result::failed;
+#ifdef _WIN32
+  auto c = ::accept(listener, nullptr, nullptr);
+#else
+  auto c = ::accept4(listener, nullptr, nullptr, SOCK_CLOEXEC);
+#endif
+  if (c == net::BAD_SOCKET)
+    return net::would_block() ? Result::waiting : Result::failed;
   // A browser sends its request at once; a client that does not is dropped.
   std::string request;
   char buffer[2048];
   auto until = std::chrono::steady_clock::now() + std::chrono::seconds(2);
   while (request.find("\r\n\r\n") == std::string::npos && request.size() < 8192 &&
          std::chrono::steady_clock::now() < until) {
-    pollfd p{c, POLLIN, 0};
-    if (::poll(&p, 1, 100) <= 0)
+    if (net::wait(c, POLLIN, 100) <= 0)
       continue;
-    ssize_t n = ::recv(c, buffer, sizeof buffer, 0);
+    auto n = ::recv(c, buffer, int(sizeof buffer), 0);
     if (n <= 0)
       break;
     request.append(buffer, size_t(n));
@@ -403,8 +443,8 @@ Callback::Result Callback::poll(std::string &code) {
     std::string r = std::string("HTTP/1.1 ") + status +
                     "\r\nContent-Type: text/html; charset=utf-8\r\nCache-Control: no-store\r\nConnection: close\r\n"
                     "Content-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body;
-    (void)!::send(c, r.data(), r.size(), MSG_NOSIGNAL);
-    ::close(c);
+    (void)!::send(c, r.data(), int(r.size()), net::NO_SIGNAL);
+    net::close(c);
   };
   auto line = request.substr(0, request.find("\r\n"));
   if (!line.starts_with("GET /callback?")) {
@@ -417,8 +457,8 @@ Callback::Result Callback::poll(std::string &code) {
     respond("400 Bad Request", "This login link is stale. Return to the game and try again.");
     return Result::waiting;
   }
-  ::close(listener);
-  listener = -1;
+  net::close(listener);
+  listener = net::BAD_SOCKET;
   if (!v["error"].empty() || v["code"].empty()) {
     respond("200 OK", "<!doctype html><title>N3E Realm</title><p>Discord login was cancelled. You can close this tab.");
     return Result::denied;
@@ -430,6 +470,11 @@ Callback::Result Callback::poll(std::string &code) {
 }
 
 bool open_browser(const std::string &url) {
+#ifdef _WIN32
+  // The default browser; the URL is ASCII (authorize_url encodes everything else).
+  const std::wstring wide(url.begin(), url.end());
+  return reinterpret_cast<INT_PTR>(::ShellExecuteW(nullptr, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL)) > 32;
+#else
   pid_t pid;
   const char *args[] = {"xdg-open", url.c_str(), nullptr};
   if (posix_spawnp(&pid, "xdg-open", nullptr, nullptr, const_cast<char **>(args), environ) != 0)
@@ -437,6 +482,7 @@ bool open_browser(const std::string &url) {
   // xdg-open hands the URL to the browser and exits; it is reaped off the frame.
   std::thread([pid] { int status; ::waitpid(pid, &status, 0); }).detach();
   return true;
+#endif
 }
 
 void Flow::reset() {

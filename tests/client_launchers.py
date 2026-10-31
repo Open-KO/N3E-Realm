@@ -38,6 +38,8 @@ ALLOWED = {
     "tests/editing.py": "nm of the player binary (no editor symbols)",
     "tests/graphical.py": "nm of the player binary; its runs use n3e-test-client",
     "tests/demo.py": "hashes the binaries across game packages",
+    "tests/launcher_live.py": "its releases name their client n3e-client as the Launcher requires: a stub, "
+                              "or a wrapper that runs n3e-test-client",
 }
 ROOTS = ("tools/", "tests/", "deploy/", "spikes/", "Makefile")
 

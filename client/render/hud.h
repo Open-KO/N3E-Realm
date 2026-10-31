@@ -1,5 +1,5 @@
 #pragma once
-#include <GL/gl.h>
+#include "platform/gl.h"
 #include <cctype>
 #include <string>
 // Original small bitmap alphabet: no font/runtime asset dependency.

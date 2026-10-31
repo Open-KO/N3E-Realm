@@ -238,6 +238,14 @@ cache, `%APPDATA%\n3e-realm\` for config, replacing the XDG dirs above.
 `--no-start` assembles/updates everything and exits 0 without starting the client (used
 by CI's smoke job).
 
+The client archive (`tools/package_client.py`) is `n3e-client` or `n3e-client.exe` at
+its top level, `.tar.zst` on both platforms. The Windows client is one static `.exe`
+(console subsystem, so the login address it prints is visible; a UTF-8 code page
+manifest, so any user name in `%LOCALAPPDATA%` survives argv). Its settings and
+session live under `%APPDATA%` (`n3e\Option.ini`, `n3e-realm\<id>\session.json`),
+hotbars and panels under `%LOCALAPPDATA%\n3e`. It trusts the Windows `ROOT` store when
+`--ca` is not given (Linux: OpenSSL's default paths).
+
 ## Acceptance tests
 
 1. **Clean install.** Empty XDG dirs, run the launcher against a test manifest: client

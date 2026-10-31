@@ -1,0 +1,7 @@
+{
+  "name": "n3e-client",
+  "version-string": "0",
+  "description": "The Windows client's libraries (spec 04 \"Build\"); Linux uses the system's.",
+  "dependencies": ["sdl3", "protobuf", "openssl", "opengl-registry"],
+  "builtin-baseline": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+}

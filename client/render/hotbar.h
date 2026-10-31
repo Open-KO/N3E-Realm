@@ -1,4 +1,5 @@
 #pragma once
+#include "platform/dirs.h"
 #include "feature_ui.h"
 #include <array>
 #include <cmath>
@@ -34,10 +35,7 @@ struct Hotbar {
     if(self!=entity){timers.clear();drag.reset();self=entity;}
     if(identity==scope)return;
     identity=scope;assignments={};page=0;file.clear();notice.clear();
-    const char*base=std::getenv("XDG_STATE_HOME");
-    std::filesystem::path root;
-    if(base&&*base&&std::filesystem::path(base).is_absolute())root=base;
-    else if(const char*home=std::getenv("HOME");home&&*home)root=std::filesystem::path(home)/".local/state";
+    const auto root=n3e::dirs::state();
     if(root.empty())return;
     unsigned char digest[SHA256_DIGEST_LENGTH];SHA256(reinterpret_cast<const unsigned char*>(scope.data()),scope.size(),digest);
     std::string key;for(auto b:digest){key+="0123456789abcdef"[b>>4];key+="0123456789abcdef"[b&15];}

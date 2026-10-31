@@ -4,6 +4,7 @@
 // login screen's state machine. The Discord client id comes from realm.json, never
 // from the build, so a fork logs in with its own Discord application.
 #include "network/world.h"
+#include "platform/net.h"
 #include <chrono>
 #include <filesystem>
 #include <map>
@@ -26,11 +27,12 @@ struct Session {
   int64_t expires_at = 0;
   std::string discord_name;
 };
-// $XDG_CONFIG_HOME/n3e-realm/<realm id>/session.json ($HOME/.config without it).
+// <config>/n3e-realm/<realm id>/session.json (platform/dirs.h: XDG config; %APPDATA%).
 std::filesystem::path session_path(const std::string &realm_id);
 // The stored session if it is readable, well formed and not yet expired.
 std::optional<Session> load_session(const std::filesystem::path &, int64_t now);
-// Written mode 0600 through a temporary file; false when it could not be.
+// Written through a temporary file, mode 0600 on Linux (Windows: the per-user
+// %APPDATA%); false when it could not be.
 bool save_session(const std::filesystem::path &, const Session &);
 void forget_session(const std::filesystem::path &);
 
@@ -52,7 +54,7 @@ std::string player_text(const std::string &detail);
 // The loopback redirect target: the first free port of 49152-49155, polled once a
 // frame without blocking. One request carrying the expected state ends it.
 class Callback {
-  int listener = -1;
+  net::Socket listener = net::BAD_SOCKET;
   int port_ = 0;
   std::string state;
 

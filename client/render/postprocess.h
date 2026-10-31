@@ -99,7 +99,7 @@ inline std::array<float, 3> tone_map(std::array<float, 3> c, float average, floa
 }  // namespace n3e::post
 
 #ifndef N3E_POSTPROCESS_NO_GL
-#include <GL/gl.h>
+#include "platform/gl.h"
 #include <stdexcept>
 
 GLuint shader(GLenum type, const char *source);

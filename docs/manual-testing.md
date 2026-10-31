@@ -67,7 +67,7 @@ target/release/realm-launcher --realm local --ca deploy/local/ca.pem
 
 | # | Do | Expect |
 |---|---|---|
-| L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game opens on KO's login screen: the orc with the axe under the moon, the login bar with a **Discord** button, "ENTER - Log in with Discord" above it. |
+| L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game opens on KO's login screen: the orc with the axe under the moon, the login bar with KO's ID and Password boxes (they take no input) and a **Discord** button, "ENTER - Log in with Discord" above it. |
 | L2 | **Discord** (or ENTER) | The browser opens Discord's authorize page for your application; after **Authorize** the tab says you are logged in, and KO's server list drops in from the top with "Local Realm". |
 | L3 | Double-click the realm (or **Connect**) | The Karus character select hall. With no characters, ENTER opens character create (Tuarek priest, name field). |
 | L4 | Type a name, **Create**; then ENTER (or click the character) | Back in the hall with the new character in the centre slot and "Level 1" in the info bar; ENTER plays its selected animation, then the loading screen, then the world. |

@@ -28,8 +28,7 @@
       },
       "hidden": [
         "Img_Daum", "Img_MGame", "premium", "Group_Notice_1", "Group_Notice_2", "Group_Notice_3",
-        "Edit_ID", "Edit_PW", "Btn_Option", "Btn_Join",
-        "Group_LogIn#8", "Group_LogIn#9", "Group_LogIn#10", "Group_LogIn#19",
+        "Btn_Option", "Btn_Join",
         "Group_LogIn#15", "Group_LogIn#16", "Group_LogIn#17", "Group_LogIn#18"
       ]
     },

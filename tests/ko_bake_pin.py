@@ -232,14 +232,14 @@ CLIENT = Path("assets/ko")
 # The plain cooks and the homelands keep their pins.
 # Spec 11 (M4c) changed the three --features pins: front-end.bin (N3FE, KO's
 # login, select, create and loading screens) makes the package engine 42 and
-# wire 30. Default features bc6493df... -> 37ae631d...; classic df3cdb80... ->
-# 2398df38.... The 1097 pin (dc494e1f...) was not recut: the 1097 install was
+# wire 30. Default features bc6493df... -> 38654bcd...; classic df3cdb80... ->
+# 5f0792a5.... The 1097 pin (dc494e1f...) was not recut: the 1097 install was
 # not unpacked on the machine that made this change, so that check SKIPs there
 # and fails where it runs until it is recut. The plain cooks and the homelands
 # keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "37ae631deb541b262320080b24802cf617914bf6c13081ea500d52e3a314897c"),
+    "features": (["--features"], "38654bcd9997ef1a400ba988b3500d284c0f786ebde5cf5e878728ca42fb7cb2"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -260,7 +260,7 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "2398df380fd839e825c3076339bf4b53536243ac93e3b617477b9c0e13bb4952"),
+    "features": (["--features"], "5f0792a561ba7efc50a38b70376c0d50f3f4836c1e489d94ae4817c8b89b615b"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.

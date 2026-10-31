@@ -383,3 +383,11 @@ reference NPCs. Moradon has reference NPCs (N3N2, engine 36). **Default taken (M
 engine 42 keeps whichever NPC table the package has; N3N4 still needs engine 41 or
 later, and an engine 41 package still has N3N4. Both readers say so
 (`server/src/content.rs`, `client/assets/assets.cpp`).
+
+### Q60 — The ID and password fields on the login screen
+
+Spec 11 first hid them, since login is Discord. The maintainer asked on 2026-10-31 to
+keep them for KO's look. **Default taken (M4c):** they are drawn as KO draws them,
+with their labels, and bound to no action: they take no clicks or typing, so nobody
+types a password into a field that goes nowhere. Login stays the **Discord** button
+and ENTER.

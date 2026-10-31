@@ -30,6 +30,8 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
      (1–15: the button states normal, down, on, disabled it draws in);
    - image: texture, uv u0 v0 u1 v1 in [0, 1];
    - text: text (≤1024 ASCII bytes), font, colour (ARGB), KO string style;
+     an edit is its string child's font and colour (its other children are
+     images, as the login's untextured ones);
    - edit: font, colour, style (`0x10000000` password); list: font, colour.
    A node draws only when its parent does. A button's state images carry one
    mask bit each; its other children draw in every state.
@@ -85,9 +87,10 @@ is where create draws the character.
 ## Moradon (`games/moradon/front-end.json`)
 
 - Login (`UI_US/co_login_us.uif`, centred on the bottom edge): the Login button,
-  relabelled "Discord", starts spec 02's flow; Cancel exits. Hidden: the ID and
-  password fields and labels, Option, Registration, the MGAME and Daum logos,
-  `premium` and the three notice groups. The bar's art has the four buttons
+  relabelled "Discord", starts spec 02's flow; Cancel exits. The ID and password
+  fields and their labels stay, as KO draws them, unbound: they take no input
+  (Q60). Hidden: Option, Registration, the MGAME and Daum logos, `premium` and the
+  three notice groups. The bar's art has the four buttons
   painted in, so Option and Registration leave two blank buttons (Q58). Added:
   the `notice` line above the bar. `Text_Rights` reads "N3E Realm, a community
   project. Not affiliated with MGAME or Noahsystem." (Q56). The server group sits

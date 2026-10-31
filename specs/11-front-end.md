@@ -102,8 +102,8 @@ replace the panels when the client has a Discord realm config.
   their eye and spot light, the hall meshes, the model with clips 0 and 1, plugs).
 - **`text` overrides.** The Moradon package relabels the login bar's Login button
   "Discord" and replaces `Text_Rights` (Q56).
-- **`hidden`.** The Moradon package hides `Edit_ID`, `Edit_PW` and their labels,
-  `Btn_Option`, `Btn_Join` (Registration), `Img_Daum`, `Img_MGame`, `premium`, the
+- **`hidden`.** The Moradon package keeps `Edit_ID`, `Edit_PW` and their labels as
+  KO draws them, unbound, so they take no input (Q60), and hides `Btn_Option`, `Btn_Join` (Registration), `Img_Daum`, `Img_MGame`, `premium`, the
   three notice groups and the select screen's `bt_delete` (Q53). The bar's art has
   the buttons painted in, so two blank buttons remain (Q58).
 

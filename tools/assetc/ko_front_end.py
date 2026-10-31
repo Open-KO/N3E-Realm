@@ -379,10 +379,12 @@ def screen(name, spec, assets, textures, fonts):
                 raise ValueError("front-end text length")
             record += u(len(data)) + data + u(font(n["font_size"], n["font_flags"])) + u(n["color"]) + u(n["style"])
         elif kind == "edit":
-            # CN3UIEdit draws its one string child itself.
-            if [c["kind"] for c in n["children"]] != [6]:
+            # CN3UIEdit draws its one string child itself; the login's edits
+            # also hold an image (untextured, so drawn as nothing).
+            strings = [c for c in n["children"] if c["kind"] == 6]
+            if len(strings) != 1 or any(c["kind"] not in (4, 6) for c in n["children"]):
                 raise ValueError("front-end edit layout")
-            label = n["children"][0]
+            label = strings[0]
             record += u(font(label["font_size"], label["font_flags"])) + u(label["color"]) + u(n["style"])
         elif kind == "list":
             size, color, bold, _italic = n["list_font"]

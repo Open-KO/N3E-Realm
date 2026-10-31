@@ -53,7 +53,8 @@ TREES = {
     "select": lambda: node(0, "root", [button("bt_left"), button("bt_right"), button("bt_back"),
                                        button("bt_exit"), text("text00")]),
     "create": lambda: node(0, "root", [button("btn_create"), button("btn_cancel"),
-                                       node(8, "edit_name", [text("")]), node(9, "area_character"),
+                                       node(8, "edit_name", [node(4, texture=""), text("")]),
+                                       node(9, "area_character"),
                                        text("text_desc")]),
     "loading": lambda: node(0, "root", [node(3, "Progress_Loading", [node(4, reserved=0), node(4, reserved=1)])]),
     "message": lambda: node(0, "root", [text("text_msg"), button("btn_ok")]),
@@ -121,6 +122,9 @@ problems = {
                                       "message": spec("message", bindings={**BINDINGS["message"], "btn_no": "back"})}),
     "action bound twice": dict(specs={**{n: spec(n) for n in fe.SCREENS},
                                       "select": spec("select", bindings={**BINDINGS["select"], "bt_left": "exit"})}),
+    "edit with two strings": dict(trees={**trees, "create.uif": node(0, "root", [
+        button("btn_create"), button("btn_cancel"), node(8, "edit_name", [text(""), text("")]),
+        node(9, "area_character")])[1]}),
     "UIF tree over its bound": dict(trees={**trees, "loading.uif": node(0, "root", [
         node(0, "g%d" % i, [node(0) for _ in range(40)]) for i in range(52)] + [
         node(3, "Progress_Loading")])[1]}),

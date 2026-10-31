@@ -119,7 +119,7 @@ existing suites (`make live`, LIVE_OK 73/73, graphical); tests 5–7
 (`tests/front_end_live.py`, `tests/front_end_flow_live.py`) pass on the Moradon
 package. The 1097 `--features` bake pin was not recut (no 1097 install here; see
 `tests/ko_bake_pin.py`). Open: the manual round on Linux and Windows
-(`docs/manual-testing.md` L1–L12, W1–W7), Q57–Q59.
+(`docs/manual-testing.md` L1–L12, W1–W7), Q57–Q60.
 
 ## M5 — CD (spec 06)
 

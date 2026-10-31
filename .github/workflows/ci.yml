@@ -123,10 +123,12 @@ jobs:
           echo "SDL_VIDEO_DRIVER=offscreen" >> "$GITHUB_ENV"
 
       # vcpkg at the pinned commit (vcpkg.json's builtin-baseline); its binary cache
-      # keeps the static libraries between runs.
+      # keeps the static libraries between runs, saved even when the client build
+      # after them fails (they take ~25 minutes to build).
       - name: vcpkg binary cache (Windows)
         if: runner.os == 'Windows'
-        uses: actions/cache@v4
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/vcpkg-cache
           key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}-x64-windows-static
@@ -141,9 +143,15 @@ jobs:
           cmake -S . -B build/client -A x64 \
             -DCMAKE_TOOLCHAIN_FILE="$RUNNER_TEMP/vcpkg/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET=x64-windows-static
-          cmake --build build/client --config Release --target n3e-client n3e-test-client
           echo "CLIENT_BUILD=build/client/Release" >> "$GITHUB_ENV"
           echo "LAUNCHER=target/release/realm-launcher.exe" >> "$GITHUB_ENV"
+          cmake --build build/client --config Release --target n3e-client n3e-test-client
+      - name: Save the vcpkg binary cache (Windows)
+        if: always() && runner.os == 'Windows' && steps.vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/vcpkg-cache
+          key: vcpkg-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json') }}-x64-windows-static
       - name: Mesa software OpenGL (Windows; the runner has no GPU)
         if: runner.os == 'Windows'
         run: |

@@ -167,6 +167,13 @@ against your own Discord server:
 `/deploy` also needs `GITHUB_REPO` and `GITHUB_DISPATCH_TOKEN` (a fine-grained token with
 Actions write on this repository only); without them it says deploy is not configured.
 
+### Manual test round
+
+[docs/manual-testing.md](docs/manual-testing.md) is the maintainer's periodic check of
+what the suites cannot do: a real Discord login, the bot in a real server, and the
+Windows client on a real GPU, playing the local realm over the LAN (`tools/local-realm`,
+`tools/local_release.py`, `tools/windows_kit.py`).
+
 ### Launcher
 
 `realm-launcher` (spec 04) is the one binary a player downloads. It reads the realm's

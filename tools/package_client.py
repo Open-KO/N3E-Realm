@@ -33,10 +33,9 @@ def bundled_libraries(binary):
     return libraries
 
 
-def main():
-    if len(sys.argv) != 3 or not sys.argv[2].endswith(".tar.zst"):
-        raise SystemExit(__doc__)
-    build, target = Path(sys.argv[1]), Path(sys.argv[2])
+def package(build, target):
+    """Writes the archive of the client in `build` to `target`; returns its bytes."""
+    build, target = Path(build), Path(target)
     windows = (build / "n3e-client.exe").is_file()
     exe = build / ("n3e-client.exe" if windows else "n3e-client")
     if not exe.is_file():
@@ -59,6 +58,10 @@ def main():
     for name, _, _ in entries:
         print(f"  {name}")
     print(f"{target} sha256={hashlib.sha256(data).hexdigest()} size={len(data)}")
+    return data
 
 
-main()
+if __name__ == "__main__":
+    if len(sys.argv) != 3 or not sys.argv[2].endswith(".tar.zst"):
+        raise SystemExit(__doc__)
+    package(sys.argv[1], sys.argv[2])

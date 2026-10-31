@@ -65,7 +65,8 @@ services:
       - "${N3E_TLS_PATH:-./deploy/local}/server.pem:/tls/server.pem:ro"
       - "${N3E_TLS_PATH:-./deploy/local}/server.key:/tls/server.key:ro"
     ports:
-      - "127.0.0.1:${N3E_PORT:-7777}:7777"
+      # N3E_BIND=0.0.0.0 opens the game port to the LAN (docs/manual-testing.md).
+      - "${N3E_BIND:-127.0.0.1}:${N3E_PORT:-7777}:7777"
     depends_on:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}

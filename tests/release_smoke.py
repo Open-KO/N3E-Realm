@@ -13,66 +13,21 @@ software OpenGL (Mesa's opengl32.dll and friends) next to the installed Windows
 client first, for runners without a GPU. Prints SMOKE_OK.
 """
 import argparse
-import hashlib
-import http.server
-import json
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import sys
 import tempfile
-import threading
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "tools"))
+from local_release import publish, serve  # noqa: E402
 
 WINDOWS = sys.platform == "win32"
-PLATFORM = "windows-x86_64" if WINDOWS else "linux-x86_64"
 CLIENT = "n3e-client.exe" if WINDOWS else "n3e-client"
-
-
-def sha(data):
-    return hashlib.sha256(data).hexdigest()
-
-
-def serve(root):
-    class Handler(http.server.SimpleHTTPRequestHandler):
-        def __init__(self, *a, **k):
-            super().__init__(*a, directory=str(root), **k)
-
-        def log_message(self, *a):
-            pass
-
-    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    threading.Thread(target=server.serve_forever, daemon=True).start()
-    return server, f"http://127.0.0.1:{server.server_address[1]}"
-
-
-def publish(web, url, archive, package):
-    """manifest.json for `archive` and `package` under `web`; returns the manifest."""
-    client = archive.read_bytes()
-    shutil.copy(archive, web / archive.name)
-    (web / "store").mkdir()
-    files = []
-    for path in sorted(p for p in package.rglob("*") if p.is_file()):
-        data = path.read_bytes()
-        (web / "store" / sha(data)).write_bytes(data)
-        files.append({"path": path.relative_to(package).as_posix(), "sha256": sha(data), "size": len(data)})
-    content = sha((package / "release.bin").read_bytes())
-    index = json.dumps({"schema": 1, "hash": content, "files": files}).encode()
-    (web / f"content-{content}.index.json").write_bytes(index)
-    manifest = {
-        "schema": 1, "release": "smoke", "published_at": "2026-10-31T00:00:00Z",
-        "realm": {"id": "smoke-realm", "name": "Smoke Realm", "host": "localhost", "port": 7777,
-                  "discord_client_id": "123456789012345678"},
-        "launcher": {"version": "0.0.0", "min_version": "0.0.0", "artifacts": {}},
-        "client": {"version": "smoke", "artifacts": {
-            PLATFORM: {"url": f"{url}/{archive.name}", "sha256": sha(client), "size": len(client)}}},
-        "content": {"game": json.loads((package / "package.json").read_text()).get("game", "demo")
-                    if (package / "package.json").is_file() else "demo",
-                    "hash": content, "index_url": f"{url}/content-{content}.index.json",
-                    "index_sha256": sha(index), "base_url": f"{url}/store/"},
-    }
-    (web / "manifest.json").write_text(json.dumps(manifest))
-    return manifest
+REALM = {"id": "smoke-realm", "name": "Smoke Realm", "host": "localhost", "port": 7777,
+         "discord_client_id": "123456789012345678"}
 
 
 def main():
@@ -90,7 +45,7 @@ def main():
     home.mkdir()
     server, url = serve(web)
     try:
-        manifest = publish(web, url, a.client.resolve(), a.package.resolve())
+        manifest = publish(web, url, a.client.resolve(), a.package.resolve(), REALM, version="smoke")
         env = {k: v for k, v in os.environ.items()
                if k not in ("XDG_DATA_HOME", "XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME")}
         if WINDOWS:

@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# The local Compose realm for a manual test round (docs/manual-testing.md): the
+# demo package, Discord login from .env, and with LAN_ADDRESS the game port open to
+# the LAN under a certificate that names that address.
+#
+#   tools/local-realm [LAN_ADDRESS]     start or restart it
+#   tools/local-realm down              stop it (the database volume stays)
+#
+# The realm is test-local: the demo package's progression converts only on a test-
+# realm with disposable progression (as tools/play-* do). The bot starts too when
+# .env has REALM_ADMIN_TOKEN.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+export N3E_REALM="${N3E_REALM:-test-local}"
+if test "${1:-}" = down; then
+  docker compose --profile bot down
+  exit 0
+fi
+lan="${1:-}"
+if test -n "$lan"; then
+  export N3E_BIND=0.0.0.0
+  N3E_LOCAL_NAMES="$lan" bash deploy/local-ca.sh
+else
+  export N3E_BIND=127.0.0.1
+  bash deploy/local-ca.sh
+fi
+setting() { test -f .env && grep -qE "^$1=.+" .env; }
+for name in DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET; do
+  setting "$name" || { echo "local-realm: $name is not set in .env (README, Discord login)" >&2; exit 2; }
+done
+test -f build/packages/demo/release.bin || python tools/assetc/main.py games/demo build/packages/demo
+
+docker compose build server
+docker compose up -d --wait postgres redis
+docker compose run --rm --no-deps migrate
+log="$(mktemp)"
+if ! docker compose run --rm --no-deps -e N3E_TEST_PROGRESSION=disposable server convert-progression >"$log" 2>&1; then
+  grep -q "realm already owned" "$log" || { cat "$log" >&2; rm -f "$log"; exit 1; }
+fi
+rm -f "$log"
+docker compose up -d --wait --force-recreate server
+if setting REALM_ADMIN_TOKEN; then
+  docker compose --profile bot up -d --build bot
+  bot="bot started"
+else
+  bot="bot not started: mint a token (README, Discord bot), put it in .env as REALM_ADMIN_TOKEN, run this again"
+fi
+echo
+echo "realm $N3E_REALM on port ${N3E_PORT:-7777} ($([ -n "$lan" ] && echo "LAN, as $lan and localhost" || echo "this machine only")); $bot"

@@ -27,6 +27,10 @@ if(MSVC)
   # Winsock and <windows.h> without min/max macros; M_PI from <cmath>; the CRT's
   # getenv/sscanf without deprecation notes.
   add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN _USE_MATH_DEFINES _CRT_SECURE_NO_WARNINGS)
+  # The client's own sources (not protobuf's): Windows headers first, minus the
+  # macros that collide with its names (client/platform/windows.h).
+  set(N3E_WINDOWS_FIRST "/FI${CMAKE_CURRENT_SOURCE_DIR}/client/platform/windows.h")
+  list(APPEND N3E_WARNINGS ${N3E_WINDOWS_FIRST})
 else()
   set(N3E_WARNINGS -Wall -Wextra -Wpedantic)
 endif()
@@ -43,6 +47,7 @@ target_link_libraries(n3e-wire PUBLIC protobuf::libprotobuf)
 find_package(Threads REQUIRED)
 add_library(n3e-assets STATIC client/assets/assets.cpp client/assets/collision.cpp client/assets/world_stream.cpp)
 target_include_directories(n3e-assets PUBLIC client)
+target_compile_options(n3e-assets PRIVATE ${N3E_WINDOWS_FIRST})
 target_link_libraries(n3e-assets PUBLIC OpenSSL::Crypto Threads::Threads)
 # Two clients from one source (PQ-006). n3e-client is the player build: its replay,
 # smoke and capture hooks are compiled out (N3E_HARNESS=0, client/harness/harness.h)

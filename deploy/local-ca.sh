@@ -4,6 +4,11 @@
 # missing, unreadable, mismatched, expired or within RENEW_SECONDS of expiry is
 # replaced in place by a new CA and server certificate, so `make live` (whose
 # prepare runs this) never fails at prepare with "certificate has expired".
+#
+# N3E_LOCAL_NAMES="192.168.1.20 mybox.local" adds those IP addresses and host names
+# to the server certificate besides localhost, so a client on another machine of
+# the LAN can verify the local stack (docs/manual-testing.md). A pair lacking a
+# requested name is renewed; a run without the variable keeps the names it has.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 local_dir="${1:-deploy/local}"
@@ -12,6 +17,16 @@ DAYS=30
 # persistent play stack started before the renewal keeps a week of validity.
 RENEW_SECONDS=$((7 * 24 * 3600))
 mkdir -p "$local_dir"
+local_names="${N3E_LOCAL_NAMES:-}"
+read -r -a names <<<"${local_names//,/ }"
+is_ip() { [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+san="DNS:localhost"
+for n in "${names[@]}"; do
+  [[ "$n" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "local-ca: bad N3E_LOCAL_NAMES entry: $n" >&2; exit 2; }
+  if is_ip "$n"; then san="$san,IP:$n"; else san="$san,DNS:$n"; fi
+done
+# openssl verify's check of one name: -verify_ip for an address, else -verify_hostname.
+name_check() { if is_ip "$1"; then echo "-verify_ip $1"; else echo "-verify_hostname $1"; fi; }
 
 # One run at a time per directory (two make live prepares, a launcher).
 if command -v flock >/dev/null; then
@@ -37,6 +52,12 @@ renew_reason() {
   if ! openssl verify -purpose sslserver -verify_hostname localhost -CAfile "$d/ca.pem" "$d/server.pem" >/dev/null 2>&1; then
     echo "server.pem does not verify against ca.pem"; return
   fi
+  for n in "${names[@]}"; do
+    # shellcheck disable=SC2046
+    if ! openssl verify -purpose sslserver $(name_check "$n") -CAfile "$d/ca.pem" "$d/server.pem" >/dev/null 2>&1; then
+      echo "server.pem lacks $n"; return
+    fi
+  done
   local cert_key key_pub
   cert_key="$(openssl x509 -noout -pubkey -in "$d/server.pem" 2>/dev/null)" || { echo "server.pem has no public key"; return; }
   key_pub="$(openssl pkey -pubout -in "$d/server.key" 2>/dev/null)" || { echo "unreadable server.key"; return; }
@@ -51,8 +72,8 @@ if test -n "$reason"; then
   trap 'rm -rf "$work"' EXIT
   openssl req -x509 -newkey rsa:2048 -nodes -keyout "$work/ca.key" -out "$work/ca.pem" -days "$DAYS" -subj '/CN=n3e local development CA' -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,keyCertSign,cRLSign'
   openssl req -newkey rsa:2048 -nodes -keyout "$work/server.key" -out "$work/server.csr" -subj '/CN=localhost'
-  cat > "$work/extensions" <<'EXT'
-subjectAltName=DNS:localhost
+  cat > "$work/extensions" <<EXT
+subjectAltName=$san
 extendedKeyUsage=serverAuth
 keyUsage=critical,digitalSignature,keyEncipherment
 basicConstraints=critical,CA:FALSE
@@ -69,3 +90,8 @@ EXT
   rm -f "$local_dir/server.csr" "$local_dir/extensions" "$local_dir/ca.srl"
 fi
 openssl verify -purpose sslserver -verify_hostname localhost -CAfile "$local_dir/ca.pem" "$local_dir/server.pem"
+for n in "${names[@]}"; do
+  # shellcheck disable=SC2046
+  openssl verify -purpose sslserver $(name_check "$n") -CAfile "$local_dir/ca.pem" "$local_dir/server.pem" >/dev/null
+  echo "local-ca: server.pem also names $n"
+done

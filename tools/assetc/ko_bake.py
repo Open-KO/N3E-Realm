@@ -454,6 +454,12 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
                             protocol_version=30)
         report['audio']=ko_audio.cook(source_assets,report['effects'],hud,root/'audio.bin',item_icons,extra_sounds)
         manifest['presentation']['audio.bin']='audio.bin'
+        # Spec 11: KO's login scene, select hall, create, loading and message
+        # box from the same client tree; engine 42.
+        import ko_front_end
+        report['front_end']=ko_front_end.cook(source_assets,root,'games/moradon/front-end.json',root.parent/(root.name+'-front-end'))
+        manifest['presentation']['front-end.bin']='front-end.bin'
+        manifest.update(engine_version=max(manifest['engine_version'],42),protocol_version=30)
         if des:
             # Exploration: Demon's Souls characters from the user's own dump (moradon_des.py).
             import moradon_des

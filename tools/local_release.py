@@ -1,7 +1,7 @@
 """A release of this tree on this machine, for the launcher (docs/manual-testing.md).
 
   python tools/local_release.py [--port 8770] [--client-build build/client]
-                                [--package build/packages/demo]
+                                [--package build/packages/moradon]
 
 Packages the client in --client-build (tools/package_client.py), publishes it with
 the content package as a release on http://127.0.0.1:PORT (manifest.json, content
@@ -88,8 +88,10 @@ def main():
     args = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     args.add_argument("--port", type=int, default=8770)
     args.add_argument("--client-build", type=Path, default=ROOT / "build/client")
-    args.add_argument("--package", type=Path, default=ROOT / "build/packages/demo")
+    args.add_argument("--package", type=Path, default=ROOT / "build/packages/moradon")
     a = args.parse_args()
+    if not (a.package / "release.bin").is_file():
+        raise SystemExit(f"local_release: {a.package} is missing; run make realm-assets")
     client_id = dotenv("DISCORD_CLIENT_ID")
     if not client_id:
         raise SystemExit("local_release: set DISCORD_CLIENT_ID in .env (README, Discord login)")

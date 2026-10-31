@@ -143,7 +143,12 @@ pub struct Release {
     pub hash: String,
     pub collision: crate::movement::Collision,
     pub rules: crate::rules::Rules,
+    /// Most characters an account has in this realm: the front end's slot
+    /// count (spec 11, front-end.bin), else 8.
+    pub character_slots: u32,
 }
+/// front-end.bin's bound (spec 11; tools/assetc/main.py FRONT_END_FILE).
+pub const MAX_FRONT_END_ASSET: u64 = 64 * 1024 * 1024;
 pub fn load(root: &Path) -> Result<Release> {
     let mut r = Reader::open(&root.join("release.bin"))?;
     let hash = sha256(&r.bytes)
@@ -158,8 +163,9 @@ pub fn load(root: &Path) -> Result<Release> {
     // Engines 38 (PQ-253), 39 (PQ-265: N3MM looks models with render
     // states) and 40 (PQ-283: N3NI / N3MI looks models with influence
     // tables) add client presentation only and keep wire 30; so does 41
-    // (PQ-272: N3N4 templates with a drawn scale, sent as `Entity.scale`).
-    if !(1..=41).contains(&engine)
+    // (PQ-272: N3N4 templates with a drawn scale, sent as `Entity.scale`),
+    // and 42 (spec 11: the KO front end, front-end.bin).
+    if !(1..=42).contains(&engine)
         || if engine >= 38 { protocol != 30 } else if engine >= 15 { protocol != engine - 7 } else if engine >= 13 {
             protocol != 7
         } else if engine == 12 {
@@ -217,6 +223,8 @@ pub fn load(root: &Path) -> Result<Release> {
             &path,
             if name == "render-detail.bin" {
                 128 * 1024 * 1024
+            } else if name == "front-end.bin" {
+                MAX_FRONT_END_ASSET
             } else if name == "world.bin" {
                 MAX_CHUNKED_WORLD_ASSET
             } else if name == "world-textures.bin" {
@@ -478,6 +486,24 @@ pub fn load(root: &Path) -> Result<Release> {
     if files.remove("audio.bin") && (engine < 33 || !presentation) {
         return Err(bad("audio compatibility"));
     }
+    // Spec 11: the server reads only front-end.bin's header, for the slot
+    // count; the client reads the rest.
+    let character_slots = if files.remove("front-end.bin") {
+        if engine < 42 || !presentation {
+            return Err(bad("front end compatibility"));
+        }
+        let mut p = Reader::open_bounded(&root.join("front-end.bin"), MAX_FRONT_END_ASSET)?;
+        if p.take(4)? != b"N3FE" || p.u()? != 1 {
+            return Err(bad("front end magic/version"));
+        }
+        let slots = p.u()?;
+        if !(1..=3).contains(&slots) {
+            return Err(bad("front end character slots"));
+        }
+        slots
+    } else {
+        8
+    };
     // The package input map is client-side (PQ-009, D-136): the server hashes it
     // with the release, checks its magic and otherwise ignores it. N3I2 adds the
     // name display policy (PQ-014), N3I3 the other-player label lifetime (PQ-169),
@@ -731,8 +757,9 @@ pub fn load(root: &Path) -> Result<Release> {
             return Err(bad("reference npc compatibility"));
         }
         // PQ-272 (D-179): N3N4 (templates with a drawn scale) is engine 41, and
-        // an engine 41 package's templates are N3N4.
-        if reference.scaled != (engine >= 41) {
+        // an engine 41 package's templates are N3N4. Engine 42 adds only the
+        // front end (spec 11, Q59), so it keeps whichever table it has.
+        if (reference.scaled && engine < 41) || (!reference.scaled && engine == 41) {
             return Err(bad("npc scale compatibility"));
         }
         // N3N3 templates (PQ-249): engine 37 / wire 30, names and looks keys in
@@ -788,6 +815,7 @@ pub fn load(root: &Path) -> Result<Release> {
         game,
         hash,
         collision,
+        character_slots,
     })
 }
 /// Most NPC looks entries one package carries (PQ-253): a KO homeland zone's

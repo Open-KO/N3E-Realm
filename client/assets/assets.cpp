@@ -440,8 +440,9 @@ Release load_release(const std::filesystem::path &root) {
   auto engine = r.u(), protocol = r.u();
   // Engines 38 (PQ-253), 39 (PQ-265: N3MM looks models with render
   // states) and 40 (PQ-283: N3NI / N3MI looks models with influence tables)
-  // add client presentation only and keep wire 30.
-  need(engine >= 1 && engine <= 41 &&
+  // add client presentation only and keep wire 30; so do 41 (PQ-272) and
+  // 42 (spec 11: front-end.bin).
+  need(engine >= 1 && engine <= 42 &&
            (engine >= 38 ? protocol == 30
             : engine >= 15 ? protocol == engine-7
             : engine >= 13 ? protocol == 7
@@ -502,7 +503,7 @@ Release load_release(const std::filesystem::path &root) {
       need(magic == "N3WO", "world overlay magic");
       continue;
     }
-    Reader f(path, name == "render-detail.bin" ? 128 * 1024 * 1024 : 16 * 1024 * 1024);
+    Reader f(path, name == "render-detail.bin" ? 128 * 1024 * 1024 : name == "front-end.bin" ? kFrontEndFile : 16 * 1024 * 1024);
     need(f.b.size() == size && sha(f.b) == hash, "asset size/hash mismatch");
   }
   r.end();
@@ -617,12 +618,13 @@ Release load_release(const std::filesystem::path &root) {
     // N3N3 (PQ-249, engine 37) is N3N2 with a template table: acquisition moves
     // into each template and every slot names one.
     // N3N4 (PQ-272, D-179, engine 41) is N3N3 with a drawn scale per template;
-    // an engine 41 package's templates are N3N4.
+    // an engine 41 package's templates are N3N4. Engine 42 adds only the
+    // front end (spec 11, Q59), so it keeps whichever table it has.
     bool scaled = magic == "N3N4" && model == 4;
     bool templated = (magic == "N3N3" && model == 3) || scaled;
     bool reference = (magic == "N3N2" && model == 2) || templated;
     need((magic == "N3N1" && model == 1) || (reference && engine >= (templated ? 37u : 36u)), "npc model");
-    need(scaled == (engine >= 41), "npc scale compatibility");
+    need(scaled ? engine >= 41 : engine != 41, "npc scale compatibility");
     for (int i = 0; i < 6; ++i) {
       auto ticks = n.u();
       need(ticks >= (i == 1 ? 0u : 1u) && ticks <= (i == 3 || i == 4 ? 12000u : 1200u), "npc timer");
@@ -851,6 +853,11 @@ Release load_release(const std::filesystem::path &root) {
   if(files.erase("audio.bin")){
     need(engine>=33&&result.presentation,"audio compatibility");
     result.audio=load_audio(root/"audio.bin");
+  }
+  // Spec 11: hashed above; read whole by load_front_end when the window opens.
+  if(files.erase("front-end.bin")){
+    need(engine>=42&&result.presentation,"front end compatibility");
+    result.front_end=true;
   }
   result.loot_model=files.erase("loot-model.bin")!=0;
   need(!result.loot_model||(engine>=10&&result.presentation&&result.thresholds),"loot model requires durable loot presentation");
@@ -2306,10 +2313,11 @@ Collision load_collision(const std::filesystem::path &path) {
   c.end();
   return Collision(std::move(t), std::move(objects));
 }
-// N3S1's parts (PQ-253: N3NM repeats the track list once per clip).
-static void read_scene_head(Reader &r, Scene &s) {
-  s.width = r.count(1024);
-  s.height = r.count(1024);
+// N3S1's parts (PQ-253: N3NM repeats the track list once per clip). `atlas`
+// is the largest side: 2048 for the front end's models only (spec 11).
+static void read_scene_head(Reader &r, Scene &s, uint32_t atlas = 1024) {
+  s.width = r.count(atlas);
+  s.height = r.count(atlas);
   auto tex = r.raw(s.width * s.height * s.channels);
   s.texture.assign(tex.begin(), tex.end());
   auto nn = r.count(128);
@@ -2660,4 +2668,208 @@ std::vector<float> Scene::skin(const std::vector<Node> &animated, std::span<cons
   return out;
 }
 float Scene::ground_height(float x, float z) const { return collision.ground_height(x, z); }
+// Spec 11's front end (content/front-end.md): every bound ko_front_end.py
+// checks, the required actions per screen, and each embedded model read as
+// load_scene reads a package scene, with the front end's 2048 atlas.
+FrontEnd load_front_end(const Release &release) {
+  need(release.front_end, "front end not in the package");
+  Reader r(release.root / "front-end.bin", kFrontEndFile);
+  r.magic("N3FE");
+  need(r.u() == 1, "front end version");
+  FrontEnd fe;
+  fe.character_slots = r.count(3);
+  fe.canvas_width = r.u();
+  fe.canvas_height = r.u();
+  need(fe.canvas_width == 1024 && fe.canvas_height == 768, "front end canvas");
+  const auto textures = r.count(64);
+  for (uint32_t i = 0; i < textures; ++i) {
+    HudTexture t;
+    t.width = r.count(1024);
+    t.height = r.count(1024);
+    auto pixels = r.raw(size_t(t.width) * t.height * 4);
+    t.pixels.assign(pixels.begin(), pixels.end());
+    fe.textures.push_back(std::move(t));
+  }
+  auto text = [&](size_t limit) { return r.raw(r.count(uint32_t(limit), 0)); };
+  auto ascii = [](const std::string &s) {
+    for (unsigned char c : s) need(c == '\n' || (c >= 32 && c < 127), "front end text");
+    return s;
+  };
+  const auto fonts = r.count(8, 0);
+  for (uint32_t i = 0; i < fonts; ++i) {
+    FrontFont font;
+    font.texture = r.u();
+    font.pixels = r.count(48, 6);
+    font.height = r.count(32);
+    font.top = r.u();
+    font.advances = r.floats<95>();
+    need(font.texture < fe.textures.size() && fe.textures[font.texture].width == 512 &&
+             fe.textures[font.texture].height == 192 && font.top + font.height <= 32,
+         "front end font");
+    for (float a : font.advances) need(a > 0 && a <= 28, "front end font advance");
+    fe.fonts.push_back(font);
+  }
+  static const std::array<std::vector<FrontAction>, size_t(FrontScreen::count)> required{{
+      {FrontAction::login, FrontAction::exit, FrontAction::login_group, FrontAction::realm_group,
+       FrontAction::realm_list, FrontAction::realm_connect, FrontAction::notice},
+      {FrontAction::select_prev, FrontAction::select_next, FrontAction::back, FrontAction::exit,
+       FrontAction::char_info},
+      {FrontAction::create_confirm, FrontAction::back, FrontAction::name_field, FrontAction::char_view},
+      {FrontAction::progress},
+      {FrontAction::message, FrontAction::ok},
+  }};
+  for (size_t screen = 0; screen < fe.screens.size(); ++screen) {
+    auto &nodes = fe.screens[screen];
+    const auto count = r.count(1024);
+    std::set<FrontAction> bound;
+    for (uint32_t i = 0; i < count; ++i) {
+      FrontNode n;
+      n.kind = r.u();
+      n.parent = r.u();
+      need(n.kind <= FrontNode::LIST && (i == 0 ? n.parent == 0xffffffffu : n.parent < i), "front end node");
+      n.rect = r.floats<4>();
+      need(n.rect[0] <= n.rect[2] && n.rect[1] <= n.rect[3] && std::abs(n.rect[0]) <= 16384 &&
+               std::abs(n.rect[1]) <= 16384 && std::abs(n.rect[2]) <= 16384 && std::abs(n.rect[3]) <= 16384,
+           "front end rect");
+      n.id = text(64);
+      const auto action = r.u();
+      need(action < uint32_t(FrontAction::count), "front end action");
+      n.action = FrontAction(action);
+      need(n.action == FrontAction::none || bound.insert(n.action).second, "front end action bound twice");
+      n.flags = r.u();
+      n.mask = r.u();
+      need(n.flags <= 7 && n.mask >= 1 && n.mask <= 15, "front end node state");
+      if (n.kind == FrontNode::IMAGE) {
+        n.texture = r.u();
+        n.uv = r.floats<4>();
+        need(n.texture < fe.textures.size(), "front end image texture");
+        for (float v : n.uv) need(v >= 0 && v <= 1, "front end image uv");
+      } else if (n.kind == FrontNode::TEXT) {
+        n.text = ascii(text(1024));
+        n.font = r.u();
+        n.color = r.u();
+        n.style = r.u();
+      } else if (n.kind == FrontNode::EDIT) {
+        n.font = r.u();
+        n.color = r.u();
+        n.style = r.u();
+      } else if (n.kind == FrontNode::LIST) {
+        n.font = r.u();
+        n.color = r.u();
+      }
+      need((n.kind != FrontNode::TEXT && n.kind != FrontNode::EDIT && n.kind != FrontNode::LIST) ||
+               n.font < fe.fonts.size(),
+           "front end font index");
+      nodes.push_back(std::move(n));
+    }
+    for (auto action : required[screen]) need(bound.contains(action), "front end screen action unbound");
+  }
+  for (auto &s : fe.strings) s = ascii(text(1024));
+  // D3DLIGHT9's range is unclamped (the intro's point lights carry 1e6 and
+  // 1e7), so it is read past Reader::f's 1e6 bound.
+  auto light = [&] {
+    FrontLight l;
+    l.kind = r.u();
+    need(l.kind >= FrontLight::POINT && l.kind <= FrontLight::DIRECTIONAL, "front end light type");
+    l.diffuse = r.floats<3>();
+    l.ambient = r.floats<3>();
+    l.position = r.floats<3>();
+    l.direction = r.floats<3>();
+    l.range = std::bit_cast<float>(r.u());
+    need(std::isfinite(l.range) && l.range > 0 && l.range <= 1e8f, "front end light range");
+    l.falloff = r.f();
+    l.attenuation = r.floats<3>();
+    l.theta = r.f();
+    l.phi = r.f();
+    need(l.attenuation[0] >= 0 && l.attenuation[1] >= 0 && l.attenuation[2] >= 0 &&
+             l.attenuation[0] + l.attenuation[1] + l.attenuation[2] > 0,
+         "front end light attenuation");
+    return l;
+  };
+  auto mesh = [&] {
+    FrontMesh m;
+    m.texture = r.u();
+    m.flags = r.u();
+    need(m.texture < fe.textures.size() && m.flags <= 3, "front end mesh");
+    m.diffuse = r.floats<3>();
+    m.ambient = r.floats<3>();
+    const auto vertices = r.count(65536);
+    m.vertices.reserve(size_t(vertices) * 8);
+    for (uint32_t i = 0; i < vertices * 8; ++i) m.vertices.push_back(r.f());
+    const auto indices = r.count(196608, 3);
+    need(indices % 3 == 0, "front end mesh triangles");
+    for (uint32_t i = 0; i < indices; ++i) {
+      m.indices.push_back(r.u());
+      need(m.indices.back() < vertices, "front end mesh index");
+    }
+    return m;
+  };
+  auto scene = [&](FrontScene &out) {
+    out.camera.eye = r.floats<3>();
+    out.camera.at = r.floats<3>();
+    out.camera.up = r.floats<3>();
+    out.camera.fov = r.f();
+    out.camera.near_plane = r.f();
+    out.camera.far_plane = r.f();
+    need(out.camera.fov > 0 && out.camera.fov < 3.14159f && out.camera.near_plane > 0 &&
+             out.camera.near_plane < out.camera.far_plane && out.camera.far_plane <= 1000,
+         "front end camera");
+    const auto lights = r.count(8, 0);
+    for (uint32_t i = 0; i < lights; ++i) out.lights.push_back(light());
+    out.ambient = r.floats<3>();
+  };
+  auto model = [&](FrontScene &out) {
+    const auto bytes = r.u();
+    const auto start = r.p;
+    const auto magic = r.raw(4);
+    need(magic == "N3S1" || magic == "N3SM", "front end model magic");
+    out.model.channels = magic == "N3SM" ? 4 : 3;
+    read_scene_head(r, out.model, 2048);
+    read_scene_tracks(r, out.model, out.model.tracks);
+    read_scene_tail(r, out.model);
+    need(r.p - start == bytes, "front end model length");
+    out.clips.push_back(out.model.tracks);
+    const auto extra = r.count(4, 0);
+    for (uint32_t i = 0; i < extra; ++i) {
+      const auto length = r.u();
+      const auto at = r.p;
+      std::vector<Track> tracks;
+      read_scene_tracks(r, out.model, tracks);
+      need(r.p - at == length, "front end clip length");
+      out.clips.push_back(std::move(tracks));
+    }
+    for (const auto &clip : out.clips) need(!clip.empty(), "front end clip without tracks");
+    const auto plugs = r.count(4, 0);
+    for (uint32_t i = 0; i < plugs; ++i) {
+      FrontPlug plug;
+      plug.joint = r.u();
+      need(plug.joint < out.model.joints.size(), "front end plug joint");
+      plug.mesh = mesh();
+      out.plugs.push_back(std::move(plug));
+    }
+  };
+  scene(fe.intro);
+  model(fe.intro);
+  fe.backdrop = r.u();
+  fe.backdrop_rect = r.floats<4>();
+  need(fe.backdrop < fe.textures.size() && fe.backdrop_rect[0] < fe.backdrop_rect[2] &&
+           fe.backdrop_rect[1] < fe.backdrop_rect[3],
+       "front end backdrop");
+  scene(fe.select);
+  const auto slots = r.count(3);
+  need(slots == fe.character_slots, "front end slots");
+  for (uint32_t i = 0; i < slots; ++i) {
+    FrontSlot slot;
+    slot.position = r.floats<3>();
+    slot.yaw = r.f();
+    slot.eye = r.floats<3>();
+    slot.spot = light();
+    fe.slots.push_back(slot);
+  }
+  const auto parts = r.count(64);
+  for (uint32_t i = 0; i < parts; ++i) fe.hall.push_back(mesh());
+  model(fe.select);
+  r.end();
+  return fe;
+}
 } // namespace n3e

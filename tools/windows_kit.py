@@ -1,7 +1,7 @@
 """A zip for playing the local realm from a Windows PC on the LAN (docs/manual-testing.md).
 
   python tools/windows_kit.py --host 192.168.1.20 [--run RUN_ID]
-                              [--package build/packages/demo] [--out build/windows-kit.zip]
+                              [--package build/packages/moradon] [--out build/windows-kit.zip]
 
 Takes the Windows client and launcher CI built (the `client-windows-x86_64` artifact
 of RUN_ID, else of the newest successful `ci` run on master; needs `gh`), and adds
@@ -58,9 +58,11 @@ def main():
     args = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     args.add_argument("--host", required=True, help="this machine's LAN address, as the Windows PC reaches it")
     args.add_argument("--run", help="the ci run whose Windows artifact to use")
-    args.add_argument("--package", type=Path, default=ROOT / "build/packages/demo")
+    args.add_argument("--package", type=Path, default=ROOT / "build/packages/moradon")
     args.add_argument("--out", type=Path, default=ROOT / "build/windows-kit.zip")
     a = args.parse_args()
+    if not (a.package / "release.bin").is_file():
+        raise SystemExit(f"windows_kit: {a.package} is missing; run make realm-assets")
     if not re.fullmatch(r"[A-Za-z0-9.-]+", a.host):
         raise SystemExit(f"windows_kit: bad --host {a.host}")
     client_id = dotenv("DISCORD_CLIENT_ID")

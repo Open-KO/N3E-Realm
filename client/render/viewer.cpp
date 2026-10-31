@@ -1,6 +1,7 @@
 #include "harness/harness.h"
 #include "feature_ui.h"
 #include "hotbar.h"
+#include "front_end.h"
 #include "panel_state.h"
 #include "skills_ui.h"
 #include "portrait.h"
@@ -1147,6 +1148,31 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glFrontFace(GL_CCW);
+    // Spec 11: a package with front-end.bin and a Discord realm shows KO's
+    // login, realm list, select, create and loading screens instead of the
+    // panels. A blob that fails to load falls back to the panels.
+    std::unique_ptr<n3e::front::View> front;
+    if (release.front_end && discord_flow) {
+      try {
+        front = std::make_unique<n3e::front::View>(n3e::load_front_end(release));
+      } catch (const std::exception &error) {
+        std::cerr << "front-end.bin: " << error.what() << "; using the panels\n";
+      }
+      glUseProgram(p);
+      glBindVertexArray(vao);
+      glBindBuffer(GL_ARRAY_BUFFER, vbo);
+      glActiveTexture(GL_TEXTURE0);
+      glBindTexture(GL_TEXTURE_2D, texture);
+    }
+    // The loading screen's progress (0..1), and whether the screens stay up
+    // after the first World until the loading screen has shown it.
+    float front_progress = 0;
+    bool front_entering = false, front_chose = false, front_connected = false;
+    double front_hold = 0;
+    uint64_t front_refusals = 0;
+#if N3E_HARNESS
+#include "harness/front_end_captures.inc"
+#endif
 #if TOOLS
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
@@ -1611,6 +1637,39 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
       if(!profile_frames)return;
       uint64_t now=SDL_GetTicksNS();if(section>=0)profile_sum[section]+=(now-profile_last)/1e6;profile_last=now;
     };
+    // F12 (and the front end's back and a dropped connection): a new
+    // connection and a clean session state.
+    auto reset_connection=[&]{
+      network.reset();
+      network = std::make_unique<n3e::WorldClient>(release, scene,
+                                                   endpoint, ca);
+      if (discord_flow) discord_flow->reset();
+      world = {};
+      notices_seen = 0;
+      operator_notices_seen = 0;
+      operator_line.clear();
+      banner_until = {};
+      walking_to = false;
+      auto_move.active = false;
+      running = release.movement.has_value();
+      melee.stop();
+      target = 0;
+      action_seq = 0;rest_seq=0;skill_failures.reset();
+      respawn_seq = 0;
+      claim_seq = 0;party_open=false;party_seq=party_invitation=party_group=0;friends_open=false;friend_page=0;friend_seq=friend_query=friend_refresh=0;friend_retry.Clear(); bank_secret=0;bank_old.clear();bank_new.clear();bank_auth_retry.Clear();bank_prompt.clear();bank_open=false;storage_retry.Clear();bag_seq=0; bag_retry.Clear(); bag_open=false;
+      entry = 0;
+      text_entry.clear();
+#if N3E_HARNESS
+      automated_login = automated_select = false;
+#endif
+      front_progress = 0;
+      front_entering = front_chose = front_connected = false;
+      front_hold = 0;
+      front_refusals = 0;
+    };
+    // Spec 11: the KO screens stay up until the loading screen has shown the
+    // first World.
+    auto front_active=[&]{ return front && (entry < 4 || front_entering); };
     while (run) {
       profile_mark(-1);
       SDL_Event e;
@@ -1672,6 +1731,53 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             (e.type == SDL_EVENT_KEY_DOWN || e.type == SDL_EVENT_TEXT_INPUT))
           continue;
 #endif
+        // Spec 11: the KO screens take every event; their commands are the
+        // protocol messages the panels send.
+        if (network && front_active()) {
+          if (e.type == SDL_EVENT_QUIT) {
+            run = false;
+            continue;
+          }
+          if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && e.key.scancode == n3e::input::reconnect_key) {
+            reset_connection();
+            front->reset();
+            continue;
+          }
+          float x = 0, y = 0;
+          if (e.type == SDL_EVENT_MOUSE_MOTION) x = e.motion.x, y = e.motion.y;
+          if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN || e.type == SDL_EVENT_MOUSE_BUTTON_UP) x = e.button.x, y = e.button.y;
+          int pw, ph, lw, lh;
+          SDL_GetWindowSizeInPixels(w, &pw, &ph);
+          SDL_GetWindowSize(w, &lw, &lh);
+          if (lw > 0 && lh > 0) x = x * pw / lw, y = y * ph / lh;
+          const auto out = front->event(e, x, y, pw, ph);
+          n3e::Envelope message;
+          switch (out.command) {
+          case n3e::front::Command::login:
+            if (!world.connected) reset_connection();
+            discord_start = true;
+            break;
+          case n3e::front::Command::exit:
+            if (discord_flow->phase() == n3e::login::Flow::Phase::browser) discord_cancel = true;
+            else run = false;
+            break;
+          case n3e::front::Command::select:
+            message.mutable_select_character()->set_id(out.character);
+            network->send(message);
+            front_chose = true;
+            break;
+          case n3e::front::Command::create:
+            message.mutable_create_character()->set_name(out.name);
+            network->send(message);
+            break;
+          case n3e::front::Command::back:
+            reset_connection();
+            front->reset();
+            break;
+          default: break;
+          }
+          continue;
+        }
         if ((feature_ui.drag||hotbar.drag) && (e.type==SDL_EVENT_KEY_DOWN||e.type==SDL_EVENT_WINDOW_FOCUS_LOST||
             e.type==SDL_EVENT_WINDOW_MOUSE_LEAVE||e.type==SDL_EVENT_WINDOW_RESIZED||
             (e.type==SDL_EVENT_MOUSE_BUTTON_DOWN&&e.button.button!=SDL_BUTTON_LEFT))){cancel_item_drag();if(e.type==SDL_EVENT_MOUSE_BUTTON_DOWN)continue;}
@@ -2084,28 +2190,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             // F12 reconnects: engine-reserved, outside the KO key range (D-136).
             if (e.key.scancode == n3e::input::reconnect_key &&
                 (entry == 4 || entry == 2 || !world.connected)) {
-              network.reset();
-              network = std::make_unique<n3e::WorldClient>(release, scene,
-                                                           endpoint, ca);
-              if (discord_flow) discord_flow->reset();
-              world = {};
-              notices_seen = 0;
-              operator_notices_seen = 0;
-              operator_line.clear();
-              banner_until = {};
-              walking_to = false;
-              auto_move.active = false;
-              running = release.movement.has_value();
-              melee.stop();
-              target = 0;
-              action_seq = 0;rest_seq=0;skill_failures.reset();
-              respawn_seq = 0;
-              claim_seq = 0;party_open=false;party_seq=party_invitation=party_group=0;friends_open=false;friend_page=0;friend_seq=friend_query=friend_refresh=0;friend_retry.Clear(); bank_secret=0;bank_old.clear();bank_new.clear();bank_auth_retry.Clear();bank_prompt.clear();bank_open=false;storage_retry.Clear();bag_seq=0; bag_retry.Clear(); bag_open=false;
-              entry = 0;
-              text_entry.clear();
-#if N3E_HARNESS
-              automated_login = automated_select = false;
-#endif
+              reset_connection();
               continue;
             }
             // Package-bound actions (PQ-009): in play every binding; while a
@@ -2238,7 +2323,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
         }
       }
       if (network) {
-        bool typing = entry != 2 && entry != 4;
+        bool typing = front_active() ? front->wants_text() : entry != 2 && entry != 4;
 #if TOOLS
         // Gameplay stops text input so movement keys never reach a text field.
         // The terminal and inspectors own it back while they capture input,
@@ -2270,6 +2355,27 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           } else {
             entry = 0;
             world.status = discord_flow->status();
+          }
+        }
+        // Spec 11: a dropped connection returns to login with the operator's
+        // wording or KO's text 1601; a refused create or select is shown in
+        // the message box in the server's wording.
+        if (front) {
+          if (front_connected && !world.connected) {
+            const std::string why = world.disconnect.empty() ? "Disconnected from server" : world.disconnect;
+            reset_connection();
+            front->reset();
+            front->show_message(why);
+          } else {
+            front_connected = world.connected;
+            if (discord_flow->phase() == n3e::login::Flow::Phase::done) front->logged_in();
+            if (world.refusals != front_refusals) {
+              front_refusals = world.refusals;
+              if (world.refusal_code == 7 || world.refusal_code == 8) {
+                front->refused(world.refusal_detail);
+                if (world.refusal_code == 7) front_chose = false;
+              }
+            }
           }
         }
         // PQ-406 (D-209): a new chat, whisper, rest or admin refusal takes the
@@ -2349,6 +2455,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           }
         if (world.world.self() && entry == 2) {
           entry = 4;
+          front_entering = front != nullptr;
           std::cout << "ENTERED map self=" << world.world.self()
                     << " visible=" << world.world.entities_size() << std::endl;
         }
@@ -2772,6 +2879,35 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
       if (frame == 0 && fixed_width)
         std::cout << "fixed window requested=" << fixed_width << "x" << fixed_height
                   << " drawable=" << width << "x" << height << "\n";
+#if N3E_HARNESS
+#include "harness/front_end_flow.inc"
+#endif
+      // Spec 11: the KO screens draw the whole frame until the world is in.
+      const bool front_frame = network && front_active();
+      if (front_frame) {
+        const double now = SDL_GetTicksNS() / 1e9;
+        if (front_entering) {
+          // The harness selects without the screens: skip to loading.
+          if (!front_chose && front->screen() != n3e::front::Screen::loading) front->loading();
+          if (front->screen() == n3e::front::Screen::loading) {
+            front_progress = 1;
+            if (front_hold == 0) front_hold = now + .4;
+            else if (now >= front_hold) front_entering = false;
+          }
+        } else if (front->screen() == n3e::front::Screen::loading) {
+          // The package and its textures are loaded at start; the first
+          // World is the last stage.
+          front_progress = std::max(front_progress, 2 / 3.f);
+        }
+        front->draw(width, height, now,
+                    {realm_config ? realm_config->name : endpoint, world.status, release.version,
+                     &world.characters, front_progress});
+        glUseProgram(p);
+        glBindVertexArray(vao);
+        glBindBuffer(GL_ARRAY_BUFFER, vbo);
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, texture);
+      } else {
       glViewport(0, 0, width, height);
       if (release.exploration) {
         auto c=release.exploration->fog_color; glClearColor(c[0],c[1],c[2],1);
@@ -4968,6 +5104,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
 #endif
       }
       if (!network) draw_fps();
+      }
 #if N3E_HARNESS
       if (frame == 40 && !capture_path.empty() && !world_smoke)
         capture(capture_path, width, height);

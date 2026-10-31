@@ -309,7 +309,7 @@ SUITES = [
     # specs/01-connection-hardening.md (M2): admission limits, idle, drain, PROXY v2, cost.
     suite("connections_live", "python", "tests/connections_live.py"),
     # Spec 02 (M3): Discord login against a loopback stand-in, sessions, kick, ban, mute.
-    suite("discord_login_live", "python", "tests/discord_login_live.py",
+    suite("discord_login_live", "python", "tests/discord_login_live.py", covers=["tests/discord_standin.py"],
           graphical="PASS client expiry: the server says expired, the client drops session.json and runs the browser flow"),
     # Spec 05 (M6): the Discord bot against stand-ins for Discord's gateway/REST and GitHub.
     suite("bot_live", "python", "tests/bot_live.py"),
@@ -450,6 +450,10 @@ OPT_IN = {
                                      "player-supplied data and START_POSITION export (PQ-392); make live-ko",
     "tests/ko_object_npc_shapes_live.py": "needs the Moradon package (build/packages/moradon) cooked from "
                                          "player-supplied data (PQ-395); make live-ko",
+    "tests/front_end_flow_live.py": "needs the Moradon package (build/packages/moradon) cooked from "
+                                    "player-supplied data, Docker and a GPU (spec 11); make live-ko",
+    "tests/front_end_live.py": "needs the Moradon package (build/packages/moradon) cooked from "
+                               "player-supplied data (spec 11); make live-ko",
     "tests/ko_material_shapes_live.py": "needs the 1097 Moradon package (build/packages/moradon-1097) cooked "
                                        "from player-supplied data (PQ-412); make live-ko",
     "tests/homeland_live.py": "needs the KO homeland packages (build/packages/ko-zone-10, -20, "

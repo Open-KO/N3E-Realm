@@ -198,9 +198,14 @@ def character(data, strict=True, trailing=False):
     }
 
 
-def animations(data, empty=False):
+def animations(data, empty=False, unused_word=False):
     """The clip table's records; a table without clips is refused unless
-    `empty` (an NPC looks row whose table KO starts no clip from, PQ-268)."""
+    `empty` (an NPC looks row whose table KO starts no clip from, PQ-268).
+    `unused_word` (the front end's intro table, spec 11) accepts any value in
+    a clip's first word: `Intro/intro.n3anim` carries uninitialised bytes
+    there. The reference's __AnimData::Load reads that word into a local
+    ("where a string pointer used to be, for compatibility") and never uses
+    it. Every other caller keeps refusing a non-zero word."""
     r = Reader(data)
     out = []
     n = r.integer()
@@ -215,7 +220,7 @@ def animations(data, empty=False):
         flags = r.integer()
         strike = r.floats(2)
         name = r.string()
-        if reserved or not all(0 <= f <= 100000 for f in v[:2]) or not 0 < v[2] <= 120:
+        if (reserved and not unused_word) or not all(0 <= f <= 100000 for f in v[:2]) or not 0 < v[2] <= 120:
             raise ValueError("animation metadata")
         out.append(
             {
@@ -442,8 +447,10 @@ def dxt3(blocks, width, height):
 FORMATS = {0x31545844: (dxt1, 8), 0x33545844: (dxt3, 16)}
 
 
-def texture(data):
-    """(width, height, RGBA texels) of an NTF3 DXT1 or DXT3 texture."""
+def texture(data, limit=512):
+    """(width, height, RGBA texels) of an NTF3 DXT1 or DXT3 texture. `limit`
+    is the largest side: 512 for every part the world draws; the front end's
+    intro model (spec 11) passes 1024, for its eye texture."""
     r = Reader(data)
     name = r.string()
     magic = r.take(4)
@@ -451,7 +458,7 @@ def texture(data):
     if magic != b"NTF\x03" or fmt not in FORMATS or mips != 1:
         raise ValueError("only NTF3 mipmapped DXT1 or DXT3 supported")
     for n in [w, h]:
-        if not 4 <= n <= 512 or n & (n - 1):
+        if not 4 <= n <= limit or n & (n - 1):
             raise ValueError("texture dimensions")
     decode, block = FORMATS[fmt]
     base = r.take(w * h * block // 16)
@@ -584,7 +591,7 @@ class Assets:
         return data
 
 
-def wrapped_uv(corners, w, h, border):
+def wrapped_uv(corners, w, h, border, limit=1024):
     """(corners, region, record) for one part's maximum-detail corner UVs on a
     w x h texture (PQ-264).
 
@@ -607,7 +614,8 @@ def wrapped_uv(corners, w, h, border):
     least of it outside 0..1 (the smaller move on a tie), and the region grows,
     in texels, to cover every moved corner; the caller fills it with the
     texture repeated, so the atlas samples what KO's wrap samples. A region
-    wider or taller than the 1024-texel atlas is refused."""
+    wider or taller than the atlas (`limit`, 1024 texels unless the caller
+    is the front end, spec 11) is refused."""
     sizes = (w, h)
 
     def inside(v, size):
@@ -633,8 +641,8 @@ def wrapped_uv(corners, w, h, border):
     for axis, size in enumerate(sizes):
         lo = min(0, math.floor(min(uv[axis] for uv in shifted) * size))
         hi = max(size, math.ceil(max(uv[axis] for uv in shifted) * size))
-        if hi - lo + 2 * border > 1024:
-            raise ValueError("wrapping UV region past the 1024-texel atlas")
+        if hi - lo + 2 * border > limit:
+            raise ValueError("wrapping UV region past the %d-texel atlas" % limit)
         region += [lo, hi]
     return shifted, tuple(region), {"region_texels": [region[0], region[2], region[1], region[3]],
                                     "shifted_triangles": moved}
@@ -702,14 +710,23 @@ def corner_normals(skin):
     return normals, rebuilt
 
 
-def convert(root, source, out, clip_index=1, meters=1.0, definition=None, player=None, assets=None):
+def convert(root, source, out, clip_index=1, meters=1.0, definition=None, player=None, assets=None,
+            front_end=False):
     """`player` (default: whether a definition is given) selects the player
     path's atlas gutter and 60 Hz clamped sample times; an NPC looks row
     passes a definition with player=False and converts as the worm does.
     `assets` (default: a new reader of `root`) lets the caller name the last
     file read when the conversion is refused. `clip_index` None converts
     the rest pose of a clip table without clips (REST_CLIP); a table with
-    clips is then refused."""
+    clips is then refused.
+
+    `front_end` (spec 11, ko_front_end only) converts the login and select
+    models: a clip's unused first word is accepted (animations), part textures
+    may be 1024 texels a side in a 2048-texel atlas, and parts with the same
+    texture and region share one atlas placement (the intro orc's nine head
+    parts share one 1024-texel texture). Every other caller keeps its output
+    byte for byte."""
+    atlas_limit = 2048 if front_end else 1024
     if player is None:
         player = definition is not None
     if not math.isfinite(meters) or not 0 < meters <= 100:
@@ -722,7 +739,7 @@ def convert(root, source, out, clip_index=1, meters=1.0, definition=None, player
     source_data = assets.get(source)
     ch = copy.deepcopy(definition) if definition is not None else character(source_data)
     bones = skeleton(assets.get(ch["joint"]), scaled=True, limit=MAX_JOINTS)
-    clips = animations(assets.get(ch["animation"]), empty=clip_index is None)
+    clips = animations(assets.get(ch["animation"]), empty=clip_index is None, unused_word=front_end)
     if clip_index is None:
         if clips:
             raise ValueError("rest pose asked for a table of %d clips" % len(clips))
@@ -744,7 +761,7 @@ def convert(root, source, out, clip_index=1, meters=1.0, definition=None, player
     samples = 2 if held else math.ceil(duration * 60) + 1
     count(samples, 4096, 2)
     parts = [part(assets.get(p)) for p in ch["parts"]]
-    textures = [texture(assets.get(p["texture"])) for p in parts]
+    textures = [texture(assets.get(p["texture"]), 1024 if front_end else 512) for p in parts]
     # PQ-265 (D-173): a model whose parts all have the opaque render state and
     # whose textures have no texel below alpha 255 converts exactly as before
     # (RGB atlas, one glTF primitive). Any other model keeps the atlas's alpha
@@ -770,18 +787,36 @@ def convert(root, source, out, clip_index=1, meters=1.0, definition=None, player
         if any(max(j) >= len(bones) for j in skin["joints"]):
             raise ValueError("missing joint")
         corners = [skin["uv"][i] for i in skin["uv_indices"]]
-        meshes.append((name, lods, skin) + wrapped_uv(corners, w, h, border) + corner_normals(skin))
-    atlas_w = min(1024, sum(m[4][1] - m[4][0] + border * 2 for m in meshes))
-    placements = []
+        meshes.append((name, lods, skin) + wrapped_uv(corners, w, h, border, atlas_limit) + corner_normals(skin))
+    if front_end:
+        # One region per texture: the union of its parts' (wrapped) regions.
+        union = {}
+        for p, m in zip(parts, meshes):
+            k, (x0, x1, y0, y1) = p["texture"].casefold(), m[4]
+            u = union.get(k, (x0, x1, y0, y1))
+            union[k] = (min(u[0], x0), max(u[1], x1), min(u[2], y0), max(u[3], y1))
+        for x0, x1, y0, y1 in union.values():
+            if max(x1 - x0, y1 - y0) + 2 * border > atlas_limit:
+                raise ValueError("shared texture region past the atlas")
+        meshes = [m[:4] + (union[p["texture"].casefold()],) + m[5:] for p, m in zip(parts, meshes)]
+    atlas_w = min(atlas_limit, sum(m[4][1] - m[4][0] + border * 2 for m in meshes))
+    # The front end packs each texture's region once, tallest first.
+    keys = [p["texture"].casefold() if front_end else i for i, p in enumerate(parts)]
+    regions = dict(zip(keys, (m[4] for m in meshes)))
+    order = sorted(regions, key=lambda k: (-(regions[k][3] - regions[k][2]), -(regions[k][1] - regions[k][0]))) \
+        if front_end else list(regions)
+    placed = {}
     x = y = row_h = 0
-    for _, _, _, _, (x0, x1, y0, y1), _, _, _ in meshes:
+    for k in order:
+        x0, x1, y0, y1 = regions[k]
         tw, th = x1 - x0 + border * 2, y1 - y0 + border * 2
         if x + tw > atlas_w:
             y += row_h; x = row_h = 0
-        placements.append((x, y))
+        placed[k] = (x, y)
         x += tw; row_h = max(row_h, th)
+    placements = [placed[k] for k in keys]
     atlas_h = y + row_h
-    if atlas_h > 1024:
+    if atlas_h > atlas_limit:
         raise ValueError("atlas dimensions")
     atlas = bytearray(atlas_w * atlas_h * channels)
     # PQ-283 (D-176): every influence of a drawn vertex, as read and in file

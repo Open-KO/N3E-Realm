@@ -1,0 +1,145 @@
+{
+  "character_slots": 3,
+  "fonts": {
+    "regular": "/usr/share/fonts/liberation/LiberationSans-Regular.ttf",
+    "bold": "/usr/share/fonts/liberation/LiberationSans-Bold.ttf"
+  },
+  "screens": {
+    "login": {
+      "ui": "UI_US/co_login_us.uif",
+      "place": "bottom",
+      "moves": [{"node": "Group_ServerList", "x": 0, "y": 0}],
+      "bindings": {
+        "Group_LogIn": "login_group",
+        "Group_ServerList": "realm_group",
+        "List_Server": "realm_list",
+        "Btn_Connect": "realm_connect",
+        "Btn_Login": "login",
+        "Btn_Cancel": "exit"
+      },
+      "added": [
+        {"parent": "Group_LogIn", "id": "notice", "action": "notice", "rect": [30, 424, 960, 448],
+         "style": 76546048, "font": [11, 1], "color": "ffffffff"}
+      ],
+      "text": {
+        "Group_LogIn#11": "Discord",
+        "Group_LogIn#12": "Discord",
+        "Text_Rights": "N3E Realm, a community project. Not affiliated with MGAME or Noahsystem."
+      },
+      "hidden": [
+        "Img_Daum", "Img_MGame", "premium", "Group_Notice_1", "Group_Notice_2", "Group_Notice_3",
+        "Edit_ID", "Edit_PW", "Btn_Option", "Btn_Join",
+        "Group_LogIn#8", "Group_LogIn#9", "Group_LogIn#10", "Group_LogIn#19",
+        "Group_LogIn#15", "Group_LogIn#16", "Group_LogIn#17", "Group_LogIn#18"
+      ]
+    },
+    "select": {
+      "ui": "UI_US/ka_characterselect_us.uif",
+      "place": "origin",
+      "moves": [
+        {"node": "bt_left", "bottom": 10},
+        {"node": "bt_right", "bottom": 10},
+        {"node": "bt_exit", "bottom": 10},
+        {"node": "bt_back", "above": ["bt_exit", 15]}
+      ],
+      "bindings": {
+        "text00": "char_info",
+        "bt_left": "select_prev",
+        "bt_right": "select_next",
+        "bt_back": "back",
+        "bt_exit": "exit"
+      },
+      "hidden": ["bt_delete"]
+    },
+    "create": {
+      "ui": "UI_US/Ka_CharacterCreate_us.uif",
+      "place": "centre",
+      "bindings": {
+        "btn_create": "create_confirm",
+        "btn_cancel": "back",
+        "edit_name": "name_field",
+        "area_character": "char_view",
+        "text_desc": "class_desc"
+      },
+      "states": {
+        "btn_race_ka_tu": "on",
+        "btn_class_priest": "on",
+        "btn_race_ka_at": "disabled",
+        "btn_race_ka_wt": "disabled",
+        "btn_race_ka_pt": "disabled",
+        "btn_class_warrior": "disabled",
+        "btn_class_rogue": "disabled",
+        "btn_class_mage": "disabled",
+        "btn_face_left": "disabled",
+        "btn_face_right": "disabled",
+        "btn_hair_left": "disabled",
+        "btn_hair_right": "disabled",
+        "btn_str_left": "disabled",
+        "btn_str_right": "disabled",
+        "btn_sta_left": "disabled",
+        "btn_sta_right": "disabled",
+        "btn_dex_left": "disabled",
+        "btn_dex_right": "disabled",
+        "btn_int_left": "disabled",
+        "btn_int_right": "disabled",
+        "btn_map_left": "disabled",
+        "btn_map_right": "disabled"
+      },
+      "hidden": [
+        "img_warrior", "img_rogue", "img_mage",
+        "img_str", "img_sta", "img_dex", "img_int", "img_map", "text_bonus"
+      ]
+    },
+    "loading": {
+      "ui": "UI_US/ka_loading_us.uif",
+      "place": "centre",
+      "moves": [{"node": "Text_Version", "x": 10, "y": 10}],
+      "bindings": {
+        "Progress_Loading": "progress",
+        "Text_Version": "version",
+        "Text_Info": "info"
+      }
+    },
+    "message": {
+      "ui": "UI_US/co_MsgBoxOk_us.uif",
+      "place": "centre",
+      "bindings": {"text_msg": "message", "btn_ok": "ok"}
+    }
+  },
+  "strings": {
+    "select_info": "Level: {level}\nSpecialty: {class}\nID: {name}",
+    "select_hint": "Press ENTER to create a character.",
+    "class_name": "Priest",
+    "class_desc": "Priests heal and shield their party and fight with a mace. Every character in this realm is a Tuarek priest.",
+    "loading_info": "Loading...",
+    "version": "Ver. {version}"
+  },
+  "intro": {
+    "character": "Intro/Intro.N3Chr",
+    "clip": 0,
+    "camera": {"eye": [0.22, 0.91, -1.63], "at": [-0.19, 1.1, 0.09], "fov": 0.9599311, "near": 0.1, "far": 32},
+    "lights": ["Intro/0.N3Light", "Intro/1.N3Light", "Intro/2.N3Light"],
+    "ambient": [0, 0, 0],
+    "backdrop": {"texture": "Intro/Moon.dxt", "at": [100, 50], "scale": 1.3}
+  },
+  "select": {
+    "camera": {"eye": [0, -0.2, 7.4], "at": [0, -0.4, 0], "fov": 0.96, "near": 0.1, "far": 100},
+    "lights": ["ChrSelect/ka_light_0.n3light", "ChrSelect/ka_light_1.n3light"],
+    "ambient": [0, 0, 0],
+    "hall": "ChrSelect/ka_chairs.n3shape",
+    "spot_theta": 0.5,
+    "spot_phi": 0.6,
+    "slots": [
+      {"position": [0, -1.16, 2.72], "yaw": 0, "spot": [0, 1.8, 7.4], "spot_target": [0, 0, 3.5]},
+      {"position": [1.86, -1.16, 2.1], "yaw": 42, "spot": [5.87, 2.4, 4.73], "spot_target": [2.32, 0, 2.54]},
+      {"position": [-1.9, -1.16, 2.1], "yaw": -42, "spot": [-5.87, 2.4, 4.73], "spot_target": [-2.32, 0, 2.54]}
+    ],
+    "character": {
+      "race": 2,
+      "joint": "ChrSelect/upc_ka_tu_pri.n3joint",
+      "animation": "ChrSelect/upc_ka_at_wa.n3anim",
+      "clips": [0, 1],
+      "plugs": ["ChrSelect/wea_ka_mace.n3cplug"]
+    }
+  }
+}

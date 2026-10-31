@@ -173,8 +173,8 @@ mod tests {
         rules.slots = 3;
         rules.starting_items = 1;
         rules.reward_items = 1;
-        rt.block_on(db.create(account, "Test".into(), o.clone(), [0., 0., 0.]))?;
-        let id = rt.block_on(db.list(account, realm.clone()))?.characters[0].id as i64;
+        rt.block_on(db.create(account, "Test".into(), o.clone(), [0., 0., 0.], 8))?;
+        let id = rt.block_on(db.list(account, realm.clone(), &rules))?.characters[0].id as i64;
         let selected = rt.block_on(db.select(account, id, o.clone()))?;
         let ids = rt.block_on(db.instances(4))?;
         let (a, b) = rt.block_on(async {

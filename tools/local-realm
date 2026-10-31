@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # The local Compose realm for a manual test round (docs/manual-testing.md): the
-# demo package, Discord login from .env, and with LAN_ADDRESS the game port open to
-# the LAN under a certificate that names that address.
+# Moradon package (make realm-assets; spec 11), Discord login from .env, and with
+# LAN_ADDRESS the game port open to the LAN under a certificate that names that
+# address.
 #
 #   tools/local-realm [LAN_ADDRESS]     start or restart it
 #   tools/local-realm down              stop it (the database volume stays)
 #
-# The realm is test-local: the demo package's progression converts only on a test-
+# The realm is test-local: the package's progression converts only on a test-
 # realm with disposable progression (as tools/play-* do). The bot starts too when
 # .env has REALM_ADMIN_TOKEN.
 set -euo pipefail
@@ -28,7 +29,9 @@ setting() { test -f .env && grep -qE "^$1=.+" .env; }
 for name in DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET; do
   setting "$name" || { echo "local-realm: $name is not set in .env (README, Discord login)" >&2; exit 2; }
 done
-test -f build/packages/demo/release.bin || python tools/assetc/main.py games/demo build/packages/demo
+test -f build/packages/moradon/release.bin ||
+  { echo "local-realm: build/packages/moradon is missing; run make realm-assets" >&2; exit 2; }
+export N3E_PACKAGE_PATH=./build/packages/moradon
 
 docker compose build server
 docker compose up -d --wait postgres redis

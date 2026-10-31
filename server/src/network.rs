@@ -557,7 +557,7 @@ async fn peer(
                             }
                             Some(Envelope {
                                 body: Some(Body::Characters(
-                                    world.db.list(a.account, world.owner.realm.clone()).await?,
+                                    world.db.list(a.account, world.owner.realm.clone(), &r.rules).await?,
                                 )),
                             })
                         }
@@ -571,6 +571,7 @@ async fn peer(
                             c.name,
                             world.owner.clone(),
                             r.player_spawn()?,
+                            r.character_slots,
                         )
                         .await
                     {
@@ -578,7 +579,7 @@ async fn peer(
                             body: Some(Body::Characters(
                                 world
                                     .db
-                                    .list(account.unwrap(), world.owner.realm.clone())
+                                    .list(account.unwrap(), world.owner.realm.clone(), &r.rules)
                                     .await?,
                             )),
                         }),

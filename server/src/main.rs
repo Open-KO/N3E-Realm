@@ -371,6 +371,9 @@ async fn main() -> Result<()> {
         std::fs::write(format!("{}-session-login.bin",args[2]),login.encode_to_vec())?;
         let login=wire::Envelope{body:Some(wire::envelope::Body::LoginResult(wire::LoginResult{token,expires_at_unix:1_795_996_800,discord_id:"80351110224678912".into(),discord_name:"Nelly".into()}))};
         std::fs::write(format!("{}-login-result.bin",args[2]),login.encode_to_vec())?;
+        // Spec 11: the character list with levels.
+        let characters=wire::Envelope{body:Some(wire::envelope::Body::Characters(wire::Characters{characters:vec![wire::Character{id:129,name:"Nelly".into(),level:30},wire::Character{id:7,name:"Peer".into(),level:1}]}))};
+        std::fs::write(format!("{}-characters.bin",args[2]),characters.encode_to_vec())?;
         let strike=wire::Envelope{body:Some(wire::envelope::Body::World(wire::World{self_:7,entities:vec![wire::Entity{id:7,strike_tick:100,strike_sequence:129,..Default::default()}],events:vec![wire::PresentationEvent{sequence:1,tick:100,actor:7,target:8,kind:2,style:2,request_sequence:129,..Default::default()}],..Default::default()}))};
         std::fs::write(format!("{}-strike.bin",args[2]),strike.encode_to_vec())?;
         // Wire30 (PQ-249): a templated NPC's looks key and maximum health.

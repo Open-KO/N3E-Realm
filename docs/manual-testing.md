@@ -30,7 +30,8 @@ Use the machine's LAN address (`ip -4 addr`; below, `192.168.86.21`).
 
 ```sh
 source tools/env.sh
-make client server assets                # the client, the server, build/packages/demo
+make client server                       # the client and the server
+make realm-assets                        # the KO tree (once) and build/packages/moradon
 cargo build --release --locked -p realm-launcher
 tools/local-realm 192.168.86.21          # stack on the LAN; the certificate names the address
 ```
@@ -66,16 +67,18 @@ target/release/realm-launcher --realm local --ca deploy/local/ca.pem
 
 | # | Do | Expect |
 |---|---|---|
-| L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game window opens at "ENTER - Log in with Discord". |
-| L2 | ENTER | The browser opens Discord's authorize page for your application; after **Authorize** the tab says you are logged in, and the game says "Logged in as …". |
-| L3 | Create a character, enter the world, walk and run | Moves as in the play scripts. |
-| L4 | Close the game; run the launcher again | No downloads; the game logs in without the browser ("Logging in as …"). |
-| L5 | Discord: `/status`; `/whois` and pick yourself | One player online; your account, its characters and session. |
-| L6 | Discord: `/notice` some text | It appears in the game; the bot posts it to the announcements channel. |
-| L7 | Discord: `/kick` yourself with a reason | The game shows "You were disconnected by an operator: <reason>."; the ops channel shows the kick by your name. |
-| L8 | Discord: `/ban` yourself for 30m, then start the game | "Your account is blocked until … UTC: <reason>."; no login. |
-| L9 | Discord: `/unban`, start the game | The browser flow again (a ban revokes the session), then logged in. |
-| L10 | Discord: `/mute` yourself for 30m, chat in game; `/unmute`, chat again | The game refuses the chat line while muted (note its wording); it goes through after. |
+| L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game opens on KO's login screen: the orc with the axe under the moon, the login bar with a **Discord** button, "ENTER - Log in with Discord" above it. |
+| L2 | **Discord** (or ENTER) | The browser opens Discord's authorize page for your application; after **Authorize** the tab says you are logged in, and KO's server list drops in from the top with "Local Realm". |
+| L3 | Double-click the realm (or **Connect**) | The Karus character select hall. With no characters, ENTER opens character create (Tuarek priest, name field). |
+| L4 | Type a name, **Create**; then ENTER (or click the character) | Back in the hall with the new character in the centre slot and "Level 1" in the info bar; ENTER plays its selected animation, then the loading screen, then the world. |
+| L5 | Walk and run | Moves as in the play scripts. |
+| L6 | Close the game; run the launcher again | No downloads; the game logs in without the browser and opens on the server list. |
+| L7 | Discord: `/status`; `/whois` and pick yourself | One player online; your account, its characters and session. |
+| L8 | Discord: `/notice` some text | It appears in the game; the bot posts it to the announcements channel. |
+| L9 | Discord: `/kick` yourself with a reason | The game returns to the login screen with a message box: "You were disconnected by an operator: <reason>."; the ops channel shows the kick by your name. |
+| L10 | Discord: `/ban` yourself for 30m, then start the game | "Your account is blocked until … UTC: <reason>."; no login. |
+| L11 | Discord: `/unban`, start the game | The browser flow again (a ban revokes the session), then logged in. |
+| L12 | Discord: `/mute` yourself for 30m, chat in game; `/unmute`, chat again | The game refuses the chat line while muted (note its wording); it goes through after. |
 
 ## Windows: the client on a real GPU
 
@@ -86,18 +89,18 @@ On the Linux machine, once CI's `client` job has passed for the commit you are o
 python tools/windows_kit.py --host 192.168.86.21     # build/windows-kit.zip
 ```
 
-It holds CI's `n3e-client.exe` and `realm-launcher.exe`, the demo package the realm
-serves, `realm.json` naming `192.168.86.21:7777`, the local CA and three `.bat` files.
+It holds CI's `n3e-client.exe` and `realm-launcher.exe`, the Moradon package the
+realm serves, `realm.json` naming `192.168.86.21:7777`, the local CA and three `.bat` files.
 Unzip it anywhere on the Windows PC. Windows may say the files are from an unknown
 publisher (they are unsigned, Q26): **More info → Run anyway**.
 
 | # | Do | Expect |
 |---|---|---|
 | W1 | `self-test.bat` | Ends with `self-test ok`; its `opengl` line names your GPU, not `llvmpipe` or `GDI Generic`. |
-| W2 | `play.bat`, ENTER | The browser opens Discord; after **Authorize** the game logs in. |
-| W3 | Create a character, enter the world, walk and run | As on Linux; note the frame rate if it feels slow. |
-| W4 | Close; `play.bat` again | Logs in without the browser. |
-| W5 | Discord: `/kick` yourself | The disconnect message, as L7. |
+| W2 | `play.bat`, **Discord** | KO's login screen, as L1; the browser opens Discord; after **Authorize** the server list drops in. |
+| W3 | Connect, create a character, enter the world, walk and run | As L3–L5; note the frame rate if it feels slow. |
+| W4 | Close; `play.bat` again | Logs in without the browser and opens on the server list. |
+| W5 | Discord: `/kick` yourself | Back on the login screen with the disconnect message box, as L9. |
 | W6 | `forget-login.bat`, then `play.bat` | The browser flow again. |
 | W7 | Command prompt in the kit: `realm-launcher.exe --version` | `realm-launcher … (windows-x86_64)`. |
 

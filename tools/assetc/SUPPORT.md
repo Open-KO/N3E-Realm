@@ -115,3 +115,13 @@ stores a finite positive float32 open radius up to100m; C++/Rust/assetc validate
 and hash it with the release. Moradon uses strict10m opening independently of its
 server-owned3m pickup radius and20-second TTL. Legacy packages retain their prior
 opening policy. [Contract and remaining corpse gaps](../../content/loot-visual.md).
+
+Spec 11: optional engine42 `presentation["front-end.bin"]` (N3FE) holds KO's
+front end. `ko_front_end.py` reads the local client's UIF trees (login, Karus
+select, create, loading, OK box), the 1098 intro character with its plug and
+lights, the select hall's n3shape, slots, spots and the Tuarek priest with two
+clips, all from the paths and choices in `games/moradon/front-end.json`; the
+provenance report records every source path and hash. Text is drawn with the
+Liberation Sans substitutes of N3H9. Untextured images draw nothing, as KO's.
+KO's music, the 1298 Karus/El Morad nation choice and the other races and
+classes remain gaps (Q52, Q57). [Contract](../../content/front-end.md).

@@ -92,6 +92,9 @@ N3C1_POINTS = 196608
 N3C2_MAX_EXTENT = 4096
 N3C2_MAX_OBJECT_POINTS = 393216
 DIAGONALS = ("fixed", "alternating", "alternating-mirrored")
+# Spec 11: front-end.bin carries two character models and the UI art, so it
+# has its own bound (client/assets/assets.cpp kFrontEndFile).
+FRONT_END_FILE = 64 * 1024 * 1024
 
 
 def nondegenerate(points):
@@ -230,8 +233,9 @@ def cook(root, out, materials=False):
     if scaled_npc and "npc_looks" not in manifest:
         raise ValueError("npc scale requires npc looks")
     # PQ-317 (D-187): attachments are engine 38+, which is wire 30 with or
-    # without NPC templates.
-    compatibility = 30 if templated_npc or "attachments" in manifest else 29 if reference_npc else 28 if "skills" in manifest else 26 if "consumables" in manifest else 25 if 'upper_nodes' in manifest.get('combat_animation',{}) else 24 if 'combat_animation' in manifest else 23 if 'rest' in manifest else 22 if 'appearance' in manifest else 21 if item_drops else 20 if coins else 19 if party_loot else 18 if party_rewards else 17 if "party" in manifest else 16 if "friends" in manifest else 15 if "storage_auth" in manifest else 14 if "storage" in manifest else 13 if "wear" in manifest else 12 if "stats" in manifest else 11 if "equipment" in manifest else 10 if "repair" in manifest else 9 if "commerce" in manifest else 8 if "inventory" in manifest else 7 if "exploration" in manifest else 6 if "editing" in manifest else (5 if manifest["engine_version"] >= 10 else 4) if "progression" in manifest else 3 if "life" in manifest else 2 if "movement" in manifest["gameplay"] else 1
+    # without NPC templates; so is the front end (spec 11, engine 42).
+    front_end = "front-end.bin" in manifest.get("presentation", {})
+    compatibility = 30 if templated_npc or "attachments" in manifest or front_end else 29 if reference_npc else 28 if "skills" in manifest else 26 if "consumables" in manifest else 25 if 'upper_nodes' in manifest.get('combat_animation',{}) else 24 if 'combat_animation' in manifest else 23 if 'rest' in manifest else 22 if 'appearance' in manifest else 21 if item_drops else 20 if coins else 19 if party_loot else 18 if party_rewards else 17 if "party" in manifest else 16 if "friends" in manifest else 15 if "storage_auth" in manifest else 14 if "storage" in manifest else 13 if "wear" in manifest else 12 if "stats" in manifest else 11 if "equipment" in manifest else 10 if "repair" in manifest else 9 if "commerce" in manifest else 8 if "inventory" in manifest else 7 if "exploration" in manifest else 6 if "editing" in manifest else (5 if manifest["engine_version"] >= 10 else 4) if "progression" in manifest else 3 if "life" in manifest else 2 if "movement" in manifest["gameplay"] else 1
     if any(
         type(manifest[k]) is not int or manifest[k] != value
         for k, value in [
@@ -242,6 +246,8 @@ def cook(root, out, materials=False):
                     # PQ-328 (D-186): attachment models are looks models, so a
                     # package with attachments is at least the engine they need.
                     attachments.engine(manifest["attachments"], root) if "attachments" in manifest else 0,
+                    # Spec 11: the KO front end (front-end.bin, N3FE) is engine 42.
+                    42 if "front-end.bin" in manifest.get("presentation", {}) else 0,
                     # PQ-265 (D-173): N3MM looks models (render states) are engine 39;
                     # PQ-283 (D-176): N3NI / N3MI (influence tables) engine 40;
                     # PQ-272 (D-179): N3N4 templates (a drawn scale) engine 41.
@@ -442,7 +448,7 @@ def cook(root, out, materials=False):
         extras["progression.bin"] = progression.cook(manifest["progression"], manifest["gameplay"], game)
     if "animation" in manifest:
         extras["animation.bin"] = animation.cook(manifest["animation"])
-        if set(manifest.get("presentation", {})) - {"loot-model.bin", "loot-policy.bin", "target-marker.bin", "effects.bin", "audio.bin"} != set(animation.names(len(manifest["animation"]))) | {"hud.bin"}:
+        if set(manifest.get("presentation", {})) - {"loot-model.bin", "loot-policy.bin", "target-marker.bin", "effects.bin", "audio.bin", "front-end.bin"} != set(animation.names(len(manifest["animation"]))) | {"hud.bin"}:
             raise ValueError("animation requires matching complete clip sets")
     if "life" in manifest:
         extras["life.bin"] = life.cook(manifest["life"])
@@ -579,6 +585,11 @@ def cook(root, out, materials=False):
         if isinstance(presentation,dict) and "audio.bin" in presentation:
             if manifest['engine_version']<33:raise ValueError('audio compatibility')
             expected.add('audio.bin')
+        if isinstance(presentation,dict) and "front-end.bin" in presentation:
+            # Spec 11: KO's login, select, create and loading screens; its
+            # models are the player's, so it needs the full presentation.
+            if 'appearance' not in manifest:raise ValueError('front end requires appearance')
+            expected.add('front-end.bin')
         extended = expected | {"player-run.bin", "player-backward.bin"}
         if not isinstance(presentation, dict) or not (
             set(presentation) == expected
@@ -586,13 +597,13 @@ def cook(root, out, materials=False):
         ):
             raise ValueError("presentation asset set")
         for name, source in presentation.items():
-            data = read(safe(root, source))
+            data = read(safe(root, source), FRONT_END_FILE if name == "front-end.bin" else MAX_FILE)
             if name=='loot-policy.bin':
                 if len(data)!=8 or data[:4]!=b'N3LP':raise ValueError('loot policy format')
                 radius=struct.unpack('<f',data[4:])[0]
                 if not math.isfinite(radius) or not 0<radius<=100:raise ValueError('loot open radius')
                 extras[name]=data;deps[source]=digest(data).hex();continue
-            if data[:4] not in ((b"N3H1", b"N3H2", b"N3H3", b"N3H4", b"N3H5", b"N3H6", b"N3H7", b"N3H8", b"N3H9", b"N3HA", b"N3HB", b"N3HC", b"N3HD", b"N3HE") if name == "hud.bin" else (b"N3TM",) if name == "target-marker.bin" else (b"N3EF", b"N3E2", b"N3E3", b"N3E4", b"N3E5") if name == "effects.bin" else (b"N3AU", b"N3A2") if name == "audio.bin" else (b"N3S1",)):
+            if data[:4] not in ((b"N3H1", b"N3H2", b"N3H3", b"N3H4", b"N3H5", b"N3H6", b"N3H7", b"N3H8", b"N3H9", b"N3HA", b"N3HB", b"N3HC", b"N3HD", b"N3HE") if name == "hud.bin" else (b"N3TM",) if name == "target-marker.bin" else (b"N3EF", b"N3E2", b"N3E3", b"N3E4", b"N3E5") if name == "effects.bin" else (b"N3AU", b"N3A2") if name == "audio.bin" else (b"N3FE",) if name == "front-end.bin" else (b"N3S1",)):
                 raise ValueError("presentation magic")
             extras[name] = data
             deps[source] = digest(data).hex()
@@ -610,6 +621,7 @@ def cook(root, out, materials=False):
         files["editing.bin"] = editing.cook(manifest)
     if any(
         len(data) > (128*1024*1024 if name == "render-detail.bin" else
+                     FRONT_END_FILE if name == "front-end.bin" else
                      (world_chunks.MAX_FILE if data[:4] in world_chunks.MAGICS else MAX_WORLD_FILE) if name == "world.bin" else
                      world_textures.MAX_FILE if name == "world-textures.bin" else
                      world_overlay.MAX_FILE if name == "world-overlay.bin" else MAX_FILE)

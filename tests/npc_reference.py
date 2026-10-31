@@ -256,6 +256,9 @@ assert [line for line in reach if line.startswith("skills reach ")] == [
 with tempfile.TemporaryDirectory(dir="build") as tmp:
     out = Path(tmp) / "release"
     shutil.copytree(package, out)
+    # The forged releases are about the NPC table at engines 35 and 36, so they
+    # leave out the front end (spec 11, engine 42).
+    (out / "front-end.bin").unlink()
     files = {p.name: p.read_bytes() for p in out.iterdir() if p.name not in ("release.bin", "release.sha256")}
     m = json.loads((out / "recipe.json").read_text())["manifest"]
 

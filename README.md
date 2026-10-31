@@ -58,7 +58,7 @@ cmake -S . -B build/client -A x64 -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/bu
   -DVCPKG_TARGET_TRIPLET=x64-windows-static
 cmake --build build/client --config Release --target n3e-client n3e-test-client
 cargo build --release --locked -p realm-launcher
-build/client/Release/n3e-client.exe build/packages/demo --self-test --realm realm.json
+build/client/Release/n3e-client.exe build/packages/moradon --self-test --realm realm.json
 ```
 
 `--self-test` checks an install without a server: the package, `realm.json`, the
@@ -126,10 +126,11 @@ your own Discord application:
    ```sh
    echo '{"id": "local", "name": "Local", "host": "localhost", "port": 7777,
           "discord_client_id": "<client id>"}' > /tmp/realm.json
-   build/client/n3e-client build/packages/demo --realm /tmp/realm.json --ca deploy/local/ca.pem
+   build/client/n3e-client build/packages/moradon --realm /tmp/realm.json --ca deploy/local/ca.pem
    ```
 
-   ENTER opens the browser; after Discord, the game logs in and later starts skip
+   The Moradon package (`make realm-assets`) opens on KO's login screen (spec 11);
+   **Discord** or ENTER opens the browser; after Discord, the game logs in and later starts skip
    the browser until the token expires or an operator revokes it.
 4. Operators act through the admin API: `n3e-server admin mint --name mod --perm
    'account.*'`, then `POST /v1/accounts/{id}/kick|ban|unban|mute|unmute` (spec 03).

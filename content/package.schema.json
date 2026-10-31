@@ -341,6 +341,11 @@
           "minLength": 1,
           "maxLength": 200
         },
+        "front-end.bin": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
         "player-run.bin": {
           "type": "string",
           "minLength": 1,

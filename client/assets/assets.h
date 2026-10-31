@@ -459,6 +459,7 @@ struct Release {
   std::optional<Effects> effects;
   std::optional<PostProcess> postprocess;
   std::optional<Audio> audio;
+  bool front_end = false;  // front-end.bin (N3FE, engine 42, spec 11); load_front_end reads it
   std::optional<Skills> skills;
   std::optional<std::vector<InputBinding>> input;
   NameDisplayPolicy names;
@@ -835,4 +836,66 @@ struct Hud {
   std::optional<NameplateStyle> nameplates;
 };
 Hud load_hud(const Release &release);
+// Spec 11's KO front end (content/front-end.md, tools/assetc/ko_front_end.py).
+inline constexpr size_t kFrontEndFile = 64 * 1024 * 1024;
+enum class FrontAction : uint32_t {
+  none, login, exit, login_group, realm_group, realm_list, realm_connect, notice, select_prev,
+  select_next, back, char_info, create_confirm, name_field, char_view, class_desc, progress,
+  version, info, message, ok, count
+};
+enum class FrontScreen : uint32_t { login, select, create, loading, message, count };
+enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };
+struct FrontNode {
+  static constexpr uint32_t IMAGE = 0, TEXT = 1, BUTTON = 2, EDIT = 3, PROGRESS = 4, GROUP = 5, AREA = 6, LIST = 7;
+  static constexpr uint32_t FIXED_ON = 1, FIXED_DISABLED = 2, FOREGROUND = 4;
+  uint32_t kind = 0, parent = 0, flags = 0, mask = 15;
+  FrontAction action = FrontAction::none;
+  std::array<float, 4> rect{}, uv{};
+  std::string id, text;
+  uint32_t texture = 0, font = 0, color = 0, style = 0;
+};
+struct FrontFont {
+  uint32_t texture = 0, pixels = 0, height = 0, top = 0;
+  std::array<float, 95> advances{};
+};
+struct FrontLight {
+  static constexpr uint32_t POINT = 1, SPOT = 2, DIRECTIONAL = 3;
+  uint32_t kind = POINT;
+  V diffuse{}, ambient{}, position{}, direction{};
+  float range = 0, falloff = 0;
+  std::array<float, 3> attenuation{};
+  float theta = 0, phi = 0;
+};
+struct FrontCamera { V eye{}, at{}, up{}; float fov = 1, near_plane = .1f, far_plane = 100; };
+struct FrontMesh {
+  static constexpr uint32_t DOUBLE_SIDED = 1, ALPHA_TEST = 2;
+  uint32_t texture = 0, flags = 0;
+  V diffuse{}, ambient{};
+  std::vector<float> vertices;  // position, normal, uv
+  std::vector<uint32_t> indices;
+};
+struct FrontPlug { uint32_t joint = 0; FrontMesh mesh; };
+// A scene's model: the first clip in `model`, each further clip's tracks after.
+struct FrontScene {
+  FrontCamera camera;
+  std::vector<FrontLight> lights;
+  V ambient{};
+  Scene model;
+  std::vector<std::vector<Track>> clips;  // clips[0] is model.tracks
+  std::vector<FrontPlug> plugs;
+};
+struct FrontSlot { V position{}; float yaw = 0; V eye{}; FrontLight spot; };
+struct FrontEnd {
+  uint32_t character_slots = 0, canvas_width = 0, canvas_height = 0;
+  std::vector<HudTexture> textures;
+  std::vector<FrontFont> fonts;
+  std::array<std::vector<FrontNode>, size_t(FrontScreen::count)> screens;
+  std::array<std::string, size_t(FrontString::count)> strings;
+  FrontScene intro, select;
+  uint32_t backdrop = 0;
+  std::array<float, 4> backdrop_rect{};  // 1024 x 768 units
+  std::vector<FrontSlot> slots;
+  std::vector<FrontMesh> hall;
+};
+FrontEnd load_front_end(const Release &release);
 } // namespace n3e

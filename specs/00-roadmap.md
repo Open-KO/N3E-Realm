@@ -94,6 +94,33 @@ which M5 produces; the static musl build is unverified here (no musl C compiler)
 `--self-test`; a canary player on Windows logs in end-to-end. Real-GPU Windows
 testing stays manual: the maintainer runs it on their own Windows machine, periodically.
 
+Evidence so far: CI run 41236996414 (c379da0), `client` on windows-2025 and
+ubuntu-24.04: build, package, launcher install and `--self-test` on Mesa llvmpipe, all
+green (Windows 25 min with a cold vcpkg cache, now saved). Open: the canary Windows
+login (`docs/manual-testing.md` W1–W7).
+
+## M4c — KO front end (spec 11) — **implemented; the manual round is open**
+
+- `ko_front_end` cook: intro scene, select hall, the login, server list, select, create
+  and loading layouts and the OK box, into an optional `front-end.bin` (N3FE, engine
+  42, `content/front-end.md`).
+- Client front-end module drawing it; panels stay for packages without it.
+- `Character.level` on the wire; the character limit from the package.
+- The player path (local release, Windows kit, `tools/local-realm`, docs) moves from
+  `demo` to `moradon`.
+
+**Done when:** a player starts on KO's login scene, logs in with Discord, picks the
+realm, creates and selects a character in the Karus hall, and loads into Moradon,
+on Linux and Windows; spec 11 tests 1–7 pass.
+
+Evidence so far (this machine, RTX 4090, offscreen): spec 11 tests 1–2
+(`tests/front_end.py`) and 4 (`tests/check.py`) in `make test`, exit 0; test 3 is the
+existing suites (`make live`, LIVE_OK 73/73, graphical); tests 5–7
+(`tests/front_end_live.py`, `tests/front_end_flow_live.py`) pass on the Moradon
+package. The 1097 `--features` bake pin was not recut (no 1097 install here; see
+`tests/ko_bake_pin.py`). Open: the manual round on Linux and Windows
+(`docs/manual-testing.md` L1–L12, W1–W7), Q57–Q59.
+
 ## M5 — CD (spec 06)
 
 - Workflow: cron + `workflow_dispatch(force)`.

@@ -114,6 +114,8 @@ target_link_libraries(n3e-animation-check PRIVATE n3e-assets n3e-wire)
 
 add_executable(n3e-hud-check tests/hud.cpp)
 target_link_libraries(n3e-hud-check PRIVATE n3e-assets n3e-wire)
+add_executable(n3e-front-end-check tests/front_end.cpp)
+target_link_libraries(n3e-front-end-check PRIVATE n3e-assets n3e-wire)
 add_executable(n3e-lod-check tests/world_lod.cpp)
 target_link_libraries(n3e-lod-check PRIVATE n3e-assets)
 

@@ -64,6 +64,8 @@
   X(Uniform3f, PFNGLUNIFORM3FPROC) \
   X(Uniform3fv, PFNGLUNIFORM3FVPROC) \
   X(Uniform4f, PFNGLUNIFORM4FPROC) \
+  X(Uniform4fv, PFNGLUNIFORM4FVPROC) \
+  X(UniformMatrix4fv, PFNGLUNIFORMMATRIX4FVPROC) \
   X(UnmapBuffer, PFNGLUNMAPBUFFERPROC) \
   X(UseProgram, PFNGLUSEPROGRAMPROC) \
   X(VertexAttribPointer, PFNGLVERTEXATTRIBPOINTERPROC)
@@ -124,6 +126,8 @@ N3E_GL_FUNCTIONS(N3E_GL_POINTER)
 #define glUniform3f pUniform3f
 #define glUniform3fv pUniform3fv
 #define glUniform4f pUniform4f
+#define glUniform4fv pUniform4fv
+#define glUniformMatrix4fv pUniformMatrix4fv
 #define glUnmapBuffer pUnmapBuffer
 #define glUseProgram pUseProgram
 #define glVertexAttribPointer pVertexAttribPointer

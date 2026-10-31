@@ -3226,6 +3226,7 @@ mod tests {
             hash: String::new(),
             collision: crate::movement::Collision::soup(ground.to_vec()).unwrap(),
             rules,
+            character_slots: 8,
         };
         let metrics = Metrics::new();
         let mut p = test_player();

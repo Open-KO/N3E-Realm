@@ -228,7 +228,7 @@ check(materials, lambda f: None, True, engine=39)
 # An N3MM model is engine 39 only; an engine 39 package may still carry N3NM.
 check(materials, lambda f: None, False, "npc looks model", engine=38)
 check(package, lambda f: None, True, engine=39)
-check(package, lambda f: None, False, "incompatible", engine=42)
+check(package, lambda f: None, False, "incompatible", engine=43)  # past the newest engine (42, spec 11)
 model = (materials / "npc-looks-0.bin").read_bytes()
 runs_at = len(model) - 16 - 4 - 3 * 24  # three runs, then scale (12) and attachment (4)
 assert struct.unpack_from("<I", model, runs_at)[0] == 3

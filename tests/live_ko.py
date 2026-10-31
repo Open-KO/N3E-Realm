@@ -252,6 +252,14 @@ KO_SUITES = [
     # with that class left out; no stack.
     (live.suite("ko_material_shapes_live", "python", "tests/ko_material_shapes_live.py",
                 graphical="PASS KO animated-material shapes graphical"), ["moradon-1097"], True),
+    # Spec 11 acceptance 5 and 6: the front-end cook twice, and each KO screen
+    # drawn offscreen at two sizes; no stack.
+    (live.suite("front_end_live", "python", "tests/front_end_live.py",
+                graphical="PASS KO front end graphical"), ["moradon"], True),
+    # Spec 11 acceptance 7: the screens against a native server with the Discord
+    # stand-in: login, create (a refusal, then success), start, a kick.
+    (live.suite("front_end_flow_live", "python", "tests/front_end_flow_live.py",
+                covers=["tests/discord_standin.py"], graphical="PASS KO front-end flow"), ["moradon"], True),
 ]
 SUITES = [s for s, _, _ in KO_SUITES]
 SCRIPTS = sorted({"tests/live_ko.py", "tests/ko_stack.py", "tests/moradon_stack.py",

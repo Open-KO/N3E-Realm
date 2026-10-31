@@ -52,6 +52,7 @@ test:
 	build/client/n3e-chat-check
 	build/client/n3e-refusal-check
 	build/client/n3e-login-check
+	python tests/front_end.py
 	build/client/n3e-message-log-check
 	python tests/check.py
 	python tests/isolation_check.py

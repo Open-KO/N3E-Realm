@@ -147,7 +147,8 @@ int main(int argc, char **argv) {
        auto write=[&](const Envelope&e,const char*name){auto b=e.SerializeAsString();std::ofstream(std::string(argv[2])+name,std::ios::binary).write(b.data(),b.size());};
        Envelope d;auto*l=d.mutable_discord_login();l->set_code("c0de");l->set_code_verifier("verifier-0123456789abcdefghijklmnopqrstuvwxyzAB");l->set_redirect_uri("http://127.0.0.1:49152/callback");l->set_client_label("host");write(d,"-discord-login.bin");
        Envelope s;s.mutable_session_login()->set_token(token);s.mutable_session_login()->set_client_label("host");write(s,"-session-login.bin");
-       Envelope r;auto*x=r.mutable_login_result();x->set_token(token);x->set_expires_at_unix(1795996800);x->set_discord_id("80351110224678912");x->set_discord_name("Nelly");write(r,"-login-result.bin");}
+       Envelope r;auto*x=r.mutable_login_result();x->set_token(token);x->set_expires_at_unix(1795996800);x->set_discord_id("80351110224678912");x->set_discord_name("Nelly");write(r,"-login-result.bin");
+       Envelope c;auto*a=c.mutable_characters()->add_characters();a->set_id(129);a->set_name("Nelly");a->set_level(30);a=c.mutable_characters()->add_characters();a->set_id(7);a->set_name("Peer");a->set_level(1);write(c,"-characters.bin");}
       Envelope admin;auto*q=admin.mutable_admin_request();q->set_session(63);q->set_id("request-1");q->set_operation("publish");q->set_expected(127);q->set_base(std::string(64,'a'));auto*v=q->add_patch();v->set_key("fixture:lighting.intensity");v->set_value(.5f);q->set_reason("golden");auto admin_bytes=bytes(admin);std::ofstream(std::string(argv[2])+"-admin.bin",std::ios::binary).write(admin_bytes.data(),admin_bytes.size());
       return 0;
     }

@@ -310,3 +310,76 @@ The Linux client links the build system's glibc and libstdc++. **Default taken (
 the archive bundles SDL3, protobuf and abseil (`tools/package_client.py`), and is built
 on Ubuntu 24.04, so it runs on distributions at least that new. An older baseline would
 need the builder image (spec 06) on an older base.
+
+### Q50 — Where the demo goes
+
+The maintainer asked to drop the demo for KO assets. **Default taken (spec 11), accepted by the maintainer 2026-10-31:**
+the demo leaves every player-facing path (local release, Windows kit, `tools/local-realm`,
+README, manual test round), which serve Moradon instead. `games/demo` and the synthetic
+packages stay as test fixtures: CI has no KO tree, and the CPU suite and release smoke
+need content it can build. Deleting them repo-wide would remove most of `make test`.
+
+### Q51 — Nation select
+
+KO asks a new account for Karus or El Morad. The realm draws every player as the male
+Tuarek (`ko_player.py` `RACE = 2`, Karus). **Default taken (spec 11), accepted by the maintainer 2026-10-31:** no nation
+screen; the realm is Karus, so the Karus select hall and loading art. Two nations need
+El Morad player models, nation on the wire and in `characters`, and the server's rules
+for it: a later milestone.
+
+### Q52 — Character create choices
+
+KO's create screen picks race, class, face, hair and stat points. The realm has one
+model and one class. **Default taken (spec 11), accepted by the maintainer 2026-10-31:** the KO screen with the name field
+working and race and class shown fixed; face, hair and stats hidden. More races and
+classes come with the content that supports them.
+
+### Q53 — Deleting a character
+
+KO's select screen has Delete; the server has no character deletion. **Default taken (spec 11), accepted by
+the maintainer 2026-10-31:** the button is hidden. Deletion needs a durable, auditable path
+(soft delete, a grace period, what happens to items), which is its own change.
+
+### Q54 — More than one realm in the server list
+
+The client gets one realm from `realm.json` (the Launcher's choice, spec 04), and logs
+in over that realm's own connection. **Default taken (spec 11), accepted by the maintainer 2026-10-31:** the server list
+shows that one realm, after login, to keep KO's order. A real list (several realms, their
+population) needs a public status endpoint and is deferred.
+
+### Q55 — `demo:` ids inside the Moradon content
+
+Moradon's items, skills and classes carry `demo:` ids (`games/moradon/*.json`). Players
+don't see ids, but contributors do. **Default taken (spec 11), accepted by the maintainer 2026-10-31:** not changed by
+the front end; renaming them is a content migration (spec 10, M5b) with a revision bump.
+
+### Q56 — The KO copyright line and service logos
+
+`co_login_us.uif` carries "Copyright MGAME & Noahsystem all right reserved." and the
+Daum/MGame logos. **Default taken (spec 11), accepted by the maintainer 2026-10-31:** hide the logos; replace the line with
+"N3E Realm, a community project. Not affiliated with MGAME or Noahsystem." The realm
+should not look like an official service.
+
+### Q57 — Front-end music
+
+KO plays its intro and select music on these screens. The front end has no audio of
+its own yet, and `audio.bin` binds in-game sounds only. **Default taken (M4c):** the
+screens are silent. Music needs a bounded stream (the tracks are minutes long), which
+is its own change.
+
+### Q58 — Option and Registration in the login bar
+
+KO's login bar art (`co_login_us.uif`'s background) has its four buttons painted in.
+Hiding Option and Registration (no account registration here; options are in game)
+leaves two blank painted buttons beside **Discord** and **Cancel**. **Default taken
+(M4c):** leave them blank. Covering them needs new art or a cropped copy of KO's, which
+is a content decision.
+
+### Q59 — Engine 42 and the NPC table
+
+PQ-272 tied engine 41 to N3N4 templates both ways ("an engine 41 package's templates
+are N3N4"), so a package that needs a later engine for something else could not keep
+reference NPCs. Moradon has reference NPCs (N3N2, engine 36). **Default taken (M4c):**
+engine 42 keeps whichever NPC table the package has; N3N4 still needs engine 41 or
+later, and an engine 41 package still has N3N4. Both readers say so
+(`server/src/content.rs`, `client/assets/assets.cpp`).

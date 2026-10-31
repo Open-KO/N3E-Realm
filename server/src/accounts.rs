@@ -1,7 +1,9 @@
 //! Bounded dedicated durable worker. No database or password work runs on a tick.
 use crate::{
     content::{bad, Result},
-    persistence, wire,
+    persistence,
+    rules::Rules,
+    wire,
 };
 use postgres::Client;
 use std::sync::{mpsc, Arc};
@@ -105,8 +107,32 @@ impl Database {
         // have bounded statement/socket timeouts and the caller owns the result.
         rx.await.map_err(|_| bad("database worker unavailable"))?
     }
-    pub async fn list(&self, account: i64, realm: String) -> Result<wire::Characters> {
-        self.call(move |c| Ok(wire::Characters { characters: c.query("SELECT id,name FROM characters WHERE account_id=$1 AND realm=$2 ORDER BY id LIMIT 8", &[&account,&realm])?.iter().map(|r|wire::Character{id:r.get::<_,i64>(0) as u64,name:r.get(1)}).collect() })).await
+    /// The account's characters in creation order, each with its level as the
+    /// HUD shows it (rewards::inventory): the progression curve's level, else
+    /// 1 + xp / level_xp; 1 before the first inventory read (spec 11).
+    pub async fn list(&self, account: i64, realm: String, rules: &Rules) -> Result<wire::Characters> {
+        let (progression, level_xp) = (rules.progression.clone(), rules.level_xp.max(1) as u64);
+        self.call(move |c| {
+            let rows = c.query(
+                "SELECT c.id,c.name,p.xp,q.curve_xp FROM characters c \
+                 LEFT JOIN character_progress p ON p.character_id=c.id \
+                 LEFT JOIN character_reward_progress q ON q.character_id=c.id \
+                 WHERE c.account_id=$1 AND c.realm=$2 ORDER BY c.id LIMIT 8",
+                &[&account, &realm],
+            )?;
+            let characters = rows
+                .iter()
+                .map(|r| {
+                    let level = match &progression {
+                        Some(p) => r.get::<_, Option<i64>>(3).map(|xp| p.level(xp as u64)).unwrap_or(1),
+                        None => r.get::<_, Option<i64>>(2).map(|xp| 1 + xp as u64 / level_xp).unwrap_or(1) as u32,
+                    };
+                    wire::Character { id: r.get::<_, i64>(0) as u64, name: r.get(1), level }
+                })
+                .collect();
+            Ok(wire::Characters { characters })
+        })
+        .await
     }
     pub async fn create(
         &self,
@@ -114,6 +140,7 @@ impl Database {
         name: String,
         owner: Arc<Owner>,
         spawn: [f32; 3],
+        limit: u32,
     ) -> Result<()> {
         if !valid_name(&name, 24) {
             return Err(bad("character name must be 1..24 ASCII letters/digits/_/-"));
@@ -127,7 +154,7 @@ impl Database {
                     &[&account, &owner.realm],
                 )?
                 .get(0);
-            if count >= 8 {
+            if count >= limit as i64 {
                 return Err(bad("character limit"));
             }
             let id: i64 = t.query_one(
@@ -294,9 +321,10 @@ mod database_tests {
             )?
             .get(0);
         let db = Database::start(url, Default::default())?;
-        runtime.block_on(db.create(account, "Fenced".into(), owner.clone(), [0., 0., 0.]))?;
+        let rules = Rules::load(std::path::Path::new("../build/packages/legacy-demo/gameplay.bin"), "demo")?;
+        runtime.block_on(db.create(account, "Fenced".into(), owner.clone(), [0., 0., 0.], 8))?;
         let id = runtime
-            .block_on(db.list(account, realm.clone()))?
+            .block_on(db.list(account, realm.clone(), &rules))?
             .characters[0]
             .id as i64;
         assert!(runtime

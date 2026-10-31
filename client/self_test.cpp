@@ -1,11 +1,11 @@
 // `n3e-client PACKAGE --self-test --realm realm.json` (specs/06-cd.md "smoke"): the
 // player build's install check. CI runs it on each platform's release artifacts
 // after the Launcher assembled the package; a player can run it to see why the
-// game will not start. It loads the package and its scene, reads realm.json,
-// builds the Discord authorize address on a loopback callback port, loads the
-// system's CA certificates, finds the settings directory, and opens a hidden
-// OpenGL 3.3 core window with every function the client loads. Nothing leaves
-// this machine. Exit 0 when all of that worked.
+// game will not start. It loads the package and its scene (and front-end.bin
+// when the package has one), reads realm.json, builds the Discord authorize
+// address on a loopback callback port, loads the system's CA certificates,
+// finds the settings directory, and opens a hidden OpenGL 3.3 core window with
+// every function the client loads. Nothing leaves this machine. Exit 0 when all of that worked.
 #include "assets/assets.h"
 #include "network/discord_login.h"
 #include "platform/dirs.h"
@@ -35,6 +35,16 @@ int self_test(const n3e::Release &release, int argc, char **argv) {
   auto scene = n3e::load_scene(release);
   std::cout << "package " << release.hash.substr(0, 12) << " game=" << release.game
             << " protocol=" << release.protocol << " nodes=" << scene.nodes.size() << "\n";
+  // Spec 11: the player client falls back to the panels over a bad
+  // front-end.bin; the install check fails instead, naming it.
+  if (release.front_end) {
+    try {
+      auto front = n3e::load_front_end(release);
+      std::cout << "front-end.bin screens=" << front.screens.size() << " slots=" << front.character_slots << "\n";
+    } catch (const std::exception &error) {
+      throw std::runtime_error(std::string("self-test: front-end.bin: ") + error.what());
+    }
+  }
 
   auto realm = n3e::login::read_realm(realm_path);
   auto pkce = n3e::login::make_pkce();

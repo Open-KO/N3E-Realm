@@ -13,7 +13,7 @@ import moradon_stack
 state = moradon_stack.state()
 package = moradon_stack.PACKAGE
 m = json.loads((package / 'recipe.json').read_text())['manifest']
-assert m['engine_version'] == 36 and m['npc']['model'] == 'reference_melee_v2'
+assert m['engine_version'] >= 36 and m['npc']['model'] == 'reference_melee_v2'
 assert state['release'] == (package / 'release.sha256').read_text().strip()
 report = json.loads(moradon_stack.PROVENANCE.read_text())['features']['worm']
 env = {**os.environ, 'N3E_IMAGE': moradon_stack.IMAGE, 'N3E_PACKAGE_PATH': str(package.resolve()),

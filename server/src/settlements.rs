@@ -790,7 +790,7 @@ mod tests {
             )
             .is_err());
         // New characters get both counters and the original inventory once.
-        rt.block_on(db.create(account, "New".into(), o.clone(), [0.; 3]))?;
+        rt.block_on(db.create(account, "New".into(), o.clone(), [0.; 3], 8))?;
         assert_eq!(
             c.query_one(
                 "SELECT count(*) FROM character_reward_progress WHERE realm=$1",

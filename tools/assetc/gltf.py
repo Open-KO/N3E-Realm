@@ -30,9 +30,10 @@ import binascii, math, struct, zlib
 from common import *
 
 
-def png(data, alpha=False):
+def png(data, alpha=False, limit=1024):
     """(width, height, texels) of a noninterlaced RGB8 PNG; with `alpha`,
-    (width, height, texels, channels) of an RGB8 or RGBA8 one."""
+    (width, height, texels, channels) of an RGB8 or RGBA8 one. `limit` is the
+    largest side: 1024, or 2048 for the front end's models (spec 11)."""
     if data[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError("PNG signature")
     at = 8
@@ -57,8 +58,8 @@ def png(data, alpha=False):
             width, height, depth, color, compression, filtering, interlace = (
                 struct.unpack(">IIBBBBB", b)
             )
-            count(width, 1024)
-            count(height, 1024)
+            count(width, limit)
+            count(height, limit)
             if (depth, compression, filtering, interlace) != (8, 0, 0, 0) or color not in ((2, 6) if alpha else (2,)):
                 raise ValueError("PNG requires noninterlaced RGB8")
             channels = 3 if color == 2 else 4
@@ -122,10 +123,12 @@ def render_state(state):
     return flags, float(state["alpha_reference"]), factors[0], factors[1]
 
 
-def cook(root, source, meta, materials=False):
+def cook(root, source, meta, materials=False, atlas=1024):
     """(scene bytes, dependencies). `materials` admits the N3SM render states
     and further joint influence sets (NPC looks clips only); every other
-    caller keeps the N3S1 subset."""
+    caller keeps the N3S1 subset. `atlas` 2048 is the front end's (spec 11):
+    its models' atlases are up to 2048 texels a side; every other caller keeps
+    1024."""
     g = load(safe(root, source))
     dependencies = {source: digest(read(safe(root, source))).hex()}
     if (
@@ -312,8 +315,10 @@ def cook(root, source, meta, materials=False):
         ):
             raise ValueError("material subset")
         states.append(extension.get("N3E_render_state"))
-    width, height, pixels, channels = png(uri(g["images"][0]["uri"]), True) if materials else (
-        png(uri(g["images"][0]["uri"])) + (3,))
+    if atlas not in (1024, 2048):
+        raise ValueError("atlas bound")
+    width, height, pixels, channels = png(uri(g["images"][0]["uri"]), True, atlas) if materials else (
+        png(uri(g["images"][0]["uri"]), False, atlas) + (3,))
     stated = [st is not None for st in states]
     if any(stated) and not all(stated):
         raise ValueError("render state on every primitive or none")

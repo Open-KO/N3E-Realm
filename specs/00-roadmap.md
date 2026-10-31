@@ -57,6 +57,11 @@ the refused ones. Evidence: `tests/connections_live.py` (spec 01 tests 1–7).
 30 days (clock-advanced in test), and a `/ban` from a `curl` ends their live connection
 and refuses their token.
 
+Evidence: `tests/discord_login_live.py` (spec 02 tests 1–9 against a loopback stand-in
+for Discord, the test client's browser flow, restart and expiry; spec 03 account
+routes). A real Discord application round trip is the maintainer's manual check
+(README, "Discord login").
+
 ## M4 — Launcher and manifest (spec 04)
 
 - `manifest.json` schema and a hand-written one in a test Release.

@@ -38,6 +38,7 @@
 #include "network/world.h"
 #include "platform/gl_load.h"
 #include "play.h"
+#include "network/discord_login.h"
 #include "presentation.h"
 #include <GL/gl.h>
 #include <SDL3/SDL.h>
@@ -132,6 +133,7 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     n3e::V movement_intent{};
     float heading = 0;
     std::string endpoint, ca;
+    std::optional<n3e::login::RealmConfig> realm_config;
     int fixed_width = 0, fixed_height = 0;
     bool fullscreen = false;
     for (int i = 2; i < argc; ++i) {
@@ -154,6 +156,12 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
         fullscreen = true;
       else if (a == "--connect" && i + 1 < argc)
         endpoint = argv[++i];
+      else if (a == "--realm" && i + 1 < argc) {
+        // Spec 04: the Launcher's realm config; host, port and the Discord
+        // application replace --connect (spec 02 login).
+        realm_config = n3e::login::read_realm(argv[++i]);
+        endpoint = realm_config->endpoint();
+      }
       else if (a == "--ca" && i + 1 < argc)
         ca = argv[++i];
 #if N3E_HARNESS
@@ -466,6 +474,18 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     if (!endpoint.empty())
       network =
           std::make_unique<n3e::WorldClient>(release, scene, endpoint, ca);
+    // Spec 02: with a realm config naming a Discord application the login screen
+    // is "Log in with Discord"; ENTER starts it, ESC cancels the browser wait.
+    std::unique_ptr<n3e::login::Flow> discord_flow;
+    bool discord_start = false, discord_cancel = false;
+    if (realm_config && !realm_config->discord_client_id.empty()) {
+      bool launch = true;
+#if N3E_HARNESS
+      // A suite plays the browser itself from the printed address.
+      launch = !std::getenv("N3E_TEST_NO_BROWSER");
+#endif
+      discord_flow = std::make_unique<n3e::login::Flow>(*realm_config, launch);
+    }
     n3e::WorldState world;
     // PQ-406 (D-209): the world notices (chat, whisper, rest and admin refusals)
     // already copied to the HUD's message line.
@@ -2067,6 +2087,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
               network.reset();
               network = std::make_unique<n3e::WorldClient>(release, scene,
                                                            endpoint, ca);
+              if (discord_flow) discord_flow->reset();
               world = {};
               notices_seen = 0;
               operator_notices_seen = 0;
@@ -2103,7 +2124,9 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             }
             if ((key == SDLK_RETURN || key == SDLK_KP_ENTER) && entry != 4) {
               n3e::Envelope message;
-              if (entry == 0) {
+              if (entry == 0 && discord_flow) {
+                discord_start = true;
+              } else if (entry == 0) {
                 account = text_entry;
                 entry = 1;
               } else if (entry == 1) {
@@ -2208,7 +2231,9 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
               entry = 4;
               text_entry.clear();
             }
-          } else
+          } else if (discord_flow && discord_flow->phase() == n3e::login::Flow::Phase::browser)
+            discord_cancel = true;
+          else
             run = false;
         }
       }
@@ -2226,6 +2251,21 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           SDL_StopTextInput(w);
         profile_mark(0);
         world = network->poll();
+        if (discord_flow && entry < 4) {
+#if N3E_HARNESS
+          // A suite's client starts the Discord flow itself.
+          discord_start = discord_start || auto_login || world_smoke;
+#endif
+          if (auto message = discord_flow->update(world, discord_start, discord_cancel, std::time(nullptr)))
+            network->send(*message);
+          discord_start = discord_cancel = false;
+          if (discord_flow->phase() == n3e::login::Flow::Phase::done) {
+            if (entry < 2) entry = 2;
+          } else {
+            entry = 0;
+            world.status = discord_flow->status();
+          }
+        }
         // PQ-406 (D-209): a new chat, whisper, rest or admin refusal takes the
         // HUD's message line, as the client's own notices do; PQ-407 (D-210):
         // the line keeps the newest of them, each in its kind's colour.
@@ -2309,7 +2349,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
 #if N3E_HARNESS
         // Replays and developer sessions log in from the suite's credentials.
         if ((world_smoke || auto_login) && world.connected &&
-            !automated_login) {
+            !automated_login && !discord_flow) {
           const char *a = std::getenv("N3E_TEST_ACCOUNT"),
                      *p = std::getenv("N3E_TEST_PASSWORD");
           if (!a || !p)
@@ -4717,7 +4757,10 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
               ++at;
 #endif
         } else
-          play_hud(world, target, entry, bank_secret?std::string():text_entry, width, height, legacy_key_hint, release.names.operator_chat);
+          play_hud(world, target, entry, bank_secret?std::string():text_entry, width, height, legacy_key_hint, release.names.operator_chat, discord_flow != nullptr);
+        // Spec 02: a session the server ended in the world says why (an operator's kick).
+        if (entry >= 4 && network && !world.connected)
+          hud_text(world.status.substr(0, size_t(std::max(1, (width - 32) / 12))), 16, height / 2, height, 1, .4f, .3f);
         if (entry >= 4 && !hud && !operator_line.empty())
           hud_text(operator_line.substr(0, 42), 28, height - 230, height, 1, 1, 0);
         if (entry >= 4 && std::chrono::steady_clock::now() < banner_until) {

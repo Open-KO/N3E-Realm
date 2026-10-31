@@ -148,23 +148,32 @@ pub async fn get(e: &Endpoint, key: &str, limit: usize) -> Result<Option<String>
     .await
 }
 pub async fn login_allowed(address: &Endpoint, realm: &str, account: &str, ip: &str) -> Result<bool> {
-    let digest: String = openssl::sha::sha256(account.as_bytes())
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect();
-    let script="local a=redis.call('INCR',KEYS[1]); if a==1 then redis.call('EXPIRE',KEYS[1],60) end; local b=redis.call('INCR',KEYS[2]); if b==1 then redis.call('EXPIRE',KEYS[2],60) end; if a>10 or b>30 then return 0 else return 1 end";
-    Ok(command(
-        address,
-        &[
-            "EVAL",
-            script,
-            "2",
-            &format!("n3e:{realm}:login:{digest}"),
-            &format!("n3e:{realm}:ip:{ip}"),
-        ],
-    )
-    .await?
-        == ":1\r\n")
+    throttle(address, realm, Some(account.as_bytes()), Some(ip)).await
+}
+/// The login throttle (10 a minute per account key, 30 per IP): counts each key
+/// given and answers whether all are within their limit. The account key is
+/// stored as its SHA-256. A Discord login counts its IP before the code exchange
+/// and the Discord account after it (specs/02-auth-sessions.md).
+pub async fn throttle(address: &Endpoint, realm: &str, account: Option<&[u8]>, ip: Option<&str>) -> Result<bool> {
+    let script="local ok=1; for i,k in ipairs(KEYS) do local n=redis.call('INCR',k); if n==1 then redis.call('EXPIRE',k,60) end; if n>tonumber(ARGV[i]) then ok=0 end end; return ok";
+    let (mut keys, mut limits) = (Vec::new(), Vec::new());
+    if let Some(account) = account {
+        let digest: String = openssl::sha::sha256(account)
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        keys.push(format!("n3e:{realm}:login:{digest}"));
+        limits.push("10");
+    }
+    if let Some(ip) = ip {
+        keys.push(format!("n3e:{realm}:ip:{ip}"));
+        limits.push("30");
+    }
+    let count = keys.len().to_string();
+    let mut args = vec!["EVAL", script, &count];
+    args.extend(keys.iter().map(String::as_str));
+    args.extend(limits);
+    Ok(command(address, &args).await? == ":1\r\n")
 }
 pub async fn presence(address: &Endpoint, realm: &str, id: i64, session: i64) -> Result<()> {
     command(

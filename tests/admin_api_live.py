@@ -5,8 +5,8 @@ loopback admin listener the way the Bot and CD will: token mint/revoke/list,
 bearer auth and per-route permissions, drain/resume, deploy-pending, in-game
 notices to a logged-in peer, the `realm:events` stream, a public listen address
 refused at start, Redis and Postgres down, and the tick under status polling. Acceptance
-tests 1-5, 6b (notice), 8, 9 and 10 of spec 03; the account, motd and
-world routes answer 501 until their milestones.
+tests 1-5, 6b (notice), 8, 9 and 10 of spec 03; the motd and world routes answer 501
+until their milestones (account routes: tests/discord_login_live.py).
 """
 import concurrent.futures
 import json
@@ -215,8 +215,9 @@ try:
     code, bot_token = mint("bot", "world.catalog", "account.*", "realm.status")
     assert code == 0
     assert call(admin, "GET", "/v1/world/catalog", bot_token) == (501, {"error": "not_implemented"})
-    assert call(admin, "POST", "/v1/accounts/1/kick", bot_token, {"reason": "x"})[0] == 501
-    print("PASS routes of later milestones answer 501 after the permission check")
+    # Account routes landed in M3 (tests/discord_login_live.py covers them).
+    assert call(admin, "POST", "/v1/accounts/999999/kick", bot_token, {"reason": "x"}) == (404, {"error": "not_found"})
+    print("PASS routes of later milestones answer 501 after the permission check; account routes are served")
 
     # 10. The tick is unaffected by status polling (the listener is off-tick).
     def metric(key):

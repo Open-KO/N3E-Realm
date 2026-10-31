@@ -26,7 +26,7 @@ for binary, name in [
     ("target/debug/n3e-server", "rust"),
 ]:
     run(binary, "--golden", B / name)
-for mode in ["strike", "template", "present", "absent", "move", "move-mode", "action", "respawn", "life", "settlement", "private", "bag", "bag-state", "equipment", "stats", "storage", "storage-state", "storage-auth", "storage-auth-state", "friends", "friends-state", "friends-presence", "party", "party-state", "party-invitation", "party-result", "error"]:
+for mode in ["strike", "template", "present", "absent", "move", "move-mode", "action", "respawn", "life", "settlement", "private", "bag", "bag-state", "equipment", "stats", "storage", "storage-state", "storage-auth", "storage-auth-state", "friends", "friends-state", "friends-presence", "party", "party-state", "party-invitation", "party-result", "error", "discord-login", "session-login", "login-result"]:
     expected = bytes.fromhex((ROOT / f"protocol/golden-{mode}.hex").read_text())
     assert (
         (B / f"cpp-{mode}.bin").read_bytes()

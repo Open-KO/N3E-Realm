@@ -41,15 +41,34 @@ inline std::string upper(std::string s) {
 }
 // key_hint: the package map's target/chat keys (PQ-009), drawn under the bag line.
 // operator_chat: the package's colour for a line the server marked (PQ-178).
+// discord: the login screen is spec 02's "Log in with Discord" (a realm config).
 inline void play_hud(const n3e::WorldState &world, uint64_t target, int entry,
                      const std::string &input, int width, int height,
                      const std::string &key_hint,
-                     const std::optional<uint32_t> &operator_chat = {}) {
+                     const std::optional<uint32_t> &operator_chat = {},
+                     bool discord = false) {
   if (entry < 4) {
     int x = std::max(10, (width - 480) / 2),
         y = std::max(10, (height - 280) / 2);
     panel(x, y, 480, 280, height);
     hud_text("N3E  /  ADVENTURE", x + 24, y + 24, height);
+    if (discord && entry == 0) {
+      hud_text("LOG IN WITH DISCORD", x + 24, y + 58, height);
+      // The flow's line, wrapped at word breaks to the panel's width.
+      std::string line, word, text = world.status + " ";
+      int row = 0;
+      for (char c : text) {
+        if (c != ' ') { word += c; continue; }
+        if (line.size() + word.size() + 1 > 36 && !line.empty()) {
+          if (row < 6) hud_text(line, x + 24, y + 100 + 22 * row++, height);
+          line.clear();
+        }
+        line += (line.empty() ? "" : " ") + word.substr(0, 36);
+        word.clear();
+      }
+      if (!line.empty() && row < 6) hud_text(line, x + 24, y + 100 + 22 * row, height);
+      return;
+    }
     hud_text(world.status.substr(0, 36), x + 24, y + 58, height);
     std::string label = entry == 0   ? "ACCOUNT"
                         : entry == 1 ? "PASSWORD"

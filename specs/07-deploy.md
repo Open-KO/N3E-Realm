@@ -79,6 +79,9 @@ Secrets only).
 - The local stack's wide per-source limits (`N3E_IP_MAX_CONCURRENT` 64,
   `N3E_IP_CONNECT_RATE` 600) are not carried over: production takes spec 01's defaults
   unless `.env` raises them (Q31).
+- The local stack's `N3E_LEGACY_LOGIN` default (`1`) is not carried over, nor is
+  `N3E_DISCORD_API`: with `N3E_REALM=prod` the server refuses to start with either set,
+  and without `DISCORD_CLIENT_ID`/`DISCORD_CLIENT_SECRET` (spec 02).
 - `N3E_REALM=prod`. The compose network has a fixed subnet (`172.31.77.0/24`) and
   `server` the static `ipv4_address` `172.31.77.10`; `N3E_ADMIN_LISTEN=172.31.77.10:7780`
   (RFC 1918, which spec 03 requires — it refuses `0.0.0.0`; the publish rule restricts

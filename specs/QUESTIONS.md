@@ -179,3 +179,34 @@ sources. Spec 01 test 8 reworded to match.
 Spec 01 test 7 gave a CPU budget (5 %) but no connect rate or build. **Default taken
 (M2):** 500 connects/s from each of 4 addresses, 5 % above idle for the release binary,
 15 % for the debug build the live run uses; figures recorded in spec 01.
+
+### Q33 — Testing the Discord exchange without Discord
+
+Spec 02 hardcodes `https://discord.com/api`, and test 1 needs a real Discord
+application and a browser, so nothing automated could exercise the exchange. **Default
+taken (M3):** `N3E_DISCORD_API` overrides the base (https, or plain http to loopback
+only) and is refused on `N3E_REALM=prod`. `tests/discord_login_live.py` runs a stand-in
+that issues codes bound to a PKCE challenge and checks the secret and verifier. The
+real-application round trip stays a manual check by the maintainer.
+
+### Q34 — Throttling a Discord login before its account is known
+
+Spec 02 keys `DiscordLogin`'s account throttle on `sha256(discord_id)`, which is known
+only after the exchange; counting nothing until then would let one IP make unbounded
+Discord calls with junk codes. **Default taken (M3):** the IP is counted before the
+exchange, the Discord id after it; at most 16 exchanges run at once.
+
+### Q35 — Columns spec 02's migration lacked
+
+Spec 03's account lookup reports `created_at`, which `accounts` did not have, and a
+permanent mute (`until: null`) could not be told from no mute with `muted_until`
+alone. **Default taken (M3):** migration 025 adds `created_at` (existing rows get the
+migration's time) and `muted_at` (set = muted; `muted_until` NULL = permanent), the
+pattern bans already use.
+
+### Q36 — What LoginResult carries after a SessionLogin
+
+Spec 02 sends `LoginResult` on success of either login message but only mints a token
+for `DiscordLogin`. **Default taken (M3):** a `SessionLogin`'s `LoginResult` has an
+empty `token`, the session's `expires_at_unix`, and the account's Discord id and name;
+the client keeps the token it holds.

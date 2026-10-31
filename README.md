@@ -86,8 +86,33 @@ ship, from inputs only an operator can supply (`specs/QUESTIONS.md` Q27). Each
 ### Play locally
 
 `./tools/play-moradon` opens clients against a fresh disposable stack. Other
-`tools/play-*` scripts cover the demo and feature scenes. The login path is still
-account/password (`n3e-server account-create`) until spec 02 lands.
+`tools/play-*` scripts cover the demo and feature scenes. They log in with
+account/password fixtures (`n3e-server account-create`), which the local stack keeps
+with `N3E_LEGACY_LOGIN=1`; production accepts Discord logins only.
+
+### Discord login
+
+Players log in with Discord (spec 02); the server mints a 30-day session token the
+client keeps in `$XDG_CONFIG_HOME/n3e-realm/<realm id>/session.json`. To try it with
+your own Discord application:
+
+1. At <https://discord.com/developers/applications> create an application. Under
+   OAuth2, add the redirects `http://127.0.0.1:49152/callback` through
+   `http://127.0.0.1:49155/callback`, and copy the client ID and secret.
+2. Start the server with `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` set (for the
+   local Compose stack, in `.env`).
+3. Give the client a realm config instead of `--connect`:
+
+   ```sh
+   echo '{"id": "local", "name": "Local", "host": "localhost", "port": 7777,
+          "discord_client_id": "<client id>"}' > /tmp/realm.json
+   build/client/n3e-client build/packages/demo --realm /tmp/realm.json --ca deploy/local/ca.pem
+   ```
+
+   ENTER opens the browser; after Discord, the game logs in and later starts skip
+   the browser until the token expires or an operator revokes it.
+4. Operators act through the admin API: `n3e-server admin mint --name mod --perm
+   'account.*'`, then `POST /v1/accounts/{id}/kick|ban|unban|mute|unmute` (spec 03).
 
 ### Admin API
 
@@ -116,8 +141,8 @@ every local client shares one address. Counters are under `connections` in
 
 The engine arrived by a one-time, history-free import of the n3e engine at the commit
 pinned in `UPSTREAM.md` (spec 09); this repository is now its only home. The realm-specific work follows the roadmap: the admin API
-(M1) and connection hardening (M2) are in; Discord login, launcher, bot, CD and deploy
-follow.
+(M1), connection hardening (M2) and Discord login with sessions (M3) are in; launcher,
+bot, CD and deploy follow.
 
 ## Licence
 

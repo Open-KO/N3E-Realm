@@ -18,6 +18,12 @@ x-runtime: &runtime
     # Compose gateway, so the local stack's per-source limits are wide (Q31).
     N3E_IP_MAX_CONCURRENT: "${N3E_IP_MAX_CONCURRENT:-64}"
     N3E_IP_CONNECT_RATE: "${N3E_IP_CONNECT_RATE:-600}"
+    # Spec 02: the local stack keeps account/password logins (n3e-server
+    # account-create); production sets neither this nor N3E_DISCORD_API, and the
+    # server refuses to start with either on N3E_REALM=prod.
+    N3E_LEGACY_LOGIN: "${N3E_LEGACY_LOGIN:-1}"
+    DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID:-}"
+    DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET:-}"
 services:
   postgres:
     image: postgres:17.4-bookworm@sha256:304ab813518754228f9f792f79d6da36359b82d8ecf418096c636725f8c930ad

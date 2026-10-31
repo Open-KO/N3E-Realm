@@ -344,6 +344,8 @@ def main():
             N3E_IP_MAX_CONCURRENT=env.get("N3E_IP_MAX_CONCURRENT", "64"),
             N3E_IP_CONNECT_RATE=env.get("N3E_IP_CONNECT_RATE", "600"),
             N3E_ADMIN_LISTEN=env.get("N3E_ADMIN_LISTEN", "127.0.0.1:0"),
+            # Spec 02: a demo session's accounts are account/password fixtures.
+            N3E_LEGACY_LOGIN=env.get("N3E_LEGACY_LOGIN", "1"),
             # PQ-115: the scaled tick when tests/live.py asked for one.
             **timescale.server_env("test-" + name),
         )

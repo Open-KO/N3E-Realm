@@ -102,9 +102,9 @@ Talks to Postgres directly; needs no token. `mint` on an existing name → exit 
   a DB query per call; `revoke` therefore takes ≤ 10 s to bite (acceptable; documented).
   An uncached token is looked up one at a time, bounded at 2 s; past that it is `401`, so
   a database that stops answering holds one blocking thread, not one per request.
-- A route in this contract whose milestone has not landed (account routes: M3/M6; world
-  routes and `motd`: M5) answers `501 {"error":"not_implemented"}` after the permission
-  check, so the Bot can be written against the full table.
+- A route in this contract whose milestone has not landed (world routes and `motd`: M5)
+  answers `501 {"error":"not_implemented"}` after the permission check, so the Bot can
+  be written against the full table. The account routes landed in M3.
 
 ### Routes
 
@@ -159,15 +159,21 @@ skipped deploy.
 
 **`GET /v1/accounts/by-discord/{discord_id}`**, **`GET /v1/accounts/{id}`** → `200`
 `{id, discord_id, discord_name, created_at, last_login_at, banned_at, banned_until,
-ban_reason, sessions, online, characters: [{id, name}]}` or `404`.
+ban_reason, muted_at, muted_until, mute_reason, sessions, online, characters: [{id,
+name}]}` or `404`. Times are RFC 3339 UTC or `null`; `sessions` counts unexpired
+sessions; `online` is whether the account has a logged-in socket on this realm;
+`characters` are this realm's. A legacy (password) account has `discord_id` `null`.
 
-**`POST /v1/accounts/{id}/kick`** `{"reason"}` → `200 {connections_closed}`. Emits `account.kicked`.
-**`POST /v1/accounts/{id}/ban`** `{"reason", "until": "<rfc3339>|null"}` → `200 {banned_until}`. Emits `account.banned`.
-**`POST /v1/accounts/{id}/unban`** → `200`. Emits `account.unbanned`.
+**`POST /v1/accounts/{id}/kick`** `{"reason"}` → `200 {connections_closed}`. Deletes every session (spec 02 `revoke_account(kick)`). Emits `account.kicked`.
+**`POST /v1/accounts/{id}/ban`** `{"reason", "until": "<rfc3339>|null"}` → `200 {banned_until, connections_closed}`. Deletes every session and kicks. Emits `account.banned`.
+**`POST /v1/accounts/{id}/unban`** → `200 {banned: false}`. Emits `account.unbanned`.
 **`POST /v1/accounts/{id}/mute`** `{"reason", "until": "<rfc3339>|null"}` → `200 {muted_until}`.
-**`POST /v1/accounts/{id}/unmute`** → `200`. Emit `account.muted` / `account.unmuted`.
+**`POST /v1/accounts/{id}/unmute`** → `200 {muted: false}`. Emit `account.muted` / `account.unmuted`.
+`reason` is required for kick, ban and mute (≤ 200 characters, no control characters);
+`until` is RFC 3339 in the future, or `null`/absent for permanent; otherwise `400`. An
+unknown account is `404`; a database that does not answer within 2 s, `503`.
 Mute drops the player's chat server-side (KO authority 11 semantics) but, unlike KO,
-tells the player once per session on their first dropped message.
+tells the player once per session on their first dropped message (spec 02).
 
 **`GET /v1/world/catalog`** → `200`
 ```json
@@ -221,7 +227,7 @@ Redis Stream `realm:events`, `MAXLEN ~ 10000`. Fields: `type`, `ts` (RFC 3339), 
 | `realm.unready` | `{}` — true→false |
 | `realm.draining` | `{reason, players}` |
 | `realm.resumed` | `{}` |
-| `player.joined` / `player.left` | `{account_id, discord_name[, seconds]}` |
+| `player.joined` / `player.left` | `{account_id, discord_name[, seconds]}` — at login and when that socket ends; `discord_name` is `null` for a legacy account |
 | `account.kicked` / `account.banned` / `account.unbanned` / `account.muted` / `account.unmuted` | `{account_id, discord_name, reason, until?, by}` |
 | `notice` | `{text, level, by}` |
 | `deploy.pending` | `{since, commits_behind, head}` |

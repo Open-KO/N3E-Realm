@@ -10,12 +10,19 @@ message Error { enum Code { MALFORMED = 0; VERSION = 1; CONTENT = 2; INVALID_MOV
 message Envelope { oneof body { Handshake handshake = 1; Input input = 2; Snapshot snapshot = 3; Error error = 4; Login login = 5; Characters characters = 6; CreateCharacter create_character = 7; SelectCharacter select_character = 8; Move move = 9; World world = 10; Chat chat = 11; Logout logout = 12; LoggedOut logged_out = 13; Ping ping = 14; Action action = 15; ActionResult action_result = 16; RewardStatus reward_status = 17; RewardResult reward_result = 18; Respawn respawn = 19; RespawnResult respawn_result = 20; SettlementStatus settlement_status = 21; SettlementResult settlement_result = 22; LootList loot_list = 23; LootPage loot_page = 24; Claim claim = 25; ClaimResult claim_result = 26; ClaimStatus claim_status = 27; AdminRequest admin_request = 28; AdminResult admin_result = 29; Registry registry = 30; PrivateMessage private_message = 31; BagRequest bag_request = 32; BagResult bag_result = 33; StorageRequest storage_request = 34; StorageResult storage_result = 35; StorageAuthRequest storage_auth_request = 36; StorageAuthResult storage_auth_result = 37;
     FriendRequest friend_request = 38; FriendResult friend_result = 39;
     FriendPresenceQuery friend_presence_query = 40; FriendPresence friend_presence = 41;
-    PartyRequest party_request = 42; PartyState party_state = 43; PartyResult party_result = 44; Rest rest = 45; } }
+    PartyRequest party_request = 42; PartyState party_state = 43; PartyResult party_result = 44; Rest rest = 45;
+    DiscordLogin discord_login = 46; SessionLogin session_login = 47; LoginResult login_result = 48; } }
 
 // Phase 2 world protocol. Legacy Input/Snapshot remain golden fixtures only.
 // Movement is one 50ms step; seq starts at 1, strictly increases, never wraps.
 // Server accepts at most one pending step per tick and never client time/position.
 message Login { string account = 1; string password = 2; }
+// specs/02-auth-sessions.md: Discord login (PKCE code exchange on the server) and the
+// session token it mints. Both are accepted where Login is; on success LoginResult
+// (the raw 32-byte token, sent once) comes before Characters.
+message DiscordLogin { string code = 1; string code_verifier = 2; string redirect_uri = 3; string client_label = 4; }
+message SessionLogin { bytes token = 1; string client_label = 2; }
+message LoginResult { bytes token = 1; uint64 expires_at_unix = 2; string discord_id = 3; string discord_name = 4; }
 message Characters { repeated Character characters = 1; }
 message Character { uint64 id = 1; string name = 2; }
 message CreateCharacter { string name = 1; }

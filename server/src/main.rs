@@ -31,6 +31,7 @@ mod cache;
 mod clock;
 mod content;
 mod damage;
+mod discord;
 mod gameplay;
 mod instance_ids;
 mod life;
@@ -52,6 +53,7 @@ mod persistence;
 mod progression;
 mod rewards;
 mod rules;
+mod sessions;
 mod settlements;
 mod simulation;
 mod turbo;
@@ -361,6 +363,14 @@ async fn main() -> Result<()> {
         // PQ-405 (D-208): a refusal names the request it answers (32 BagRequest).
         let refusal=wire::Envelope{body:Some(wire::envelope::Body::Error(wire::Error{code:4,detail:"inventory rate limit".into(),request:32}))};
         std::fs::write(format!("{}-error.bin",args[2]),refusal.encode_to_vec())?;
+        // specs/02-auth-sessions.md: the Discord and session logins and their result.
+        let token:Vec<u8>=(0u8..32).collect();
+        let login=wire::Envelope{body:Some(wire::envelope::Body::DiscordLogin(wire::DiscordLogin{code:"c0de".into(),code_verifier:"verifier-0123456789abcdefghijklmnopqrstuvwxyzAB".into(),redirect_uri:"http://127.0.0.1:49152/callback".into(),client_label:"host".into()}))};
+        std::fs::write(format!("{}-discord-login.bin",args[2]),login.encode_to_vec())?;
+        let login=wire::Envelope{body:Some(wire::envelope::Body::SessionLogin(wire::SessionLogin{token:token.clone(),client_label:"host".into()}))};
+        std::fs::write(format!("{}-session-login.bin",args[2]),login.encode_to_vec())?;
+        let login=wire::Envelope{body:Some(wire::envelope::Body::LoginResult(wire::LoginResult{token,expires_at_unix:1_795_996_800,discord_id:"80351110224678912".into(),discord_name:"Nelly".into()}))};
+        std::fs::write(format!("{}-login-result.bin",args[2]),login.encode_to_vec())?;
         let strike=wire::Envelope{body:Some(wire::envelope::Body::World(wire::World{self_:7,entities:vec![wire::Entity{id:7,strike_tick:100,strike_sequence:129,..Default::default()}],events:vec![wire::PresentationEvent{sequence:1,tick:100,actor:7,target:8,kind:2,style:2,request_sequence:129,..Default::default()}],..Default::default()}))};
         std::fs::write(format!("{}-strike.bin",args[2]),strike.encode_to_vec())?;
         // Wire30 (PQ-249): a templated NPC's looks key and maximum health.
@@ -602,6 +612,9 @@ async fn main() -> Result<()> {
     let admin_address = env("N3E_ADMIN_LISTEN", admin_api::DEFAULT_LISTEN);
     admin_api::check_listen(&admin_address).await?;
     let limits = admission::Limits::from_env()?;
+    // Spec 02: Discord, session and (test-only) legacy logins; refused on prod
+    // before anything is taken.
+    let login = Arc::new(sessions::Config::from_env(&env("N3E_REALM", "local"))?);
     let admin_db = db.clone();
     let h = Arc::new(persistence::Health::new());
     let ticks = Arc::new(AtomicU64::new(0));
@@ -806,6 +819,7 @@ async fn main() -> Result<()> {
         cache: redis_endpoint,
         hashing: Arc::new(tokio::sync::Semaphore::new(2)),
         realm: admin_realm.clone(),
+        login,
     };
     let admin = Arc::new(admin_api::Service::new(
         admin_db,
@@ -814,6 +828,8 @@ async fn main() -> Result<()> {
         world.cache.clone(),
         commands.clone(),
         r.hash.clone(),
+        database.clone(),
+        owner.realm.clone(),
     ));
     let admin_listener = TcpListener::bind(&admin_address).await?;
     tokio::spawn(admin_api::watch_readiness(admin.clone()));

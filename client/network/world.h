@@ -59,6 +59,14 @@ struct WorldState {
   // PQ-405 (D-208): server refusals received, and the request the last one named.
   uint64_t refusals = 0;
   uint32_t refused_request = 0;
+  // Spec 02: the last refusal's code and detail (a login screen reads them), the
+  // last LoginResult and how many have arrived.
+  int32_t refusal_code = 0;
+  std::string refusal_detail;
+  LoginResult login_result;
+  uint64_t login_results = 0;
+  // Spec 02: why an operator ended the session, shown once the connection closes.
+  std::string disconnect;
   // PQ-406 (D-209): the last chat, private message, rest or admin refusal, shown
   // in the world on the HUD's message line, and how many have arrived (so the
   // same text again still counts as new).
@@ -80,7 +88,11 @@ struct WorldState {
 inline void refusal(WorldState &s, const Release &r, bool session, const Error &e) {
   ++s.refusals;
   s.refused_request = e.request();
+  s.refusal_code = e.code();
+  s.refusal_detail = e.detail();
   s.status = e.detail();
+  if (e.detail().starts_with("kicked:"))
+    s.disconnect = "You were disconnected by an operator: " + e.detail().substr(7) + ".";
   if (!session) {
     s.status += " | F12 RECONNECT";
     return;

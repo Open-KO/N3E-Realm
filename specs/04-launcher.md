@@ -106,7 +106,7 @@ $XDG_DATA_HOME/n3e-realm/
   store/<sha256>                            # content-addressed file store, shared by all realms
   realms/<realm.id>/
     content/<content.hash>/                 # assembled package: hard links into store/
-    realm.json                              # {host, port, discord_client_id, name} for the client
+    realm.json                              # {id, name, host, port, discord_client_id} for the client (id names session.json's folder, spec 02)
     manifest.json                           # last manifest successfully applied
     state.json                              # {installed: {client, content}, etag, last_check}
 $XDG_CACHE_HOME/n3e-realm/downloads/        # partial downloads

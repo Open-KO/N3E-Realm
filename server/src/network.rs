@@ -248,6 +248,8 @@ pub struct WorldService {
     pub hashing: Arc<Semaphore>,
     /// Drain state and the logged-in count the admin API reports (spec 03).
     pub realm: Arc<crate::admin_api::Realm>,
+    /// Which logins this realm accepts (spec 02).
+    pub login: Arc<crate::sessions::Config>,
 }
 /// Spec 01: from accept to the first whole frame within the pre-auth idle time,
 /// reading a trusted proxy's PROXY header first. None: refused or timed out
@@ -291,6 +293,128 @@ async fn preauth(
             Ok(None)
         }
         Ok(r) => r,
+    }
+}
+/// One line per refused Discord or session login, bounded like the refusals.
+fn login_refused(ip: &str, why: &str) {
+    static LOGINS: std::sync::Mutex<Lines> = std::sync::Mutex::new(Lines { window: None, lines: 0, skipped: 0 });
+    bounded(&LOGINS, format!("login refused from {ip}: {why}"), "login refusals");
+}
+/// Spec 02: one login request (legacy `Login`, `DiscordLogin` or `SessionLogin`).
+/// `Ok(Err(e))`: refused with `e`, and the socket may try again.
+async fn login(
+    world: &WorldService,
+    body: Body,
+    ip: &str,
+    ready: &crate::persistence::Health,
+) -> Result<std::result::Result<crate::sessions::Accepted, Envelope>> {
+    use crate::{accounts, cache, discord, sessions};
+    let config = &world.login;
+    let realm = world.owner.realm.as_str();
+    let refuse = |detail: &str| Ok(Err(error(5, detail)));
+    let limited = || Ok(Err(error(4, "login rate limit")));
+    match body {
+        Body::Login(l) => {
+            if !config.legacy {
+                return refuse("legacy login disabled");
+            }
+            if !ready.ready() {
+                return Ok(Err(error(6, "login dependencies unavailable")));
+            }
+            match cache::login_allowed(&world.cache, realm, &l.account, ip).await {
+                Err(_) => return Ok(Err(error(6, "login protections unavailable"))),
+                Ok(false) => return limited(),
+                Ok(true) => {}
+            }
+            let Ok(_permit) = world.hashing.clone().try_acquire_owned() else {
+                return Ok(Err(error(4, "password worker busy")));
+            };
+            let Ok(id) = accounts::login(&world.db, l.account, l.password).await else {
+                return refuse("invalid credentials");
+            };
+            let Ok(mute) = sessions::mute(&world.db, id).await else {
+                return refuse("dependency");
+            };
+            Ok(Ok(sessions::Accepted {
+                account: id,
+                token: None,
+                expires_at: 0,
+                discord_id: String::new(),
+                discord_name: String::new(),
+                mute,
+            }))
+        }
+        Body::DiscordLogin(l) => {
+            if !ready.ready() {
+                return refuse("dependency");
+            }
+            let Some(discord) = config.discord.clone() else {
+                return refuse("discord:unconfigured");
+            };
+            let unreserved = |t: &str| t.bytes().all(|b| b.is_ascii_alphanumeric() || b"-._~".contains(&b));
+            if l.code.is_empty()
+                || l.code.len() > 512
+                || !l.code.bytes().all(|b| b.is_ascii_graphic())
+                || !(43..=128).contains(&l.code_verifier.len())
+                || !unreserved(&l.code_verifier)
+                || l.redirect_uri.len() > 128
+                || !l.redirect_uri.starts_with("http://127.0.0.1:")
+            {
+                return refuse("discord:invalid_request");
+            }
+            // The IP is counted before Discord is asked; the account once it is known.
+            match cache::throttle(&world.cache, realm, None, Some(ip)).await {
+                Err(_) => return refuse("dependency"),
+                Ok(false) => return limited(),
+                Ok(true) => {}
+            }
+            let Ok(_slot) = config.exchanges.clone().try_acquire_owned() else {
+                return Ok(Err(error(4, "discord login busy")));
+            };
+            let who = match discord::exchange(discord, &l.code, &l.code_verifier, &l.redirect_uri).await {
+                Ok(who) => who,
+                Err(f) => {
+                    login_refused(ip, &format!("discord exchange: {}", f.0));
+                    return refuse(&format!("discord:{}", f.0));
+                }
+            };
+            match cache::throttle(&world.cache, realm, Some(who.id.as_bytes()), None).await {
+                Err(_) => return refuse("dependency"),
+                Ok(false) => return limited(),
+                Ok(true) => {}
+            }
+            let label = discord::label(&l.client_label, sessions::LABEL_LIMIT);
+            match sessions::discord_login(&world.db, who, label, config.ttl_days, config.max_per_account).await {
+                Ok(Ok(a)) => Ok(Ok(a)),
+                Ok(Err(why)) => refuse(&why),
+                Err(e) => {
+                    login_refused(ip, &format!("discord login: {e}"));
+                    refuse("dependency")
+                }
+            }
+        }
+        Body::SessionLogin(l) => {
+            if !ready.ready() {
+                return refuse("dependency");
+            }
+            // The account key is the token's stored hash (spec 02).
+            let key = openssl::sha::sha256(&l.token);
+            match cache::throttle(&world.cache, realm, Some(&key), Some(ip)).await {
+                Err(_) => return refuse("dependency"),
+                Ok(false) => return limited(),
+                Ok(true) => {}
+            }
+            let label = discord::label(&l.client_label, sessions::LABEL_LIMIT);
+            match sessions::session_login(&world.db, l.token, label).await {
+                Ok(Ok(a)) => Ok(Ok(a)),
+                Ok(Err(why)) => refuse(&why),
+                Err(e) => {
+                    login_refused(ip, &format!("session login: {e}"));
+                    refuse("dependency")
+                }
+            }
+        }
+        _ => unreachable!("only login bodies reach login()"),
     }
 }
 #[allow(clippy::too_many_arguments)]
@@ -356,6 +480,11 @@ async fn peer(
     let mut account = None;
     // Counted in status.players from login until the socket ends.
     let mut _counted: Option<crate::admin_api::Player> = None;
+    // Spec 02/03: reachable by an operator's kick and mute from login on; when
+    // and as whom it logged in, for player.left; whether a mute was explained.
+    let mut live: Option<crate::sessions::Registration> = None;
+    let mut joined: Option<(Instant, i64, String)> = None;
+    let mut mute_told = false;
     let mut selected: Option<accounts::Selected> = None;
     let mut window = Instant::now();
     let mut frames = 0;
@@ -368,7 +497,18 @@ async fn peer(
             if writer.is_finished() {
                 return Err(bad("output peer closed"));
             }
-            let (e, n) = read(&mut input).await?;
+            let (e, n) = match &live {
+                Some(r) => tokio::select! {
+                    biased;
+                    reason = r.connection.kicked() => {
+                        kicked = Some(format!("kicked by an operator: {reason}"));
+                        let _ = out.try_send(error(5, &format!("kicked:{reason}")));
+                        break;
+                    }
+                    frame = read(&mut input) => frame?,
+                },
+                None => read(&mut input).await?,
+            };
             if !ready.owned() {
                 return Err(bad("realm ownership unavailable"));
             }
@@ -389,41 +529,37 @@ async fn peer(
                 break;
             }
             let response = match e.body {
-                Some(Body::Login(l)) if account.is_none() => {
-                    if !ready.ready() {
-                        Some(error(6, "login dependencies unavailable"))
-                    } else {
-                        match crate::cache::login_allowed(
-                            &world.cache,
-                            &world.owner.realm,
-                            &l.account,
-                            &ip,
-                        )
-                        .await
-                        {
-                            Err(_) => Some(error(6, "login protections unavailable")),
-                            Ok(false) => Some(error(4, "login rate limit")),
-                            Ok(true) => match world.hashing.clone().try_acquire_owned() {
-                                Err(_) => Some(error(4, "password worker busy")),
-                                Ok(_permit) => {
-                                    match accounts::login(&world.db, l.account, l.password).await {
-                                        Ok(id) => {
-                                            account = Some(id);
-                                            _counted = Some(crate::admin_api::Player::new(world.realm.clone()));
-                                            open.authenticated();
-                                            Some(Envelope {
-                                                body: Some(Body::Characters(
-                                                    world
-                                                        .db
-                                                        .list(id, world.owner.realm.clone())
-                                                        .await?,
-                                                )),
-                                            })
-                                        }
-                                        Err(_) => Some(error(5, "invalid credentials")),
-                                    }
-                                }
-                            },
+                Some(b @ (Body::Login(_) | Body::DiscordLogin(_) | Body::SessionLogin(_))) if account.is_none() => {
+                    match login(&world, b, &ip, &ready).await? {
+                        Err(refused) => Some(refused),
+                        Ok(a) => {
+                            account = Some(a.account);
+                            _counted = Some(crate::admin_api::Player::new(world.realm.clone()));
+                            open.authenticated();
+                            live = Some(world.realm.live.register(a.account, a.mute.clone()));
+                            let name = (!a.discord_name.is_empty()).then(|| a.discord_name.clone());
+                            world.realm.events.emit(
+                                "player.joined",
+                                serde_json::json!({"account_id": a.account, "discord_name": name}),
+                            );
+                            joined = Some((Instant::now(), a.account, a.discord_name.clone()));
+                            // A Discord or session login: the token (minted only by a
+                            // Discord login) before Characters.
+                            if !a.discord_id.is_empty() {
+                                out.try_send(Envelope {
+                                    body: Some(Body::LoginResult(wire::LoginResult {
+                                        token: a.token.map(|t| t.to_vec()).unwrap_or_default(),
+                                        expires_at_unix: a.expires_at.max(0) as u64,
+                                        discord_id: a.discord_id,
+                                        discord_name: a.discord_name,
+                                    })),
+                                })?;
+                            }
+                            Some(Envelope {
+                                body: Some(Body::Characters(
+                                    world.db.list(a.account, world.owner.realm.clone()).await?,
+                                )),
+                            })
                         }
                     }
                 }
@@ -585,6 +721,13 @@ async fn peer(
                     None
                 }
                 Some(Body::Chat(c)) if selected.is_some() => {
+                    if let Some(m) = live.as_ref().and_then(|r| r.connection.muted()) {
+                        // Dropped; said once a session (spec 03 mute).
+                        if !std::mem::replace(&mut mute_told, true) {
+                            out.try_send(refusal(7, request::CHAT, &format!("muted:{}", m.detail())))?;
+                        }
+                        continue;
+                    }
                     let s = selected.as_ref().unwrap();
                     world
                         .commands
@@ -654,6 +797,12 @@ async fn peer(
                     }
                 }
                 Some(Body::PrivateMessage(c)) if selected.is_some() => {
+                    if let Some(m) = live.as_ref().and_then(|r| r.connection.muted()) {
+                        if !std::mem::replace(&mut mute_told, true) {
+                            out.try_send(refusal(7, request::PRIVATE_MESSAGE, &format!("muted:{}", m.detail())))?;
+                        }
+                        continue;
+                    }
                     let s = selected.as_ref().unwrap();
                     world.commands.try_send(Command::Chat(
                         s.id,
@@ -686,6 +835,14 @@ async fn peer(
     }
     .await;
     let character = selected.as_ref().map(|s| s.id);
+    if let Some((at, id, name)) = joined {
+        let name = (!name.is_empty()).then_some(name);
+        world.realm.events.emit(
+            "player.left",
+            serde_json::json!({"account_id": id, "discord_name": name, "seconds": at.elapsed().as_secs()}),
+        );
+    }
+    drop(live);
     // Always detach and persist, including malformed frames, EOF and queue overflow.
     if let Some(s) = selected {
         let (tx, rx) = oneshot::channel();

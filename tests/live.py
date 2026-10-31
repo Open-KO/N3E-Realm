@@ -308,6 +308,9 @@ SUITES = [
     suite("admin_api_live", "python", "tests/admin_api_live.py"),
     # specs/01-connection-hardening.md (M2): admission limits, idle, drain, PROXY v2, cost.
     suite("connections_live", "python", "tests/connections_live.py"),
+    # Spec 02 (M3): Discord login against a loopback stand-in, sessions, kick, ban, mute.
+    suite("discord_login_live", "python", "tests/discord_login_live.py",
+          graphical="PASS client expiry: the server says expired, the client drops session.json and runs the browser flow"),
     # PQ-405 (D-208): refusals name their request; the client routes them by it.
     # PQ-406 (D-209): chat and whisper refusals reach the HUD message line;
     # PQ-407 (D-210): its log keeps two rows, each in its kind's colour;
@@ -504,8 +507,10 @@ def run(command, log, env=None, timeout=TIMEOUT, procs=None, started=None):
         # otherwise; parallel suites take an ephemeral loopback port instead. Spec 01
         # (Q31): every suite connects from one address (loopback, or the Compose
         # gateway), so the per-source limits are lifted; global and pre-auth stay.
+        # Spec 02: the suites log in with account/password fixtures (N3E_LEGACY_LOGIN).
         merged = {"N3E_ADMIN_LISTEN": "127.0.0.1:0", "N3E_IP_MAX_CONCURRENT": "1000000",
-                  "N3E_IP_CONNECT_RATE": "1000000", **os.environ, **reads_env(), **(env or {})}
+                  "N3E_IP_CONNECT_RATE": "1000000", "N3E_LEGACY_LOGIN": "1",
+                  **os.environ, **reads_env(), **(env or {})}
         p = subprocess.Popen(command, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT,
                              env={k: v for k, v in merged.items() if v is not None}, start_new_session=True)
         if procs is not None:

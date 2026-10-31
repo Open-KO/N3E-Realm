@@ -246,6 +246,11 @@ void WorldClient::run(std::stop_token stop) {
       auto e = t.receive();
       std::lock_guard lock(mutex);
       if(e.has_registry()) state.registry=e.registry();
+      if (e.has_login_result()) {
+        check(e.login_result().token().empty() || e.login_result().token().size() == 32, "login token bound");
+        state.login_result = e.login_result();
+        ++state.login_results;
+      }
       if(e.has_admin_result()) state.admin=e.admin_result();
       if (e.has_characters()) {
         state.characters = e.characters();
@@ -480,7 +485,7 @@ void WorldClient::run(std::stop_token stop) {
   } catch (const std::exception &e) {
     std::lock_guard lock(mutex);
     state.connected = false;
-    state.status = std::string(e.what()) + " | F12 RECONNECT";
+    state.status = (state.disconnect.empty() ? std::string(e.what()) : state.disconnect) + " | F12 RECONNECT";
   }
 }
 } // namespace n3e

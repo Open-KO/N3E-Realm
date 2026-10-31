@@ -59,6 +59,13 @@ enum Handler {
     DeployGet,
     DeployPut,
     DeployDelete,
+    Account,
+    AccountByDiscord,
+    Kick,
+    Ban,
+    Unban,
+    Mute,
+    Unmute,
     /// In the contract, not served yet: answers 501 after the permission check.
     Later,
 }
@@ -123,43 +130,43 @@ const ROUTES: &[(Method, &str, &str, Handler)] = &[
         Method::Get,
         "/v1/accounts/by-discord/{discord_id}",
         "account.lookup",
-        Handler::Later,
+        Handler::AccountByDiscord,
     ),
     (
         Method::Get,
         "/v1/accounts/{id}",
         "account.lookup",
-        Handler::Later,
+        Handler::Account,
     ),
     (
         Method::Post,
         "/v1/accounts/{id}/kick",
         "account.kick",
-        Handler::Later,
+        Handler::Kick,
     ),
     (
         Method::Post,
         "/v1/accounts/{id}/ban",
         "account.ban",
-        Handler::Later,
+        Handler::Ban,
     ),
     (
         Method::Post,
         "/v1/accounts/{id}/unban",
         "account.ban",
-        Handler::Later,
+        Handler::Unban,
     ),
     (
         Method::Post,
         "/v1/accounts/{id}/mute",
         "account.mute",
-        Handler::Later,
+        Handler::Mute,
     ),
     (
         Method::Post,
         "/v1/accounts/{id}/unmute",
         "account.mute",
-        Handler::Later,
+        Handler::Unmute,
     ),
     (
         Method::Get,
@@ -209,6 +216,8 @@ const NOTICE_TEXT: usize = 500;
 /// The in-game copy fits the chat bound (simulation.rs Command::Chat).
 const NOTICE_IN_GAME: usize = 256;
 const DEPLOY_PENDING_BYTES: usize = 4096;
+/// An account route's database call; past it the route answers 503.
+const ACCOUNT_CALL: Duration = Duration::from_secs(2);
 
 /// The realm-wide state the admin API reads and changes. Drain is memory-only:
 /// a restart clears it, which is what CD wants.
@@ -217,10 +226,12 @@ pub struct Realm {
     /// Sockets past login, character select included.
     pub players: AtomicU64,
     started: Instant,
-    events: Events,
     deploy: Mutex<Option<(Instant, Option<Value>)>>,
     /// The public listener's admission counters (spec 01).
     pub connections: Arc<crate::admission::Counters>,
+    pub events: Events,
+    /// Logged-in sockets by account, for kick, ban and mute (spec 02).
+    pub live: Arc<crate::sessions::Live>,
 }
 impl Realm {
     pub fn new(events: Events) -> Self {
@@ -231,6 +242,7 @@ impl Realm {
             events,
             deploy: Mutex::new(None),
             connections: Arc::default(),
+            live: Arc::default(),
         }
     }
 }
@@ -572,8 +584,13 @@ pub struct Service {
     pub commands: mpsc::Sender<crate::simulation::Command>,
     pub content_hash: String,
     tokens: Tokens,
+    /// The account worker, for account routes (bounded by `ACCOUNT_CALL`).
+    pub db: crate::accounts::Database,
+    /// This realm's name: characters are listed per realm.
+    pub realm_name: String,
 }
 impl Service {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         db: String,
         realm: Arc<Realm>,
@@ -581,6 +598,8 @@ impl Service {
         redis: Arc<Endpoint>,
         commands: mpsc::Sender<crate::simulation::Command>,
         content_hash: String,
+        accounts: crate::accounts::Database,
+        realm_name: String,
     ) -> Self {
         let tokens = Tokens {
             db,
@@ -595,6 +614,8 @@ impl Service {
             commands,
             content_hash,
             tokens,
+            db: accounts,
+            realm_name,
         }
     }
 }
@@ -815,7 +836,7 @@ async fn respond(service: &Service, r: Request) -> (u16, Value) {
             }
         }
     };
-    let (code, out) = handle(service, handler, &name, &body).await;
+    let (code, out) = handle(service, handler, &name, path, &body).await;
     if m != Some(Method::Get) {
         eprintln!(
             "admin by={name} route={} {template} result={code}",
@@ -844,9 +865,34 @@ fn text_field(
     }
 }
 
-async fn handle(service: &Service, handler: Handler, by: &str, body: &Value) -> (u16, Value) {
+async fn handle(service: &Service, handler: Handler, by: &str, path: &str, body: &Value) -> (u16, Value) {
     let realm = &service.realm;
     match handler {
+        Handler::Account | Handler::AccountByDiscord => {
+            let key = match (handler, path.rsplit('/').next().unwrap_or("")) {
+                (Handler::Account, id) => match id.parse::<i64>() {
+                    Ok(id) if id > 0 => crate::sessions::Key::Id(id),
+                    _ => return (404, json!({"error": "not_found"})),
+                },
+                (_, d) if !d.is_empty() && d.len() <= 20 && d.bytes().all(|b| b.is_ascii_digit()) => {
+                    crate::sessions::Key::Discord(d.into())
+                }
+                _ => return (404, json!({"error": "not_found"})),
+            };
+            let found = timeout(
+                ACCOUNT_CALL,
+                crate::sessions::account(&service.db, key, service.realm_name.clone()),
+            )
+            .await;
+            match found {
+                Ok(Ok(Some(a))) => (200, account_json(&a, realm.live.online(a.id))),
+                Ok(Ok(None)) => (404, json!({"error": "not_found"})),
+                _ => (503, json!({"error": "unavailable", "detail": "database"})),
+            }
+        }
+        Handler::Kick | Handler::Ban | Handler::Unban | Handler::Mute | Handler::Unmute => {
+            account_change(service, handler, by, path, body).await
+        }
         Handler::Status => (200, status(service).await),
         Handler::Drain => {
             let reason = match text_field(body, "reason", 160) {
@@ -1015,6 +1061,102 @@ async fn deploy_pending(service: &Service) -> Result<Option<Value>> {
         .lock()
         .unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), v.clone()));
     Ok(v)
+}
+
+fn time(t: Option<i64>) -> Value {
+    t.map_or(Value::Null, |t| {
+        json!(rfc3339(UNIX_EPOCH + Duration::from_secs(t.max(0) as u64)))
+    })
+}
+
+fn account_json(a: &crate::sessions::Account, online: usize) -> Value {
+    json!({
+        "id": a.id,
+        "discord_id": a.discord_id,
+        "discord_name": a.discord_name,
+        "created_at": time(Some(a.created_at)),
+        "last_login_at": time(a.last_login_at),
+        "banned_at": time(a.banned_at),
+        "banned_until": time(a.banned_until),
+        "ban_reason": a.ban_reason,
+        "muted_at": time(a.muted_at),
+        "muted_until": time(a.muted_until),
+        "mute_reason": a.mute_reason,
+        "sessions": a.sessions,
+        "online": online > 0,
+        "characters": a.characters.iter().map(|(id, name)| json!({"id": id, "name": name})).collect::<Vec<_>>(),
+    })
+}
+
+/// Kick, ban, unban, mute, unmute (spec 03): the database first, then the live
+/// sockets, then the event.
+async fn account_change(service: &Service, handler: Handler, by: &str, path: &str, body: &Value) -> (u16, Value) {
+    use crate::sessions::{Change, Sanction, REASON_LIMIT};
+    let id = match path.split('/').nth(3).map(str::parse::<i64>) {
+        Some(Ok(id)) if id > 0 => id,
+        _ => return (404, json!({"error": "not_found"})),
+    };
+    let reason = match handler {
+        Handler::Unban | Handler::Unmute => String::new(),
+        _ => match text_field(body, "reason", REASON_LIMIT) {
+            Ok(Some(r)) if !r.trim().is_empty() => r,
+            Ok(_) => return (400, json!({"error": "bad_request", "detail": "reason is required"})),
+            Err(e) => return e,
+        },
+    };
+    let until = match (handler, body.get("until")) {
+        (Handler::Ban | Handler::Mute, Some(Value::String(t))) => match crate::sessions::parse_rfc3339(t) {
+            Some(u) if u > crate::sessions::now() => Some(u),
+            Some(_) => return (400, json!({"error": "bad_request", "detail": "until must be in the future"})),
+            None => return (400, json!({"error": "bad_request", "detail": "until: an RFC 3339 time or null"})),
+        },
+        (Handler::Ban | Handler::Mute, None | Some(Value::Null)) => None,
+        (Handler::Ban | Handler::Mute, Some(_)) => {
+            return (400, json!({"error": "bad_request", "detail": "until: an RFC 3339 time or null"}))
+        }
+        _ => None,
+    };
+    let sanction = Sanction { until, reason: reason.clone() };
+    let change = match handler {
+        Handler::Kick => Change::Revoke,
+        Handler::Ban => Change::Ban(sanction.clone()),
+        Handler::Unban => Change::Unban,
+        Handler::Mute => Change::Mute(sanction.clone()),
+        _ => Change::Unmute,
+    };
+    let name = match timeout(ACCOUNT_CALL, crate::sessions::change(&service.db, id, change)).await {
+        Ok(Ok(Some(name))) => name,
+        Ok(Ok(None)) => return (404, json!({"error": "not_found"})),
+        _ => return (503, json!({"error": "unavailable", "detail": "database"})),
+    };
+    let live = &service.realm.live;
+    let mut event = json!({"account_id": id, "discord_name": name, "reason": reason, "by": by});
+    let (kind, out) = match handler {
+        Handler::Kick => {
+            let closed = live.kick(id, &reason);
+            ("account.kicked", json!({"connections_closed": closed}))
+        }
+        Handler::Ban => {
+            let closed = live.kick(id, &reason);
+            event["until"] = time(until);
+            ("account.banned", json!({"banned_until": time(until), "connections_closed": closed}))
+        }
+        Handler::Unban => ("account.unbanned", json!({"banned": false})),
+        Handler::Mute => {
+            live.mute(id, Some(sanction));
+            event["until"] = time(until);
+            ("account.muted", json!({"muted_until": time(until)}))
+        }
+        _ => {
+            live.mute(id, None);
+            ("account.unmuted", json!({"muted": false}))
+        }
+    };
+    if matches!(handler, Handler::Unban | Handler::Unmute) {
+        event.as_object_mut().map(|o| o.remove("reason"));
+    }
+    service.realm.events.emit(kind, event);
+    (200, out)
 }
 
 async fn status(service: &Service) -> Value {

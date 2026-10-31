@@ -14,6 +14,10 @@ x-runtime: &runtime
     N3E_HEALTH: 0.0.0.0:8080
     N3E_CERT: /tls/server.pem
     N3E_KEY: /tls/server.key
+    # Spec 01: through the loopback publish every local client arrives from the
+    # Compose gateway, so the local stack's per-source limits are wide (Q31).
+    N3E_IP_MAX_CONCURRENT: "${N3E_IP_MAX_CONCURRENT:-64}"
+    N3E_IP_CONNECT_RATE: "${N3E_IP_CONNECT_RATE:-600}"
 services:
   postgres:
     image: postgres:17.4-bookworm@sha256:304ab813518754228f9f792f79d6da36359b82d8ecf418096c636725f8c930ad

@@ -38,7 +38,8 @@ deadline. The checks below go **in front of** the semaphore, before TLS starts.
 | `N3E_TRUSTED_PROXY_CIDRS` | *(empty)* | If set, PROXY protocol v2 is accepted from these ranges and the client IP is taken from it (future relay tier). Otherwise PROXY headers are rejected. |
 
 "Source IP" is the TCP peer address, or the PROXY-protocol original address when the
-peer is a trusted proxy. IPv6 sources are bucketed by /64.
+peer is a trusted proxy. IPv6 sources are bucketed by /64. Every numeric limit must be a
+whole number from 1; anything else refuses to start, naming the variable.
 
 ### Status counters
 
@@ -71,12 +72,20 @@ starting TLS:
 6. Otherwise take a pre-auth slot, start the idle timer, begin TLS.
 
 "Close" means `close()` with no bytes written. No TLS alert, no game-wire `Error`: that
-costs cycles and tells the attacker which rule they tripped.
+costs cycles and tells the attacker which rule they tripped. The close is a reset
+(`SO_LINGER` 0): still no payload, and no `TIME_WAIT` entry left on the server for each
+socket of a flood.
+
+A **trusted proxy**'s socket passes steps 1–2 at accept; steps 3–5 run once its PROXY v2
+header (read under the idle timer, at most 232 bytes) names the client. A trusted peer
+may also connect directly. From any other peer, a first byte that starts a PROXY v2
+signature (TLS starts with `0x16`) is a PROXY header: close, `refused_proxy++`.
 
 After step 6:
 
-- The idle timer covers the TLS handshake **and** the first game-wire frame. No complete
-  `Handshake` within `N3E_PREAUTH_IDLE_MS` → close, `preauth_timeouts++`.
+- The idle timer covers the TLS handshake **and** the first game-wire frame, and is the
+  only bound on them. No complete first frame within `N3E_PREAUTH_IDLE_MS` → close,
+  `preauth_timeouts++`.
 - The pre-auth slot is released when login completes (spec 02) or the socket closes.
 - Per-IP state is in-memory only: an LRU keyed by source IP, cap 65,536 entries. Not in
   Redis — one realm process, and a Redis round trip at accept time defeats the purpose.
@@ -91,8 +100,9 @@ process does not exit on its own — CD restarts it.
 
 ### Logging
 
-One line per refusal **class** per minute, not per refusal:
-`connections refused ip_concurrent=1203 ip_rate=88 global=0 preauth_slots=12 draining=3`.
+One line per minute at most, counting each refusal class since the last line, and none
+in a minute with no refusals:
+`connections refused ip_concurrent=1203 ip_rate=88 global=0 preauth_slots=12 draining=3 proxy=0 preauth_timeouts=540`.
 Per-connection refusal logging is forbidden (it turns a SYN flood into a disk flood).
 
 ## Failure modes
@@ -103,6 +113,7 @@ Per-connection refusal logging is forbidden (it turns a SYN flood into a disk fl
 | Clock jumps | Monotonic clock for the window. |
 | PROXY header from an untrusted peer | Close, `refused_proxy++`. |
 | Players behind CGNAT share an IP | They hit `N3E_IP_MAX_CONCURRENT`. Accepted trade; raise in `.env`. Document for mods. |
+| Clients reach the server through Docker's loopback publish (the local stack) | All arrive from the Compose gateway address: the local `compose.yaml` defaults the per-source limits to 64 concurrent and 600/min (Q31). Production traffic arrives by DNAT with its own source address. |
 
 ## Acceptance tests
 
@@ -121,10 +132,19 @@ Scriptable against a running stack with a throwaway cert:
    connection is refused immediately; `status.draining == true`. Resume → admitted.
 6. **No per-connection logs.** Test 1 in a loop for 10 s → log grows ≤ one line per
    class per minute.
-7. **Cost.** Test 1 continuously from 4 addresses → server CPU < 5 % of one core
-   (measure; record the figure).
-8. **Existing suites still pass.** n3e's `tests/host_network_check.py`,
-   `tests/multiplayer.py` and the `live` suites are unaffected with default settings.
+7. **Cost.** Test 1 continuously from 4 addresses, 500 connects/s each → server CPU
+   < 5 % of one core above idle for the release binary (measure; record the figure).
+   Recorded 2026-10-30, 8-thread desktop, loopback: release 4.2–4.7 % (user 1.1–1.3 %,
+   system 3.1–3.4 %; 19–22 µs per connect, kernel accept/close most of it); the debug
+   build `make live` runs spends 7–8 % and is held to 15 %. Unpaced (6,300 connects/s):
+   release 10 %.
+8. **Existing suites still pass.** `tests/multiplayer.py` and the `live` suites are
+   unaffected with the realm's global and pre-auth defaults. Every suite connects from one
+   address, so the harness lifts the per-source limits (Q31); `connections_live` tests
+   them with small values from distinct loopback sources.
+
+Evidence: `tests/connections_live.py` (tests 1–7, the roadmap's 500 connections from one
+address, PROXY v2 trusted and untrusted, the status counters).
 
 ## Open questions
 

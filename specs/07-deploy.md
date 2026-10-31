@@ -76,6 +76,9 @@ Secrets only).
 - `N3E_CERT`/`N3E_KEY` mount `/etc/n3e-realm/tls/fullchain.pem` / `privkey.pem`
   read-only. The container runs as `1000:1000`; `privkey.pem` is `0640 root:n3e` with
   gid 1000 — or copy with the right owner in the renewal hook.
+- The local stack's wide per-source limits (`N3E_IP_MAX_CONCURRENT` 64,
+  `N3E_IP_CONNECT_RATE` 600) are not carried over: production takes spec 01's defaults
+  unless `.env` raises them (Q31).
 - `N3E_REALM=prod`. The compose network has a fixed subnet (`172.31.77.0/24`) and
   `server` the static `ipv4_address` `172.31.77.10`; `N3E_ADMIN_LISTEN=172.31.77.10:7780`
   (RFC 1918, which spec 03 requires — it refuses `0.0.0.0`; the publish rule restricts

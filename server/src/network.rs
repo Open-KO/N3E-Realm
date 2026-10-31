@@ -12,6 +12,8 @@ use tokio::{
     time::{timeout, Instant},
 };
 use tokio_openssl::SslStream;
+use crate::admission::{self, Gate, Open, Origin};
+use std::sync::atomic::Ordering;
 const LIMIT: usize = 65536;
 const DEADLINE: Duration = Duration::from_secs(2);
 /// The Envelope body field numbers of the client requests an Error can refuse
@@ -46,16 +48,17 @@ pub fn refusal(code: i32, request: u32, detail: &str) -> Envelope {
     }
 }
 async fn read(s: &mut (impl tokio::io::AsyncRead + Unpin)) -> Result<(Envelope, usize)> {
-    timeout(DEADLINE, async {
-        let n = s.read_u32().await? as usize;
-        if n == 0 || n > LIMIT {
-            return Err(bad("inbound frame bound"));
-        }
-        let mut b = vec![0; n];
-        s.read_exact(&mut b).await?;
-        Ok((Envelope::decode(b.as_slice())?, n))
-    })
-    .await?
+    timeout(DEADLINE, frame(s)).await?
+}
+/// One frame, unbounded in time: the caller bounds it.
+async fn frame(s: &mut (impl tokio::io::AsyncRead + Unpin)) -> Result<(Envelope, usize)> {
+    let n = s.read_u32().await? as usize;
+    if n == 0 || n > LIMIT {
+        return Err(bad("inbound frame bound"));
+    }
+    let mut b = vec![0; n];
+    s.read_exact(&mut b).await?;
+    Ok((Envelope::decode(b.as_slice())?, n))
 }
 async fn send(s: &mut (impl tokio::io::AsyncWrite + Unpin), e: Envelope) -> Result<()> {
     let b = e.encode_to_vec();
@@ -246,8 +249,56 @@ pub struct WorldService {
     /// Drain state and the logged-in count the admin API reports (spec 03).
     pub realm: Arc<crate::admin_api::Realm>,
 }
+/// Spec 01: from accept to the first whole frame within the pre-auth idle time,
+/// reading a trusted proxy's PROXY header first. None: refused or timed out
+/// (counted), closed with nothing written.
+async fn preauth(
+    mut t: TcpStream,
+    peer: std::net::SocketAddr,
+    open: &mut Open,
+    gate: &Gate,
+    a: &SslAcceptor,
+) -> Result<Option<(SslStream<TcpStream>, Envelope, String)>> {
+    let c = &gate.counters;
+    let trusted = gate.limits.trusts(peer.ip());
+    let first = timeout(gate.limits.preauth_idle, async {
+        let source = match admission::origin(&mut t, peer, &gate.limits).await? {
+            Origin::Untrusted => {
+                c.refused_proxy.fetch_add(1, Ordering::Relaxed);
+                refuse(t);
+                return Ok(None);
+            }
+            Origin::Relayed(ip) => ip,
+            Origin::Peer => peer.ip(),
+        };
+        // An untrusted peer was admitted at accept, by its own address.
+        if trusted && gate.admit(open, source).is_err() {
+            refuse(t);
+            return Ok(None);
+        }
+        t.set_nodelay(true)?;
+        socket2::SockRef::from(&t).set_send_buffer_size(8192)?;
+        let mut s = SslStream::new(Ssl::new(a.context())?, t)?;
+        Pin::new(&mut s).accept().await?;
+        // The pre-auth idle time alone bounds the first frame.
+        let (h, _) = frame(&mut s).await?;
+        Ok(Some((s, h, source.to_string())))
+    })
+    .await;
+    match first {
+        Err(_) => {
+            c.preauth_timeouts.fetch_add(1, Ordering::Relaxed);
+            Ok(None)
+        }
+        Ok(r) => r,
+    }
+}
+#[allow(clippy::too_many_arguments)]
 async fn peer(
     t: TcpStream,
+    address: std::net::SocketAddr,
+    mut open: Open,
+    gate: Arc<Gate>,
     a: Arc<SslAcceptor>,
     r: Arc<Release>,
     ready: Arc<crate::persistence::Health>,
@@ -255,12 +306,9 @@ async fn peer(
 ) -> Result<()> {
     use crate::{accounts, simulation::Command};
     use tokio::sync::{mpsc, oneshot, watch};
-    let ip = t.peer_addr()?.ip().to_string();
-    t.set_nodelay(true)?;
-    socket2::SockRef::from(&t).set_send_buffer_size(8192)?;
-    let mut s = SslStream::new(Ssl::new(a.context())?, t)?;
-    timeout(DEADLINE, Pin::new(&mut s).accept()).await??;
-    let (h, _) = read(&mut s).await?;
+    let Some((mut s, h, ip)) = preauth(t, address, &mut open, &gate, &a).await? else {
+        return Ok(());
+    };
     let rejection = match h.body {
         Some(Body::Handshake(h)) if h.version != r.protocol => {
             Some(error(1, "unsupported protocol version"))
@@ -362,6 +410,7 @@ async fn peer(
                                         Ok(id) => {
                                             account = Some(id);
                                             _counted = Some(crate::admin_api::Player::new(world.realm.clone()));
+                                            open.authenticated();
                                             Some(Envelope {
                                                 body: Some(Body::Characters(
                                                     world
@@ -684,6 +733,11 @@ async fn peer(
     }
     result
 }
+/// Closes a refused socket with a reset: no payload, and no TIME_WAIT left
+/// behind for each one of a flood (spec 01).
+fn refuse(t: TcpStream) {
+    let _ = socket2::SockRef::from(&t).set_linger(Some(Duration::ZERO));
+}
 pub async fn serve(
     address: &str,
     cert: &str,
@@ -691,6 +745,7 @@ pub async fn serve(
     r: Arc<Release>,
     health: Arc<crate::persistence::Health>,
     world: WorldService,
+    gate: Arc<Gate>,
 ) -> Result<()> {
     let mut a = SslAcceptor::mozilla_intermediate(SslMethod::tls_server())?;
     a.set_private_key_file(key, SslFiletype::PEM)?;
@@ -700,17 +755,32 @@ pub async fn serve(
     let listener = TcpListener::bind(address).await?;
     println!("LISTEN {}", listener.local_addr()?);
     health.listening.store(true, std::sync::atomic::Ordering::Relaxed);
-    let slots = Arc::new(Semaphore::new(64));
+    let summary = gate.counters.clone();
+    tokio::spawn(async move {
+        let mut last = [0; 7];
+        loop {
+            tokio::time::sleep(admission::SUMMARY_EVERY).await;
+            if let Some(line) = admission::summary(&summary, &mut last) {
+                eprintln!("{line}");
+            }
+        }
+    });
     loop {
-        let (t, _) = listener.accept().await?;
-        let permit = match slots.clone().try_acquire_owned() {
-            Ok(p) => p,
-            Err(_) => continue,
+        let (t, address) = listener.accept().await?;
+        // Spec 01 steps 1-5, before a byte is read; a refused socket is dropped
+        // here with nothing written. A trusted proxy's client is checked once
+        // its PROXY header names it.
+        let Ok(mut open) = gate.open(world.realm.draining.load(Ordering::Relaxed)) else {
+            refuse(t);
+            continue;
         };
-        let (a, r, h, w) = (a.clone(), r.clone(), health.clone(), world.clone());
+        if !gate.limits.trusts(address.ip()) && gate.admit(&mut open, address.ip()).is_err() {
+            refuse(t);
+            continue;
+        }
+        let (a, r, h, w, g) = (a.clone(), r.clone(), health.clone(), world.clone(), gate.clone());
         tokio::spawn(async move {
-            let _permit = permit;
-            let _ = peer(t, a, r, h, w).await;
+            let _ = peer(t, address, open, g, a, r, h, w).await;
         });
     }
 }

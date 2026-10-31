@@ -26,6 +26,7 @@ mod item_drop_tests;
 mod reward_upgrades;
 mod administration;
 mod admin_api;
+mod admission;
 mod cache;
 mod clock;
 mod content;
@@ -600,6 +601,7 @@ async fn main() -> Result<()> {
     // Refuse a public admin listener before taking anything (spec 03).
     let admin_address = env("N3E_ADMIN_LISTEN", admin_api::DEFAULT_LISTEN);
     admin_api::check_listen(&admin_address).await?;
+    let limits = admission::Limits::from_env()?;
     let admin_db = db.clone();
     let h = Arc::new(persistence::Health::new());
     let ticks = Arc::new(AtomicU64::new(0));
@@ -785,6 +787,7 @@ async fn main() -> Result<()> {
         }
     });
     let admin_realm = Arc::new(admin_api::Realm::new(admin_api::Events::start(redis_endpoint.clone())));
+    let gate = admission::Gate::new(limits, admin_realm.connections.clone());
     let (commands, rx) = tokio::sync::mpsc::channel(256);
     tokio::spawn(simulation::run(
         h.clone(),
@@ -820,7 +823,7 @@ async fn main() -> Result<()> {
     let key = env("N3E_KEY", "deploy/local/server.key");
     // A lease failure stops admission immediately and terminates for operator restart.
     let mut terminate = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-    let outcome = tokio::select! {r=network::serve(&address,&cert,&key,r,h.clone(),world)=>r,r=worker=>r?,r=health_task=>r?,r=admin_task=>r?,_=tokio::signal::ctrl_c()=>Ok(()),_=terminate.recv()=>Ok(())};
+    let outcome = tokio::select! {r=network::serve(&address,&cert,&key,r,h.clone(),world,gate)=>r,r=worker=>r?,r=health_task=>r?,r=admin_task=>r?,_=tokio::signal::ctrl_c()=>Ok(()),_=terminate.recv()=>Ok(())};
     // Drain tick state and commit final positions while renewal remains alive.
     let (tx, rx) = tokio::sync::oneshot::channel();
     if commands

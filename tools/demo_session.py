@@ -339,6 +339,11 @@ def main():
             N3E_LISTEN=f"127.0.0.1:{listen}",
             N3E_HEALTH=f"127.0.0.1:{health}",
             N3E_TEST_PROGRESSION="disposable",
+            # A local session's clients all come from loopback, and two sessions may run
+            # at once: wide per-source limits (spec 01, Q31), an ephemeral admin port.
+            N3E_IP_MAX_CONCURRENT=env.get("N3E_IP_MAX_CONCURRENT", "64"),
+            N3E_IP_CONNECT_RATE=env.get("N3E_IP_CONNECT_RATE", "600"),
+            N3E_ADMIN_LISTEN=env.get("N3E_ADMIN_LISTEN", "127.0.0.1:0"),
             # PQ-115: the scaled tick when tests/live.py asked for one.
             **timescale.server_env("test-" + name),
         )

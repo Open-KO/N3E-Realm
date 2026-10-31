@@ -306,6 +306,8 @@ SUITES = [
     suite("readiness_live", "python", "tests/readiness_live.py"),
     # specs/03-admin-api.md (M1): tokens, bearer auth, drain/notice/deploy-pending, realm:events.
     suite("admin_api_live", "python", "tests/admin_api_live.py"),
+    # specs/01-connection-hardening.md (M2): admission limits, idle, drain, PROXY v2, cost.
+    suite("connections_live", "python", "tests/connections_live.py"),
     # PQ-405 (D-208): refusals name their request; the client routes them by it.
     # PQ-406 (D-209): chat and whisper refusals reach the HUD message line;
     # PQ-407 (D-210): its log keeps two rows, each in its kind's colour;
@@ -499,8 +501,11 @@ def run(command, log, env=None, timeout=TIMEOUT, procs=None, started=None):
         out.write("$ " + " ".join(command) + "\n")
         out.flush()
         # Spec 03: every server opens an admin listener, 127.0.0.1:7780 unless told
-        # otherwise; parallel suites take an ephemeral loopback port instead.
-        merged = {"N3E_ADMIN_LISTEN": "127.0.0.1:0", **os.environ, **reads_env(), **(env or {})}
+        # otherwise; parallel suites take an ephemeral loopback port instead. Spec 01
+        # (Q31): every suite connects from one address (loopback, or the Compose
+        # gateway), so the per-source limits are lifted; global and pre-auth stay.
+        merged = {"N3E_ADMIN_LISTEN": "127.0.0.1:0", "N3E_IP_MAX_CONCURRENT": "1000000",
+                  "N3E_IP_CONNECT_RATE": "1000000", **os.environ, **reads_env(), **(env or {})}
         p = subprocess.Popen(command, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT,
                              env={k: v for k, v in merged.items() if v is not None}, start_new_session=True)
         if procs is not None:

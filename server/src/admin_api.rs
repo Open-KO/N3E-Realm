@@ -219,6 +219,8 @@ pub struct Realm {
     started: Instant,
     events: Events,
     deploy: Mutex<Option<(Instant, Option<Value>)>>,
+    /// The public listener's admission counters (spec 01).
+    pub connections: Arc<crate::admission::Counters>,
 }
 impl Realm {
     pub fn new(events: Events) -> Self {
@@ -228,6 +230,7 @@ impl Realm {
             started: Instant::now(),
             events,
             deploy: Mutex::new(None),
+            connections: Arc::default(),
         }
     }
 }
@@ -1028,7 +1031,7 @@ async fn status(service: &Service) -> Value {
         "draining": service.realm.draining.load(Ordering::Relaxed),
         "ready": service.health.ready(),
         "uptime_s": service.realm.started.elapsed().as_secs(),
-        "connections": {},
+        "connections": service.realm.connections.json(),
         "deploy_pending": pending,
         "redis": redis,
         "events_dropped": service.realm.events.dropped.load(Ordering::Relaxed),

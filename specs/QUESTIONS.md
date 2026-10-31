@@ -161,3 +161,21 @@ M1 is spec 03 minus world operations, but the motd route needs the revision prop
 store (M5) and the account routes need sessions and moderation (M3/M6). **Default
 taken:** M1 ships status, drain, resume, notice and deploy-pending; every other route is
 routed and permission-checked and answers `501 not_implemented` until its milestone.
+
+### Q31 — Per-source limits in tests and the local stack
+
+Spec 01's defaults (3 sockets, 10 connects a minute per source) cannot hold for the live
+suites, which all connect from one address (loopback, or the Compose gateway through
+Docker's loopback publish), nor for several local clients on the local stack. Options:
+exempt loopback in the server; lift the limits where every client shares an address.
+**Default taken (M2):** no exemption in the server. `tests/live.py` gives every suite
+`N3E_IP_MAX_CONCURRENT`/`N3E_IP_CONNECT_RATE` of 1,000,000 unless it sets them;
+`compose.yaml` (local) defaults them to 64 and 600; production keeps spec 01's
+defaults. `tests/connections_live.py` tests the real limits from distinct `127.0.0.x`
+sources. Spec 01 test 8 reworded to match.
+
+### Q32 — The cost budget's rate and build
+
+Spec 01 test 7 gave a CPU budget (5 %) but no connect rate or build. **Default taken
+(M2):** 500 connects/s from each of 4 addresses, 5 % above idle for the release binary,
+15 % for the debug build the live run uses; figures recorded in spec 01.

@@ -44,7 +44,7 @@ Evidence: `tests/admin_api_live.py` (spec 03 tests 1–5, 6b notice, 8, 9, 10).
 
 **Done when:** a load script opening 500 connections from one IP sees exactly the
 configured cap admitted and the rest refused in < 10 ms each, with no TLS work spent on
-the refused ones.
+the refused ones. Evidence: `tests/connections_live.py` (spec 01 tests 1–7).
 
 ## M3 — Discord login and sessions (spec 02)
 

@@ -102,11 +102,22 @@ n3e-server admin revoke --name ops                    # bites within 10 s
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7780/v1/realm/status
 ```
 
+### Connection limits
+
+The public listener refuses, before any TLS work, sockets past `N3E_MAX_CONNECTIONS`
+(64), a source's `N3E_IP_MAX_CONCURRENT` (3) or `N3E_IP_CONNECT_RATE` (10 a minute), or
+the `N3E_PREAUTH_MAX_SLOTS` (16) between accept and login, and closes a socket that has
+not sent its first frame in `N3E_PREAUTH_IDLE_MS` (2000) (spec 01). The local Compose
+stack, `tools/demo_session.py` and the live suites widen the per-source limits, since
+every local client shares one address. Counters are under `connections` in
+`/v1/realm/status`.
+
 ## Status
 
 The engine arrived by a one-time, history-free import of the n3e engine at the commit
 pinned in `UPSTREAM.md` (spec 09); this repository is now its only home. The realm-specific work follows the roadmap: the admin API
-(M1) is in; connection hardening, Discord login, launcher, bot, CD and deploy follow.
+(M1) and connection hardening (M2) are in; Discord login, launcher, bot, CD and deploy
+follow.
 
 ## Licence
 

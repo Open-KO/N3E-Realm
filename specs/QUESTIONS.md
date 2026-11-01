@@ -458,3 +458,22 @@ and gains the new default; a default the player chose stays. Players' `realms.js
 stores the URL, so it is permanent: when CD (M5) publishes Releases, it publishes the
 manifest at this URL (or redirects it there), and keeps `realm.id` `openko`, which
 every profile pins.
+
+### Q67 — How CD reaches a host with no inbound port
+
+Spec 06's deploy job ssh-es into a VPS; the home host (Q64) has no forwarded port and
+no public address, and is aarch64 (`deploy/HOST.md`). Options: (a) pull: CD publishes a
+`deploy.json` (sha, image digests, content hash, force, reason) beside the manifest and
+a timer on the host polls it and runs the gated `remote.sh` locally; (b) a self-hosted
+Actions runner on the host for the deploy job only (fork-PR workflows need approval;
+the runner has Docker on a personal machine); (c) ssh through the tunnel behind a
+Cloudflare Access service token. **Default (raised by RQ-000, 2026-11-01; needs the
+maintainer):** (a), with images built for `linux/arm64`. RQ-031 waits on it.
+
+### Q68 — Where off-box backups go from the home host
+
+Spec 07 sends the nightly `pg_dump` to an object store; `deploy/HOST.md` has none yet
+and plans the workstation, which is in the same house. **Default (raised by RQ-000,
+2026-11-01; needs the maintainer, who owns the account):** Cloudflare R2 via `rclone`
+(credentials in a root-only file on the host, never `.env`), with the workstation as a
+second copy. RQ-033 waits on it.

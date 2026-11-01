@@ -17,7 +17,13 @@ multi-node, HA, CDN, monitoring beyond what the Bot already surfaces (see Q15).
 
 ## Provider and host
 
-- **Requirement:** always-on L3/L4 DDoS scrubbing included for game/TCP traffic
+**The realm's host is the maintainer's own machine (2026-11-01, Q64)**, not a VPS: its
+volumetric layer is Cloudflare's network in front of the WebSocket edge (spec 12), and
+the host opens no inbound port. What follows for a VPS still holds if the realm moves to
+one (the ladder in `architecture.md`); the host's deviations from it are in
+`deploy/HOST.md`.
+
+- **Requirement (VPS):** always-on L3/L4 DDoS scrubbing included for game/TCP traffic
   (OVH "Game" anti-DDoS, Hetzner's standard protection, or equivalent). Not Cloudflare
   (Spectrum is Enterprise-only — see `architecture.md` DDoS ladder).
 - Size: 4 vCPU / 8 GiB / 80 GiB SSD is ample (n3e caps at 64 sockets; Postgres and
@@ -147,8 +153,10 @@ pinned message.
   provider, and document the IP-change procedure (change DNS, re-issue cert via DNS-01,
   update nothing else — everything is by hostname).
 - If attacks persist past the provider's scrubbing: step 2 of the ladder in
-  `architecture.md` (relay VPS). `REALM_TRUSTED_PROXY_CIDRS` (spec 01) exists for that
-  day.
+  `architecture.md` (relay VPS). `N3E_TRUSTED_PROXY_CIDRS` (spec 01) exists for that
+  day (it was misnamed `REALM_…` here).
+- On the home host (Q64) the origin is hidden outright: the only public name is a
+  Cloudflare-proxied record and nothing listens publicly (spec 12, "Host").
 
 ## Runbooks
 

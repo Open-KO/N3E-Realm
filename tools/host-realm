@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# The realm on its host (deploy/HOST.md): the production compose stack
+# (deploy/compose.prod.yaml) from this checkout and its .env. Run on the host.
+#
+#   tools/host-realm            build, migrate, convert and (re)start the realm
+#   tools/host-realm mint-bot   mint the bot's admin token into .env (never printed)
+#   tools/host-realm down       stop it (the database volume stays)
+#
+# The cooked package comes from a machine with the KO tree:
+#   make realm-assets && rsync -a --delete build/packages/moradon/ HOST:REPO/build/packages/moradon/
+#
+# The package's progression converts only on a test- realm with disposable
+# progression (server/src/main.rs), and a realm keeps the progression it was
+# converted with, so the realm is ${N3E_REALM_PREFIX}-<package hash> (Q63): a new
+# package starts a new realm, as tools/local-realm does.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+compose() { docker compose -f deploy/compose.prod.yaml --env-file .env "$@"; }
+setting() { grep -qE "^$1=.+" .env; }
+test -f .env || { echo "host-realm: .env is missing (deploy/HOST.md)" >&2; exit 2; }
+# Every compose verb interpolates the whole file, so these are set for all of them.
+package=build/packages/moradon
+export N3E_PACKAGE_PATH="$PWD/$package"
+release="$(cat "$package/release.sha256" 2>/dev/null || echo none)"
+export N3E_REALM="$(sed -n 's/^N3E_REALM_PREFIX=//p' .env)-${release:0:12}"
+case "${1:-up}" in
+down)
+  compose down
+  exit 0 ;;
+mint-bot)
+  # The token's plaintext goes from the mint output straight into .env.
+  setting REALM_ADMIN_TOKEN && { echo "host-realm: .env already has REALM_ADMIN_TOKEN" >&2; exit 2; }
+  # The bot's permissions as in README, "Discord bot".
+  token="$(compose exec -T server n3e-server admin mint --name bot --perm world.catalog \
+    --perm world.spawn --perm world.kill --perm world.event --perm 'account.*' \
+    --perm realm.status --perm realm.notice)"
+  [[ "$token" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "host-realm: mint printed no token" >&2; exit 1; }
+  printf 'REALM_ADMIN_TOKEN=%s\n' "$token" >> .env
+  echo "host-realm: REALM_ADMIN_TOKEN written to .env"
+  exit 0 ;;
+up) ;;
+*) echo "usage: tools/host-realm [up|mint-bot|down]" >&2; exit 2 ;;
+esac
+for name in N3E_DB_PASSWORD N3E_REALM_PREFIX N3E_TLS_PATH DISCORD_CLIENT_ID DISCORD_CLIENT_SECRET; do
+  setting "$name" || { echo "host-realm: $name is not set in .env (deploy/HOST.md)" >&2; exit 2; }
+done
+test -f "$package/release.bin" || { echo "host-realm: $package is missing (see the top of this script)" >&2; exit 2; }
+export N3E_BUILD_VERSION="$(git rev-parse --short HEAD)"
+
+compose build server
+setting DISCORD_BOT_TOKEN && compose build bot
+compose up -d --wait postgres redis
+compose run --rm --no-deps migrate
+# The running server owns the realm; stop it so the conversion (a no-op for a
+# realm already converted with this package) can take it.
+compose stop server
+compose run --rm --no-deps -e N3E_TEST_PROGRESSION=disposable server convert-progression
+compose up -d --wait --no-deps --force-recreate server
+if setting DISCORD_BOT_TOKEN && setting REALM_ADMIN_TOKEN; then
+  compose up -d --no-deps --force-recreate bot
+  bot="bot started"
+else
+  bot="bot not started: tools/host-realm mint-bot, then run this again"
+fi
+echo
+echo "realm $N3E_REALM on port ${N3E_PORT:-7777}; $bot"

@@ -1,13 +1,13 @@
 """A release of this tree on this machine, for the launcher (docs/manual-testing.md).
 
   python tools/local_release.py [--port 8770] [--client-build build/client]
-                                [--package build/packages/moradon]
+                                [--package build/packages/moradon] [--host HOST]
 
 Packages the client in --client-build (tools/package_client.py), publishes it with
 the content package as a release on http://127.0.0.1:PORT (manifest.json, content
 index, content-addressed files; spec 04), and serves it until Ctrl-C. The realm is
-the local Compose stack: localhost, N3E_PORT (7777), and DISCORD_CLIENT_ID from the
-environment or .env. tests/release_smoke.py publishes through the same functions.
+the local Compose stack: localhost, or --host for the realm's host on the LAN
+(deploy/HOST.md), N3E_PORT (7777), and DISCORD_CLIENT_ID from the environment or .env. tests/release_smoke.py publishes through the same functions.
 """
 import argparse
 import hashlib
@@ -89,6 +89,7 @@ def main():
     args.add_argument("--port", type=int, default=8770)
     args.add_argument("--client-build", type=Path, default=ROOT / "build/client")
     args.add_argument("--package", type=Path, default=ROOT / "build/packages/moradon")
+    args.add_argument("--host", default="localhost")
     a = args.parse_args()
     if not (a.package / "release.bin").is_file():
         raise SystemExit(f"local_release: {a.package} is missing; run make realm-assets")
@@ -105,7 +106,7 @@ def main():
     server, url = serve(web, a.port)
     # The client version names its install directory: a new one per archive, so the
     # Launcher installs each rebuild instead of keeping the first.
-    realm = {"id": "local", "name": "Local Realm", "host": "localhost", "port": int(dotenv("N3E_PORT") or 7777),
+    realm = {"id": "local", "name": "Local Realm", "host": a.host, "port": int(dotenv("N3E_PORT") or 7777),
              "discord_client_id": client_id}
     m = publish(web, url, archive, a.package, realm, version=f"local-{sha(data)[:12]}")
     print(f"\nServing release {m['release']} (content {m['content']['hash'][:12]}) at {url}/manifest.json")

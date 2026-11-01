@@ -1,0 +1,108 @@
+# The production stack (specs/07-deploy.md, "Compose"): the local compose.yaml with
+# Discord-only logins, spec 01's per-source limits, restarts, and the admin API on a
+# static compose address. Run from the repository root with the host's .env:
+#
+#   docker compose -f deploy/compose.prod.yaml --env-file .env up -d --wait
+#
+# Until CD's content image exists (spec 06), the cooked package and the TLS pair are
+# host paths: N3E_PACKAGE_PATH and N3E_TLS_PATH (server.pem, server.key). deploy/HOST.md
+# records the host's values.
+name: n3e-realm
+x-runtime: &runtime
+  image: "${N3E_IMAGE:-n3e-foundation:prod}"
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  user: "${N3E_UID:-1000}:${N3E_GID:-1000}"
+  environment: &environment
+    DATABASE_URL: "host=postgres user=n3e password=${N3E_DB_PASSWORD:?set N3E_DB_PASSWORD} dbname=n3e"
+    REDIS_ADDRESS: redis:6379
+    N3E_PACKAGE: /package
+    N3E_REALM: "${N3E_REALM:-prod}"
+    N3E_LISTEN: 0.0.0.0:7777
+    N3E_HEALTH: 0.0.0.0:8080
+    N3E_ADMIN_LISTEN: 172.31.77.10:7780
+    N3E_CERT: /tls/server.pem
+    N3E_KEY: /tls/server.key
+    DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID:?set DISCORD_CLIENT_ID}"
+    DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET:?set DISCORD_CLIENT_SECRET}"
+services:
+  postgres:
+    image: postgres:17.4-bookworm@sha256:304ab813518754228f9f792f79d6da36359b82d8ecf418096c636725f8c930ad
+    environment:
+      POSTGRES_USER: n3e
+      POSTGRES_PASSWORD: "${N3E_DB_PASSWORD:?set N3E_DB_PASSWORD}"
+      POSTGRES_DB: n3e
+    volumes: ["pg:/var/lib/postgresql/data"]
+    init: true
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "n3e", "-d", "n3e"]
+      interval: 1s
+      timeout: 2s
+      retries: 40
+    restart: unless-stopped
+  redis:
+    image: redis:7.4.2-bookworm@sha256:fbdbaea47b9ae4ecc2082ecdb4e1cea81e32176ffb1dcf643d422ad07427e5d9
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 2s
+      retries: 40
+    restart: unless-stopped
+  migrate:
+    <<: *runtime
+    command: ["migrate"]
+    depends_on:
+      postgres: {condition: service_healthy}
+  server:
+    <<: *runtime
+    volumes:
+      - "${N3E_PACKAGE_PATH:?set N3E_PACKAGE_PATH}:/package:ro"
+      - "${N3E_TLS_PATH:?set N3E_TLS_PATH}/server.pem:/tls/server.pem:ro"
+      - "${N3E_TLS_PATH:?set N3E_TLS_PATH}/server.key:/tls/server.key:ro"
+    ports:
+      - "${N3E_BIND:-0.0.0.0}:${N3E_PORT:-7777}:7777"
+      - "127.0.0.1:7780:7780"
+    networks:
+      default: {ipv4_address: 172.31.77.10}
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "n3e-server", "health"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+    stop_grace_period: 30s
+  bot:
+    image: "${N3E_BOT_IMAGE:-n3e-bot:prod}"
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: bot
+    hostname: realm-bot
+    environment:
+      DISCORD_BOT_TOKEN: "${DISCORD_BOT_TOKEN:-}"
+      DISCORD_GUILD_ID: "${DISCORD_GUILD_ID:-}"
+      DISCORD_CHANNEL_ANNOUNCE: "${DISCORD_CHANNEL_ANNOUNCE:-}"
+      DISCORD_CHANNEL_OPS: "${DISCORD_CHANNEL_OPS:-}"
+      DISCORD_ROLE_MOD: "${DISCORD_ROLE_MOD:-}"
+      DISCORD_ROLE_OPS: "${DISCORD_ROLE_OPS:-}"
+      REALM_ADMIN_URL: http://server:7780
+      REALM_ADMIN_TOKEN: "${REALM_ADMIN_TOKEN:-}"
+      REALM_REDIS: redis:6379
+      GITHUB_REPO: "${GITHUB_REPO:-}"
+      GITHUB_DISPATCH_TOKEN: "${GITHUB_DISPATCH_TOKEN:-}"
+      REALM_NAG_HOUR_UTC: "${REALM_NAG_HOUR_UTC:-18}"
+    depends_on:
+      redis: {condition: service_healthy}
+      server: {condition: service_healthy}
+    restart: unless-stopped
+    stop_grace_period: 5s
+networks:
+  default:
+    ipam:
+      config: [{subnet: 172.31.77.0/24}]
+volumes:
+  pg:

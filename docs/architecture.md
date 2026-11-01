@@ -312,3 +312,35 @@ What this design does *not* give you: L7 game-protocol scrubbing or multi-region
 | 4 | Cloudflare Spectrum | Enterprise contract, four figures/mo+ | Not for a community server. |
 
 Step 2 is the first time a gateway box would earn its place in the runtime diagram.
+
+#### Decision, 2026-11-01: a home host behind Cloudflare's WebSocket proxy (Q64)
+
+The realm runs on the maintainer's own machine (`gn100`) instead of a rented VPS, with
+the game wire carried as a WebSocket through Cloudflare (spec 12). Why:
+
+- **Cost.** The maintainer has idle, powerful machines and wants no monthly bill. The
+  VPS options checked on 2026-11-01 were all worse than expected: OVH's VPS range (the
+  scrubbing provider this section names) was out of stock in every location; Hetzner
+  Cloud had raised prices twice in 2026 (US 4 vCPU/8 GB about €63/mo) and showed its
+  plans as unavailable; DigitalOcean ($24–48/mo) blackholes an attacked address instead
+  of scrubbing it; Hostinger was $24.49/mo month to month.
+- **A home connection cannot be exposed.** A port-forward publishes the home address
+  with no filtering at all: a flood fills the household's line, and a new address from
+  the ISP does not help while the hostname points at the house (dynamic DNS publishes
+  the new one).
+- **Cloudflare's "not an option" was about raw TCP.** Spectrum is still Enterprise-only,
+  but WebSockets are proxied on the free plan and we ship the client, so the client can
+  speak WebSocket. The game wire's own TLS runs inside it unchanged, so Cloudflare
+  carries but cannot read it. With a Cloudflare Tunnel the host opens no inbound port
+  and its address is in no DNS record: layers 1 and 4 above at €0, on a network far
+  larger than any VPS provider's scrubbing.
+- **The cost is work, not money:** a WebSocket transport in the client, a small bridge
+  that hands the player's address to the server through PROXY protocol v2 (spec 01
+  already accepts it), and the tunnel. Latency grows by Cloudflare's hop (roughly 5–20
+  ms), and Cloudflare may drop long-lived sockets, which the session token's reconnect
+  already covers.
+
+The VPS path is not lost: spec 07 still describes it, and moving is a DNS change plus
+the runbook. If the free plan's WebSocket limits (unpublished, Q65) or Cloudflare's
+policy ever stop the realm, step 2 of the ladder (a relay VPS) or step 3 replaces the
+edge.

@@ -418,3 +418,31 @@ has. **Default taken (spec 04):** with `--realm` the client opens a fixed window
 `--fixed-window`, and refuses other sizes; `--fullscreen` uses an exclusive mode of
 that size. `realm-launcher --fixed-window SIZE [--fullscreen]` and the Windows kit's
 `play.bat` pass them through. The size is not saved between starts.
+
+### Q63 — The hosted realm is a `test-` realm
+
+The server converts a package's progression only on a `test-` realm with
+`N3E_TEST_PROGRESSION=disposable` (`server/src/main.rs`), and refuses a realm whose
+reward policy was never converted, so `N3E_REALM=prod` (spec 07) cannot run Moradon
+today. **Default taken (2026-11-01):** the hosted realm is
+`<N3E_REALM_PREFIX>-<package hash[:12]>` (`test-openko-…`), as `tools/local-realm`
+does; every other production setting stands (Discord only, no legacy login, spec 01's
+limits). A new package with changed progression starts a new realm, so characters do
+not carry over. Revisit with a production conversion path for progression packages.
+
+### Q64 — The realm's host: a home machine behind Cloudflare, not a VPS
+
+The maintainer chose on 2026-11-01 to host on their own machine (`gn100`) rather than
+pay for a VPS with scrubbing (spec 07's requirement), and to carry the game wire as a
+WebSocket through Cloudflare's free proxy and a Tunnel so the home address is never
+public. The reasoning and the providers checked are in `architecture.md`, "DDoS". Spec
+12 is the design (milestone M7a, proposed). Until it is built the realm is LAN only; no
+port is forwarded.
+
+### Q65 — Cloudflare's free-plan WebSocket limits
+
+Cloudflare supports WebSockets on all plans but publishes no concurrent-connection
+figure for the free plan, and says long-lived sockets can be closed when its edge
+restarts. **Default taken:** assume a community realm's tens of players fit; the client
+reconnects with its session token after a close (spec 02). If the realm is throttled,
+the fallback is the relay VPS of `architecture.md`'s ladder.

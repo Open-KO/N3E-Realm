@@ -172,6 +172,20 @@ does not exist yet.
 **Done when:** a stranger with the Discord invite can download the launcher, log in,
 and play, and the rebuild runbook has been followed successfully once.
 
+## M7a — Home host behind Cloudflare (spec 12) — **proposed 2026-11-01**
+
+The realm runs on the maintainer's machine `gn100` instead of a VPS (Q64).
+
+- Done first, LAN only: `deploy/compose.prod.yaml` (spec 07's production stack) and
+  `tools/host-realm` on the host; `deploy/HOST.md`.
+- `realm-edge` bridge, the client's WebSocket transport, `edge` in the realm profile.
+- The realm's Cloudflare Tunnel; Let's Encrypt via DNS-01 on Cloudflare DNS; releases
+  through the tunnel until M5 publishes GitHub Releases.
+
+**Done when:** spec 12 tests 1–6 pass: a player outside the home network downloads the
+launcher, logs in and plays through `wss://play.openko.net`, and the host has no
+forwarded port and no public DNS record naming it.
+
 ## M8 — Docs on Pages (spec 08)
 
 Small and independent; can be done any time after M5 exists. Listed last because

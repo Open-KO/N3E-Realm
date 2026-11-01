@@ -36,7 +36,7 @@ cargo build --release --locked -p realm-launcher
 tools/local-realm 192.168.86.21          # stack on the LAN; the certificate names the address
 ```
 
-`tools/local-realm` prints `realm test-local on port 7777 (LAN, …)`. For the bot, the
+`tools/local-realm` prints `realm test-local-<package hash> on port 7777 (LAN, …)`. For the bot, the
 first time: mint its admin token, add it to `.env`, and run `tools/local-realm` again:
 
 ```sh

@@ -7,12 +7,13 @@
 #   tools/local-realm [LAN_ADDRESS]     start or restart it
 #   tools/local-realm down              stop it (the database volume stays)
 #
-# The realm is test-local: the package's progression converts only on a test-
-# realm with disposable progression (as tools/play-* do). The bot starts too when
-# .env has REALM_ADMIN_TOKEN.
+# The realm is test-local-<package hash>: the package's progression converts only
+# on a test- realm with disposable progression, and a realm keeps the progression
+# it was converted with, so each package gets its own realm (as tools/play-* do;
+# characters stay with the package that made them). The bot starts too when .env
+# has REALM_ADMIN_TOKEN.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-export N3E_REALM="${N3E_REALM:-test-local}"
 if test "${1:-}" = down; then
   docker compose --profile bot down
   exit 0
@@ -32,15 +33,16 @@ done
 test -f build/packages/moradon/release.bin ||
   { echo "local-realm: build/packages/moradon is missing; run make realm-assets" >&2; exit 2; }
 export N3E_PACKAGE_PATH=./build/packages/moradon
+release="$(cat build/packages/moradon/release.sha256)"
+export N3E_REALM="${N3E_REALM:-test-local-${release:0:12}}"
 
 docker compose build server
 docker compose up -d --wait postgres redis
 docker compose run --rm --no-deps migrate
-log="$(mktemp)"
-if ! docker compose run --rm --no-deps -e N3E_TEST_PROGRESSION=disposable server convert-progression >"$log" 2>&1; then
-  grep -q "realm already owned" "$log" || { cat "$log" >&2; rm -f "$log"; exit 1; }
-fi
-rm -f "$log"
+# The running server owns the realm; stop it so the conversion (a no-op for a
+# realm already converted with this package) can take it.
+docker compose stop server
+docker compose run --rm --no-deps -e N3E_TEST_PROGRESSION=disposable server convert-progression
 docker compose up -d --wait --force-recreate server
 if setting REALM_ADMIN_TOKEN; then
   docker compose --profile bot up -d --build bot

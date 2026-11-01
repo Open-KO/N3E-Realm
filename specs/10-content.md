@@ -31,7 +31,11 @@ a package-defined default and bounds.
 - `tools/assetc` reads KO sources from `assets/ko/` (the migration renames the eight
   hardcoded `assets/ko` paths — spec 09 tweak list).
 - Nothing from `assets/ko/` is ever committed, uploaded in a PR, or published
-  uncooked. CI fails a PR that adds a file with a KO native extension (`.n3*`, `.gtd`,
+  uncooked. **Cooked** means read, validated and repackaged by `tools/assetc` into an
+  engine container (a package's `*.bin` files, under its recipe and provenance). It
+  need not mean re-encoded: a payload may keep KO's own encoding where the engine
+  decodes it (Q69: the front-end track's MPEG frames inside `front-end.bin`). KO's
+  original files, its tree layout and its file names never ship as they are. CI fails a PR that adds a file with a KO native extension (`.n3*`, `.gtd`,
   `.opd`, `.tbl`, …) anywhere under `games/`.
 - Contributors who only edit JSON still need the tarball to cook locally; `make
   realm-assets` runs the fetch first. The PR check cooks in CI regardless, so a

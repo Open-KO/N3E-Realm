@@ -15,7 +15,8 @@ The repository carries the context. Do not assume a planned component exists; ch
 Engine (`client/`, `server/`, `protocol/`, `tools/assetc`, `tests/`), realm components
 (`launcher/`, `bot/`), content (`games/`, `content/`), ops (`deploy/`, `.github/`).
 The raw KO client tree is a pinned input in git-ignored `assets/ko/`
-(`tools/fetch-ko-assets.sh`); never commit or publish it uncooked.
+(`tools/fetch-ko-assets.sh`); never commit or publish it uncooked
+("cooked" as `specs/10-content.md` defines it).
 
 ## Working agreements
 

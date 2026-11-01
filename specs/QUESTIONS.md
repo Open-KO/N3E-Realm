@@ -502,3 +502,6 @@ decodes them while streaming with minimp3 (CC0), vendored at a pinned commit in
 package for it on Linux. Nothing raw is published as a file, but the frames are KO's
 bytes; if the maintainer reads "only cooked output ships" (spec 10) as excluding
 them, the alternative is a cook-time decode to PCM or ADPCM with a pinned decoder.
+**Decided by the maintainer, 2026-11-01:** the default (KO's frames inside
+`front-end.bin`, decoded by the client); spec 10 now defines "cooked" as validated and
+repackaged into an engine container, not necessarily re-encoded.

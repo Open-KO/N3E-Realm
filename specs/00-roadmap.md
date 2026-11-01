@@ -172,7 +172,7 @@ does not exist yet.
 **Done when:** a stranger with the Discord invite can download the launcher, log in,
 and play, and the rebuild runbook has been followed successfully once.
 
-## M7a — Home host behind Cloudflare (spec 12) — **built 2026-11-01; test 6 open**
+## M7a — Home host behind Cloudflare (spec 12) — **done 2026-11-01**
 
 The realm runs on the maintainer's machine `gn100` instead of a VPS (Q64).
 
@@ -188,7 +188,8 @@ forwarded port and no public DNS record naming it.
 
 Evidence so far (this workstation): `tests/edge_live.py --graphical` (tests 1–4),
 `cargo test -p realm-edge`, `make test`, and `discord_login_live`, `launcher_live` and
-`front_end_flow_live` graphical (test 5). Open: test 6 on gn100.
+`front_end_flow_live` graphical (test 5); test 6 by the maintainer on 2026-11-01, from
+outside the home network on Linux and Windows through `wss://play.openko.net`.
 
 ## M8 — Docs on Pages (spec 08)
 

@@ -446,3 +446,15 @@ figure for the free plan, and says long-lived sockets can be closed when its edg
 restarts. **Default taken:** assume a community realm's tens of players fit; the client
 reconnects with its session token after a close (spec 02). If the realm is throttled,
 the fallback is the relay VPS of `architecture.md`'s ladder.
+
+### Q66 — The launcher's default realm
+
+The maintainer asked on 2026-11-01 that a launcher downloaded and run with no arguments
+connect to OpenKO. **Default taken (spec 04):** the compiled-in default profile is
+`openko` at `https://releases.openko.net/manifest.json` (the realm's tunnel,
+deploy/HOST.md), replacing `n3e-realm` at a GitHub Releases URL that never served a
+manifest. A `realms.json` from an older launcher drops that profile while it is unpinned
+and gains the new default; a default the player chose stays. Players' `realms.json`
+stores the URL, so it is permanent: when CD (M5) publishes Releases, it publishes the
+manifest at this URL (or redirects it there), and keeps `realm.id` `openko`, which
+every profile pins.

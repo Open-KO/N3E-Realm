@@ -177,10 +177,11 @@ Windows client on a real GPU, playing the local realm over the LAN (`tools/local
 
 ### Launcher
 
-`realm-launcher` (spec 04) is the one binary a player downloads. It reads the realm's
-`manifest.json` from GitHub Releases, installs the client and the content package
-under `~/.local/share/n3e-realm/`, updates itself, and starts the client. A realm other
-than the default:
+`realm-launcher` (spec 04) is the one binary a player downloads. Run with no
+arguments, it plays the OpenKO realm: it reads `https://releases.openko.net/manifest.json`
+(deploy/HOST.md), installs the client and the content package under
+`~/.local/share/n3e-realm/` (`%LOCALAPPDATA%\n3e-realm` on Windows), updates itself,
+and starts the client. A realm other than the default:
 
 ```
 cargo build --release -p realm-launcher
@@ -188,8 +189,9 @@ target/release/realm-launcher --add-realm my-fork https://example.org/realm/mani
 target/release/realm-launcher --realm my-fork
 ```
 
-`--check` lists what would change; `--no-update` starts what is installed. CD publishes
-the releases it reads (M5); until then `tests/launcher_live.py` serves its own.
+`--check` lists what would change; `--no-update` starts what is installed. A fork
+builds its own default with `REALM_DEFAULT_NAME` and `REALM_DEFAULT_MANIFEST` set at
+compile time.
 
 ### Admin API
 

@@ -90,8 +90,8 @@ local store.
 
 `$XDG_CONFIG_HOME/n3e-realm/realms.json`:
 ```json
-{ "default": "n3e-realm",
-  "realms": { "n3e-realm": { "manifest": "https://github.com/<org>/N3E-Realm/releases/latest/download/manifest.json" },
+{ "default": "openko",
+  "realms": { "openko":  { "manifest": "https://releases.openko.net/manifest.json" },
               "my-fork":   { "manifest": "https://example.org/realm/manifest.json" } } }
 ```
 Ships with the default profile. `realm-launcher --realm my-fork` or `--add-realm NAME URL`.
@@ -101,8 +101,12 @@ URL from silently re-pointing a profile). The pin is stored in the profile itsel
 `"my-fork": { "manifest": "…", "id": "fork-realm" }`. Profile names and realm ids are
 `[a-z0-9-]`, at most 64, not starting with `-` (they name directories).
 
-The default profile's URL is compiled in (`REALM_DEFAULT_MANIFEST` at build time; a
-fork builds with its own). Manifest, index and artifact URLs must be `https://`; plain
+The default profile's name and URL are compiled in (`REALM_DEFAULT_NAME`,
+`REALM_DEFAULT_MANIFEST` at build time; a fork builds with its own). The default is the
+OpenKO realm, `openko` at `https://releases.openko.net/manifest.json` (2026-11-01, Q66),
+so a launcher run with no arguments plays it. A profile file from an older launcher
+loses its unpinned `n3e-realm` profile (a Releases URL that never served a manifest)
+and gains the default. Manifest, index and artifact URLs must be `https://`; plain
 `http://` is accepted only when the host resolves to loopback (test realms and the
 suites' file servers).
 

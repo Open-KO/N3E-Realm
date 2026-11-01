@@ -43,13 +43,17 @@ make realm-assets
 python tools/local_release.py --hosted https://releases.openko.net --host play.openko.net \
   --edge wss://play.openko.net/v1/wire --realm-id openko --realm-name OpenKO \
   [--client windows-x86_64=<CI's client-windows-x86_64 archive>]
+cp <CI's realm-launcher.exe> build/hosted-release/realm-launcher.exe   # until M5 publishes launchers
+cp target/release/realm-launcher build/hosted-release/realm-launcher-linux-x86_64
 rsync -a --delete build/packages/moradon/ gn100-69be.local:Projects/N3E-Realm/build/packages/moradon/
 rsync -a --delete build/hosted-release/ gn100-69be.local:Projects/N3E-Realm/build/hosted-release/
 ssh gn100-69be.local 'cd ~/Projects/N3E-Realm && git pull --ff-only && tools/host-realm'
 ```
 
-Players: `realm-launcher --add-realm openko https://releases.openko.net/manifest.json`,
-then `realm-launcher --realm openko` (no `--ca`: both certificates are public).
+Players download `https://releases.openko.net/realm-launcher.exe` (Windows) or
+`realm-launcher-linux-x86_64` and run it: OpenKO is the launcher's compiled-in default
+profile (`launcher/src/profiles.rs`), so no arguments are needed and no `--ca` (both
+certificates are public).
 
 ## `.env` variables
 

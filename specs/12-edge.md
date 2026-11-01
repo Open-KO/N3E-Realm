@@ -1,7 +1,6 @@
 # 12 — The WebSocket edge: the game wire through Cloudflare
 
-**Status: approved 2026-11-01; built, tests 1–5 pass, test 6 (manual, on the host)
-open.** Milestone M7a
+**Status: done 2026-11-01; tests 1–6 pass.** Milestone M7a
 in [`00-roadmap.md`](00-roadmap.md). Why: [`architecture.md`](../docs/architecture.md),
 "DDoS", and Q64.
 
@@ -166,4 +165,5 @@ Q64 (why), Q65 (Cloudflare's free-plan WebSocket limits are unpublished).
 
 Evidence (2026-11-01, this workstation): `tests/edge_live.py --graphical` (tests 1–4
 and the non-`wss` refusal), `cargo test -p realm-edge` (framing, PROXY v2 bytes,
-refusals), the existing suites for test 5.
+refusals), the existing suites for test 5; test 6 by the maintainer on Linux and
+Windows from outside the home network.

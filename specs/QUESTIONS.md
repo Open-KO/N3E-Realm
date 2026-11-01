@@ -409,3 +409,12 @@ login press show in KO's message box. Still hidden: the Daum/MGame logos (the UI
 names `ui_us\service_logos.dxt`, absent from the pinned tree, which has
 `Service_Logos_us.DXT`) and `premium` and the three notice groups (KO's news panels,
 which draw as empty frames with no news to fill them).
+
+### Q62 — The realm client's window size
+
+The maintainer asked on 2026-10-31 for KO's fixed window sizes, as `tools/play-moradon`
+has. **Default taken (spec 04):** with `--realm` the client opens a fixed window of
+1280x1024 (`play-moradon`'s default), or 1024x768 or 1600x1200 with
+`--fixed-window`, and refuses other sizes; `--fullscreen` uses an exclusive mode of
+that size. `realm-launcher --fixed-window SIZE [--fullscreen]` and the Windows kit's
+`play.bat` pass them through. The size is not saved between starts.

@@ -65,6 +65,9 @@ target/release/realm-launcher --add-realm local http://127.0.0.1:8770/manifest.j
 target/release/realm-launcher --realm local --ca deploy/local/ca.pem
 ```
 
+The window is 1280x1024; add `--fixed-window 1024x768` (or `1600x1200`) for another of
+KO's sizes, and `--fullscreen` for full screen at that size (Q62).
+
 | # | Do | Expect |
 |---|---|---|
 | L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game opens on KO's login screen: the orc with the axe under the moon, KO's copyright line, and the login bar exactly as KO's: ID and Password boxes, **Login**, **Cancel**, **Option**, **Registration** (only Login and Cancel do anything). |

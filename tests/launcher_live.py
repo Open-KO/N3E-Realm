@@ -283,6 +283,13 @@ try:
     [run] = stub_runs()
     assert code == 0 and run["exe"].endswith("2026.10.31-a/n3e-client"), (code, text, run)
     print("PASS corrupt artifact: exit 11, nothing changed, --no-update starts the previous version (test 4)")
+    # KO's window sizes pass through to the client; another size is a usage error.
+    code, text, _ = launch("--realm", "test", "--no-update", "--fixed-window", "1024x768", "--fullscreen")
+    [run] = stub_runs()
+    assert code == 0 and run["argv"][-3:] == ["--fixed-window", "1024x768", "--fullscreen"], (code, text, run)
+    code, text, _ = launch("--realm", "test", "--no-update", "--fixed-window", "1280x800")
+    assert code == 2 and stub_runs() == [], (code, text)
+    print("PASS window: --fixed-window 1024x768 --fullscreen reach the client; 1280x800 is refused (exit 2)")
 
     # 9. Index paths that would leave the package; a client archive entry that would.
     for bad in ["../x", "/abs"]:

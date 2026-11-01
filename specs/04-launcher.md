@@ -136,6 +136,8 @@ realm-launcher --version            # "realm-launcher <version> (<platform>)"
 realm-launcher --add-realm NAME URL # add a profile
 realm-launcher --manifest URL       # one-off manifest URL (dev realms; not saved)
 realm-launcher --ca PATH            # pass through to the client (dev only)
+realm-launcher --fixed-window SIZE  # KO's window size: 1024x768, 1280x1024 or 1600x1200
+realm-launcher --fullscreen         # fullscreen at that size (1280x1024 without one)
 ```
 
 Exit codes: `0` client exited normally; `2` usage (unknown option, bad profile file);
@@ -152,7 +154,13 @@ already running" and exits `0`.
 
 ```
 n3e-client <content dir> --realm <realms/<id>/realm.json> [--ca PATH]
+           [--fixed-window SIZE [--fullscreen]]
 ```
+
+With `--realm` the client opens a fixed window at one of KO's sizes (1024x768,
+1280x1024, 1600x1200), 1280x1024 unless `--fixed-window` names another, and refuses
+any other size (Q62). `--fullscreen` takes an exclusive display mode of exactly that
+size, which the monitor must offer.
 
 The first positional is the content package directory (client convention). `--realm`
 replaces `--connect`: the client reads host, port and `discord_client_id` from it (and

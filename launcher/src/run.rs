@@ -35,7 +35,13 @@ pub struct Options {
     pub add_realm: Option<(String, String)>,
     pub manifest: Option<String>,
     pub ca: Option<PathBuf>,
+    /// KO's window sizes (spec 04); the client opens at 1280x1024 without one.
+    pub window: Option<String>,
+    pub fullscreen: bool,
 }
+
+/// The window sizes KO is drawn for.
+pub const WINDOW_SIZES: [&str; 3] = ["1024x768", "1280x1024", "1600x1200"];
 
 pub fn parse(args: &[String]) -> Result<Options, String> {
     let mut o = Options::default();
@@ -68,6 +74,18 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
                 o.ca = Some(PathBuf::from(value(i, "--ca")?));
                 i += 1;
             }
+            "--fixed-window" => {
+                let size = value(i, "--fixed-window")?;
+                if !WINDOW_SIZES.contains(&size.as_str()) {
+                    return Err(format!(
+                        "--fixed-window is one of {}",
+                        WINDOW_SIZES.join(", ")
+                    ));
+                }
+                o.window = Some(size);
+                i += 1;
+            }
+            "--fullscreen" => o.fullscreen = true,
             other => return Err(format!("unknown argument `{other}`")),
         }
         i += 1;
@@ -289,8 +307,8 @@ fn plan(net: &Net, dirs: &Dirs, m: &Manifest) -> i32 {
     i32::from(changes > 0)
 }
 
-/// Step 8: the client, with the content directory and realm config.
-fn start(dirs: &Dirs, m: &Manifest, ca: Option<&Path>) -> i32 {
+/// Step 8: the client, with the content directory, realm config and window.
+fn start(dirs: &Dirs, m: &Manifest, o: &Options) -> i32 {
     let exe = dirs.client(&m.client.version).join(CLIENT);
     let mut cmd = Command::new(&exe);
     cmd.arg(dirs.content(&m.realm.id, &m.content.hash))
@@ -298,8 +316,15 @@ fn start(dirs: &Dirs, m: &Manifest, ca: Option<&Path>) -> i32 {
         .arg(install::realm_json(dirs, m))
         .env_remove(REEXEC)
         .env_remove(LOCK_HELD);
-    if let Some(ca) = ca {
+    if let Some(ca) = &o.ca {
         cmd.arg("--ca").arg(ca);
+    }
+    if o.window.is_some() || o.fullscreen {
+        cmd.arg("--fixed-window")
+            .arg(o.window.as_deref().unwrap_or(WINDOW_SIZES[1]));
+    }
+    if o.fullscreen {
+        cmd.arg("--fullscreen");
     }
     println!("Starting {} (client {})", m.realm.name, m.client.version);
     match cmd.status() {
@@ -546,7 +571,7 @@ pub fn run(o: Options) -> i32 {
         if o.no_start {
             return OK;
         }
-        let code = start(&dirs, &manifest, o.ca.as_deref());
+        let code = start(&dirs, &manifest, &o);
         if code != CLIENT_UPDATE || retried {
             if code == CLIENT_UPDATE {
                 eprintln!("realm-launcher: the client still does not match the realm after updating. {AHEAD}");
@@ -638,6 +663,10 @@ mod tests {
         assert!(parse(&args(&["--realm"])).is_err());
         assert!(parse(&args(&["--bogus"])).is_err());
         assert!(parse(&args(&["--realm", "a", "--manifest", "https://e/m.json"])).is_err());
+        let o = parse(&args(&["--fixed-window", "1024x768", "--fullscreen"])).unwrap();
+        assert!(o.window.as_deref() == Some("1024x768") && o.fullscreen);
+        assert!(parse(&args(&["--fixed-window", "1280x800"])).is_err());
+        assert!(parse(&args(&["--fixed-window"])).is_err());
     }
 
     #[test]

@@ -595,6 +595,15 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,
                         SDL_GL_CONTEXT_PROFILE_CORE);
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    // Spec 04: a realm's client opens at one of KO's window sizes, 1280x1024
+    // unless --fixed-window picks another (as tools/play-moradon does).
+    if (realm_config) {
+      if (!fixed_width)
+        fixed_width = 1280, fixed_height = 1024;
+      else if (!((fixed_width == 1024 && fixed_height == 768) || (fixed_width == 1280 && fixed_height == 1024) ||
+                 (fixed_width == 1600 && fixed_height == 1200)))
+        throw std::runtime_error("a realm's window is 1024x768, 1280x1024 or 1600x1200");
+    }
     auto *w = SDL_CreateWindow(network ? "n3e - Test field" : "n3e foundation",
                                fixed_width ? fixed_width : network ? 1280 : 800,
                                fixed_height ? fixed_height : network ? 800 : 600,

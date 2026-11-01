@@ -3,7 +3,7 @@ from the player's own KO data.
 
 5. The front-end cook of the pinned tree runs twice with identical bytes, the same
    bytes the package holds (the `moradon` prepare step's cook).
-6. The test client draws each screen at rest at 1280x800 and 1024x768
+6. The test client draws each screen at rest at 1280x1024 and 1024x768 (KO's sizes)
    (N3E_TEST_FRONT_END, client/harness/front_end_captures.inc) and this script
    checks the frames:
    - login: the intro character is drawn and its projected box covers the view's
@@ -79,7 +79,7 @@ def lit_share(path, rect):
 realm = B / "realm.json"
 realm.write_text('{"id": "front-end", "name": "Local Realm", "host": "127.0.0.1", "port": 1, '
                  '"discord_client_id": "0"}')
-for size in ("1280x800", "1024x768"):
+for size in ("1280x1024", "1024x768"):
     width, height = map(int, size.split("x"))
     run = subprocess.run(["build/client/n3e-test-client", str(package), "--realm", str(realm),
                           "--fixed-window", size],

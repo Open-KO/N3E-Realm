@@ -32,7 +32,10 @@ README = """N3E local realm test kit, for Windows (docs/manual-testing.md in the
 2. play.bat        starts the game against {host}:{port}. ENTER opens Discord in your
                    browser; after you authorize, the game logs you in. Starting it
                    again logs in without the browser (the token is kept 30 days in
-                   %APPDATA%\\n3e-realm\\local\\session.json).
+                   %APPDATA%\\n3e-realm\\local\\session.json). The window is
+                   1280x1024; for another of KO's sizes run it from a command
+                   prompt as  play.bat --fixed-window 1024x768  (or 1600x1200),
+                   and add --fullscreen for full screen at that size.
 3. forget-login.bat deletes that token, so the next start asks Discord again.
 
 Windows may warn that the program is from an unknown publisher (it is unsigned):
@@ -97,7 +100,7 @@ def main():
             z.write(ca, "n3e-kit/ca.pem")
             z.writestr("n3e-kit/self-test.bat",
                        bat.format("n3e-client.exe package --self-test --realm realm.json"))
-            z.writestr("n3e-kit/play.bat", bat.format("n3e-client.exe package --realm realm.json --ca ca.pem"))
+            z.writestr("n3e-kit/play.bat", bat.format("n3e-client.exe package --realm realm.json --ca ca.pem %*"))
             z.writestr("n3e-kit/forget-login.bat",
                        bat.format('del "%APPDATA%\\n3e-realm\\local\\session.json" && echo Forgotten.'))
             z.writestr("n3e-kit/README.txt", README.format(host=a.host, port=port).replace("\n", "\r\n"))

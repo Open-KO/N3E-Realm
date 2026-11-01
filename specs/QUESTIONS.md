@@ -537,3 +537,26 @@ silent, as in KO. `[Sound] Bgm` is not read, since n3e plays no zone music. If t
 maintainer wants the later source's rotate sound or a music-only switch anyway, each
 is a small addition (a sound-table id bound in `audio.bin`; an Option.ini key) that
 departs from 1298 and is recorded as such.
+
+### Q71 — The select hall's character in front: the later source's hover, or 1298's loop
+
+The 2026-11-01 playtest (RQ-066) found the character in front cycling its clip while the
+pointer was on it, and asked for KO's once-and-hold. Read against the 1298 binary
+(KO-FINDINGS §8), the hold is the later source's: its `DoProcPreselect` plays
+`pre_select` once and freezes on the last frame while the pointer is in the centre
+rect, the asset set the Moradon package cooks (`upc_ka_tu_pri.n3joint`,
+`upc_ka_at_wa.n3anim`: `pre_select`, `selected`, `dummy`) is that source's, and
+neither name is in 1298. 1298 has no hover: with the camera at rest it loops clip 1
+of the per-race `upc_ka_tu.n3anim` (frames 20–300, 9.3 s) on the character in front
+and plays clip 0 once on the others, whatever the pointer does; the centre rect is
+only its click; start plays clip 2 once.
+
+Options: (a) keep the cooked set and play it as its source does (hover, once and hold);
+(b) follow 1298: cook `upc_ka_<race>.n3joint`/`.n3anim` with clips 0, 1 and 2 and
+their roles, loop clip 1 on the character in front without the pointer, and leave the
+rect to the click.
+
+**Default taken (RQ-066):** (a), what the maintainer asked for and coherent with the
+assets the hall draws; spec 11 and `content/front-end.md` say it is not 1298's. (b) is
+a separate change to the cook and the hall (proposed as its own queue item), and would
+also need 1298's looks for those joints.

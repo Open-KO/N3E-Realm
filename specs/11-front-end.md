@@ -155,7 +155,7 @@ prev/next).
 |---|---|---|
 | login | intro scene looping; login bar | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. |
 | realms | intro; the server group with the realm's name from `realm.json` | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
-| select | hall; up to 3 characters with the realm's player model and default looks, each holding clip 0's first frame; the one in front plays clip 0 while the pointer is over it (`DoProcPreselect`'s centre rect); info bar from the character in front | ENTER or a click on the character in front → `SelectCharacter`, its clip 1 to the end (`IsAnimEnd`), → loading; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next turns the camera to the next slot (left to right: 1, 0, 2). |
+| select | hall; up to 3 characters with the realm's player model and default looks, each holding clip 0's first frame; the one in front plays clip 0 once when the pointer comes over it and holds its last frame while the pointer stays (`DoProcPreselect`'s centre rect, once-and-freeze: the later source's behaviour for this asset set, not 1298's, Q71); info bar from the character in front | ENTER or a click on the character in front → `SelectCharacter`, its clip 1 to the end (`IsAnimEnd`), → loading; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next turns the camera to the next slot (left to right: 1, 0, 2). |
 | create | KO's create screen; the create model breathing in `char_view` (standing, no weapon); name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording; `back` → select. |
 | loading | the loading art; `progress` by real stages: the package and its textures (loaded at start, 2/3), the first `World` (1); `version` shows the client version | the first `World` → in game after the bar shows full. |
 
@@ -250,6 +250,8 @@ KO (`make live-ko`, needs `assets/ko`):
    playing the screens with key and text events:
    - Discord login → realms → create a character (the name refusal path, then success)
      → select → start → loading → in world;
+   - on select, with the pointer on the character in front, its clip plays once and
+     holds its last frame (RQ-066);
    - a kick returns to login with the operator's wording;
    - `character_slots` refuses a fourth character.
 
@@ -260,4 +262,4 @@ Manual (`docs/manual-testing.md`, Linux and Windows):
 
 ## Open questions
 
-Q50–Q57 and Q69 in `QUESTIONS.md`.
+Q50–Q57, Q69 and Q71 in `QUESTIONS.md`.

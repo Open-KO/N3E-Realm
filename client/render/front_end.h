@@ -234,6 +234,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   void show_message(std::string text) { message = std::move(text); }
   bool showing_message() const { return message.has_value(); }
   bool creating() const { return pending_create; }
+  // The character in front as the last select frame posed it: its clip's
+  // time and that clip's length (seconds). The test client checks the hold.
+  std::array<float, 2> front_pose() const { return front_shown; }
   const std::string &message_text() const { static const std::string none; return message ? *message : none; }
   // The server answered CreateCharacter: a longer list is a success (the
   // new character takes its slot), a refusal is shown in a message box.
@@ -400,6 +403,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   int focus = 0, choosing = -1, known = 0;
   float angle = 0, theta = 0;
   double chosen_at = 0, chosen_until = 0, last_frame = -1, hover_since = -1;
+  std::array<float, 2> front_shown{0, 0};  // the character in front: clip time, clip length
   std::array<float, 2> screen_pointer{-1, -1};  // the pointer as a share of the window
   bool pending_create = false;
   std::string name;
@@ -689,12 +693,22 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const auto [x, y] = screen_pointer;
     return x >= .36f && x <= .64f && y >= .44f && y <= .86f;
   }
-  std::vector<Node> pose(size_t scene, size_t clip, double t, bool loop) {
-    const auto &s = clips[scene][std::min(clip, clips[scene].size() - 1)];
+  const Scene &clip_scene(size_t scene, size_t clip) const {
+    return clips[scene][std::min(clip, clips[scene].size() - 1)];
+  }
+  float clip_length(size_t scene, size_t clip) const {
     float duration = .001f;
-    for (const auto &track : s.tracks) duration = std::max(duration, track.keys.back().time);
-    const float time = loop ? float(std::fmod(t, double(duration))) : std::min(float(t), duration);
-    return s.sample(time);
+    for (const auto &track : clip_scene(scene, clip).tracks) duration = std::max(duration, track.keys.back().time);
+    return duration;
+  }
+  // A clip's time at t: looping, or (KO's once-and-freeze) held on its last
+  // frame once it has played.
+  float clip_time(size_t scene, size_t clip, double t, bool loop) const {
+    const float duration = clip_length(scene, clip);
+    return loop ? float(std::fmod(t, double(duration))) : std::min(float(t), duration);
+  }
+  std::vector<Node> pose(size_t scene, size_t clip, double t, bool loop) {
+    return clip_scene(scene, clip).sample(clip_time(scene, clip, t, loop));
   }
   detail::Mat view_projection(const FrontCamera &c, V eye, int width, int height) const {
     return detail::mul(detail::perspective(c.fov, width / float(std::max(height, 1)), c.near_plane, c.far_plane),
@@ -738,18 +752,21 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     lights(fe.select, {spot});
     for (size_t i = 0; i < statics.size(); ++i) draw_mesh(statics[i], fe.hall[i], vp, detail::identity());
     // DoProcPreselect: every character holds pre_select's first frame (its
-    // dummy clip); the one in front plays pre_select while the pointer is
-    // over it, from where the pointer came in.
+    // dummy clip); the one in front plays pre_select once from where the
+    // pointer came in and holds its last frame while the pointer stays
+    // (AniCurSet(SELECT_ANIM_PRE_SELECT, true): once and freeze; RQ-066).
     const bool over = in_front();
     if (!over) hover_since = -1;
     else if (hover_since < 0) hover_since = now;
+    front_shown = {0, 0};
     for (int i = 0; i < characters_shown(); ++i) {
       const auto &slot = fe.slots[i];
-      const bool chosen = choosing == i;
-      draw_character(1, chosen                    ? pose(1, 1, last_frame - chosen_at, false)
-                        : i == focus && over && choosing < 0 ? pose(1, 0, now - hover_since, true)
-                                                            : pose(1, 0, 0, false),
-                     vp, detail::translate_yaw(slot.position, slot.yaw));
+      const size_t clip = choosing == i ? 1 : 0;
+      const double t = choosing == i                         ? last_frame - chosen_at
+                       : i == focus && over && choosing < 0 ? now - hover_since
+                                                            : 0;
+      if (i == focus) front_shown = {clip_time(1, clip, t, false), clip_length(1, clip)};
+      draw_character(1, pose(1, clip, t, false), vp, detail::translate_yaw(slot.position, slot.yaw));
     }
   }
   // Create: the player's own model breathing in `char_view`, as KO's

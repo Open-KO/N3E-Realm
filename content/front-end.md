@@ -129,7 +129,12 @@ is where create draws the character.
   off), `Intro/Moon.dxt` at (100, 50) × 1.3, KO's fixed camera.
 - Select: `ChrSelect/ka_chairs.n3shape`, `ka_light_0/1`, the Karus slots, spots
   and camera from `CGameProcCharacterSelect::Init`, and the Tuarek priest
-  (`upc_ka_tu_pri.n3joint`, default looks, clips 0 and 1, the mace plug).
+  (`upc_ka_tu_pri.n3joint`, default looks, clips 0 and 1, the mace plug). The
+  character in front plays clip 0 (`pre_select`) once when the pointer comes into
+  the centre rect and holds its last frame while it stays, as the later source's
+  `DoProcPreselect` does with this set (RQ-066). 1298 draws the hall from other
+  files and loops a clip on the character in front without the pointer
+  (`specs/KO-FINDINGS.md` §8, Q71).
 - Fonts: Liberation Sans regular and bold for Arial, at points × 96 / 72.
 - Music: `Snd/Intro_Sound.mp3` (44.1 kHz stereo, 4,096 frames, 107 s; the
   file's cut-short 4,097th frame is dropped), looping, on login, select and

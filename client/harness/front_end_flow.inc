@@ -13,6 +13,9 @@
 //   FRONT_FLOW message='...'
 //   FRONT_FLOW music=none|streamK (RQ-018: K counts the streams started; a
 //   line each time the mixer's stream changes, a frame after the screen)
+//   FRONT_FLOW hover t=T end=E (RQ-066: on select, before start, the front
+//   character's clip time T and clip length E with the pointer on it; three
+//   lines, the first while it plays, two after its end)
 {
   static const char *flow_names = std::getenv("N3E_TEST_FRONT_FLOW");
   static std::vector<std::string> names;
@@ -79,8 +82,29 @@
       } else if (screen == 1 ||
           (screen == 2 && !world.characters.characters_size()))
         key(SDLK_RETURN);
-      else if (screen == 2 && next_name > 0 && world.characters.characters_size())
-        key(SDLK_RETURN);  // the new character, in focus: start
+      else if (screen == 2 && next_name > 0 && world.characters.characters_size()) {
+        // RQ-066: the pointer on the character in front (the centre rect);
+        // its clip plays once and holds the last frame. One sample while it
+        // plays, two after its end, then ENTER: the new character, in focus,
+        // starts.
+        static uint64_t hover_at = 0;
+        static int samples = 0;
+        const auto [t, length] = front->front_pose();
+        if (!hover_at) {
+          int lw = 0, lh = 0;
+          SDL_GetWindowSize(w, &lw, &lh);
+          SDL_Event ev{};
+          ev.type = SDL_EVENT_MOUSE_MOTION;
+          ev.motion.x = lw * .5f;
+          ev.motion.y = lh * .65f;
+          SDL_PushEvent(&ev);
+          hover_at = now_ms;
+        } else if (samples < 3 && (samples == 0 || now_ms - hover_at > uint64_t(length * 1000) + 500)) {
+          std::cout << "FRONT_FLOW hover t=" << t << " end=" << length << std::endl;
+          ++samples;
+        } else if (samples == 3)
+          key(SDLK_RETURN);
+      }
       else if (screen == 3 && !front->creating() && next_name < names.size()) {
         for (size_t i = 0; i < typed.size(); ++i) key(SDLK_BACKSPACE);
         typed = names[next_name++];

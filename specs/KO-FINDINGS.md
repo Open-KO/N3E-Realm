@@ -117,6 +117,32 @@ Our client sends 20 Hz input (every 50 ms) by design, so KO's "< 0.1 s" heuristi
 not a bound we can reuse; n3e's own 100 frames/s per peer cap stands. **Decides:**
 nothing to change in spec 01 defaults.
 
+## 8. Character select: the character in front (RQ-066, 2026-11-01)
+
+Ghidra 12.1.3 headless (`-readOnly -noanalysis`), `ko-audit`, `KnightOnLine.exe`
+(1298), output under `N3E-Realm/build/ghidra/rq066/` (not committed). The clip
+setter `0041be40(index, once, blend, freeze, upper)` and the frame tick `00418b20`
+are n3e's PQ-273 reading (`n3e/docs/implementation/evidence/pq-273-ko-npc-zero-length-clips.md`):
+with the once flag the tick puts the frame on the clip's end and leaves it there, and
+a call naming the clip already set starts nothing.
+
+| Observation | Where | Label |
+|---|---|---|
+| The later source's hover: `DoProcPreselect` sets `AniCurSet(SELECT_ANIM_PRE_SELECT, true)` (clip 0, once and freeze) on the character in front while the pointer is in the rect 0.36–0.64 × 0.44–0.86 of the viewport, and `AniCurSet(SELECT_ANIM_DUMMY, true)` (clip 2) otherwise; `PRE_SELECT` 0, `SELECTED` 1, `DUMMY` 2 | `GameProcCharacterSelect.cpp` `DoProcPreselect`, `.h` | source |
+| In `ChrSelect/upc_ka_at_wa.n3anim` (the set the Moradon package cooks) the clips are `pre_select` 10–65, `selected` 65–200 and `dummy` 10–10, at 30 frames/s: `dummy` is `pre_select`'s first frame | the pinned tree | local-asset |
+| 1298 has no hover. The rect's four reals (`006a402c` 0.36, `006a4024` 0.64, `006a4028` 0.44, `006a4020` 0.86) are each read once, at `005fafa1`–`005fafe2`, in the select tick `005faf10`, and only for a left click while the select state `+0x394` is 5: `PtInRect` on the click point, then start the character or (an empty slot) go to create | `005faf10` | binary |
+| In state 5 (the camera at rest on a slot, `005fe5b0` case 5) `005fef90` sets, every tick, clip 1 **looping** on the character in front (`0041be40(1, 0, FLT_MIN, 0, 1)`, pushes `005fefab`–`005fefb6`) and clip 0 once on the others (`0041be40(0, 1, FLT_MIN, 0, 1)`, `005fefee`–`005feff9`), whatever the pointer does; while the camera turns (cases 1, 2, 6) every character gets clip 0 once | `005fef90`, `005fe5b0` | binary |
+| Start (`005fe7c0`, state 5 only): clip 2 once with a 0.6 s blend (`0041be40(2, 1, 0x3f19999a, 0, 1)`, `005fe7e6`–`005fe7fd`), state 4; state 4 (`005fea70`) loads the world once the clip has played (`+0x1e4`, or the upper body's `+0x20c`, above 0): `IsAnimEnd` | `005fe7c0`, `005fea70` | binary |
+| 1298 poses the select characters from per-race files: a Tuarek (race 2) rogue or priest (classes `0x66`, `0x6b`, `0x6c`, `0x68`, `0x6f`, `0x70`) loads `ChrSelect\upc_ka_tu.n3joint` and `upc_ka_tu.n3anim`; no `upc_ka_tu_pri` or `_wa` name is in the binary | `005fb4f0`; strings | binary |
+| `ChrSelect/upc_ka_tu.n3anim`'s clips are 180–220 at 25 frames/s, 20–300 at 30 and 394–466 at 25, blend 0.25 s, no loop delay (flags 0) | the pinned tree | local-asset |
+
+**Decides:** the Moradon package cooks the later source's set (`upc_ka_tu_pri.n3joint`,
+`upc_ka_at_wa.n3anim`), so the hall plays it as that source does: the character in
+front plays `pre_select` once when the pointer comes over it and holds its last frame
+while the pointer stays, back to the first frame when it leaves. That is not 1298,
+which loops a different clip of a different set on the character in front with no
+pointer involved; which hall the realm shows is **Q71**.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

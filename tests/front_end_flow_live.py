@@ -9,8 +9,9 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   browser step is denied: KO's message box shows the flow's failure, and ENTER
   again logs in (the browser step played here on the address it prints) -> realms -> select (no
   characters) -> create "Taken", which another account holds: the server's
-  refusal in KO's message box -> create a fresh name -> select with it -> start
-  -> loading -> the world.
+  refusal in KO's message box -> create a fresh name -> select with it (the
+  pointer on the character in front: its clip plays once and holds its last
+  frame, RQ-066) -> start -> loading -> the world.
 - An operator kick (admin API) returns the client to the login screen with the
   operator's wording in the message box.
 - `character_slots` (3, front-end.bin) refuses a fourth character at the wire,
@@ -201,10 +202,17 @@ try:
     want = ["screen=login", "music=stream1", "screen=realms", "screen=select", "screen=create", "screen=select",
             "screen=loading", "music=none", "screen=world", "screen=login"]
     assert order in (want, want + ["music=stream2"]), flow
+    # RQ-066: with the pointer on the character in front, its clip plays once
+    # and holds its last frame (KO's once-and-freeze), not a loop.
+    hovers = [dict(kv.split("=") for kv in f.split()[1:]) for f in flow if f.startswith("hover ")]
+    assert len(hovers) == 3, flow
+    times = [(float(h["t"]), float(h["end"])) for h in hovers]
+    assert times[0][1] > 0.5 and 0 < times[0][0] < times[0][1], times
+    assert all(abs(t - end) < 1e-4 and end == times[0][1] for t, end in times[1:]), times
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
     print(f"PASS front-end flow: one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box, "
-          "Fresh created) -> select -> loading -> world; a kick returns to login with the operator's wording; "
+          "Fresh created) -> select (the front character's clip plays once and holds) -> loading -> world; a kick returns to login with the operator's wording; "
           "one music stream from login to loading")
     assert server.poll() is None, "server exited"
     print("PASS KO front-end flow")

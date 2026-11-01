@@ -42,6 +42,15 @@ never force-push. Run `cargo fmt`, `cargo clippy -D warnings`, `cargo test` for 
 touching the server's runtime behaviour. Report what ran, with exit codes; a missing
 GPU, Docker or fixture is an unverified gate, not a pass.
 
+## Agent loop
+
+Standing authorization for the loop (`/loop /realm-loop`, `docs/loop/LOOP.md`): it may
+pick items from `docs/loop/queue.jsonl`, commit each gated item straight to `master`
+(no task branch), and push `master` at most once a day, never forced. It may not deploy
+to or touch the realm host, publish a release, rewrite history, read or write secrets,
+or work on its own machinery unless `docs/loop/INBOX.md` asks. While it runs, nobody
+else edits this checkout; `docs/loop/INBOX.md` is the maintainer's channel to it.
+
 ## Verification evidence
 
 Planned commands in specs are plans until run. Mark work complete only when its

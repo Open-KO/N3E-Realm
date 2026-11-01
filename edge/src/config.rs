@@ -84,6 +84,8 @@ pub fn listen(value: Option<String>) -> Result<SocketAddr, String> {
 }
 
 /// `a.b.c.d/n x::/n`, separated by commas or spaces; a bare address is a single host.
+/// An IPv4-mapped range (`::ffff:a.b.c.d/n`) is kept as the IPv4 range it maps,
+/// `/n - 96`, so a prefix under 96 is refused.
 pub fn cidrs(text: &str) -> Result<Vec<(IpAddr, u8)>, String> {
     text.split(|c: char| c == ',' || c.is_whitespace())
         .filter(|s| !s.is_empty())
@@ -101,9 +103,14 @@ pub fn cidrs(text: &str) -> Result<Vec<(IpAddr, u8)>, String> {
                     .filter(|b| *b <= most)
                     .ok_or_else(|| format!("REALM_EDGE_TRUSTED_CIDRS: {s:?} has a bad prefix"))?
             };
-            // A mapped IPv6 range is matched as the IPv4 range it maps.
+            // A mapped IPv6 range is matched as the IPv4 range it maps, never wider.
             match (address, canonical(address)) {
-                (IpAddr::V6(_), v4 @ IpAddr::V4(_)) => Ok((v4, bits.saturating_sub(96))),
+                (IpAddr::V6(_), v4 @ IpAddr::V4(_)) => match bits.checked_sub(96) {
+                    Some(bits) => Ok((v4, bits)),
+                    None => Err(format!(
+                        "REALM_EDGE_TRUSTED_CIDRS: {s:?} is an IPv4-mapped range shorter than /96"
+                    )),
+                },
                 (_, a) => Ok((a, bits)),
             }
         })
@@ -118,16 +125,23 @@ pub fn canonical(ip: IpAddr) -> IpAddr {
     }
 }
 
+/// A prefix longer than the family's width matches nothing (`cidrs` never makes one).
 fn within(ip: IpAddr, net: IpAddr, bits: u8) -> bool {
     match (ip, net) {
-        (IpAddr::V4(a), IpAddr::V4(n)) => {
-            let mask = u32::MAX.checked_shl(32 - bits as u32).unwrap_or(0);
-            u32::from(a) & mask == u32::from(n) & mask
-        }
-        (IpAddr::V6(a), IpAddr::V6(n)) => {
-            let mask = u128::MAX.checked_shl(128 - bits as u32).unwrap_or(0);
-            u128::from(a) & mask == u128::from(n) & mask
-        }
+        (IpAddr::V4(a), IpAddr::V4(n)) => match 32u32.checked_sub(bits as u32) {
+            Some(shift) => {
+                let mask = u32::MAX.checked_shl(shift).unwrap_or(0);
+                u32::from(a) & mask == u32::from(n) & mask
+            }
+            None => false,
+        },
+        (IpAddr::V6(a), IpAddr::V6(n)) => match 128u32.checked_sub(bits as u32) {
+            Some(shift) => {
+                let mask = u128::MAX.checked_shl(shift).unwrap_or(0);
+                u128::from(a) & mask == u128::from(n) & mask
+            }
+            None => false,
+        },
         _ => false,
     }
 }
@@ -210,5 +224,35 @@ mod tests {
                 && cidrs("::/129").is_err()
                 && cidrs("10.0.0.0/x").is_err()
         );
+    }
+
+    #[test]
+    fn mapped_ranges_are_their_ipv4_range_and_never_shorter_than_96() {
+        // RQ-036: a bare mapped address is one IPv4 host, /104 an IPv4 /8.
+        assert_eq!(
+            cidrs("::ffff:172.18.0.5 ::ffff:10.0.0.0/104 ::ffff:0.0.0.0/96").unwrap(),
+            [
+                (ip("172.18.0.5"), 32),
+                (ip("10.0.0.0"), 8),
+                (ip("0.0.0.0"), 0)
+            ]
+        );
+        let c =
+            Config::from_lookup(env(&[("REALM_EDGE_TRUSTED_CIDRS", "::ffff:172.18.0.5")])).unwrap();
+        assert!(c.trusts(ip("172.18.0.5")) && c.trusts(ip("::ffff:172.18.0.5")));
+        assert!(!c.trusts(ip("172.18.0.6")) && !c.trusts(ip("203.0.113.7")));
+        for short in [
+            "::ffff:172.18.0.5/95",
+            "::ffff:172.18.0.5/80",
+            "::ffff:0.0.0.0/0",
+        ] {
+            let e = Config::from_lookup(env(&[("REALM_EDGE_TRUSTED_CIDRS", short)])).unwrap_err();
+            assert!(
+                e.starts_with("REALM_EDGE_TRUSTED_CIDRS") && e.contains("/96"),
+                "{short}: {e}"
+            );
+        }
+        assert!(!within(ip("10.0.0.1"), ip("10.0.0.1"), 33));
+        assert!(!within(ip("::1"), ip("::1"), 129));
     }
 }

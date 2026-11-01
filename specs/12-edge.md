@@ -82,7 +82,7 @@ A Rust binary in this workspace (`edge/`), image `deploy/Dockerfile --target edg
 | `REALM_EDGE_LISTEN` | `0.0.0.0:8443` | Plain HTTP listener for `cloudflared`, on the compose network only, never published. |
 | `REALM_EDGE_UPSTREAM` | `server:7777` | The game port. |
 | `REALM_EDGE_MAX_CONNECTIONS` | `256` | Open WebSockets; past it, upgrades get `503`. |
-| `REALM_EDGE_TRUSTED_CIDRS` | *(required)* | Peers allowed to connect (the `cloudflared` container's network); others are closed before reading. |
+| `REALM_EDGE_TRUSTED_CIDRS` | *(required)* | Peers allowed to connect (the `cloudflared` container's network); others are closed before reading. `a.b.c.d/n` or `x::/n`, separated by commas or spaces; a bare address is one host. An IPv4-mapped range (`::ffff:a.b.c.d/n`) means the IPv4 range `/n-96`; one shorter than `/96` refuses to start. |
 
 - The player's address is `CF-Connecting-IP`; an upgrade without it, or with a value
   that is not one address, is refused (`400`). It is trusted only because the peer is

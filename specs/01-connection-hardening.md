@@ -35,7 +35,7 @@ deadline. The checks below go **in front of** the semaphore, before TLS starts.
 | `N3E_IP_CONNECT_RATE` | `10` | New connections per source IP per 60 s window. |
 | `N3E_PREAUTH_IDLE_MS` | `2000` | Accept → first complete `Handshake` frame, else close. Matches the existing handshake deadline. |
 | `N3E_PREAUTH_MAX_SLOTS` | `16` | Sockets between accept and completed login at once. Bounds TLS handshakes in flight. |
-| `N3E_TRUSTED_PROXY_CIDRS` | *(empty)* | If set, PROXY protocol v2 is accepted from these ranges and the client IP is taken from it (future relay tier). Otherwise PROXY headers are rejected. |
+| `N3E_TRUSTED_PROXY_CIDRS` | *(empty)* | If set, PROXY protocol v2 is accepted from these ranges and the client IP is taken from it (future relay tier). Otherwise PROXY headers are rejected. Comma-separated `a.b.c.d/n` or `x::/n`; a bare address is one host. An IPv4-mapped range (`::ffff:a.b.c.d/n`) means the IPv4 range `/n-96`, and one shorter than `/96`, or any entry that does not parse, refuses to start, naming the variable. |
 
 "Source IP" is the TCP peer address, or the PROXY-protocol original address when the
 peer is a trusted proxy. IPv6 sources are bucketed by /64. Every numeric limit must be a

@@ -67,7 +67,9 @@ impl Limits {
     }
 }
 
-/// `a.b.c.d/n, x::/n`; a bare address is a single host.
+/// `a.b.c.d/n, x::/n`; a bare address is a single host. An IPv4-mapped range
+/// (`::ffff:a.b.c.d/n`) is kept as the IPv4 range it maps, `/n - 96`, so a prefix
+/// under 96 is refused.
 pub fn cidrs(text: &str) -> Result<Vec<(IpAddr, u8)>> {
     text.split(',')
         .map(str::trim)
@@ -88,7 +90,15 @@ pub fn cidrs(text: &str) -> Result<Vec<(IpAddr, u8)>> {
                         bad(&format!("N3E_TRUSTED_PROXY_CIDRS: {s:?} has a bad prefix"))
                     })?
             };
-            Ok((canonical(address), bits))
+            match (address, canonical(address)) {
+                (IpAddr::V6(_), v4 @ IpAddr::V4(_)) => match bits.checked_sub(96) {
+                    Some(bits) => Ok((v4, bits)),
+                    None => Err(bad(&format!(
+                        "N3E_TRUSTED_PROXY_CIDRS: {s:?} is an IPv4-mapped range shorter than /96"
+                    ))),
+                },
+                (_, a) => Ok((a, bits)),
+            }
         })
         .collect()
 }
@@ -98,16 +108,23 @@ fn canonical(ip: IpAddr) -> IpAddr {
         v4 => v4,
     }
 }
+/// A prefix longer than the family's width matches nothing (`cidrs` never makes one).
 fn within(ip: IpAddr, net: IpAddr, bits: u8) -> bool {
     match (ip, net) {
-        (IpAddr::V4(a), IpAddr::V4(n)) => {
-            let mask = u32::MAX.checked_shl(32 - bits as u32).unwrap_or(0);
-            u32::from(a) & mask == u32::from(n) & mask
-        }
-        (IpAddr::V6(a), IpAddr::V6(n)) => {
-            let mask = u128::MAX.checked_shl(128 - bits as u32).unwrap_or(0);
-            u128::from(a) & mask == u128::from(n) & mask
-        }
+        (IpAddr::V4(a), IpAddr::V4(n)) => match 32u32.checked_sub(bits as u32) {
+            Some(shift) => {
+                let mask = u32::MAX.checked_shl(shift).unwrap_or(0);
+                u32::from(a) & mask == u32::from(n) & mask
+            }
+            None => false,
+        },
+        (IpAddr::V6(a), IpAddr::V6(n)) => match 128u32.checked_sub(bits as u32) {
+            Some(shift) => {
+                let mask = u128::MAX.checked_shl(shift).unwrap_or(0);
+                u128::from(a) & mask == u128::from(n) & mask
+            }
+            None => false,
+        },
         _ => false,
     }
 }
@@ -532,6 +549,40 @@ mod tests {
         );
         assert!(cidrs("10.0.0.0/33").is_err() && cidrs("nope").is_err());
         assert!(cidrs("").unwrap().is_empty());
+        // An IPv4-mapped range is the IPv4 range it maps (RQ-036): a bare mapped
+        // address is one IPv4 host, /104 an IPv4 /8, and under /96 is refused.
+        assert_eq!(
+            cidrs("::ffff:172.31.77.11, ::ffff:10.0.0.0/104, ::ffff:0.0.0.0/96").unwrap(),
+            [
+                (ip("172.31.77.11"), 32),
+                (ip("10.0.0.0"), 8),
+                (ip("0.0.0.0"), 0)
+            ]
+        );
+        let bare = Limits {
+            trusted_proxies: cidrs("::ffff:172.31.77.11").unwrap(),
+            ..limits(1, 1, 1)
+        };
+        assert!(bare.trusts(ip("172.31.77.11")) && bare.trusts(ip("::ffff:172.31.77.11")));
+        assert!(!bare.trusts(ip("172.31.77.12")) && !bare.trusts(ip("203.0.113.7")));
+        let eight = Limits {
+            trusted_proxies: cidrs("::ffff:10.0.0.0/104").unwrap(),
+            ..limits(1, 1, 1)
+        };
+        assert!(eight.trusts(ip("10.200.0.1")) && !eight.trusts(ip("11.0.0.1")));
+        for short in [
+            "::ffff:172.31.77.11/95",
+            "::ffff:172.31.77.11/80",
+            "::ffff:0.0.0.0/0",
+        ] {
+            let e = cidrs(short).unwrap_err().to_string();
+            assert!(
+                e.contains("N3E_TRUSTED_PROXY_CIDRS") && e.contains("/96"),
+                "{short}: {e}"
+            );
+        }
+        assert!(!within(ip("10.0.0.1"), ip("10.0.0.1"), 33));
+        assert!(!within(ip("::1"), ip("::1"), 129));
         let mut head = [0u8; 16];
         head[..12].copy_from_slice(PROXY_SIGNATURE);
         head[12] = 0x21;

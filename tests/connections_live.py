@@ -124,7 +124,7 @@ try:
                N3E_LISTEN=f"127.0.0.1:{listen}", N3E_HEALTH=f"127.0.0.1:{health}",
                N3E_ADMIN_LISTEN=f"127.0.0.1:{admin}", N3E_IP_MAX_CONCURRENT=str(CAP),
                N3E_IP_CONNECT_RATE=str(RATE), N3E_PREAUTH_MAX_SLOTS=str(SLOTS),
-               N3E_PREAUTH_IDLE_MS=str(int(IDLE * 1000)), N3E_TRUSTED_PROXY_CIDRS="127.0.0.100/32")
+               N3E_PREAUTH_IDLE_MS=str(int(IDLE * 1000)), N3E_TRUSTED_PROXY_CIDRS="::ffff:127.0.0.100")
     run(server_binary, "migrate", env=env)
     run(server_binary, "convert-progression", env={**env, "N3E_TEST_PROGRESSION": "disposable"})
     token = run(server_binary, "admin", "mint", "--name", "ops", "--perm", "realm.*", env=env).stdout.strip()
@@ -133,6 +133,12 @@ try:
     bad = run(server_binary, env={**env, "N3E_IP_CONNECT_RATE": "0"}, good=False)
     assert bad.returncode != 0 and "N3E_IP_CONNECT_RATE" in bad.stderr, bad.stderr
     print("PASS a limit of 0 refuses to start, naming the variable")
+    # RQ-036: a mapped range is its IPv4 range; one shorter than /96 would be wider
+    # than all of IPv4, so it refuses to start. The server below trusts the bare
+    # mapped ::ffff:127.0.0.100, which must mean that one IPv4 host only.
+    bad = run(server_binary, env={**env, "N3E_TRUSTED_PROXY_CIDRS": "::ffff:127.0.0.100/80"}, good=False)
+    assert bad.returncode != 0 and "N3E_TRUSTED_PROXY_CIDRS" in bad.stderr, bad.stderr
+    print("PASS an IPv4-mapped trusted range under /96 refuses to start, naming the variable")
 
     log_path = out / "server.log"
     log = open(log_path, "w")
@@ -251,8 +257,8 @@ try:
     for s in held:
         s.close()
     settle("open", 0)
-    print("PASS PROXY v2: untrusted header refused (refused_proxy 1); a trusted proxy's clients limited by the "
-          "named address; TLS after the header")
+    print("PASS PROXY v2: untrusted header refused (refused_proxy 1) with the proxy trusted as the bare mapped "
+          "::ffff:127.0.0.100; a trusted proxy's clients limited by the named address; TLS after the header")
 
     # 6 and 7. Test 1 continuously: from one address for the log check, then from four
     # for the cost. Each source keeps CAP held and hammers connect-and-close.

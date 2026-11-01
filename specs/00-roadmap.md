@@ -117,9 +117,9 @@ Evidence so far (this machine, RTX 4090, offscreen): spec 11 tests 1–2
 (`tests/front_end.py`) and 4 (`tests/check.py`) in `make test`, exit 0; test 3 is the
 existing suites (`make live`, LIVE_OK 73/73, graphical); tests 5–7
 (`tests/front_end_live.py`, `tests/front_end_flow_live.py`) pass on the Moradon
-package. The 1097 `--features` bake pin was not recut (no 1097 install here; see
-`tests/ko_bake_pin.py`). Open: the manual round on Linux and Windows
-(`docs/manual-testing.md` L1–L12, W1–W7), Q57–Q60.
+package. The 1097 `--features` bake pin, not recut at M4c (no 1097 install there),
+was recut by RQ-020 once the install was unpacked (`tests/ko_bake_pin.py`). Open: the
+manual round on Linux and Windows (`docs/manual-testing.md` L1–L12, W1–W7), Q57–Q60.
 
 ## M5 — CD (spec 06)
 

@@ -244,6 +244,12 @@ CLIENT = Path("assets/ko")
 # N3FE version 2 changed them again: the create screen's own model (the looks
 # row's joint and animation, ANI_BREATH, no plugs). Default features 4c1008e3...
 # -> c3dfc2bd...; classic ba567f16... -> 0f8ade92....
+# RQ-020 recut the 1097 --features pin with the 1097 install unpacked:
+# dc494e1f... -> 2fb34600..., covering every front-end change above at once.
+# The pre-M4c tree (854c5f5^) still cooks dc494e1f...; against it the new cook
+# differs only by front-end.bin (byte-identical to the default --features
+# cook's), engine 36 -> 42, wire 29 -> 30 and their recipe and provenance
+# entries. The 1097 plain pin and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
     "features": (["--features"], "c3dfc2bd715c1f826262e78ac8ea20f94b1d6cb14b5ade13e0e4c539f9e0f2d3"),
@@ -273,7 +279,7 @@ INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "dc494e1fee5a9833af13943f25378ab200f7a58855b3220f77b7aab54d201087"),
+    "features": (["--features"], "2fb346004343cac9e7b279d69f47e6f690b4509ecc396cd33c26eb0c6c654f3f"),
 }
 
 

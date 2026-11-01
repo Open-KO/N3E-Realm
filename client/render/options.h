@@ -33,11 +33,27 @@
 //                                    its global 00cf2e6d is set, which WinMain
 //                                    009dfda0 reads from this key with default
 //                                    1, 009e0883; slot 1 always draws)
+// and KO 1298's sound switch (RQ-071, Q70):
+//   [Sound] Effect=1                 every sound n3e plays: the voices and
+//                                    the front end's music. 1298 creates each
+//                                    sound object through 0044d240 (or plays
+//                                    one once through 0044d660), which marks
+//                                    it inaudible (+0x38) while the manager's
+//                                    effect flag (+0x29) is clear, and
+//                                    006453b0 clears that flag when this key
+//                                    is 0 (0064b9b0, default 1); 004501b0 and
+//                                    0044fdf0 start nothing inaudible. Off,
+//                                    the client opens no audio device.
+//   [Sound] Bgm is not read: 1298 applies it only to the zone music
+//   (00640b10 sets the stream's +0x38 from it), which n3e does not play; the
+//   front end's track is created through 0044d240 (005f68e0) and follows
+//   Effect, not Bgm.
 struct ClientOptions {
   bool weapon_effects = true;
   bool equipment_glow = true;
   bool hdr = false;
   bool wing = true;
+  bool sound = true;
 
   static std::filesystem::path path() {
     auto base = n3e::dirs::config();
@@ -88,6 +104,7 @@ struct ClientOptions {
     o.equipment_glow = integer(file, "Addition2233", "EquipmentGlow").value_or(1) != 0;
     o.hdr = integer(file, "Addition2233", "HDR").value_or(0) != 0;
     o.wing = integer(file, "Effect", "Wing").value_or(1) != 0;
+    o.sound = integer(file, "Sound", "Effect").value_or(1) != 0;
     return o;
   }
 };

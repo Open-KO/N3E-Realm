@@ -110,7 +110,8 @@ replace the panels when the client has a Discord realm config.
   select, create and loading screens play, or none. The client streams the track
   (one frame decoded at a time, `client/assets/music.h`); a screen naming the track
   already playing keeps it, so it runs on across the screens; entering the world
-  stops it.
+  stops it. Option.ini `[Sound] Effect=0` silences it with every other sound, as in
+  KO 1298 (Q70). The screens have no other sounds: 1298 plays none there (Q70).
 - **`text` overrides.** The format allows them; the Moradon package uses none: the
   login screen keeps KO's labels and copyright line (Q61, superseding Q56).
 - **`hidden`.** The Moradon package keeps the login bar as KO draws it: `Edit_ID`,

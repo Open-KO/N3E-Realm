@@ -374,6 +374,8 @@ version 3 carries KO 1298's track, `Snd/Intro_Sound.mp3`, looping on login, the
 realm list, select and create and stopped before loading, as `KnightOnLine.exe` plays
 it (content/front-end.md, "Moradon"); the client streams it one frame at a time.
 Its form in the package is Q69.
+*RQ-071:* Option.ini `[Sound] Effect=0` silences it, as KO 1298 does; the front end
+has no other sounds in 1298 (Q70).
 
 ### Q58 — Option and Registration in the login bar
 
@@ -505,3 +507,33 @@ them, the alternative is a cook-time decode to PCM or ADPCM with a pinned decode
 **Decided by the maintainer, 2026-11-01:** the default (KO's frames inside
 `front-end.bin`, decoded by the client); spec 10 now defines "cooked" as validated and
 repackaged into an engine container, not necessarily re-encoded.
+
+### Q70 — The front-end screens' other sounds, and the switch that silences them
+
+The 2026-11-01 playtest follow-up (RQ-071) asked for the select hall's rotate sound
+(`ID_SOUND_CHR_SELECT_ROTATE`, `char_select_turn.wav`), the UIF buttons' hover and
+click sounds on login, select, create and the message box, and KO's Option.ini
+`[Sound] Bgm` switch, each to be confirmed against the 1298 binary. It does not
+confirm them (binary, `KnightOnLine.exe`; local-asset, the pinned UIFs):
+
+- The rotate sound is the later source's. 1298's select left and right (`005fe3c0`,
+  `005fe450`) play no sound, and no function of the select proc, its UI class
+  (`00606a90`) or any caller of the sound-table creator `0044d1b0` names id 2501.
+- The UIF buttons play only the sounds their file names (`00403fc0` reads both names
+  and creates each with `0044d240`, which returns none for an empty one), and the
+  five front-end layouts name none: every hover, click, typing, open and close sound
+  string in them is empty.
+- `[Sound] Bgm` (`0064b9b0`, default 1) is read by the zone music alone (`00640b10`
+  sets the stream's audible flag `+0x38` from it). The front end's track is created
+  through `0044d240` (`005f68e0`), which, like every other sound object (and the
+  play-once path `0044d660`), is inaudible while `[Sound] Effect` is 0 (`006453b0`
+  clears the manager's `+0x29`; `004501b0` and `0044fdf0` start nothing inaudible);
+  with both 0 the device is never opened.
+
+**Default taken (RQ-071):** follow 1298. The front end gains no rotate or UI sounds
+(`content/front-end.md`, "Moradon"), and the client reads `[Sound] Effect` (default 1):
+at 0 it opens no audio device, so the front end's music and every in-world sound are
+silent, as in KO. `[Sound] Bgm` is not read, since n3e plays no zone music. If the
+maintainer wants the later source's rotate sound or a music-only switch anyway, each
+is a small addition (a sound-table id bound in `audio.bin`; an Option.ini key) that
+departs from 1298 and is recorded as such.

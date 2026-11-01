@@ -236,7 +236,14 @@ void options(){
   write("[effect]\nwing=0\n");need(!ClientOptions::load(file).wing&&ClientOptions::load(file).equipment_glow);
   write("[Effect]\nWing=1\n[Addition2233]\nEquipmentGlow=0\n");need(ClientOptions::load(file).wing);
   std::filesystem::remove(file);
-  std::cout<<"PASS client options: WeaponEffect.EffectVisible, Addition2233.EquipmentGlow and Effect.Wing default on, case-blind names, leading-integer values, bounded file\n";
+  // RQ-071 (Q70): 1298's [Sound] Effect (0064b9b0, default 1) silences every
+  // sound; [Sound] Bgm (zone music only) and [Effect] (2233's Wing) do not.
+  need(ClientOptions::load(file.string()+".missing").sound);
+  write("[sound]\neffect=0\n");need(!ClientOptions::load(file).sound&&ClientOptions::load(file).wing);
+  write("[Sound]\nBgm=0\n[Effect]\nEffect=0\nWing=0\n");need(ClientOptions::load(file).sound&&!ClientOptions::load(file).wing);
+  write("[Sound]\nEffect=1\nBgm=0\nDistance=20\n");need(ClientOptions::load(file).sound);
+  std::filesystem::remove(file);
+  std::cout<<"PASS client options: WeaponEffect.EffectVisible, Addition2233.EquipmentGlow, Effect.Wing and Sound.Effect default on, case-blind names, leading-integer values, bounded file\n";
 }
 // PQ-315: the N3E3 equipment glow. The KO cook writes 0056ea30's pulse as rise
 // 1 s, hold to 3 s, fall to 5 s, period 5.5 s (2233 constants 00b96e14 3.0,

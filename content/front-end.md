@@ -143,3 +143,19 @@ is where create draws the character.
   `005fe280`). The create proc does not touch it (source:
   `GameProcCharacterCreate.cpp`). The 1098 scene's own login sound (sound
   table 35, `GameProcLogIn_1098.cpp`) is not 1298's and is not used.
+- Other sounds (RQ-071, Q70): none, as KO 1298 plays none on these screens.
+  Its UIF buttons play only the hover and click sounds their file names
+  (binary: the button loader `00403fc0` creates them with `0044d240`, which
+  creates nothing for an empty name), and every button, static, edit and
+  window of the five layouts above names none (local-asset: each sound string
+  in `co_login_us.uif`, `ka_characterselect_us.uif`,
+  `Ka_CharacterCreate_us.uif`, `ka_loading_us.uif` and `co_MsgBoxOk_us.uif`
+  is empty), so `front-end.bin` carries no UI sounds. The select's left and
+  right (`005fe3c0`, `005fe450`) play no sound, and neither the select proc,
+  its UI class (`00606a90`) nor any sound-table creator names sound 2501
+  (`char_select_turn.wav`): `ID_SOUND_CHR_SELECT_ROTATE` is the later
+  source's (`GameProcCharacterSelect.cpp`), not 1298's.
+- Option.ini (`client/render/options.h`): `[Sound] Effect=0` silences the
+  music, as it does every KO 1298 sound object (`0044d240`, `006453b0`);
+  `[Sound] Bgm` is 1298's zone-music switch only (`00640b10`) and does not
+  touch it.

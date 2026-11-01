@@ -1032,7 +1032,10 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
       if(added){it->second=n3e::load_scene(release,"player-skill-"+std::to_string(skill.animation)+".bin");if(!player_scenes.front().compatible(it->second))throw std::runtime_error("skill skeleton mismatch");}
     }
     AudioDevice audio;
-    if(release.audio){audio.mixer.spatial=release.audio->spatial;audio.open();}
+    // RQ-071 (Q70): KO 1298's Option.ini [Sound] Effect=0 silences every sound
+    // this client plays, the front end's music too (options.h); no device then.
+    if(!client_options.sound)std::cout<<"Sound: off by Option.ini [Sound] Effect=0"<<std::endl;
+    if(release.audio){audio.mixer.spatial=release.audio->spatial;if(client_options.sound)audio.open();}
     uint64_t audio_claim=0,audio_claim_responses=0,audio_session=0;
     std::string audio_claim_key;
     std::vector<n3e::PresentationEvent> local_casts;
@@ -1169,7 +1172,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
       try {
         front = std::make_unique<n3e::front::View>(n3e::load_front_end(release));
         // RQ-018: the screens' music needs the device even without audio.bin.
-        if (front->has_music() && !release.audio) audio.open();
+        if (front->has_music() && !release.audio && client_options.sound) audio.open();
       } catch (const std::exception &error) {
         std::cerr << "front-end.bin: " << error.what() << "; using the panels\n";
       }

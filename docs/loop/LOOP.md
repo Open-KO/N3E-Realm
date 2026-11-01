@@ -72,8 +72,10 @@ the LOG row, not a round.
 committed by the loop after handling (`loop: inbox`):
 
 - **HALT**: a line `HALT` stops the loop before the next item; the maintainer deletes it.
-- **Feedback**: guidance for the loop or an item; the loop applies it (a queue edit, a
-  new item) and moves the entry to LOG.
+- **Feedback**: guidance for the loop or an item, or playtest notes; the loop applies it
+  (a queue edit, a new item) and moves the entry to LOG. Feedback goes to the top of the
+  queue, in the order written, and is worked next; only the item in progress finishes
+  first. Feedback given in the session is handled the same way.
 - **Answers**: `RQ-NNN: <answer>` unblocks a blocked item: the answer goes into its
   `note` (and specs/QUESTIONS.md when it decides a question), status `ready`.
 - **Accepted**: `RQ-NNN` marks a `testme` item checked by hand (`accepted: true`).

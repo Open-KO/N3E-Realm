@@ -16,3 +16,10 @@ found with `git log --grep RQ-NNN`.
 | 2026-11-01 16:05 | RQ-064 | inbox | - | Maintainer: the loop may fix its gate's blind spots (review 2026-11-01 section 6); RQ-064 filed. |
 | 2026-11-01 16:05 | RQ-065 | inbox | - | Maintainer: research a deploy path self-hosting operators can use; RQ-065 filed after RQ-031. |
 | 2026-11-01 17:10 | RQ-036 | done | queue, cargo-test-server, fmt/clippy/test edge, make-test, make-live all 0 | Mapped trusted-proxy CIDRs: prefix - 96, under /96 refused at start, over-wide prefix matches nothing, in server and edge; specs 01 and 12 state the rule. Reviewer pass round 1. Re-gated after RQ-020 from stash; an earlier run failed make live at once because the shell lacked tools/env.sh (not the change; RQ-064 now covers it). |
+| 2026-11-01 17:14 | RQ-018 | inbox | - | Feedback: no music or sound on the login and select screens; RQ-018 moved to the top. |
+| 2026-11-01 17:14 | RQ-066 | inbox | - | Feedback: select-screen hover loops the animation, 1298 plays it once and holds; RQ-066 filed at the top. |
+| 2026-11-01 17:14 | RQ-067 | inbox | - | Feedback: select-screen arrows swing the camera around the pillar; RQ-067 filed at the top. |
+| 2026-11-01 17:14 | RQ-068 | inbox | - | Feedback: no way to log out of Discord; RQ-068 filed at the top (KO screens stay original, Q61). |
+| 2026-11-01 17:14 | RQ-001 | inbox | - | Feedback: full character creation (every class, stat points); RQ-001..RQ-007 moved up as a block. |
+| 2026-11-01 17:14 | RQ-069 | inbox | - | Maintainer (in session): play the game here while the loop runs; RQ-069 filed after the feedback fixes. |
+| 2026-11-01 17:14 | RQ-064 | inbox | - | Maintainer (in session): split the gate (affected live suites per item, full make live and live-ko once a day before the push) and load tools/env.sh; folded into RQ-064, moved up. Rule recorded in LOOP.md: feedback goes to the top of the queue. |

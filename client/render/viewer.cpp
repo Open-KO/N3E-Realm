@@ -1168,6 +1168,9 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     // after the first World until the loading screen has shown it.
     float front_progress = 0;
     bool front_entering = false, front_chose = false, front_connected = false;
+    // ENTER (or the Discord button) on the login screen: held until the
+    // connection is up, so a press while connecting still logs in.
+    bool front_login = false;
     double front_hold = 0;
     uint64_t front_refusals = 0;
 #if N3E_HARNESS
@@ -1663,7 +1666,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
       automated_login = automated_select = false;
 #endif
       front_progress = 0;
-      front_entering = front_chose = front_connected = false;
+      front_entering = front_chose = front_connected = front_login = false;
       front_hold = 0;
       front_refusals = 0;
     };
@@ -1755,7 +1758,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           switch (out.command) {
           case n3e::front::Command::login:
             if (!world.connected) reset_connection();
-            discord_start = true;
+            front_login = true;
             break;
           case n3e::front::Command::exit:
             if (discord_flow->phase() == n3e::login::Flow::Phase::browser) discord_cancel = true;
@@ -2347,6 +2350,10 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           // A suite's client starts the Discord flow itself.
           discord_start = discord_start || auto_login || world_smoke;
 #endif
+          if (front_login && world.connected && discord_flow->phase() != n3e::login::Flow::Phase::start) {
+            discord_start = discord_flow->phase() == n3e::login::Flow::Phase::idle;
+            front_login = false;
+          }
           if (auto message = discord_flow->update(world, discord_start, discord_cancel, std::time(nullptr)))
             network->send(*message);
           discord_start = discord_cancel = false;

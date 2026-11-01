@@ -4,8 +4,11 @@
 // with the events a player sends (ENTER, text input, backspace): Discord login,
 // the realm, create with each name in turn until one is accepted, start, the
 // world. A message box is printed and dismissed; one that comes after the
-// world (a kick) ends the run. It prints, for tests/front_end_flow_live.py:
+// world (a kick) ends the run. Login is one ENTER at the first frame, which
+// may come before the connection is up. It prints, for
+// tests/front_end_flow_live.py:
 //   FRONT_FLOW screen=login|realms|select|create|loading|world characters=N
+//   FRONT_FLOW enter connected=0|1
 //   FRONT_FLOW message='...'
 {
   static const char *flow_names = std::getenv("N3E_TEST_FRONT_FLOW");
@@ -13,7 +16,7 @@
   static size_t next_name = 0;
   static int last_screen = -1;
   static uint64_t last_push = 0;
-  static bool was_in_world = false;
+  static bool was_in_world = false, entered = false;
   static std::string typed;
   if (flow_names && front && network) {
     if (names.empty())
@@ -53,8 +56,11 @@
         key(SDLK_RETURN);
     } else if (screen < 5 && !front->showing_message() && now_ms - last_push > 700) {
       last_push = now_ms;
-      const bool idle = discord_flow->phase() == n3e::login::Flow::Phase::idle;
-      if ((screen == 0 && idle && !was_in_world) || screen == 1 ||
+      if (screen == 0 && !entered) {
+        std::cout << "FRONT_FLOW enter connected=" << world.connected << std::endl;
+        entered = true;
+        key(SDLK_RETURN);
+      } else if (screen == 1 ||
           (screen == 2 && !world.characters.characters_size()))
         key(SDLK_RETURN);
       else if (screen == 2 && next_name > 0 && world.characters.characters_size())

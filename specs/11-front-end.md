@@ -140,7 +140,7 @@ prev/next).
 
 | State | Shows | Leaves on |
 |---|---|---|
-| login | intro scene looping; login bar; the Discord flow's status line in `notice` | `login` → the flow (spec 02, unchanged) → `LoginResult` → realms. A stored session skips the browser as today. |
+| login | intro scene looping; login bar; the Discord flow's status line in `notice` | `login` (the Discord button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. |
 | realms | intro; the server group with the realm's name from `realm.json` | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
 | select | hall; up to 3 characters with the realm's player model and default looks, idle clip; info bar from the character in front | ENTER or a click on the character in front → `SelectCharacter`, its clip 1, → loading; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next turns the camera to the next slot (left to right: 1, 0, 2). |
 | create | KO's create screen; the character turning in `char_view`; name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording; `back` → select. |

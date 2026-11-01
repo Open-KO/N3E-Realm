@@ -3,8 +3,10 @@ on the Moradon package cooked from the player's own KO data, with the Discord
 stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
 
 - The test client plays the screens with a player's events
-  (N3E_TEST_FRONT_FLOW, client/harness/front_end_flow.inc): Discord login (the
-  browser step played here on the address it prints) -> realms -> select (no
+  (N3E_TEST_FRONT_FLOW, client/harness/front_end_flow.inc): Discord login on one
+  ENTER pressed while the server is paused (SIGSTOP), so before the connection is
+  up; the press is held and the flow starts once the server resumes (the browser
+  step played here on the address it prints) -> realms -> select (no
   characters) -> create "Taken", which another account holds: the server's
   refusal in KO's message box -> create a fresh name -> select with it -> start
   -> loading -> the world.
@@ -18,6 +20,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import signal
 import subprocess
 import sys
 import time
@@ -144,6 +147,9 @@ try:
     subprocess.run(["rm", "-rf", str(home)])
     (home / "config").mkdir(parents=True)
     realm_json = home / "realm.json"
+    # The client's ENTER must come before the connection is up: pause the
+    # server until the client has pressed it.
+    server.send_signal(signal.SIGSTOP)
     realm_json.write_text(json.dumps({"id": "front-end", "name": "Front End Realm", "host": "localhost",
                                       "port": listen, "discord_client_id": CLIENT_ID}))
     client = subprocess.Popen(
@@ -164,6 +170,8 @@ try:
                 assert r.status == 200
         if line.startswith("FRONT_FLOW "):
             flow.append(line.strip()[len("FRONT_FLOW "):])
+            if flow[-1].startswith("enter "):
+                server.send_signal(signal.SIGCONT)
             if flow[-1].startswith("screen=world") and not kicked:
                 account = sql(f"SELECT id FROM accounts WHERE discord_id='{player['id']}'")
                 status, body = call("POST", f"/v1/accounts/{account}/kick", ops, {"reason": "flow test"})
@@ -175,11 +183,13 @@ try:
     assert code == 0 and "ENTERED map" in text, (code, text[-3000:])
     screens = [f.split()[0][len("screen="):] for f in flow if f.startswith("screen=")]
     messages = [f[len("message='"):-1] for f in flow if f.startswith("message=")]
+    enters = [f for f in flow if f.startswith("enter ")]
+    assert enters == ["enter connected=0"], flow
     assert screens == ["login", "realms", "select", "create", "select", "loading", "world", "login"], flow
     assert messages == [REFUSED, "You were disconnected by an operator: flow test."], flow
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
-    print("PASS front-end flow: Discord login -> realms -> select -> create (Taken refused in the message box, "
+    print(f"PASS front-end flow: one ENTER ({enters[0]}) -> Discord login -> realms -> select -> create (Taken refused in the message box, "
           "Fresh created) -> select -> loading -> world; a kick returns to login with the operator's wording")
     assert server.poll() is None, "server exited"
     print("PASS KO front-end flow")
@@ -187,6 +197,7 @@ finally:
     if client is not None and client.poll() is None:
         client.kill()
     if server is not None:
+        server.send_signal(signal.SIGCONT)
         server.terminate()
         try:
             server.wait(10)

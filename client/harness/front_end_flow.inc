@@ -11,6 +11,8 @@
 //   FRONT_FLOW screen=login|realms|select|create|loading|world characters=N
 //   FRONT_FLOW enter connected=0|1
 //   FRONT_FLOW message='...'
+//   FRONT_FLOW music=none|streamK (RQ-018: K counts the streams started; a
+//   line each time the mixer's stream changes, a frame after the screen)
 {
   static const char *flow_names = std::getenv("N3E_TEST_FRONT_FLOW");
   static std::vector<std::string> names;
@@ -43,6 +45,14 @@
       std::cout << "FRONT_FLOW screen=" << labels[screen] << " characters=" << world.characters.characters_size()
                 << std::endl;
       last_screen = screen;
+    }
+    static const void *last_stream = nullptr;
+    static int streams = 0;
+    if (audio.mixer.music.get() != last_stream) {
+      last_stream = audio.mixer.music.get();
+      if (last_stream) ++streams;
+      std::cout << "FRONT_FLOW music=" << (last_stream ? "stream" + std::to_string(streams) : std::string("none"))
+                << std::endl;
     }
     was_in_world = was_in_world || screen == 5;
     const uint64_t now_ms = SDL_GetTicks();

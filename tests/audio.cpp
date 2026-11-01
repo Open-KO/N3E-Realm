@@ -8,6 +8,84 @@
 void need(bool value,std::source_location where=std::source_location::current()){if(!value)throw std::runtime_error("audio/event check line "+std::to_string(where.line()));}
 bool near(float a,float b){return std::abs(a-b)<1e-5f;}
 float energy(const std::vector<float>&out){float sum=0;for(float x:out)sum+=std::abs(x);return sum;}
+// RQ-018: synthetic MPEG-1 Layer III frames, 32 kbit/s, mono, no CRC (as
+// tests/front_end.py's mp3_frame): `rate` is the header's index (1 48 kHz,
+// 2 32 kHz). A tone frame's granules each carry one count1 quadruple, so it
+// decodes to a quiet low tone; big_values past 288 makes a frame the decoder
+// refuses (minimp3's L3_read_side_info).
+std::string mp3_frame(bool tone=true,unsigned rate=1,unsigned big_values=0){
+  std::vector<int> bits;
+  auto put=[&](unsigned v,int n){for(int i=n-1;i>=0;--i)bits.push_back((v>>i)&1);};
+  // sync, MPEG-1, Layer III, no CRC, 32 kbit/s, rate, no padding, private, mono, ...
+  const std::pair<unsigned,int> header[]={{0x7ff,11},{3,2},{1,2},{1,1},{1,4},{rate,2},{0,1},{0,1},{3,2},{0,2},{0,1},{0,1},{0,2}};
+  for(auto[v,n]:header)put(v,n);
+  put(0,9);put(0,5);put(0,4);
+  for(int g=0;g<2;++g){
+    const std::pair<unsigned,int> side[]={{tone?5u:0u,12},{big_values,9},{210,8},{0,4},{0,1},{0,15},{0,4},{0,3},{0,1},{0,1},{1,1}};
+    for(auto[v,n]:side)put(v,n);
+  }
+  for(int g=0;g<2&&tone;++g){put(7,4);put(0,1);}
+  const unsigned size=144000*32/(rate==1?48000:32000);
+  bits.resize(size*8,0);
+  std::string out(size,'\0');
+  for(size_t i=0;i<bits.size();++i)if(bits[i])out[i/8]=char(out[i/8]|(0x80>>(i%8)));
+  return out;
+}
+std::shared_ptr<n3e::MusicTrack> music_track(const std::string&frame,unsigned frames,unsigned rate,bool loop){
+  auto t=std::make_shared<n3e::MusicTrack>();t->rate=rate;t->channels=1;t->loop=loop;t->frames=frames;
+  for(unsigned i=0;i<frames;++i)t->data+=frame;
+  return t;
+}
+bool refused(const n3e::MusicTrack&t){try{n3e::check_music_track(t);}catch(const std::exception&){return true;}return false;}
+// Streams up to `limit` 48 kHz frames in chunks; returns {written, peak}.
+std::pair<uint64_t,float> drain(n3e::MusicStream&s,uint64_t limit){
+  std::vector<float> out(4800*2);uint64_t written=0;float peak=0;
+  while(written<limit){std::fill(out.begin(),out.end(),0.f);auto n=s.mix(out.data(),4800,1);
+    for(unsigned i=0;i<n*2;++i)peak=std::max(peak,std::abs(out[i]));written+=n;if(n<4800)break;}
+  return {written,peak};
+}
+void music_checks(){
+  const auto tone=mp3_frame();need(tone.size()==96);
+  auto f=n3e::mpeg_frame(reinterpret_cast<const unsigned char*>(tone.data()),tone.size());
+  need(f&&f->bytes==96&&f->rate==48000&&f->channels==1&&f->mpeg1);
+  need(!n3e::mpeg_frame(reinterpret_cast<const unsigned char*>(tone.data()),95));
+  // A track that does not loop: every sample once (50 x 1152 at 48 kHz),
+  // audible, then the stream ends and stays ended.
+  auto once=music_track(tone,50,48000,false);n3e::check_music_track(*once);
+  {n3e::MusicStream s(once);auto[written,peak]=drain(s,1<<20);need(written==50*1152&&peak>.1f&&s.ended()&&s.decoded_frames()==50);
+   std::vector<float> out(200,0.f);need(s.mix(out.data(),100,1)==0&&energy(out)==0);}
+  // Looping: three passes and more, never ending.
+  auto loop=music_track(tone,50,48000,true);
+  {n3e::MusicStream s(loop);auto[written,peak]=drain(s,3*57600+1000);need(written>=3*57600+1000&&!s.ended()&&s.decoded_frames()>150&&peak>.1f);}
+  // 32 kHz resampled to 48 kHz: 1.5 output frames a sample.
+  auto low=music_track(mp3_frame(true,2),10,32000,false);need(low->data.size()==1440);n3e::check_music_track(*low);
+  {n3e::MusicStream s(low);auto[written,peak]=drain(s,1<<20);need(written>=17278&&written<=17282&&peak>0);}
+  // Silent frames stream silence; frames the decoder refuses end even a
+  // looping stream after one pass instead of spinning.
+  {n3e::MusicStream s(music_track(mp3_frame(false),5,48000,true));auto[written,peak]=drain(s,20000);need(written>=20000&&peak==0);}
+  {auto bad=music_track(mp3_frame(true,1,300),5,48000,true);n3e::check_music_track(*bad);
+   n3e::MusicStream s(bad);need(drain(s,20000).first==0&&s.ended());}
+  // The loader's frame checks.
+  auto t=*once;t.frames=49;need(refused(t));
+  t=*once;t.rate=44100;need(refused(t));
+  t=*once;t.channels=2;need(refused(t));
+  t=*once;t.data.pop_back();need(refused(t));
+  t=*once;t.data[1]=char(0xfd);need(refused(t)); // Layer II
+  t=*once;t.data.clear();t.frames=0;need(refused(t));
+  t=*once;t.data+=mp3_frame(true,2);t.frames=51;need(refused(t)); // a second rate
+  // The mixer: one stream at the voices' gain, kept for the same track (an
+  // ended one too), replaced by another, stopped by none.
+  n3e::AudioMixer m;need(!m.music_playing());
+  m.play_music(loop);need(m.music_playing());auto*stream=m.music.get();
+  m.play_music(loop);need(m.music.get()==stream);
+  float most=0;for(int i=0;i<30;++i){auto out=m.mix(i*.1,4800,{});for(float x:out)most=std::max(most,std::abs(x));}
+  need(most>.06f&&most<=.6f);
+  m.play_music(once);need(m.music.get()!=stream&&m.music->track()==once);
+  for(int i=0;i<15;++i)m.mix(i*.1,4800,{});need(!m.music_playing()&&m.music);
+  auto*ended=m.music.get();m.play_music(once);need(m.music.get()==ended&&!m.music_playing());
+  m.play_music(nullptr);need(!m.music&&energy(m.mix(9,4800,{}))==0);
+  std::cout<<"PASS music: frame checks, a track once and looping, 32 kHz resampling, undecodable frames end, mixer keeps and replaces streams\n";
+}
 // PQ-013: KO effect start test, listener frame, curves and fixed source positions.
 void spatial_checks(){
   const n3e::AudioSpatial legacy,ko{1,48,20,48,30,2};
@@ -243,6 +321,7 @@ int main(int argc,char**argv){try{
   auto far=m.mix(1,100,{{40,0,0},{40,0,0},{1,0,0}});need(far[0]==0&&far[1]==0);
   need(m.play(a,"tone",1));need(!m.play(a,"tone",1));m.retire(1.2);need(m.voices.empty());
   spatial_checks();
+  music_checks();
   local_release_checks();
   n3e::WorldState w;w.connected=true;w.world.set_self(7);w.world.set_session(1);w.world.set_tick(100);w.world.set_event_cursor(10);
   auto*e=w.world.add_events();e->set_sequence(10);e->set_tick(100);

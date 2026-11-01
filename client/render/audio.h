@@ -1,7 +1,9 @@
 #pragma once
 #include "assets/assets.h"
+#include "assets/music.h"
 #include <algorithm>
 #include <cmath>
+#include <memory>
 #include <vector>
 
 namespace n3e {
@@ -33,6 +35,18 @@ struct AudioMixer {
   std::vector<Voice> voices;
   uint64_t started=0;
   AudioSpatial spatial;
+  // RQ-018 (Q57): one music stream, unpositioned, mixed under the voices at
+  // their gain. play_music keeps a stream that already plays the track (KO
+  // 1298 005f68e0: the login keeps a BGM of the same file, even one that
+  // has ended), starts another from its first frame and stops on nullptr
+  // (005fea70 releases the BGM).
+  std::unique_ptr<MusicStream> music;
+  void play_music(const std::shared_ptr<const MusicTrack>&track){
+    if(!track){music.reset();return;}
+    if(music&&music->track()==track)return;
+    music=std::make_unique<MusicStream>(track);
+  }
+  bool music_playing()const{return music&&!music->ended();}
   bool play(const Audio&data,const std::string&key,double start,V position={},bool positional=false,uint64_t request=0,bool effect=false){
     auto binding=data.bindings.find(key);if(binding==data.bindings.end()||!std::isfinite(start))return false;
     const auto&clip=data.clips[binding->second];
@@ -52,6 +66,7 @@ struct AudioMixer {
       v.checked=true;if(!effect_starts(v.position,listener.eye,spatial.start_distance()))v.clip=nullptr;
     }
     std::erase_if(voices,[](const auto&v){return !v.clip;});
+    if(music)music->mix(out.data(),frames,.6f);
     for(const auto&v:voices){
       float gain=.6f,pan=0;
       if(v.positional){

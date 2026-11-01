@@ -1168,6 +1168,8 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     if (release.front_end && discord_flow) {
       try {
         front = std::make_unique<n3e::front::View>(n3e::load_front_end(release));
+        // RQ-018: the screens' music needs the device even without audio.bin.
+        if (front->has_music() && !release.audio) audio.open();
       } catch (const std::exception &error) {
         std::cerr << "front-end.bin: " << error.what() << "; using the panels\n";
       }
@@ -2936,12 +2938,18 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
         front->draw(width, height, now,
                     {realm_config ? realm_config->name : endpoint, world.status, release.version,
                      &world.characters, front_progress});
+        // RQ-018 (Q57): the screen's track, streamed; no listener (music is
+        // not positioned and the screens play no effects).
+        audio.mixer.play_music(front->music());
+        audio.tick(SDL_GetTicks() / 1000., n3e::AudioListener{});
         glUseProgram(p);
         glBindVertexArray(vao);
         glBindBuffer(GL_ARRAY_BUFFER, vbo);
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, texture);
       } else {
+      // KO releases the BGM when the world is entered (1298 005fea70).
+      audio.mixer.play_music(nullptr);
       glViewport(0, 0, width, height);
       if (release.exploration) {
         auto c=release.exploration->fog_color; glClearColor(c[0],c[1],c[2],1);

@@ -2,8 +2,9 @@
 
 `front-end.bin` is an optional presentation file (spec 11): KO's 1098 login scene,
 login and server list, the Karus character select hall, character create, loading
-and the OK message box. `tools/assetc/ko_front_end.py` cooks it from the pinned
-client tree with the choices in `games/moradon/front-end.json`; the client's
+and the OK message box, and the screens' music (version 3, Q57).
+`tools/assetc/ko_front_end.py` cooks it from the pinned client tree with the
+choices in `games/moradon/front-end.json`; the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
 its header. A package with it is engine 42, so wire 30 (as engines 38–41). Its bound is
 64 MiB (`FRONT_END_FILE`, `MAX_FRONT_END_ASSET`, `kFrontEndFile`), since it holds
@@ -14,7 +15,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 2, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 3, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤64), each width and height (1–1024) then RGBA8 rows.
 3. Fonts: a count (≤8), each texture index, pixel size (6–48), cap height, atlas
@@ -49,6 +50,20 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    player (`InitChr`: the race's `UPC_DefaultLooks` joint, animation and default
    parts) with one clip, `ANI_BREATH` (0), and no plugs (a new character holds
    nothing). The select model's seated clips are for the hall's thrones.
+9. Music (version 3, RQ-018): a track count (≤4), each its sample rate,
+   channels (1 or 2), loop (0 or 1), an MPEG frame count and a byte length
+   (1 to 16 MiB) and then that many bytes: MPEG-1 or MPEG-2 Layer III frames
+   back to back, every one whole, at the track's rate and channel count (free
+   format, MPEG 2.5 and reserved header values refused; a CRC is allowed). Then
+   four track indices, `0xffffffff` for none: the login screen (the realm list
+   too), select, create and loading. The client (`client/assets/music.h`)
+   checks every frame at load and streams a track while its screen shows:
+   one frame decoded at a time (minimp3, `UPSTREAM.md`), resampled linearly
+   to 48 kHz, mixed unpositioned at the voices' gain and kept up to six audio
+   chunks (128 ms) ahead. A screen naming the track already playing keeps it
+   (an ended one too); another track starts at its first frame; none, and
+   entering the world, stops it. A looping track starts again at its first
+   frame, with a fresh decoder; one whose whole pass decodes nothing ends.
 
 The client samples as KO sets its devices: UIF images with point sampling on whole
 screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
@@ -116,3 +131,15 @@ is where create draws the character.
   and camera from `CGameProcCharacterSelect::Init`, and the Tuarek priest
   (`upc_ka_tu_pri.n3joint`, default looks, clips 0 and 1, the mace plug).
 - Fonts: Liberation Sans regular and bold for Arial, at points × 96 / 72.
+- Music: `Snd/Intro_Sound.mp3` (44.1 kHz stereo, 4,096 frames, 107 s; the
+  file's cut-short 4,097th frame is dropped), looping, on login, select and
+  create; loading is silent. KO 1298 (binary, `KnightOnLine.exe`): the login
+  proc `005f68e0` creates the BGM stream for that file (`0044d240`), loops it
+  (`004504a0(1)`) and plays it (`004501b0`), or keeps a BGM of the same file
+  already playing; the select proc `005f98c0` restarts it only when the flag
+  `00818408` is set (not decoded; the realm's flow never returns from the
+  world to select) and otherwise keeps it; the select releases it when the
+  chosen character's clip has played, before "Loading data..." (`005fea70`,
+  `005fe280`). The create proc does not touch it (source:
+  `GameProcCharacterCreate.cpp`). The 1098 scene's own login sound (sound
+  table 35, `GameProcLogIn_1098.cpp`) is not 1298's and is not used.

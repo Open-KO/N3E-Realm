@@ -11,6 +11,8 @@
 #include <string_view>
 #include <vector>
 #include "collision.h"
+#include "music.h"
+#include <memory>
 namespace n3e {
 using V = std::array<float, 3>;
 using Q = std::array<float, 4>;
@@ -896,6 +898,12 @@ struct FrontEnd {
   std::array<float, 4> backdrop_rect{};  // 1024 x 768 units
   std::vector<FrontSlot> slots;
   std::vector<FrontMesh> hall;
+  // Version 3 (RQ-018, Q57): the screens' music. A track is shared with the
+  // stream that plays it; screen_music names one per screen (login, which
+  // includes the realm list, select, create, loading), kNoMusic for silence.
+  static constexpr uint32_t kNoMusic = 0xffffffffu;
+  std::vector<std::shared_ptr<const MusicTrack>> music;
+  std::array<uint32_t, 4> screen_music{kNoMusic, kNoMusic, kNoMusic, kNoMusic};
 };
 FrontEnd load_front_end(const Release &release);
 } // namespace n3e

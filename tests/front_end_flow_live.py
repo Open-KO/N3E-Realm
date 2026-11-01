@@ -15,6 +15,10 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   operator's wording in the message box.
 - `character_slots` (3, front-end.bin) refuses a fourth character at the wire,
   in the server's wording; the Characters list names the levels.
+- Music (RQ-018): one stream starts on the login screen and plays on through the
+  realm list, select, create and select again, stops on loading, before the
+  world, and (when the client runs a frame more after the kick) a new one starts
+  on the login screen.
 """
 import hashlib
 import json
@@ -193,10 +197,15 @@ try:
     assert screens == ["login", "realms", "select", "create", "select", "loading", "world", "login"], flow
     assert messages == ["Discord login was cancelled. ENTER to try again.", REFUSED,
                         "You were disconnected by an operator: flow test."], flow
+    order = [f.split()[0] for f in flow if f.startswith(("screen=", "music="))]
+    want = ["screen=login", "music=stream1", "screen=realms", "screen=select", "screen=create", "screen=select",
+            "screen=loading", "music=none", "screen=world", "screen=login"]
+    assert order in (want, want + ["music=stream2"]), flow
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
     print(f"PASS front-end flow: one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box, "
-          "Fresh created) -> select -> loading -> world; a kick returns to login with the operator's wording")
+          "Fresh created) -> select -> loading -> world; a kick returns to login with the operator's wording; "
+          "one music stream from login to loading")
     assert server.poll() is None, "server exited"
     print("PASS KO front-end flow")
 finally:

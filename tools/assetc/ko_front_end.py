@@ -3,7 +3,8 @@
 KO's 1098 login scene (the orc with the axe under the moon, GameProcLogIn_1098),
 its login and server-list layout, the Karus character select hall
 (GameProcCharacterSelect), character create, loading and the OK message box,
-cooked from the pinned client tree. games/moradon/front-end.json names every KO
+cooked from the pinned client tree, and (version 3) the screens' music, KO's
+MP3 frames carried as they are. games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
@@ -25,7 +26,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 2
+VERSION = 3
 # ANI_BREATH (GameDef.h): the idle InventoryChrAnimationInitialize plays.
 BREATH = 0
 CANVAS = (1024, 768)
@@ -57,6 +58,16 @@ MAX_TEXTURES = 64
 MAX_FONTS = 8
 MAX_TEXT = 1024
 MAX_FILE = 64 * 1024 * 1024
+# Music (version 3, RQ-018): the client's bounds (client/assets/music.h).
+MAX_TRACKS = 4
+MAX_TRACK_BYTES = 16 * 1024 * 1024
+NO_MUSIC = 0xFFFFFFFF
+# The screens a track is named for, in file order (login includes the realm list).
+MUSIC_SCREENS = ("login", "select", "create", "loading")
+# ISO/IEC 11172-3 and 13818-3 Layer III bitrates (kbit/s) and MPEG-1 rates (Hz).
+MPEG1_KBPS = (0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320)
+MPEG2_KBPS = (0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160)
+MPEG1_HZ = (44100, 48000, 32000)
 
 
 def texture(data):
@@ -520,6 +531,89 @@ def create_scene(assets, race, work):
     return model(assets, joint, definition, [BREATH], work / "create") + u(0)
 
 
+def mpeg_frame(data, at, end):
+    """(bytes, rate, channels, mpeg1) of the MPEG-1 or MPEG-2 Layer III frame
+    header at `at` (its four bytes before `end`), or None: free format,
+    MPEG 2.5 and reserved values are refused, as client/assets/music.cpp's
+    mpeg_frame. The frame itself may run past `end`."""
+    if at + 4 > end or data[at] != 0xFF or data[at + 1] & 0xE0 != 0xE0:
+        return None
+    version, layer = (data[at + 1] >> 3) & 3, (data[at + 1] >> 1) & 3
+    bitrate, rate, padding = data[at + 2] >> 4, (data[at + 2] >> 2) & 3, (data[at + 2] >> 1) & 1
+    if version not in (2, 3) or layer != 1 or bitrate in (0, 15) or rate == 3:
+        return None
+    mpeg1 = version == 3
+    hz = MPEG1_HZ[rate] if mpeg1 else MPEG1_HZ[rate] // 2
+    kbps = (MPEG1_KBPS if mpeg1 else MPEG2_KBPS)[bitrate]
+    return (144000 if mpeg1 else 72000) * kbps // hz + padding, hz, 1 if data[at + 3] >> 6 == 3 else 2, mpeg1
+
+
+def music_track(data):
+    """A KO MP3 file's Layer III frames: (rate, channels, frames, the frames'
+    bytes, bytes dropped). A leading ID3v2 tag and a trailing ID3v1 tag are
+    dropped, and so is a last frame the file cuts short (KO's
+    Snd/Intro_Sound.mp3 lacks the last 196 bytes of its 4097th frame,
+    local-asset); anything else that is not a whole frame of the first
+    frame's format refuses. The frames are carried unchanged (Q69)."""
+    start, end = 0, len(data)
+    if data[:3] == b"ID3" and len(data) >= 10:
+        size = data[6:10]
+        if any(b & 0x80 for b in size):
+            raise ValueError("music ID3v2 tag size")
+        start = 10 + (size[0] << 21 | size[1] << 14 | size[2] << 7 | size[3]) + (10 if data[5] & 0x10 else 0)
+    if end - start >= 128 and data[end - 128:end - 125] == b"TAG":
+        end -= 128
+    at, frames, form = start, 0, None
+    while at < end:
+        frame = mpeg_frame(data, at, end)
+        if frame is None or (form is not None and frame[1:] != form):
+            raise ValueError("music frame at byte %d" % at)
+        if at + frame[0] > end:
+            if form is None:
+                raise ValueError("music frame at byte %d" % at)
+            break
+        form = frame[1:]
+        at += frame[0]
+        frames += 1
+    if not frames:
+        raise ValueError("music without frames")
+    body = data[start:at]
+    if len(body) > MAX_TRACK_BYTES:
+        raise ValueError("music track past its bound")
+    return form[0], form[1], frames, body, len(data) - len(body)
+
+
+def music(assets, config):
+    """Section 9: the tracks and the track each screen plays. KO 1298
+    (binary, KnightOnLine.exe): the login (005f68e0) creates the BGM stream
+    `Snd\\Intro_Sound.mp3` (0044d240), loops it (004504a0(1)) and plays it
+    (004501b0), keeping a stream of the same file already playing; the select
+    (005f98c0) restarts it only when 00818408 is set and otherwise keeps it;
+    the create proc leaves it (source: GameProcCharacterCreate.cpp has no
+    BGM); and the select releases it when the chosen character's clip ends,
+    before "Loading data..." (005fea70, 005fe280). games/moradon/front-end.json
+    names the file and the screens."""
+    config = config or {"tracks": [], "screens": {}}
+    tracks = config["tracks"]
+    count(len(tracks), MAX_TRACKS, 0)
+    if set(config["screens"]) - set(MUSIC_SCREENS):
+        raise ValueError("music screens")
+    data, report = u(len(tracks)), []
+    for track in tracks:
+        if type(track.get("loop")) is not bool:
+            raise ValueError("music loop")
+        rate, channels, frames, body, dropped = music_track(assets.get(track["path"]))
+        data += u(rate) + u(channels) + u(int(track["loop"])) + u(frames) + u(len(body)) + body
+        report.append(dict(path=track["path"], rate=rate, channels=channels, frames=frames, bytes=len(body),
+                           dropped=dropped, loop=track["loop"]))
+    for name in MUSIC_SCREENS:
+        index = config["screens"].get(name)
+        if index is not None and (type(index) is not int or not 0 <= index < len(tracks)):
+            raise ValueError("music screen track")
+        data += u(NO_MUSIC if index is None else index)
+    return data, report
+
+
 def cook(assets, out, config_path, work):
     """Writes front-end.bin into the directory `out`; returns its provenance."""
     config = load(pathlib.Path(config_path))
@@ -558,10 +652,11 @@ def write(assets, out, config, work):
         atlases += u(textures.raw(w, h, rgba)) + u(pixels) + u(height) + u(top) + f(advances)
     data = b"N3FE" + u(VERSION) + u(count(config["character_slots"], 3)) + u(CANVAS[0]) + u(CANVAS[1])
     data += u(len(textures.list)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in textures.list)
-    data += u(len(fonts)) + atlases + screens + table + scenes
+    tracks, played = music(assets, config.get("music"))
+    data += u(len(fonts)) + atlases + screens + table + scenes + tracks
     if len(data) > MAX_FILE:
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)
     return dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), textures=len(textures.list),
-                fonts=len(fonts), font_substitutes=sorted(str(p) for p in sources.values()),
+                fonts=len(fonts), music=played, font_substitutes=sorted(str(p) for p in sources.values()),
                 sources=dict(sorted(assets.sources.items())))

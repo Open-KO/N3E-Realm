@@ -1,6 +1,7 @@
 # Pinned inputs
 
-Everything this repository depends on that is not in this repository.
+Everything this repository depends on that is not in this repository, and the one
+third-party source vendored in it.
 
 | Input | Pin | Where it goes |
 |---|---|---|
@@ -8,6 +9,7 @@ Everything this repository depends on that is not in this repository.
 | KO client assets | see below | `assets/ko/` (git-ignored), via `tools/fetch-ko-assets.sh` |
 | imgui | v1.91.9b @ `f5befd2d29e66809cd1110a152e375a7f1981f06` | `.cache/tools/imgui` via `tools/bootstrap.sh` |
 | Rust toolchain | 1.85.1 (`rust-toolchain.toml`) | `.cache/tools` via `tools/bootstrap.sh` |
+| minimp3 | `lieff/minimp3` @ `ea99364f61c14656440e8d77e9c233ccf3124633`, `minimp3.h` sha256 `57e437c5c1f0e8b243885d3929c8973b5e6c778451e0100ab4251d19915cb3ad`, `LICENSE` (CC0 1.0) sha256 `6a1ee543e5282cd9061881edf462e6fdab181f328da71fc2c9a6950a80e94d01` | vendored unmodified in `client/third_party/minimp3/` (the front-end music decoder, RQ-018, `specs/QUESTIONS.md` Q69) |
 
 ## KO client assets
 

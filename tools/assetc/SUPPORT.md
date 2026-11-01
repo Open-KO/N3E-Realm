@@ -123,5 +123,9 @@ lights, the select hall's n3shape, slots, spots and the Tuarek priest with two
 clips, all from the paths and choices in `games/moradon/front-end.json`; the
 provenance report records every source path and hash. Text is drawn with the
 Liberation Sans substitutes of N3H9. Untextured images draw nothing, as KO's.
-KO's music, the 1298 Karus/El Morad nation choice and the other races and
-classes remain gaps (Q52, Q57). [Contract](../../content/front-end.md).
+N3FE version 3 (RQ-018) adds the screens' music: each track's MPEG-1/2 Layer III
+frames as the KO file has them (ID3 tags and a cut-short last frame dropped, any
+other irregularity refused), and the track per screen from `front-end.json`'s
+`music` (Q69).
+The 1298 Karus/El Morad nation choice and the other races and classes remain
+gaps (Q51, Q52). [Contract](../../content/front-end.md).

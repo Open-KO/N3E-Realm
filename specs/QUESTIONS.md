@@ -369,6 +369,12 @@ its own yet, and `audio.bin` binds in-game sounds only. **Default taken (M4c):**
 screens are silent. Music needs a bounded stream (the tracks are minutes long), which
 is its own change.
 
+*Done (RQ-018, 2026-11-01):* the maintainer's playtest asked for it. `front-end.bin`
+version 3 carries KO 1298's track, `Snd/Intro_Sound.mp3`, looping on login, the
+realm list, select and create and stopped before loading, as `KnightOnLine.exe` plays
+it (content/front-end.md, "Moradon"); the client streams it one frame at a time.
+Its form in the package is Q69.
+
 ### Q58 — Option and Registration in the login bar
 
 *Superseded by Q61: Option and Registration are shown, unbound.*
@@ -480,3 +486,19 @@ and plans the workstation, which is in the same house. RQ-000 proposed Cloudflar
 `rclone` with the workstation as a second copy. **Decided by the maintainer,
 2026-11-01:** no off-box backups for now. The nightly `pg_dump` and the pre-deploy dump
 stay on the host, with one restore rehearsal; an off-box copy is revisited later.
+
+### Q69 — Front-end music: KO's MPEG frames in the package, decoded by the client
+
+RQ-018 streams KO's front-end track. Every other KO asset is decoded at cook time into
+an engine format (textures to RGBA, `ko_audio` WAVs to PCM). The track is MP3, and the
+cook has no MP3 decoder: a pure-Python one is too slow for a 107 s track, and a system
+`ffmpeg`/`mpg123` would make the package bytes, and so the release pins, depend on the
+cooking machine's decoder. Decoded PCM would also be about 19 MB (44.1 kHz stereo).
+**Default taken (RQ-018):** the cook carries the track's MPEG-1/2 Layer III frames
+unchanged inside `front-end.bin` (tags and the file's cut-short last frame dropped,
+every frame checked by the cook and again by the loader; 1.7 MB), and the client
+decodes them while streaming with minimp3 (CC0), vendored at a pinned commit in
+`client/third_party/minimp3/` (`UPSTREAM.md`) because the player build has no system
+package for it on Linux. Nothing raw is published as a file, but the frames are KO's
+bytes; if the maintainer reads "only cooked output ships" (spec 10) as excluding
+them, the alternative is a cook-time decode to PCM or ADPCM with a pinned decoder.

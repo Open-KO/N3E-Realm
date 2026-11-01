@@ -59,8 +59,11 @@ Every path below was checked against the pinned tree. The paths and choices live
 | Loading | none | `ka_loading_us.uif` |
 | Message box | over any screen | `co_MsgBoxOk_us.uif` |
 
-KO's music is not used yet (Q57). Text is drawn with Liberation Sans regular and bold
-for KO's Arial, at points × 96 / 72, baked as N3H9's nameplate fonts are.
+Music (Q57, RQ-018): KO 1298's front-end track, `Snd/Intro_Sound.mp3`, looping from
+login through the realm list, select and create, stopped when the chosen character's
+clip has played; its frames are carried as they are (Q69). Text is drawn with
+Liberation Sans regular and bold for KO's Arial, at points × 96 / 72, baked as N3H9's
+nameplate fonts are.
 
 What the cook reuses: `ko_hud.parse()` for the UIF trees, `ko_hud.texture()` and the
 character texture reader for NTF3, `ko_character.py` and `gltf.py` for the two
@@ -72,7 +75,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 1, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 3, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -102,6 +105,12 @@ replace the panels when the client has a Discord realm config.
   their eye and spot light, the hall meshes, the model with clips 0 and 1, plugs),
   and the create model (the race's own looks joint and animation, `ANI_BREATH`, no
   plugs; N3FE version 2).
+- **Music** (N3FE version 3, RQ-018). Up to 4 tracks of MPEG-1 or MPEG-2 Layer III
+  frames (each ≤ 16 MiB, every frame checked at load), and the track the login,
+  select, create and loading screens play, or none. The client streams the track
+  (one frame decoded at a time, `client/assets/music.h`); a screen naming the track
+  already playing keeps it, so it runs on across the screens; entering the world
+  stops it.
 - **`text` overrides.** The format allows them; the Moradon package uses none: the
   login screen keeps KO's labels and copyright line (Q61, superseding Q56).
 - **`hidden`.** The Moradon package keeps the login bar as KO draws it: `Edit_ID`,
@@ -179,6 +188,7 @@ stays private.
 |---|---|
 | Package without `front_end` | Today's panels, unchanged. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
+| A package cooked before N3FE version 3 (no music section) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -200,6 +210,8 @@ stays private.
 - The client front-end module lives in `client/render/front_end.h`. It draws with its
   own two small shader programs (the lit scene as Direct3D 9's fixed function, the UI
   quads) and skins the characters with the engine's `Scene`.
+- The music decoder is minimp3 (CC0), vendored at a pinned commit in
+  `client/third_party/minimp3/` (`UPSTREAM.md`, Q69).
 
 ## Acceptance tests
 
@@ -207,10 +219,15 @@ CPU (`make test`):
 
 1. **Cook bounds** (`tests/front_end.py`). `ko_front_end` refuses truncated inputs,
    trees over the bounds, unknown actions, unbound required actions and missing
-   screens. It works on synthetic UIF fixtures (original bytes). (The wrapped-UV
+   screens, and music that is not whole Layer III frames of one format or names an
+   unknown screen or track. It works on synthetic UIF fixtures and synthetic MPEG
+   frames (original bytes). (The wrapped-UV
    `ka_login_intro_us.uif` is not an input: the 1098 intro scene replaced it.)
 2. **Loader bounds** (`tests/front_end.py`, `tests/front_end.cpp`). The client loader
-   refuses malformed blobs, each with its own message and no crash.
+   refuses malformed blobs, each with its own message and no crash. The music stream
+   (`tests/audio.cpp`) plays a synthetic track once and looping, resamples 32 kHz to
+   48 kHz, ends a track that decodes to nothing, and the mixer keeps, replaces and
+   stops it.
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.
@@ -224,7 +241,9 @@ KO (`make live-ko`, needs `assets/ko`):
    projected box is non-empty and covers the view's centre: KO's close-up runs past
    the frame's edges); the login button's rect has its
    art; the realms list shows the realm name; select shows 1, 2 and 3 characters in
-   the slots; loading shows a progress bar that advances.
+   the slots; loading shows a progress bar that advances. Music: login, the realm
+   list, select and create name KO's track, loading none, and the track streams
+   audibly past its end.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:
@@ -240,4 +259,4 @@ Manual (`docs/manual-testing.md`, Linux and Windows):
 
 ## Open questions
 
-Q50–Q56 in `QUESTIONS.md`.
+Q50–Q57 and Q69 in `QUESTIONS.md`.

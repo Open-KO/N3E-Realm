@@ -13,6 +13,7 @@
 #include <array>
 #include <cctype>
 #include <cmath>
+#include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -209,6 +210,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
 
   Screen screen() const { return state; }
   bool wants_text() const { return state == Screen::create && !message; }
+  // RQ-018 (Q57): the track this screen plays (null for silence). The
+  // viewer hands it to the mixer every frame, which keeps a track already
+  // playing, so it runs on across the screens that share it.
+  std::shared_ptr<const MusicTrack> music() const {
+    const auto index = fe.screen_music[size_t(layout())];
+    return index == FrontEnd::kNoMusic ? nullptr : fe.music[index];
+  }
+  bool has_music() const { return !fe.music.empty(); }
   // The Discord login finished: KO's OpenServerList.
   void logged_in() {
     // A message box (a kick, a drop) stays over the login screen until OK.

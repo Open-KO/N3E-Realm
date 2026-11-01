@@ -22,13 +22,20 @@ struct AudioDevice {
     int queued=SDL_GetAudioStreamQueued(stream);
     if(queued<0){close();return;}
     constexpr unsigned frames=1024;
-    if(queued>int(frames*2*sizeof(float)))return;
-    if(next<now-.1||next>now+.2)next=now;
-    auto samples=mixer.mix(next,frames,listener);next+=frames/48000.;
-    for(float sample:samples)peak=std::max(peak,std::abs(sample));
-    if(!SDL_PutAudioStreamData(stream,samples.data(),int(samples.size()*sizeof(float))))close();
-    else if(std::any_of(samples.begin(),samples.end(),[](float sample){return std::abs(sample)>.0001f;}))audible_frames+=frames;
+    constexpr int chunk=int(frames*2*sizeof(float));
+    // Voices keep one chunk (21 ms) of latency. Music (RQ-018) runs up to
+    // six chunks ahead, so a slow frame does not gap it; the voices' clock
+    // (next) stays within the resync window below.
+    const int ahead=mixer.music_playing()?6:1;
+    for(int round=0;round<ahead&&queued<=ahead*chunk;++round){
+      if(next<now-.1||next>now+.2)next=now;
+      auto samples=mixer.mix(next,frames,listener);next+=frames/48000.;
+      for(float sample:samples)peak=std::max(peak,std::abs(sample));
+      if(!SDL_PutAudioStreamData(stream,samples.data(),int(samples.size()*sizeof(float)))){close();return;}
+      if(std::any_of(samples.begin(),samples.end(),[](float sample){return std::abs(sample)>.0001f;}))audible_frames+=frames;
+      queued+=chunk;
+    }
   }
-  void close(){if(stream)SDL_DestroyAudioStream(stream);stream=nullptr;enabled=false;mixer.voices.clear();}
+  void close(){if(stream)SDL_DestroyAudioStream(stream);stream=nullptr;enabled=false;mixer.voices.clear();mixer.music.reset();}
   ~AudioDevice(){close();}
 };

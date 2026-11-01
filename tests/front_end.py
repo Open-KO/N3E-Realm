@@ -2,7 +2,10 @@
 original synthetic UIF fixtures, and the client loader (build/client/
 n3e-front-end-check) on a synthetic front-end.bin and its malformed variants.
 No reference assets: the UIF trees, the texture and the font atlas are written
-here, and both scenes use the demo package's own N3S1 character."""
+here, and both scenes use the demo package's own N3S1 character. The music
+(RQ-018) is synthetic MPEG-1 Layer III frames written bit by bit here: a
+96-byte mono frame at 48 kHz whose two granules each carry one count1
+quadruple, so it decodes to a quiet low tone (tests/audio.cpp decodes it)."""
 import pathlib
 import shutil
 import struct
@@ -14,6 +17,82 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools/assetc"))
 from common import f, string, u  # noqa: E402
 import ko_front_end as fe  # noqa: E402
+
+# --- synthetic MPEG audio (RQ-018) ----------------------------------------------
+
+
+def mp3_frame(tone=True, layer=1, rate=1, padding=0):
+    """One MPEG-1 frame, 32 kbit/s, mono, no CRC (96 bytes at 48 kHz, rate
+    index 1). `layer` is the header's field (1 is Layer III)."""
+    bits = []
+
+    def put(value, n):
+        bits.extend((value >> i) & 1 for i in range(n - 1, -1, -1))
+    for value, n in ((0x7FF, 11), (3, 2), (layer, 2), (1, 1), (1, 4), (rate, 2), (padding, 1), (0, 1), (3, 2),
+                     (0, 2), (0, 1), (0, 1), (0, 2)):
+        put(value, n)
+    put(0, 9), put(0, 5), put(0, 4)  # main_data_begin, private bits, scfsi
+    for _ in range(2):  # granules: count1 only (table B), global gain 210
+        for value, n in ((5 if tone else 0, 12), (0, 9), (210, 8), (0, 4), (0, 1), (0, 15), (0, 4), (0, 3),
+                         (0, 1), (0, 1), (1, 1)):
+            put(value, n)
+    for _ in range(2):
+        if tone:
+            put(0b0111, 4), put(0, 1)  # the quadruple (1, 0, 0, 0), sign +
+    size = fe.mpeg_frame(bytes([0xFF, 0xFB, (1 << 4) | (rate << 2) | (padding << 1), 0xC0]), 0, 4)[0]
+    bits.extend([0] * (size * 8 - len(bits)))
+    return bytes(int("".join(map(str, bits[i:i + 8])), 2) for i in range(0, len(bits), 8))
+
+
+FRAME = mp3_frame()
+assert len(FRAME) == 96 and fe.mpeg_frame(FRAME, 0, 96) == (96, 48000, 1, True)
+TRACK = FRAME * 10
+id3v2 = b"ID3\x03\x00\x00" + bytes([0, 0, 0, 20]) + bytes(20)
+assert fe.music_track(TRACK) == (48000, 1, 10, TRACK, 0)
+assert fe.music_track(id3v2 + TRACK + b"TAG" + bytes(125)) == (48000, 1, 10, TRACK, 30 + 128)
+# KO's intro track ends inside its last frame: that frame is dropped.
+assert fe.music_track(TRACK + FRAME[:40]) == (48000, 1, 10, TRACK, 40)
+music_problems = {
+    "no frames": b"",
+    "junk before the frames": b"\0" + TRACK,
+    "junk between frames": TRACK[:96] + b"\0" * 4 + TRACK[96:],
+    "Layer II": mp3_frame(layer=2) + TRACK,
+    "a second sample rate": TRACK + mp3_frame(rate=0),
+    "only a cut frame": FRAME[:40],
+    "past the track bound": FRAME * (fe.MAX_TRACK_BYTES // 96 + 1),
+}
+for reason, data in music_problems.items():
+    try:
+        fe.music_track(data)
+    except ValueError:
+        continue
+    raise AssertionError("music cook accepted " + reason)
+
+
+class Tracks:
+    def get(self, path):
+        return TRACK
+
+
+one = {"tracks": [{"path": "a.mp3", "loop": True}], "screens": {"login": 0, "select": 0}}
+section, played = fe.music(Tracks(), one)
+assert section == u(1) + u(48000) + u(1) + u(1) + u(10) + u(len(TRACK)) + TRACK + u(0) + u(0) + u(fe.NO_MUSIC) * 2
+assert played == [dict(path="a.mp3", rate=48000, channels=1, frames=10, bytes=960, dropped=0, loop=True)], played
+assert fe.music(Tracks(), None)[0] == u(0) + u(fe.NO_MUSIC) * 4
+config_problems = {
+    "an unknown screen": dict(one, screens={"message": 0}),
+    "a screen past the tracks": dict(one, screens={"login": 1}),
+    "a loop that is not a flag": dict(one, tracks=[{"path": "a.mp3", "loop": 1}]),
+    "five tracks": dict(one, tracks=[{"path": "a.mp3", "loop": True}] * 5),
+}
+for reason, config in config_problems.items():
+    try:
+        fe.music(Tracks(), config)
+    except ValueError:
+        continue
+    raise AssertionError("music cook accepted " + reason)
+print("PASS front-end music cook: frames, tags and a cut last frame; %d refusals"
+      % (len(music_problems) + len(config_problems)))
 
 # --- synthetic UIF (ko_hud.parse's layout) ------------------------------------
 
@@ -161,8 +240,15 @@ def raw_light(l):
                             [l["range"], l["falloff"]] + l["attenuation"] + [l["theta"], l["phi"]])
 
 
-def blob(version=2, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
-         canvas=(1024, 768), magic=b"N3FE", strings=None):
+NO_MUSIC = u(0) + u(fe.NO_MUSIC) * 4
+
+
+def track(data=TRACK, rate=48000, channels=1, loop=1, frames=None):
+    return u(rate) + u(channels) + u(loop) + u(len(data) // 96 if frames is None else frames) + u(len(data)) + data
+
+
+def blob(version=3, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+         canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -178,7 +264,7 @@ def blob(version=2, slots=1, screen_data=None, font_index=None, light=None, plug
     out += CAMERA + u(0) + f([0, 0, 0]) + u(slots if slot_count is None else slot_count)
     out += (f([0, -1, 2, 0, 0, 0, 7]) + fe.light_record(spot)) * (slots if slot_count is None else slot_count)
     out += u(1) + MESH + character + character
-    return out + extra
+    return out + music + extra
 
 
 def unbound(name, action):
@@ -218,7 +304,19 @@ cases = {
     "bad-truncated": valid[:-1],
     "bad-trailing": valid + b"\0",
     "bad-magic": blob(magic=b"N3FX"),
-    "bad-version": blob(version=1),
+    "bad-version": blob(version=2),
+    "ok-music": blob(music=u(1) + track() + u(0) * 3 + u(fe.NO_MUSIC)),
+    "ok-music-two": blob(music=u(2) + track() + track(loop=0) + u(0) + u(1) + u(fe.NO_MUSIC) * 2),
+    "bad-music-tracks": blob(music=u(5) + track() * 5 + u(fe.NO_MUSIC) * 4),
+    "bad-music-loop": blob(music=u(1) + track(loop=2) + u(fe.NO_MUSIC) * 4),
+    "bad-music-channels": blob(music=u(1) + track(channels=2) + u(fe.NO_MUSIC) * 4),
+    "bad-music-rate": blob(music=u(1) + track(rate=44100) + u(fe.NO_MUSIC) * 4),
+    "bad-music-frame-count": blob(music=u(1) + track(frames=11) + u(fe.NO_MUSIC) * 4),
+    "bad-music-layer": blob(music=u(1) + track(mp3_frame(layer=2) + TRACK[96:]) + u(fe.NO_MUSIC) * 4),
+    "bad-music-cut-frame": blob(music=u(1) + track(TRACK[:-1], frames=10) + u(fe.NO_MUSIC) * 4),
+    "bad-music-empty": blob(music=u(1) + track(b"", frames=1) + u(fe.NO_MUSIC) * 4),
+    "bad-music-screen": blob(music=u(1) + track() + u(1) + u(fe.NO_MUSIC) * 3),
+    "bad-music-missing": valid[:-len(NO_MUSIC)],
     "bad-slots": blob(slots=4),
     "bad-slot-count": blob(slot_count=2),
     "bad-canvas": blob(canvas=(800, 600)),

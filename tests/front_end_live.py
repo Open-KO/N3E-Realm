@@ -18,7 +18,10 @@ from the player's own KO data.
      across its top is darker than 0.6 of the band's mean;
    - loading: the progress bar's lit share grows from the start stage (2/3: the
      package and its textures) to the first World (1);
-   - message: the box's text rect holds text.
+   - message: the box's text rect holds text;
+   - music (RQ-018, Q57): login, the realm list, select and create name one
+     track and loading none, and that track (KO's Snd/Intro_Sound.mp3, 4,096
+     frames at 44.1 kHz stereo) streams audibly past its end without ending.
 
 No server or stack.
 """
@@ -157,7 +160,19 @@ for size in ("1280x1024", "1024x768"):
 
     path, rect, _ = shots["message"]
     assert len(set(region(path, rect))) > 10, (size, rect)
+
+    music = re.search(r"^FRONT_MUSIC (.*)$", run.stdout, re.M)
+    assert music and music.group(1) == "login=0 realms=0 select=0 create=0 loading=none", (size, music)
+    stream = re.search(r"^FRONT_MUSIC_STREAM rate=(\d+) channels=(\d+) frames=(\d+) decoded=(\d+) peak=(\S+) "
+                       r"audible=(\d+) ended=(\d)$", run.stdout, re.M)
+    assert stream, (size, run.stdout[-2000:])
+    rate, channels, frames, decoded, peak, audible, ended = stream.groups()
+    assert (rate, channels, frames) == ("44100", "2", "4096"), stream.group(0)
+    # One second past the end: the loop decoded the first frames again.
+    assert int(decoded) > int(frames) and ended == "0", stream.group(0)
+    assert float(peak) > 0.1 and int(audible) > 48000 * 60, stream.group(0)
     print(f"PASS front-end captures {size}: intro box {boxes and shots['login'][2][0][1]}, "
           f"realm name {inside} px in the list, 1-3 characters in the hall, create stands "
-          f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}")
+          f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}, music "
+          f"{frames} frames looped (peak {float(peak):.2f})")
 print("PASS KO front end graphical")

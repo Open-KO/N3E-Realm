@@ -127,5 +127,9 @@
       "clips": [0, 1],
       "plugs": ["ChrSelect/wea_ka_mace.n3cplug"]
     }
+  },
+  "music": {
+    "tracks": [{"path": "Snd/Intro_Sound.mp3", "loop": true}],
+    "screens": {"login": 0, "select": 0, "create": 0}
   }
 }

@@ -75,10 +75,10 @@ KO's sizes, and `--fullscreen` for full screen at that size (Q62).
 
 | # | Do | Expect |
 |---|---|---|
-| L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game opens on KO's login screen: the orc with the axe under the moon, KO's copyright line, and the login bar exactly as KO's: ID and Password boxes, **Login**, **Cancel**, **Option**, **Registration** (only Login and Cancel do anything). |
+| L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game opens on KO's login screen: the orc with the axe under the moon, KO's copyright line, and the login bar exactly as KO's: ID and Password boxes, **Login**, **Cancel**, **Option**, **Registration** (only Login and Cancel do anything). KO's intro music plays and loops (RQ-018). |
 | L2 | **Login** (or ENTER, even right after the window opens) | The browser opens Discord's authorize page for your application; after **Authorize** the tab says you are logged in, and KO's server list drops in from the top with "Local Realm". |
 | L3 | Double-click the realm (or **Connect**) | The Karus character select hall. With no characters, ENTER opens character create (Tuarek priest, name field). |
-| L4 | Type a name, **Create**; then ENTER (or click the character) | Back in the hall with the new character in the centre slot and "Level 1" in the info bar; ENTER plays its selected animation, then the loading screen, then the world. |
+| L4 | Type a name, **Create**; then ENTER (or click the character) | Back in the hall with the new character in the centre slot and "Level 1" in the info bar; ENTER plays its selected animation, then the loading screen, then the world. The intro music plays on without restarting through the realm list, select and create, and stops when the loading screen shows. |
 | L5 | Walk and run | Moves as in the play scripts. |
 | L6 | Close the game; run the launcher again | No downloads; the game logs in without the browser and opens on the server list. |
 | L7 | Discord: `/status`; `/whois` and pick yourself | One player online; your account, its characters and session. |

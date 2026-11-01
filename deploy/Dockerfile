@@ -7,6 +7,7 @@ COPY server server
 # Workspace members the server image does not build, but cargo must resolve.
 COPY launcher launcher
 COPY bot bot
+COPY edge edge
 COPY deploy/*.sql deploy/
 ARG N3E_BUILD_VERSION=dev
 ENV N3E_BUILD_VERSION=$N3E_BUILD_VERSION
@@ -19,6 +20,14 @@ FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2
 COPY --from=bot-build /src/target/release/realm-bot /usr/local/bin/realm-bot
 USER 1000:1000
 ENTRYPOINT ["realm-bot"]
+# The WebSocket edge image (`--target edge`, specs/12-edge.md): tokio only, no TLS, so
+# it needs neither OpenSSL nor a CA store at run time.
+FROM build AS edge-build
+RUN cargo build --locked --release -p realm-edge
+FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251 AS edge
+COPY --from=edge-build /src/target/release/realm-edge /usr/local/bin/realm-edge
+USER 1000:1000
+ENTRYPOINT ["realm-edge"]
 # The server image: the last stage, so a plain build produces it.
 FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
 RUN apt-get update && apt-get install -y --no-install-recommends libssl3 ca-certificates && rm -rf /var/lib/apt/lists/*

@@ -1,0 +1,16 @@
+[package]
+name = "realm-edge"
+version = "0.0.1"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "N3E Realm edge: the game wire from cloudflared's WebSockets to the server, with PROXY v2"
+publish = false
+
+[dependencies]
+# All already in the workspace lock (server, bot, launcher); the WebSocket framing is
+# hand-rolled so its bounds stay explicit (specs/12-edge.md).
+tokio = { version = "=1.53.1", features = ["rt-multi-thread", "net", "io-util", "time", "sync", "signal", "macros"] }
+httparse = "=1.10.1"
+sha1_smol = "=1.0.1"
+base64 = "=0.22.1"

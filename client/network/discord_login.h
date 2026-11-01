@@ -15,6 +15,8 @@ namespace n3e::login {
 // realms/<id>/realm.json (spec 04): {id, name, host, port, discord_client_id}.
 struct RealmConfig {
   std::string id, name, host, discord_client_id;
+  // Spec 12: the WebSocket edge the game wire goes through; "" for TCP to host:port.
+  std::string edge;
   int port = 0;
   std::string endpoint() const { return host + ":" + std::to_string(port); }
 };

@@ -53,7 +53,7 @@ target_link_libraries(n3e-assets PUBLIC OpenSSL::Crypto Threads::Threads)
 # smoke and capture hooks are compiled out (N3E_HARNESS=0, client/harness/harness.h)
 # and tests/player_build.py checks none of their strings reach the binary.
 # n3e-test-client (N3E_HARNESS=1) adds them; every test and developer session uses it.
-add_library(n3e-client-network OBJECT client/network/handshake.cpp client/network/world.cpp client/network/movement.cpp client/network/discord_login.cpp)
+add_library(n3e-client-network OBJECT client/network/handshake.cpp client/network/world.cpp client/network/movement.cpp client/network/discord_login.cpp client/network/websocket.cpp)
 target_link_libraries(n3e-client-network PRIVATE n3e-assets n3e-wire n3e-sdl3 OpenSSL::SSL)
 target_compile_options(n3e-client-network PRIVATE ${N3E_WARNINGS})
 if(N3E_TOOLS)

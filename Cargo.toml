@@ -1,3 +1,3 @@
 [workspace]
-members = ["server", "launcher", "bot"]
+members = ["server", "launcher", "bot", "edge"]
 resolver = "2"

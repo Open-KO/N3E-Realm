@@ -7,6 +7,11 @@
 # Until CD's content image exists (spec 06), the cooked package and the TLS pair are
 # host paths: N3E_PACKAGE_PATH and N3E_TLS_PATH (server.pem, server.key). deploy/HOST.md
 # records the host's values.
+#
+# The `edge` profile (spec 12) adds the WebSocket bridge, the release files and the
+# realm's Cloudflare Tunnel; with it the server trusts PROXY headers from the bridge
+# only (N3E_TRUSTED_PROXY_CIDRS=172.31.77.11/32) and N3E_BIND=127.0.0.1 keeps the
+# game port off the host's public interfaces.
 name: n3e-realm
 x-runtime: &runtime
   image: "${N3E_IMAGE:-n3e-foundation:prod}"
@@ -26,6 +31,7 @@ x-runtime: &runtime
     N3E_KEY: /tls/server.key
     DISCORD_CLIENT_ID: "${DISCORD_CLIENT_ID:?set DISCORD_CLIENT_ID}"
     DISCORD_CLIENT_SECRET: "${DISCORD_CLIENT_SECRET:?set DISCORD_CLIENT_SECRET}"
+    N3E_TRUSTED_PROXY_CIDRS: "${N3E_TRUSTED_PROXY_CIDRS:-}"
 services:
   postgres:
     image: postgres:17.4-bookworm@sha256:304ab813518754228f9f792f79d6da36359b82d8ecf418096c636725f8c930ad
@@ -100,6 +106,51 @@ services:
       server: {condition: service_healthy}
     restart: unless-stopped
     stop_grace_period: 5s
+  # Spec 12: the bridge between cloudflared and the game port.
+  edge:
+    profiles: [edge]
+    image: "${N3E_EDGE_IMAGE:-n3e-edge:prod}"
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      target: edge
+    environment:
+      REALM_EDGE_LISTEN: 0.0.0.0:8443
+      REALM_EDGE_UPSTREAM: 172.31.77.10:7777
+      REALM_EDGE_TRUSTED_CIDRS: 172.31.77.12/32
+    networks:
+      default: {ipv4_address: 172.31.77.11}
+    depends_on:
+      server: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "realm-edge", "health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    restart: unless-stopped
+    stop_grace_period: 5s
+  # The launcher's manifest, client archives and content store, served to the tunnel
+  # until CD publishes GitHub Releases (spec 06).
+  releases:
+    profiles: [edge]
+    image: nginx:1.28.0-alpine@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284
+    volumes:
+      - "${N3E_RELEASES_PATH:-../build/hosted-release}:/usr/share/nginx/html:ro"
+    networks:
+      default: {ipv4_address: 172.31.77.13}
+    restart: unless-stopped
+  # The realm's own tunnel: play.openko.net -> http://edge:8443,
+  # releases.openko.net -> http://releases:80 (routes set in Cloudflare).
+  cloudflared:
+    profiles: [edge]
+    image: cloudflare/cloudflared:2025.10.0@sha256:396cd2e6f021275ad09969a1b4f1a7e62ca5349fde62781ce082bb2c18105c70
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN:-}"
+    networks:
+      default: {ipv4_address: 172.31.77.12}
+    depends_on: [edge, releases]
+    restart: unless-stopped
 networks:
   default:
     ipam:

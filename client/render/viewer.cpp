@@ -132,7 +132,7 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     uint64_t turbo_self=0, turbo_session=0, turbo_generation=0;
     n3e::V movement_intent{};
     float heading = 0;
-    std::string endpoint, ca;
+    std::string endpoint, ca, edge;
     std::optional<n3e::login::RealmConfig> realm_config;
     int fixed_width = 0, fixed_height = 0;
     bool fullscreen = false;
@@ -161,7 +161,11 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
         // application replace --connect (spec 02 login).
         realm_config = n3e::login::read_realm(argv[++i]);
         endpoint = realm_config->endpoint();
+        edge = realm_config->edge;
       }
+      else if (a == "--edge" && i + 1 < argc)
+        // Spec 12: a WebSocket edge in front of --connect (tests; realms name it).
+        edge = argv[++i];
       else if (a == "--ca" && i + 1 < argc)
         ca = argv[++i];
 #if N3E_HARNESS
@@ -473,7 +477,7 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     std::unique_ptr<n3e::WorldClient> network;
     if (!endpoint.empty())
       network =
-          std::make_unique<n3e::WorldClient>(release, scene, endpoint, ca);
+          std::make_unique<n3e::WorldClient>(release, scene, endpoint, ca, edge);
     // Spec 02: with a realm config naming a Discord application the login screen
     // is "Log in with Discord"; ENTER starts it, ESC cancels the browser wait.
     std::unique_ptr<n3e::login::Flow> discord_flow;
@@ -1655,7 +1659,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     auto reset_connection=[&]{
       network.reset();
       network = std::make_unique<n3e::WorldClient>(release, scene,
-                                                   endpoint, ca);
+                                                   endpoint, ca, edge);
       if (discord_flow) discord_flow->reset();
       world = {};
       notices_seen = 0;

@@ -12,6 +12,9 @@
 !bot/Cargo.toml
 !bot/src/
 !bot/src/**
+!edge/Cargo.toml
+!edge/src/
+!edge/src/**
 !deploy/
 !deploy/001-foundation.sql
 !deploy/Dockerfile

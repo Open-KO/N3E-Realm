@@ -185,6 +185,9 @@ RealmConfig read_realm(const std::filesystem::path &path) {
   r.name = v["name"];
   r.host = v["host"];
   r.discord_client_id = v["discord_client_id"];
+  r.edge = v["edge"];
+  if (!r.edge.empty() && r.edge.compare(0, 6, "wss://") != 0)
+    throw std::runtime_error("realm config's edge must be a wss:// URL: " + path.string());
   try {
     r.port = std::stoi(v["port"]);
   } catch (...) {

@@ -137,7 +137,7 @@ inline void refusal(WorldState &s, const Release &r, bool session, const Error &
 class WorldClient {
   Release release;
   Scene scene;
-  std::string endpoint, ca;
+  std::string endpoint, ca, edge;
   std::mutex mutex;
   WorldState state;
   std::deque<Envelope> outgoing;
@@ -148,7 +148,8 @@ class WorldClient {
   void run(std::stop_token);
 
 public:
-  WorldClient(const Release &, const Scene &, std::string, std::string);
+  // `edge`: the realm's WebSocket edge URL (spec 12), or "" for TCP to `endpoint`.
+  WorldClient(const Release &, const Scene &, std::string, std::string, std::string = "");
   ~WorldClient();
   WorldState poll();
   void send(Envelope);

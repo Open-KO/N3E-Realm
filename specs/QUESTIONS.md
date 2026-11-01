@@ -436,8 +436,8 @@ The maintainer chose on 2026-11-01 to host on their own machine (`gn100`) rather
 pay for a VPS with scrubbing (spec 07's requirement), and to carry the game wire as a
 WebSocket through Cloudflare's free proxy and a Tunnel so the home address is never
 public. The reasoning and the providers checked are in `architecture.md`, "DDoS". Spec
-12 is the design (milestone M7a, proposed). Until it is built the realm is LAN only; no
-port is forwarded.
+12 is the design (milestone M7a), approved and built on 2026-11-01. No port is
+forwarded; the realm is public only through the tunnel.
 
 ### Q65 — Cloudflare's free-plan WebSocket limits
 

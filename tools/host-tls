@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# The realm certificate on its host (specs/12-edge.md "Host", specs/07-deploy.md
+# "TLS"): Let's Encrypt for the realm's name by DNS-01 on Cloudflare, so no HTTP
+# port ever opens. Certbot runs in its image, as root through Docker, reading the
+# zone-scoped token from /etc/n3e-realm/cloudflare.ini (root, 0600; deploy/HOST.md).
+# The pair is copied to /etc/n3e-realm/tls as server.pem and server.key, owned by
+# the server's user (1000), and the server restarts when it changed.
+#
+#   tools/host-tls issue    the first certificate
+#   tools/host-tls renew    renew when due; run daily from the maintainer's crontab:
+#     17 4 * * * cd ~/Projects/N3E-Realm && tools/host-tls renew >> ~/.cache/n3e-host-tls.log 2>&1
+set -euo pipefail
+cd "$(dirname "$0")/.."
+domain="${N3E_TLS_DOMAIN:-play.openko.net}"
+image=certbot/dns-cloudflare:v4.2.0@sha256:741896d9e490b4417c9c2e5eb5aa1c007b6f6a754d57edf7a9bbd8eb3874a057
+tls=/etc/n3e-realm/tls
+in_image() {
+  docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v /etc/n3e-realm:/etc/n3e-realm "$@"
+}
+certbot() { in_image "$image" "$@"; }
+# Copies the live pair into place; prints "changed" when server.pem differs.
+install_pair() {
+  in_image --entrypoint sh "$image" -c '
+    set -e
+    live=/etc/letsencrypt/live/'"$domain"'
+    mkdir -p '"$tls"'
+    if cmp -s "$live/fullchain.pem" '"$tls"'/server.pem; then exit 0; fi
+    install -o 1000 -g 1000 -m 0444 "$live/fullchain.pem" '"$tls"'/server.pem
+    install -o 1000 -g 1000 -m 0400 "$live/privkey.pem" '"$tls"'/server.key
+    echo changed'
+}
+restart_if() {
+  if test "$1" = changed && docker ps -q -f name=^n3e-realm-server-1$ | grep -q .; then
+    docker restart -t 30 n3e-realm-server-1 >/dev/null
+    echo "host-tls: server restarted with the new certificate"
+  fi
+}
+case "${1:-}" in
+issue)
+  # No contact address: expiry mail is unneeded with renewal from cron, and nothing
+  # personal goes to the CA.
+  certbot certonly --non-interactive --agree-tos --register-unsafely-without-email \
+    --dns-cloudflare --dns-cloudflare-credentials /etc/n3e-realm/cloudflare.ini \
+    --dns-cloudflare-propagation-seconds 30 --key-type ecdsa -d "$domain"
+  restart_if "$(install_pair)"
+  echo "host-tls: $domain issued to $tls; add the daily renewal to crontab (the top of this script)"
+  ;;
+renew)
+  date -u +%FT%TZ
+  certbot renew --non-interactive
+  restart_if "$(install_pair)"
+  ;;
+*)
+  echo "usage: tools/host-tls issue|renew" >&2
+  exit 2
+  ;;
+esac

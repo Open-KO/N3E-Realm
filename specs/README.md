@@ -36,7 +36,7 @@ Before the import, the only work in `n3e` is the reversing pre-phase in
 | 08 | [`08-docs.md`](08-docs.md) | AI-friendly docs on Pages | `N3E-Realm/docs` |
 | 10 | [`10-content.md`](10-content.md) | Package vs. live tunables, raw KO input, event presets, contributions, forks | `games/`, `tools/assetc`, `server/` (registry kinds) |
 | 11 | [`11-front-end.md`](11-front-end.md) | KO front end: intro and login, server list, character select and create, loading; the player path moves to Moradon | `tools/assetc`, `client/`, `games/moradon` |
-| 12 | [`12-edge.md`](12-edge.md) | The game wire as a WebSocket through Cloudflare, for a host that must stay private (proposed) | `edge/`, `client/`, `deploy/` |
+| 12 | [`12-edge.md`](12-edge.md) | The game wire as a WebSocket through Cloudflare, for a host that must stay private | `edge/`, `client/`, `deploy/` |
 | — | [`QUESTIONS.md`](QUESTIONS.md) | Open questions with defaults; Q1–Q3 block M1 | — |
 | — | [`KO-FINDINGS.md`](KO-FINDINGS.md) | Binary-confirmed KO behaviour the specs rely on (shutdown countdown, rate events, notices, sanctions, wording) | — |
 | — | [`KO-REVERSING-PRIORITIES.md`](KO-REVERSING-PRIORITIES.md) | Which KO operator surfaces the architecture depends on, and what still needs binary confirmation | — |

@@ -3,7 +3,7 @@
 //! content-addressed store, the realm's state committed only after both, and old
 //! versions pruned.
 
-use crate::manifest::{Artifact, Content, ContentIndex, IndexFile, Manifest};
+use crate::manifest::{Artifact, Content, ContentIndex, IndexFile, Manifest, Realm};
 use crate::net::{sha256_file, Failure, Net};
 use crate::paths::{place, write_atomic, Dirs, CLIENT};
 use serde::{Deserialize, Serialize};
@@ -314,7 +314,19 @@ fn index_path(dirs: &Dirs, realm: &str, hash: &str) -> PathBuf {
         .join(format!("{hash}.index.json"))
 }
 
-/// The realm config the client reads (spec 02/04): `{id, name, host, port, discord_client_id}`.
+/// The realm config the client reads (spec 02/04): `{id, name, host, port,
+/// discord_client_id}`, and `edge` when the realm names one (spec 12).
+pub fn realm_config(realm: &Realm) -> serde_json::Value {
+    let mut config = serde_json::json!({
+        "id": realm.id, "name": realm.name, "host": realm.host, "port": realm.port,
+        "discord_client_id": realm.discord_client_id,
+    });
+    if let Some(edge) = &realm.edge {
+        config["edge"] = edge.clone().into();
+    }
+    config
+}
+
 pub fn realm_json(dirs: &Dirs, manifest: &Manifest) -> PathBuf {
     dirs.realm(&manifest.realm.id).join("realm.json")
 }
@@ -329,10 +341,7 @@ pub fn commit(
 ) -> Result<(), Failure> {
     let realm = &manifest.realm;
     let dir = dirs.realm(&realm.id);
-    let config = serde_json::json!({
-        "id": realm.id, "name": realm.name, "host": realm.host, "port": realm.port,
-        "discord_client_id": realm.discord_client_id,
-    });
+    let config = realm_config(realm);
     let installed = Installed {
         client: manifest.client.version.clone(),
         content: manifest.content.hash.clone(),
@@ -456,5 +465,25 @@ mod tests {
         assert!(!safe_relative(Path::new("/etc/passwd")));
         assert!(!safe_relative(Path::new("a/../../x")));
         assert!(!safe_relative(Path::new(".")));
+    }
+
+    #[test]
+    fn realm_config_carries_the_edge_only_when_named() {
+        let mut realm = Realm {
+            id: "openko".into(),
+            name: "OpenKO".into(),
+            host: "play.openko.net".into(),
+            port: 7777,
+            discord_client_id: "1".into(),
+            news_url: None,
+            edge: None,
+        };
+        assert!(realm_config(&realm).get("edge").is_none());
+        realm.edge = Some("wss://play.openko.net/v1/wire".into());
+        assert_eq!(
+            realm_config(&realm)["edge"],
+            "wss://play.openko.net/v1/wire"
+        );
+        assert_eq!(realm_config(&realm)["host"], "play.openko.net");
     }
 }

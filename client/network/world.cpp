@@ -2,6 +2,7 @@
 #include "world.h"
 #include "platform/net.h"
 #include "platform/tls.h"
+#include "websocket.h"
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -21,6 +22,8 @@ struct Transport {
   net::Socket fd = net::BAD_SOCKET;
   SSL_CTX *ctx = nullptr;
   SSL *ssl = nullptr;
+  // Spec 12: the WebSocket edge the realm's TLS runs through, when the realm names one.
+  std::unique_ptr<ws::Edge> edge;
   ~Transport() {
     if (ssl)
       SSL_free(ssl);
@@ -30,35 +33,26 @@ struct Transport {
       net::close(fd);
   }
   void wait(int error, double end) {
+    // Through an edge the BIO blocks until its deadline, so a retry is a failure.
+    check(!edge, "connection closed");
     int ms = int((end - now()) * 1000);
     check(ms > 0, "TLS deadline");
     check(net::wait(fd, short(error == SSL_ERROR_WANT_WRITE ? POLLOUT : POLLIN), ms) > 0, "TLS deadline");
   }
-  void open(const std::string &endpoint, const std::string &ca) {
+  void open(const std::string &endpoint, const std::string &ca, const std::string &edge_url) {
     auto colon = endpoint.rfind(':');
     check(colon != std::string::npos, "HOST:PORT required");
     auto host = endpoint.substr(0, colon), port = endpoint.substr(colon + 1);
-    addrinfo hints{}, *raw = nullptr;
-    hints.ai_socktype = SOCK_STREAM;
-    check(getaddrinfo(host.c_str(), port.c_str(), &hints, &raw) == 0,
-          "DNS failed");
-    std::unique_ptr<addrinfo, decltype(&freeaddrinfo)> addresses(raw,
-                                                                 freeaddrinfo);
-    for (auto *a = raw; a; a = a->ai_next) {
-      fd = ::socket(a->ai_family, a->ai_socktype, a->ai_protocol);
-      if (fd == net::BAD_SOCKET)
-        continue;
-      if (net::nonblocking(fd)) {
-        int r = ::connect(fd, a->ai_addr, int(a->ai_addrlen));
-        if ((r == 0 || net::would_block()) && net::wait(fd, POLLOUT, 2000) > 0 &&
-            net::pending_error(fd) == 0)
-          break;
-      }
-      net::close(fd);
-      fd = net::BAD_SOCKET;
+    double end = now() + 2;
+    if (edge_url.empty())
+      fd = ws::connect_tcp(host, port);
+    else {
+      // Spec 12: the outer handshake gets the inner one's deadline plus 5 s.
+      end = now() + 7;
+      edge = std::make_unique<ws::Edge>();
+      edge->open(edge_url, ca, end);
+      edge->deadline = end;
     }
-    check(fd != net::BAD_SOCKET, "connect failed");
-    check(net::no_delay(fd), "TCP_NODELAY failed");
     ctx = SSL_CTX_new(TLS_client_method());
     check(ctx, "TLS context");
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
@@ -66,11 +60,14 @@ struct Transport {
     check(tls::trust(ctx, ca), ca.empty() ? "no system CA certificates" : "CA failed");
     ssl = SSL_new(ctx);
     check(ssl, "TLS allocation");
-    // OpenSSL takes a Winsock SOCKET as an int (its documented convention).
-    SSL_set_fd(ssl, int(fd));
+    if (edge) {
+      BIO *b = edge->bio();
+      SSL_set_bio(ssl, b, b);
+    } else
+      // OpenSSL takes a Winsock SOCKET as an int (its documented convention).
+      SSL_set_fd(ssl, int(fd));
     SSL_set_tlsext_host_name(ssl, host.c_str());
     check(SSL_set1_host(ssl, host.c_str()) == 1, "hostname policy");
-    double end = now() + 2;
     for (;;) {
       int r = SSL_connect(ssl);
       if (r == 1)
@@ -83,6 +80,8 @@ struct Transport {
     check(SSL_get_verify_result(ssl) == X509_V_OK, "TLS verification failed");
   }
   void transfer(char *b, size_t n, bool write, double end) {
+    if (edge)
+      edge->deadline = end;
     while (n) {
       int r = write ? SSL_write(ssl, b, n) : SSL_read(ssl, b, n);
       if (r > 0) {
@@ -105,7 +104,7 @@ struct Transport {
     transfer(b.data(), b.size(), true, end);
   }
   bool available() {
-    return SSL_pending(ssl) > 0 || net::wait(fd, POLLIN, 5) > 0;
+    return SSL_pending(ssl) > 0 || (edge ? edge->readable(5) : net::wait(fd, POLLIN, 5) > 0);
   }
   Envelope receive() {
     uint32_t n;
@@ -122,8 +121,8 @@ struct Transport {
 };
 } // namespace
 WorldClient::WorldClient(const Release &r, const Scene &s, std::string e,
-                         std::string c)
-    : release(r), scene(s), endpoint(std::move(e)), ca(std::move(c)),
+                         std::string c, std::string g)
+    : release(r), scene(s), endpoint(std::move(e)), ca(std::move(c)), edge(std::move(g)),
       worker([this](std::stop_token stop) { run(stop); }) {}
 WorldClient::~WorldClient() { worker.request_stop(); }
 WorldState WorldClient::poll() {
@@ -153,7 +152,7 @@ void WorldClient::run(std::stop_token stop) {
   try {
     net::start();
     Transport t;
-    t.open(endpoint, ca);
+    t.open(endpoint, ca, edge);
     Envelope h;
     auto *hs = h.mutable_handshake();
     hs->set_version(release.protocol);

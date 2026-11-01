@@ -81,6 +81,8 @@ local store.
   hashing the installed `release.bin` after assembling the package.
 - `realm.discord_client_id` is passed to the client; the OAuth flow is per Discord
   application and must not be compiled into the client.
+- `realm.edge` (optional, `wss://…`): the WebSocket edge the game wire goes through
+  (spec 12); copied into `realm.json`. Absent, the client connects to `host:port`.
 - `launcher.min_version`: a Launcher older than this must self-update before doing
   anything else.
 
@@ -114,7 +116,7 @@ $XDG_DATA_HOME/n3e-realm/
   realms/<realm.id>/
     content/<content.hash>/                 # assembled package: hard links into store/
     content/<content.hash>.index.json       # its verified index, for pruning store/
-    realm.json                              # {id, name, host, port, discord_client_id} for the client (id names session.json's folder, spec 02)
+    realm.json                              # {id, name, host, port, discord_client_id[, edge]} for the client (id names session.json's folder, spec 02; edge, spec 12)
     manifest.json                           # last manifest successfully applied
     state.json                              # {installed: {client, content}, etag, last_check, clients, contents}
   lock                                      # held by the running Launcher

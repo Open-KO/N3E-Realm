@@ -1306,6 +1306,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "realm-edge"
+version = "0.0.1"
+dependencies = [
+ "base64 0.22.1",
+ "httparse",
+ "sha1_smol",
+ "tokio",
+]
+
+[[package]]
 name = "realm-launcher"
 version = "0.0.1"
 dependencies = [

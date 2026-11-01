@@ -311,6 +311,9 @@ SUITES = [
     # Spec 02 (M3): Discord login against a loopback stand-in, sessions, kick, ban, mute.
     suite("discord_login_live", "python", "tests/discord_login_live.py", covers=["tests/discord_standin.py"],
           graphical="PASS client expiry: the server says expired, the client drops session.json and runs the browser flow"),
+    # Spec 12 (M7a): the game wire through realm-edge and a stand-in for Cloudflare.
+    suite("edge_live", "python", "tests/edge_live.py", covers=["tests/discord_standin.py"],
+          graphical="PASS 4 after the edge closed its WebSockets"),
     # Spec 05 (M6): the Discord bot against stand-ins for Discord's gateway/REST and GitHub.
     suite("bot_live", "python", "tests/bot_live.py"),
     # Spec 04 (M4): the launcher against releases on a loopback file server; the

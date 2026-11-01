@@ -1,6 +1,7 @@
 # 12 — The WebSocket edge: the game wire through Cloudflare
 
-**Status: proposed (2026-11-01), awaiting the maintainer's approval.** Milestone M7a
+**Status: approved 2026-11-01; built, tests 1–5 pass, test 6 (manual, on the host)
+open.** Milestone M7a
 in [`00-roadmap.md`](00-roadmap.md). Why: [`architecture.md`](../docs/architecture.md),
 "DDoS", and Q64.
 
@@ -88,9 +89,18 @@ A Rust binary in this workspace (`edge/`), image `deploy/Dockerfile --target edg
   that is not one address, is refused (`400`). It is trusted only because the peer is
   `cloudflared` (`REALM_EDGE_TRUSTED_CIDRS`).
 - Upgrade requests are bounded: 8 KiB of headers, 5 s to complete.
-- One line per connection at close: `edge close src=<address> bytes_in= bytes_out=
-  secs= reason=`. No headers are logged.
-- Health: `GET /live` on the same listener (`200`), for compose.
+- One line per connection at close, on stderr: `edge close src=<address> bytes_in=
+  bytes_out= secs= reason=`. `src` is the `CF-Connecting-IP` address once known, else
+  the peer; the byte counts are the inner stream's (frame payloads). No headers are
+  logged. Refusals before the upgrade log the same line with their reason
+  (`untrusted`, `timeout` 408, `oversize` 431, `malformed`, `path` 404, `method` 405,
+  `upgrade` and `protocol` 400, `no_source` 400, `full` 503, `upstream` 502).
+- The upstream connection and its PROXY header are made before the `101`: a server
+  that cannot be reached is a `502`, not an upgraded socket that closes.
+- An idle client (no frame for 75 s, or one that stops reading for 75 s) is closed
+  with 1001.
+- Health: `GET /live` on the same listener (`200`), which loopback may always ask;
+  `realm-edge health` asks it, for compose (the image has no curl).
 
 ### Host
 
@@ -117,7 +127,7 @@ A Rust binary in this workspace (`edge/`), image `deploy/Dockerfile --target edg
 | Cloudflare or the tunnel is down | The client's connect fails with the existing "cannot reach the realm" path; nothing reaches the host. |
 | Cloudflare restarts an edge and drops sockets | Players reconnect with their session token (spec 02). |
 | The bridge is down | `cloudflared` returns 502; the client reports the connect failure. |
-| The server is down or draining | The bridge's upstream connect fails or the server refuses; the WebSocket closes 1011 or carries the server's refusal through the inner TLS. |
+| The server is down or draining | The upstream connect fails: `502` before the upgrade. A server that closes an upgraded socket (a refusal, a drain): close 1000; an upstream error after the upgrade: 1011. |
 | `CF-Connecting-IP` missing | `400`; counted in the close log as `reason=no_source`. |
 | A flood | Cloudflare's network takes it; the host sees only what the tunnel delivers, bounded by `REALM_EDGE_MAX_CONNECTIONS` and spec 01. |
 
@@ -141,8 +151,10 @@ A Rust binary in this workspace (`edge/`), image `deploy/Dockerfile --target edg
    `CF-Connecting-IP` admit three; a fourth with another address is admitted.
 3. `realm-edge` refuses a peer outside `REALM_EDGE_TRUSTED_CIDRS`, an upgrade without
    the subprotocol or `CF-Connecting-IP`, text frames and oversize frames, as specified.
-4. A WebSocket closed mid-session reconnects with the session token and no Discord
-   prompt.
+4. After the edge closes its WebSockets (an edge restart), the client's next
+   connection through the edge logs in with its stored session token, with no Discord
+   prompt. (The client does not reconnect on its own after a drop; the player's next
+   login or a restart does, as after a dropped TCP connection.)
 5. A `realm.json` without `edge` connects over TCP exactly as before (existing suites).
 6. Manual, on the host: a client outside the home network (a phone hotspot) connects
    to `wss://play.openko.net/v1/wire` and plays; `play.openko.net` resolves only to
@@ -151,3 +163,7 @@ A Rust binary in this workspace (`edge/`), image `deploy/Dockerfile --target edg
 ## Open questions
 
 Q64 (why), Q65 (Cloudflare's free-plan WebSocket limits are unpublished).
+
+Evidence (2026-11-01, this workstation): `tests/edge_live.py --graphical` (tests 1–4
+and the non-`wss` refusal), `cargo test -p realm-edge` (framing, PROXY v2 bytes,
+refusals), the existing suites for test 5.

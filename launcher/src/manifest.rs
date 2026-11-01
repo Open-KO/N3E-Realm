@@ -30,6 +30,10 @@ pub struct Realm {
     pub discord_client_id: String,
     #[serde(default)]
     pub news_url: Option<String>,
+    /// Spec 12: the WebSocket edge the game wire goes through (`wss://…`); absent
+    /// for TCP to `host:port`. Passed to the client in `realm.json`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub edge: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -195,6 +199,7 @@ mod tests {
         assert_eq!(m.realm.port, 7777);
         assert!(m.client.artifacts.contains_key("linux-x86_64"));
         assert!(m.realm.news_url.is_none());
+        assert!(m.realm.edge.is_none());
     }
 
     fn index(path: &str) -> ContentIndex {

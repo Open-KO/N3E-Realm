@@ -83,8 +83,11 @@ waits for a hand check.
 
 ## Out of bounds
 
-The loop never deploys or touches gn100 (`tools/host-realm`, `tools/host-tls`, ssh),
-publishes a release, force-pushes, rewrites history, reads or writes `.env` or any
+The loop may ssh to the realm host to read logs and status, and deploy and restart the
+realm with `tools/host-realm`: only with no player online or after the drain notice,
+after a backup, and it stops the loop if the realm does not come back healthy. It never
+runs `tools/host-realm mint-bot` or `tools/host-tls`, changes the host's TLS, tunnel or
+firewall, publishes a release by hand, force-pushes, rewrites history, reads or writes `.env` or any
 secret, runs `docker compose config` unfiltered, commits `assets/ko`, or adds items
 about its own machinery unless INBOX asks. Reverse engineering uses n3e's Ghidra
 setup and `~/Projects/n3e/ref/` read-only.

@@ -93,6 +93,9 @@ LOG as `RQ-NNN: attempt N failed`. Never `git reset`, `checkout --`, or `clean`.
 
 ## Never
 
-Deploy or ssh to gn100, run `tools/host-realm` or `tools/host-tls`, publish a release,
-force-push, read `.env` or secrets, run `docker compose config` unfiltered, commit
+Restart the realm with a player online and no drain notice, or deploy without a backup
+(ssh to the realm host and `tools/host-realm` are otherwise allowed, LOOP.md "Out of
+bounds"); run `tools/host-realm mint-bot` or `tools/host-tls`; change the host's TLS,
+tunnel or firewall; publish a release by hand; force-push; read `.env` or secrets (the
+host's included); write private host details into tracked files; run `docker compose config` unfiltered, commit
 `assets/ko`, or file items about the loop itself unless INBOX asks.

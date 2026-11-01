@@ -18,7 +18,9 @@ before assuming it.
 - Do exactly the item. Further work you find becomes a proposed new item, not code.
 - Leave changes uncommitted. Never `git commit`, `stash`, `reset`, `checkout --`,
   `clean`, `push`, and never edit `docs/loop/` (queue, LOG, INBOX).
-- Never touch gn100, `tools/host-realm`, `tools/host-tls`, `.env` or any secret; never
+- Touch the realm host (ssh, `tools/host-realm`) only when the item calls for it and as
+  LOOP.md "Out of bounds" allows; never `tools/host-realm mint-bot`, `tools/host-tls`,
+  `.env` or any secret, and never write private host details into tracked files; never
   run `docker compose config` unfiltered; never stage or copy `assets/ko` content into
   tracked files.
 - A spec that is wrong is fixed in the same change, and your report says so. A new

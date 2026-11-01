@@ -467,13 +467,16 @@ no public address, and is aarch64 (`deploy/HOST.md`). Options: (a) pull: CD publ
 a timer on the host polls it and runs the gated `remote.sh` locally; (b) a self-hosted
 Actions runner on the host for the deploy job only (fork-PR workflows need approval;
 the runner has Docker on a personal machine); (c) ssh through the tunnel behind a
-Cloudflare Access service token. **Default (raised by RQ-000, 2026-11-01; needs the
-maintainer):** (a), with images built for `linux/arm64`. RQ-031 waits on it.
+Cloudflare Access service token. **Decided by the maintainer, 2026-11-01:** keep it
+simple for now: CI builds and publishes, and the deploy runs over ssh from a machine on
+the host's own network (the loop may run it, AGENTS.md "Agent loop"), with images built
+for `linux/arm64`. A deploy path other self-hosting operators can use is researched
+later (the queue's `self-host-deploy-research`).
 
 ### Q68 — Where off-box backups go from the home host
 
 Spec 07 sends the nightly `pg_dump` to an object store; `deploy/HOST.md` has none yet
-and plans the workstation, which is in the same house. **Default (raised by RQ-000,
-2026-11-01; needs the maintainer, who owns the account):** Cloudflare R2 via `rclone`
-(credentials in a root-only file on the host, never `.env`), with the workstation as a
-second copy. RQ-033 waits on it.
+and plans the workstation, which is in the same house. RQ-000 proposed Cloudflare R2 via
+`rclone` with the workstation as a second copy. **Decided by the maintainer,
+2026-11-01:** no off-box backups for now. The nightly `pg_dump` and the pre-deploy dump
+stay on the host, with one restore rehearsal; an off-box copy is revisited later.

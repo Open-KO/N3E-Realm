@@ -29,6 +29,10 @@ The raw KO client tree is a pinned input in git-ignored `assets/ko/`
 - Keep game-specific IDs, rules and paths out of engine modules; express game
   differences as package data (`games/`) or revision properties.
 - Original or synthetic fixtures by default; record provenance for imported assets.
+- The repository is public: keep the maintainer's private setup (private-network
+  hostnames and addresses, local paths, account names) out of tracked files and commit
+  messages. Say "the realm host"; tools read host specifics from the environment or a
+  git-ignored local file.
 - Interfaces in specs are contracts. If the spec is wrong, fix the spec in the same
   change and say so.
 - New questions go in `specs/QUESTIONS.md` under "Raised during implementation", with
@@ -46,9 +50,13 @@ GPU, Docker or fixture is an unverified gate, not a pass.
 
 Standing authorization for the loop (`/loop /realm-loop`, `docs/loop/LOOP.md`): it may
 pick items from `docs/loop/queue.jsonl`, commit each gated item straight to `master`
-(no task branch), and push `master` at most once a day, never forced. It may not deploy
-to or touch the realm host, publish a release, rewrite history, read or write secrets,
-or work on its own machinery unless `docs/loop/INBOX.md` asks. While it runs, nobody
+(no task branch), and push `master` at most once a day, never forced. It may ssh to the
+realm host to read logs and status, and deploy and restart the realm there with
+`tools/host-realm`: only with no player online or after the drain notice, after a
+backup, and it stops the loop if the realm does not come back healthy. It may not run
+`tools/host-realm mint-bot` or `tools/host-tls`, change the host's TLS, tunnel or
+firewall, publish a release by hand, rewrite history, read or write secrets (the host's
+`.env` included), or work on its own machinery unless `docs/loop/INBOX.md` asks. While it runs, nobody
 else edits this checkout; `docs/loop/INBOX.md` is the maintainer's channel to it.
 
 ## Verification evidence

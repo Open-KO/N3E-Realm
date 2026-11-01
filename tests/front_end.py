@@ -161,7 +161,7 @@ def raw_light(l):
                             [l["range"], l["falloff"]] + l["attenuation"] + [l["theta"], l["phi"]])
 
 
-def blob(version=1, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=2, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
@@ -177,7 +177,7 @@ def blob(version=1, slots=1, screen_data=None, font_index=None, light=None, plug
     spot = dict(LIGHT, kind=fe.SPOT, theta=0.5, phi=0.6, range=6.0)
     out += CAMERA + u(0) + f([0, 0, 0]) + u(slots if slot_count is None else slot_count)
     out += (f([0, -1, 2, 0, 0, 0, 7]) + fe.light_record(spot)) * (slots if slot_count is None else slot_count)
-    out += u(1) + MESH + character
+    out += u(1) + MESH + character + character
     return out + extra
 
 
@@ -218,7 +218,7 @@ cases = {
     "bad-truncated": valid[:-1],
     "bad-trailing": valid + b"\0",
     "bad-magic": blob(magic=b"N3FX"),
-    "bad-version": blob(version=2),
+    "bad-version": blob(version=1),
     "bad-slots": blob(slots=4),
     "bad-slot-count": blob(slot_count=2),
     "bad-canvas": blob(canvas=(800, 600)),

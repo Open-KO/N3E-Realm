@@ -25,7 +25,9 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 1
+VERSION = 2
+# ANI_BREATH (GameDef.h): the idle InventoryChrAnimationInitialize plays.
+BREATH = 0
 CANVAS = (1024, 768)
 SCREENS = ("login", "select", "create", "loading", "message")
 KINDS = {"image": 0, "text": 1, "button": 2, "edit": 3, "progress": 4, "group": 5, "area": 6, "list": 7}
@@ -448,14 +450,19 @@ def hall(assets, textures, name):
     return u(parts) + out
 
 
-def default_parts(assets, race):
-    """The race's default looks (UPC_DefaultLooks, face 0 and hair 0, as
-    ko_player): what select shows, since the wire carries no equipment."""
+def looks(assets, race):
+    """The race's UPC_DefaultLooks row."""
     rows = list(csv.reader(io.StringIO(assets.get("Data/UPC_DefaultLooks.tbl.csv").decode("utf-8-sig"))))
     row = next((r for r in rows[1:] if r[0] == str(race)), None)
     if row is None:
         raise ValueError("front-end race %d not in UPC_DefaultLooks" % race)
-    parts = row[4:10]
+    return row
+
+
+def default_parts(assets, race):
+    """The race's default looks (UPC_DefaultLooks, face 0 and hair 0, as
+    ko_player): what select shows, since the wire carries no equipment."""
+    parts = looks(assets, race)[4:10]
     parts[2] = parts[2].replace("_face.n3cpart", "_face00.n3cpart")
     parts[5] = parts[5].replace("_hair.n3cpart", "_hair00.n3cpart")
     return parts
@@ -503,6 +510,16 @@ def select_scene(assets, textures, config, work):
     return out + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
 
 
+def create_scene(assets, race, work):
+    """CGameProcCharacterCreate: the player's own model (InitChr from the
+    race's UPC_DefaultLooks row: its joint, animation and default parts),
+    breathing (ANI_BREATH), with no plugs: a new character holds nothing."""
+    row = looks(assets, race)
+    joint, animation = row[2].replace("\\", "/"), row[3].replace("\\", "/")
+    definition = dict(joint=joint, animation=animation, parts=default_parts(assets, race))
+    return model(assets, joint, definition, [BREATH], work / "create") + u(0)
+
+
 def cook(assets, out, config_path, work):
     """Writes front-end.bin into the directory `out`; returns its provenance."""
     config = load(pathlib.Path(config_path))
@@ -531,6 +548,7 @@ def write(assets, out, config, work):
         table += u(len(data)) + data
     scenes = intro_scene(assets, textures, config["intro"], pathlib.Path(work))
     scenes += select_scene(assets, textures, config["select"], pathlib.Path(work))
+    scenes += create_scene(assets, config["select"]["character"]["race"], pathlib.Path(work))
     atlases = b""
     sources = {False: pathlib.Path(config["fonts"]["regular"]), True: pathlib.Path(config["fonts"]["bold"])}
     for (size, bold), _ in sorted(fonts.items(), key=lambda kv: kv[1]):

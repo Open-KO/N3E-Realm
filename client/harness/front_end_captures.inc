@@ -3,7 +3,7 @@
 // Spec 11 acceptance 6: N3E_TEST_FRONT_END=PREFIX draws each KO screen at rest
 // in the window (--fixed-window), writes PREFIX.<shot>.ppm and prints, per
 // shot, the characters drawn (pixel boxes, y down) and one bound node's rect:
-//   FRONT_SHOT name=N size=WxH path=P rect=x0,y0,x1,y1 drawn=intro|hall:x0,y0,x1,y1;...
+//   FRONT_SHOT name=N size=WxH path=P rect=x0,y0,x1,y1 drawn=intro|hall|create:x0,y0,x1,y1;...
 // then exits. tests/front_end_live.py checks the frames. No server.
 if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   if (!front) throw std::runtime_error("N3E_TEST_FRONT_END needs front-end.bin and a Discord realm");
@@ -35,9 +35,11 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     const char *sep = "";
     for (const auto &d : front->drawn()) {
       const auto &b = d.box;
-      std::cout << sep << (d.intro ? "intro" : "hall") << ":" << int((b[0] + 1) / 2 * width) << ","
-                << int((1 - b[3]) / 2 * height) << "," << int((b[2] + 1) / 2 * width) << ","
-                << int((1 - b[1]) / 2 * height);
+      const auto &v = d.viewport;
+      static const char *kinds[] = {"intro", "hall", "create"};
+      std::cout << sep << kinds[d.which] << ":" << int(v[0] + (b[0] + 1) / 2 * v[2]) << ","
+                << int(height - v[1] - (b[3] + 1) / 2 * v[3]) << "," << int(v[0] + (b[2] + 1) / 2 * v[2]) << ","
+                << int(height - v[1] - (b[1] + 1) / 2 * v[3]);
       sep = ";";
     }
     std::cout << std::endl;

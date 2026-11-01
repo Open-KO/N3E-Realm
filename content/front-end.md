@@ -14,7 +14,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 1, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 2, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤64), each width and height (1–1024) then RGBA8 rows.
 3. Fonts: a count (≤8), each texture index, pixel size (6–48), cap height, atlas
@@ -45,6 +45,16 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 7. The select scene: camera, lights, global ambient, the slots (count equal to
    the character slots), the hall (part count ≤64, each a mesh), the model, its
    plugs.
+8. The create model and its plugs (version 2): `CGameProcCharacterCreate`'s
+   player (`InitChr`: the race's `UPC_DefaultLooks` joint, animation and default
+   parts) with one clip, `ANI_BREATH` (0), and no plugs (a new character holds
+   nothing). The select model's seated clips are for the hall's thrones.
+
+The client samples as KO sets its devices: UIF images with point sampling on whole
+screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
+border each tile with black texels a linear filter would blend in); hall meshes
+and plugs trilinear with mip LOD bias −1 and wrapped UVs (`CN3Eng`, D3D's default
+address mode); the font atlases and the moon linear.
 
 - Camera: eye, at, up (engine space), vertical field of view (radians, (0, π)),
   near and far (0 < near < far ≤ 1000).

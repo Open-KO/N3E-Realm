@@ -891,7 +891,7 @@ struct FrontEnd {
   std::vector<FrontFont> fonts;
   std::array<std::vector<FrontNode>, size_t(FrontScreen::count)> screens;
   std::array<std::string, size_t(FrontString::count)> strings;
-  FrontScene intro, select;
+  FrontScene intro, select, create;  // create: the model only (no camera or lights)
   uint32_t backdrop = 0;
   std::array<float, 4> backdrop_rect{};  // 1024 x 768 units
   std::vector<FrontSlot> slots;

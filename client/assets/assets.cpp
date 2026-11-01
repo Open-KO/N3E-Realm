@@ -2675,7 +2675,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 1, "front end version");
+  need(r.u() == 2, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2869,6 +2869,7 @@ FrontEnd load_front_end(const Release &release) {
   const auto parts = r.count(64);
   for (uint32_t i = 0; i < parts; ++i) fe.hall.push_back(mesh());
   model(fe.select);
+  model(fe.create);
   r.end();
   return fe;
 }

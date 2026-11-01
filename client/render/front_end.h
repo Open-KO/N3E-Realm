@@ -118,7 +118,31 @@ class View {
   explicit View(FrontEnd data) : fe(std::move(data)) {
     using namespace detail;
     for (const auto &t : fe.textures) textures.push_back(texture(t.width, t.height, t.pixels.data()));
-    for (auto *scene : {&fe.intro, &fe.select})
+    // Samplers as KO sets them. UIF images: CUIManager::RenderStateSet's
+    // point sampling (KO's atlases border each tile with black texels that
+    // a linear filter blends in). Scene meshes and plugs: CN3Eng's trilinear
+    // filter, mip LOD bias -1, and D3D's default wrap (hall UVs run past
+    // 0..1). The font atlases (not KO art) and the moon stay linear.
+    std::vector<int> use(textures.size(), 0);  // 0 UI, 1 linear, 2 scene
+    for (const auto &f : fe.fonts) use[f.texture] = 1;
+    use[fe.backdrop] = 1;
+    for (const auto &m : fe.hall) use[m.texture] = 2;
+    for (const auto *scene : {&fe.intro, &fe.select, &fe.create})
+      for (const auto &plug : scene->plugs) use[plug.mesh.texture] = 2;
+    for (size_t i = 0; i < textures.size(); ++i) {
+      glBindTexture(GL_TEXTURE_2D, textures[i]);
+      if (use[i] == 0) {
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+      } else if (use[i] == 2) {
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameterf(GL_TEXTURE_2D, GL_TEXTURE_LOD_BIAS, -1.f);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+      }
+    }
+    for (auto *scene : {&fe.intro, &fe.select, &fe.create})
       models.push_back(texture(scene->model.width, scene->model.height, scene->model.texture.data(),
                                scene->model.channels == 3));
     lit = program(R"(#version 330 core
@@ -148,8 +172,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     for (auto &mesh : fe.hall) statics.push_back(upload(mesh));
     for (auto &plug : fe.intro.plugs) intro_plugs.push_back(upload(plug.mesh));
     for (auto &plug : fe.select.plugs) select_plugs.push_back(upload(plug.mesh));
+    for (auto &plug : fe.create.plugs) create_plugs.push_back(upload(plug.mesh));
     // A further clip poses the model's own nodes (load_front_end checked them).
-    for (auto *scene : {&fe.intro, &fe.select}) {
+    for (auto *scene : {&fe.intro, &fe.select, &fe.create}) {
       std::vector<Scene> poses;
       for (const auto &clip : scene->clips) {
         Scene s;
@@ -163,11 +188,12 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (node.action == FrontAction::realm_group) realm_height = node.rect[3] - node.rect[1];
     fe.intro.model.texture.clear();
     fe.select.model.texture.clear();
+    fe.create.model.texture.clear();
   }
   ~View() {
     glDeleteTextures(GLsizei(textures.size()), textures.data());
     glDeleteTextures(GLsizei(models.size()), models.data());
-    for (auto *set : {&statics, &intro_plugs, &select_plugs})
+    for (auto *set : {&statics, &intro_plugs, &select_plugs, &create_plugs})
       for (auto &m : *set) {
         glDeleteBuffers(1, &m.vbo);
         glDeleteBuffers(1, &m.ebo);
@@ -240,8 +266,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     theta = fe.slots[0].spot.theta;
   }
   struct Drawn {
-    bool intro;
-    std::array<float, 4> box;  // x0 y0 x1 y1, y up
+    size_t which;                  // 0 intro, 1 select, 2 create
+    std::array<float, 4> box;      // x0 y0 x1 y1 in the viewport's NDC, y up
+    std::array<int, 4> viewport;   // GL viewport: x, y (from the bottom), w, h
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) const {
@@ -264,6 +291,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const float cx = (x - ox) / s, cy = (y - oy) / s;
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
       pointer = {cx, cy};
+      screen_pointer = {x / float(std::max(width, 1)), y / float(std::max(height, 1))};
       return out;
     }
     if (message) {
@@ -297,9 +325,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (pressed == FrontAction::realm_list && e.button.clicks >= 2) return act(FrontAction::realm_connect);
       // CGameProcCharacterSelect: a click in the centre of the screen
       // chooses the character in front (ENTER does the same).
-      if (state == Screen::select && pressed == FrontAction::none && x >= .36f * width && x <= .64f * width &&
-          y >= .44f * height && y <= .86f * height)
-        return primary();
+      screen_pointer = {x / float(std::max(width, 1)), y / float(std::max(height, 1))};
+      if (state == Screen::select && pressed == FrontAction::none && in_front()) return primary();
       return out;
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
@@ -354,7 +381,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   FrontEnd fe;
   std::vector<GLuint> textures, models;
   GLuint lit = 0, flat = 0, vao = 0, vbo = 0;
-  std::vector<Buffer> statics, intro_plugs, select_plugs;
+  std::vector<Buffer> statics, intro_plugs, select_plugs, create_plugs;
   std::vector<std::vector<Scene>> clips;  // per scene: each clip's poses
   Screen state = Screen::login;
   std::optional<std::string> message;
@@ -363,7 +390,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   float realm_height = 0, slide = 0;
   int focus = 0, choosing = -1, known = 0;
   float angle = 0, theta = 0;
-  double chosen_at = 0, chosen_until = 0, last_frame = -1;
+  double chosen_at = 0, chosen_until = 0, last_frame = -1, hover_since = -1;
+  std::array<float, 2> screen_pointer{-1, -1};  // the pointer as a share of the window
   bool pending_create = false;
   std::string name;
   const Characters *list = nullptr;
@@ -484,7 +512,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         float duration = 0;
         if (clips[1].size() > 1)
           for (const auto &t : clips[1][1].tracks) duration = std::max(duration, t.keys.back().time);
-        chosen_until = chosen_at + std::min(duration, 3.f);
+        chosen_until = chosen_at + duration;  // IsAnimEnd: the whole clip
         out.command = Command::select;
         out.character = list->characters(focus).id();
       } else {
@@ -595,7 +623,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     static const GLenum factors[] = {GL_ZERO, GL_ONE, GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR, GL_SRC_ALPHA,
                                      GL_ONE_MINUS_SRC_ALPHA, GL_DST_ALPHA, GL_ONE_MINUS_DST_ALPHA,
                                      GL_DST_COLOR, GL_ONE_MINUS_DST_COLOR};
-    const auto &scene = which == 0 ? fe.intro : fe.select;
+    const auto &scene = which == 0 ? fe.intro : which == 1 ? fe.select : fe.create;
     const auto vertices = scene.model.skin(pose);
     const auto mvp = detail::mul(vp, model);
     std::array<float, 4> box{1e9f, 1e9f, -1e9f, -1e9f};
@@ -607,7 +635,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       box = {std::min(box[0], c[0] / c[3]), std::min(box[1], c[1] / c[3]), std::max(box[2], c[0] / c[3]),
              std::max(box[3], c[1] / c[3])};
     }
-    drawn_boxes.push_back({which == 0, box});
+    std::array<int, 4> viewport{};
+    glGetIntegerv(GL_VIEWPORT, viewport.data());
+    drawn_boxes.push_back({which, box, viewport});
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
@@ -636,7 +666,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       glDrawArrays(GL_TRIANGLES, GLint(run.first), GLsizei(run.count));
     }
     glDisable(GL_BLEND);
-    const auto &plugs = which == 0 ? intro_plugs : select_plugs;
+    const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : create_plugs;
     for (size_t i = 0; i < plugs.size(); ++i) {
       const auto &plug = scene.plugs[i];
       const auto joint = scene.model.joint_matrix(pose, plug.joint);
@@ -644,6 +674,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       std::copy(joint.begin(), joint.end(), j.begin());
       draw_mesh(plugs[i], plug.mesh, vp, detail::mul(model, j));
     }
+  }
+  // CGameProcCharacterSelect's centre rect: the character in front.
+  bool in_front() const {
+    const auto [x, y] = screen_pointer;
+    return x >= .36f && x <= .64f && y >= .44f && y <= .86f;
   }
   std::vector<Node> pose(size_t scene, size_t clip, double t, bool loop) {
     const auto &s = clips[scene][std::min(clip, clips[scene].size() - 1)];
@@ -693,15 +728,23 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     spot.theta = theta;
     lights(fe.select, {spot});
     for (size_t i = 0; i < statics.size(); ++i) draw_mesh(statics[i], fe.hall[i], vp, detail::identity());
+    // DoProcPreselect: every character holds pre_select's first frame (its
+    // dummy clip); the one in front plays pre_select while the pointer is
+    // over it, from where the pointer came in.
+    const bool over = in_front();
+    if (!over) hover_since = -1;
+    else if (hover_since < 0) hover_since = now;
     for (int i = 0; i < characters_shown(); ++i) {
       const auto &slot = fe.slots[i];
       const bool chosen = choosing == i;
-      draw_character(1, chosen ? pose(1, 1, last_frame - chosen_at, false) : pose(1, 0, now + i * .7, true), vp,
-                     detail::translate_yaw(slot.position, slot.yaw));
+      draw_character(1, chosen                    ? pose(1, 1, last_frame - chosen_at, false)
+                        : i == focus && over && choosing < 0 ? pose(1, 0, now - hover_since, true)
+                                                            : pose(1, 0, 0, false),
+                     vp, detail::translate_yaw(slot.position, slot.yaw));
     }
   }
-  // Create: the character in `char_view`, as KO's InventoryChrRender draws
-  // the player in area_character, under the hall's lights.
+  // Create: the player's own model breathing in `char_view`, as KO's
+  // InventoryChrRender draws it in area_character.
   void character_view(int width, int height, double now) {
     const auto &nodes = fe.screens[size_t(FrontScreen::create)];
     auto it = std::find_if(nodes.begin(), nodes.end(), [](const auto &n) { return n.action == FrontAction::char_view; });
@@ -724,7 +767,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     scene.lights = {FrontLight{FrontLight::DIRECTIONAL, {1, 1, 1}, {.5f, .5f, .5f}, {}, {.3f, -.4f, 1}, 1, 0, {1, 0, 0}, 0, 0}};
     scene.ambient = {.3f, .3f, .3f};
     lights(scene, {});
-    draw_character(1, pose(1, 0, now, true), view_projection(camera, eye, w, h), detail::translate_yaw({0, 0, 0}, 0));
+    draw_character(2, pose(2, 0, now, true), view_projection(camera, eye, w, h), detail::translate_yaw({0, 0, 0}, 0));
     glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, width, height);
   }
@@ -767,8 +810,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     const float a = (argb >> 24) / 255.f, red = ((argb >> 16) & 255) / 255.f, g = ((argb >> 8) & 255) / 255.f,
                 b = (argb & 255) / 255.f;
-    const float x0 = ui_x + r[0] * ui_scale, y0 = ui_y + r[1] * ui_scale, x1 = ui_x + r[2] * ui_scale,
-                y1 = ui_y + r[3] * ui_scale;
+    // Whole screen pixels, as CN3UIImage::SetVB's integer rects: no pixel
+    // centre on an edge, adjacent tiles meet without a gap or overlap.
+    const float x0 = std::round(ui_x + r[0] * ui_scale), y0 = std::round(ui_y + r[1] * ui_scale),
+                x1 = std::round(ui_x + r[2] * ui_scale), y1 = std::round(ui_y + r[3] * ui_scale);
     const float v[6][4] = {{x0, y0, uv[0], uv[1]}, {x1, y0, uv[2], uv[1]}, {x1, y1, uv[2], uv[3]},
                            {x0, y0, uv[0], uv[1]}, {x1, y1, uv[2], uv[3]}, {x0, y1, uv[0], uv[3]}};
     for (const auto &p : v) batch.insert(batch.end(), {p[0], p[1], p[2], p[3], red, g, b, a});

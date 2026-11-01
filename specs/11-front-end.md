@@ -99,7 +99,9 @@ replace the panels when the client has a Discord realm config.
   `{version}`.
 - **Scenes.** The intro (camera, lights, the model with its clip and plugs, the moon
   as a screen quad) and the select hall (camera, lights, `character_slots` slots with
-  their eye and spot light, the hall meshes, the model with clips 0 and 1, plugs).
+  their eye and spot light, the hall meshes, the model with clips 0 and 1, plugs),
+  and the create model (the race's own looks joint and animation, `ANI_BREATH`, no
+  plugs; N3FE version 2).
 - **`text` overrides.** The format allows them; the Moradon package uses none: the
   login screen keeps KO's labels and copyright line (Q61, superseding Q56).
 - **`hidden`.** The Moradon package keeps the login bar as KO draws it: `Edit_ID`,
@@ -143,8 +145,8 @@ prev/next).
 |---|---|---|
 | login | intro scene looping; login bar | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. |
 | realms | intro; the server group with the realm's name from `realm.json` | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
-| select | hall; up to 3 characters with the realm's player model and default looks, idle clip; info bar from the character in front | ENTER or a click on the character in front → `SelectCharacter`, its clip 1, → loading; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next turns the camera to the next slot (left to right: 1, 0, 2). |
-| create | KO's create screen; the character turning in `char_view`; name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording; `back` → select. |
+| select | hall; up to 3 characters with the realm's player model and default looks, each holding clip 0's first frame; the one in front plays clip 0 while the pointer is over it (`DoProcPreselect`'s centre rect); info bar from the character in front | ENTER or a click on the character in front → `SelectCharacter`, its clip 1 to the end (`IsAnimEnd`), → loading; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next turns the camera to the next slot (left to right: 1, 0, 2). |
+| create | KO's create screen; the create model breathing in `char_view` (standing, no weapon); name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording; `back` → select. |
 | loading | the loading art; `progress` by real stages: the package and its textures (loaded at start, 2/3), the first `World` (1); `version` shows the client version | the first `World` → in game after the bar shows full. |
 
 Failures keep their spec 02/03 wording and show in KO's message box

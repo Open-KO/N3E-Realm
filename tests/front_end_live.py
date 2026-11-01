@@ -12,6 +12,10 @@ from the player's own KO data.
    - realms: the list shows the realm's name: against the same frame with an
      unnamed realm, pixels differ inside the list's rect and nowhere else;
    - select: 1, 2 and 3 characters drawn, each box non-empty and inside the view;
+   - create: the create model stands (KO's InitChr model breathing, not the hall's
+     seated clip): its box is clearly taller than wide; and the stone background
+     shows no seams (KO's UI point sampling on whole pixels): no column of a band
+     across its top is darker than 0.6 of the band's mean;
    - loading: the progress bar's lit share grows from the start stage (2/3: the
      package and its textures) to the first World (1);
    - message: the box's text rect holds text.
@@ -66,6 +70,20 @@ def region(path, rect):
     x0, y0, x1, y1 = (max(0, v) for v in rect)
     x1, y1 = min(x1, width), min(y1, height)
     return [body[(y * width + x) * 3:(y * width + x) * 3 + 3] for y in range(y0, y1) for x in range(x0, x1)]
+
+
+def seam_columns(path, width, height):
+    """Columns of the create screen's top stone band (canvas y 10-30, x 20-1000)
+    darker than 0.6 of the band's mean: the black texels that border each of
+    KO's tiles, blended in."""
+    _, _, body = pixels(path)
+    s = min(width / 1024, height / 768)
+    ox, oy = (width - 1024 * s) / 2, (height - 768 * s) / 2
+    y0, y1 = int(oy + 10 * s), int(oy + 30 * s)
+    cols = [sum(sum(body[(y * width + x) * 3:(y * width + x) * 3 + 3]) for y in range(y0, y1)) / (y1 - y0)
+            for x in range(int(ox + 20 * s), int(ox + 1000 * s))]
+    mean = sum(cols) / len(cols)
+    return sum(c < 0.6 * mean for c in cols)
 
 
 def lit_share(path, rect):
@@ -125,6 +143,13 @@ for size in ("1280x1024", "1024x768"):
         for _, (x0, y0, x1, y1) in boxes:
             assert 0 <= x0 < x1 <= width and 0 <= y0 < y1 <= height, (size, n, boxes)
 
+    path, _, boxes = shots["create"]
+    assert [k for k, _ in boxes] == ["create"], (size, boxes)
+    x0, y0, x1, y1 = boxes[0][1]
+    assert y1 - y0 > 1.5 * (x1 - x0), (size, boxes)
+    seams = seam_columns(path, width, height)
+    assert seams == 0, (size, seams)
+
     start, rect, _ = shots["loading-start"]
     world = shots["loading-world"][0]
     share = lit_share(start, rect), lit_share(world, rect)
@@ -133,5 +158,6 @@ for size in ("1280x1024", "1024x768"):
     path, rect, _ = shots["message"]
     assert len(set(region(path, rect))) > 10, (size, rect)
     print(f"PASS front-end captures {size}: intro box {boxes and shots['login'][2][0][1]}, "
-          f"realm name {inside} px in the list, 1-3 characters in the hall, loading {share[0]:.2f} -> {share[1]:.2f}")
+          f"realm name {inside} px in the list, 1-3 characters in the hall, create stands "
+          f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}")
 print("PASS KO front end graphical")

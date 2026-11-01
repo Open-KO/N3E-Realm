@@ -241,9 +241,12 @@ CLIENT = Path("assets/ko")
 # labels, copyright line, Option and Registration, without the added notice
 # line. Default features 38654bcd... -> 4c1008e3...; classic 5f0792a5... ->
 # ba567f16.... The 1097 pin is still not recut (no install here, as above).
+# N3FE version 2 changed them again: the create screen's own model (the looks
+# row's joint and animation, ANI_BREATH, no plugs). Default features 4c1008e3...
+# -> c3dfc2bd...; classic ba567f16... -> 0f8ade92....
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "4c1008e318e96c376b1242a4f8a4296f258060af423140dcd757e5e7d8ff4ad2"),
+    "features": (["--features"], "c3dfc2bd715c1f826262e78ac8ea20f94b1d6cb14b5ade13e0e4c539f9e0f2d3"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -264,7 +267,7 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "ba567f16ced53f600b3bb4d1bdb588cb02131f7f3ce67dca5bc024e3878cd79b"),
+    "features": (["--features"], "0f8ade92b1bc57ad9876dd445331f56553ed565fc4f4a59fa2462f249feed193"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.

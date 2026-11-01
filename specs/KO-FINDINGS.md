@@ -143,6 +143,63 @@ while the pointer stays, back to the first frame when it leaves. That is not 129
 which loops a different clip of a different set on the character in front with no
 pointer involved; which hall the realm shows is **Q71**.
 
+### 8.1 The 1097 client's select hall (RQ-074, 2026-11-01)
+
+The 1097 client is `build/ko-reference/installer-1097/client/KnightOnLine.exe`
+(sha256 `04ab5c54…2b771d4c`, from the installer `KnightOnline_1097.exe`,
+`d7571e18…`). It is packed with ASProtect: an ASPack-2.12-style stub at `006f6001`
+in the last named section, an empty `.adata` section, and an SEH-driven loader in
+heap memory. It was unpacked like this:
+
+- A copy ran under Wine 11.20 (WoW64) in a throwaway `WINEPREFIX` under
+  `build/rq074/`, inside `unshare -n -c` (no network) and `xvfb-run`.
+  `winemenubuilder` was disabled from the second run on.
+- The runner was a child subreaper, so Yama allowed it to read `/proc/<pid>/mem`.
+  It copied the image (`00400000`–`00708000`) every few milliseconds.
+- The kept snapshot is the one after the last code-section change and before the
+  program started (0.95 s; sha256 `faaaec68…82cad191`). The process left on its own
+  at about 1.2 s, after a failed display-mode change; any left over was killed.
+
+The snapshot was rebuilt into a PE (sha256 `82abb582…ea8febaf`):
+
+- Raw layout equals the virtual layout.
+- The entry is `00575e47`, VC6's `WinMainCRTStartup`. ASProtect stole its first 38
+  bytes, which stay zero.
+- A new import directory sits on the original IAT, `0058c000`–`0058c380`. 204 of
+  its 213 slots resolve through the export tables of the Wine DLLs in the process;
+  kernel32's go through ASProtect's redirect stubs. The 9 kernel32 slots ASProtect
+  emulates are named `aspr_<slot>`.
+
+It was analysed with Ghidra 12.1.3 (full analysis) in the project
+`build/ghidra/rq074/` with `AuditReference.java`. The scripts are in
+`build/rq074/tools/`. Nothing here is committed. Addresses are the 1097 image's
+(base `00400000`).
+
+| Observation | Where | Label |
+|---|---|---|
+| The select proc's vtable `0058cd10` holds Init `0043a950`, Tick `0043b550` and Render `0043b840`. Tick ends in the state switch `0043e4e0` (`CheckJobState`) on `+0x2cc`: 1 is turning (the rotate checks), 2 calls `0043f280`, 3 calls `0043ed20`. This is the source's `PROCESS_ROTATEING`/`PRESELECT`/`SELECTED` | `0058cd10`, `0043e4e0` | binary |
+| **1097 has the hover.** Every tick in state 2, `0043f280` (`DoProcPreselect`) scales the rect's four reals (`0058cd6c` 0.36, `0058cd64` 0.64, `0058cd68` 0.44, `0058cd60` 0.86) by the viewport (device `GetViewport`, vtable `+0xa4`). It tests the pointer (`s_pLocalInput` `+0x1c`/`+0x20`) strictly inside. **Inside:** clip 0 (`pre_select`), once, on the character in front, `00447e30(0, 1, FLT_MIN, 0, 1)` at `0043f36a`–`0043f375`; that character is ticked; its spot theta `+0x2d0` grows by 0.02 per call up to 0.5 (nation 1) or by 0.015 up to 0.38 (nation 2); `0043f280` shows the info text (`004402a0`: UI child `text00`, string 1201, or 1202 for an empty slot). **Outside:** clip 2 (`dummy`), once, `00447e30(2, 1, FLT_MIN, 0, 1)` at `0043f425`; the character is ticked; theta shrinks by the same step down to 0; `text00` is hidden (`004405a0`). Then the front slot's spot (light index + 4) gets the theta through `SetLight`/`LightEnable` (`+0xb0`/`+0xb8`), and is disabled at 0 | `0043f280` | binary |
+| The clip setter `00447e30(index, once, blend, freeze, upper)` returns without change when the index is the current clip's (`+0x1c0`). For a blend of `FLT_MIN` (`0058cf2c`) it uses the clip's own blend time (record `+0x2c`), and a blend above 0 starts from the previous frame. The frame tick `00445bb0` is called only from `CN3Chr::Tick` (`004457d0`, slot `+0x1c` of the vtable `0058cedc`). During a blend it keeps the frame on the clip's start. Past the end, a once clip holds its last frame and counts a loop (`+0x1d0`). A looping clip whose flag bit 0 is set holds its end and blends back to its start | `00447e30`, `00445bb0`, `004457d0` | binary |
+| Only Tick moves a character. Render (`0043b840`) draws the three (`004466f0`, which ticks no clip). AddChr (`0043ba10`) ends by setting clip 0 once with blend 0 on all three and ticking each once (`0043cee1`–`0043cf0b`). So the characters not in front stand on the start of `pre_select`, and the one in front moves only through `0043f280`. While the camera turns (state 1) nobody is ticked | `0043b840`, `0043ba10` | binary |
+| Click: Tick `0043b550` takes a left click outside state 1 when `PtInRect` finds the point in the same rect (`0043b6f7`–`0043b738`). It then starts the slot's character, or goes to create for an empty slot. Select, `0043ea30` (reached from `0043db54`, in state 2 only), moves to state 3, sets clip 1 (`selected`) once with a 0.6 s blend (`push 0x3f19999a` at `0043ea77`, the call at `0043ea8e`) and sets the spot to 0.5 or 0.38. In state 3, `0043ed20` runs until the clip's loop count reaches 1 (`+0x1f8` with an upper clip, else `+0x1d0`; this is `IsAnimEnd`). Until then it sets clip 1 again (which changes nothing), ticks and fades out. After that it releases the music and activates the main proc (`00545ae0`) | `0043b550`, `0043ea30`, `0043ed20` | binary |
+| AddChr `0043ba10` loads the select models per race and class. Race 1: `upc_ka_at_wa.n3joint` and `.n3anim`, great axe. Race 2: rogue (`0x66`, `0x6b`, `0x6c`) `upc_ka_tu_rog.n3joint` with bow and quiver; priest (`0x68`, `0x6f`, `0x70`) `upc_ka_tu_pri.n3joint` with mace; both use `upc_ka_at_wa.n3anim`. Race 3: `upc_ka_wt_ma.n3joint` with the at_wa clips and staff. Race 4: `upc_el_rf_pri.n3joint` with `upc_el_rf_wa.n3anim`. El Morad uses the `upc_el_*` files. The binary has no `upc_ka_tu.n3joint`/`.n3anim` name. All this is the later source's `AddChr` | `0043ba10`; strings `005a1fb0`–`005a23b4` | binary |
+| 1097's `ChrSelect/upc_ka_at_wa.n3anim` is byte-identical to the pinned tree's (`2c1d83e8…`): `pre_select` 10–65, `selected` 65–200, `dummy` 10–10, all at 30 frames/s with a 0.3 s blend; flags 1 on the first two, and `dummy`'s flag word is `0x3e99999a`, bit 0 clear. `upc_ka_tu_pri.n3joint` and `upc_ka_at_wa.n3joint` match the pinned tree too. 1097 ships no `upc_ka_tu.*`. The other select tables (`pre_select`/`selected`, all `dummy` 10–10 at 30 frames/s, blend 0.3 s): `upc_ka_wt_ma` 10–46/46–290, `upc_el_ba_wa` 10–70/70–200, `upc_el_rf_wa` 10–100/100–260, `upc_el_rm_wa` and `upc_el_rm_rog` 10–60/60–200, `upc_el_rm_pri` 10–60/60–305 | `ChrSelect/*.n3anim` (`tools/assetc/ko_character.py` `animations`) | local-asset |
+
+**Decides:** the hall the Moradon package cooks is KO's own, from 1097. It is not
+only the later source's. 1097 loads the same files the package cooks and plays them
+as that source does. The character in front plays `pre_select` once while the pointer
+is in the centre rect and holds its last frame. When the pointer leaves, it goes back
+to `dummy` (`pre_select`'s first frame). 1298 changed this later, to per-race files
+and a looping clip 1. So Q71's default (a) is KO's behaviour, not a departure from it.
+
+Within (a), three details still differ from the client:
+
+- A 0.3 s blend goes in each direction. Going in, `pre_select` stays on its first
+  frame for the blend.
+- The spot widens only while the pointer is over the character in front (0.02 per
+  tick to 0.5 for Karus), narrows when the pointer leaves, and is off at 0.
+- The info text shows only while the pointer is over the character in front.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -158,3 +215,4 @@ notes.
 | Q14 | **Add `mute` (timed) in v1**; defer attack-disable. |
 | Q10 | Wording fixed (above). |
 | Q21 | Unchanged (KO's `+monsummon` is untimed; ours gets a bounded duration). |
+| Q71 | §8.1: 1097, the client whose files the package cooks, plays the hall as (a) does, so (a) is KO's behaviour; three details still to align (RQ-074). |

@@ -560,3 +560,25 @@ rect to the click.
 assets the hall draws; spec 11 and `content/front-end.md` say it is not 1298's. (b) is
 a separate change to the cook and the hall (proposed as its own queue item), and would
 also need 1298's looks for those joints.
+
+**1097 (RQ-074, KO-FINDINGS §8.1, binary from an unpacked image):** the 1097 client
+has the hover. In state 2 its `DoProcPreselect` (`0043f280`) sets `pre_select` once on
+the character in front while the pointer is strictly inside the 0.36–0.64 ×
+0.44–0.86 rect, and `dummy` once when it is outside. The setter (`00447e30`) ignores
+a call that names the current clip, so `pre_select` plays once and holds its last
+frame. 1097 loads exactly the cooked set (`upc_ka_tu_pri.n3joint`, `upc_ka_at_wa.n3anim`,
+whose files match the pinned tree's) and has no `upc_ka_tu` name. Its click and start
+match (a)'s source: start sets clip 1 once with a 0.6 s blend and waits for
+`IsAnimEnd`. So (a) is KO's own 1097 behaviour for this asset set; 1298's loop came
+later, with the per-race files.
+
+**Recommendation:** close Q71 as (a). Align three details with 1097:
+
+- the clip's own 0.3 s blend in each direction, with `pre_select` held on its first
+  frame during the blend;
+- the front slot's spot theta, which grows only while the pointer is over the
+  character (0.02 per tick up to 0.5, Karus), shrinks when it leaves and is off at 0;
+- the info text, shown only while the pointer is over the character.
+
+These are proposed as a separate front-end item. (b) is needed only if the realm
+should look like 1298 rather than like the client its files come from.

@@ -191,8 +191,12 @@ state = moradon_stack.state()
 package = (moradon_stack.WORK / 'packages/moradon-glow2233').resolve()
 assert state['release'] == (package / 'release.sha256').read_text().strip(), 'the stack must serve the glow package'
 recipe = json.loads((package / 'recipe.json').read_text())['manifest']
-assert recipe['engine_version'] == 39 and recipe['protocol_version'] == 30, (recipe['engine_version'],
-                                                                             recipe['protocol_version'])
+# The skeletal plugs' looks models need engine 39 (attachments.engine), but
+# ko_bake --features also cooks spec 11's front end into every features package
+# and raises it to engine 42 (M4c); the bake keeps the higher, so 42, wire 30.
+assert recipe['engine_version'] == 42 and recipe['protocol_version'] == 30 and \
+    recipe['presentation'].get('front-end.bin') == 'front-end.bin', (
+        recipe['engine_version'], recipe['protocol_version'], recipe['presentation'].get('front-end.bin'))
 provenance = json.loads((moradon_stack.WORK / 'ko-moradon-glow2233/provenance.json').read_text())
 plugs = provenance['skeletal_plugs_2233']
 AZAGAI = b'demo:item/azagai'

@@ -130,7 +130,7 @@ your own Discord application:
    ```
 
    The Moradon package (`make realm-assets`) opens on KO's login screen (spec 11);
-   **Discord** or ENTER opens the browser; after Discord, the game logs in and later starts skip
+   **Login** or ENTER opens the browser for Discord; after Discord, the game logs in and later starts skip
    the browser until the token expires or an operator revokes it.
 4. Operators act through the admin API: `n3e-server admin mint --name mod --perm
    'account.*'`, then `POST /v1/accounts/{id}/kick|ban|unban|mute|unmute` (spec 03).

@@ -67,8 +67,8 @@ target/release/realm-launcher --realm local --ca deploy/local/ca.pem
 
 | # | Do | Expect |
 |---|---|---|
-| L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game opens on KO's login screen: the orc with the axe under the moon, the login bar with KO's ID and Password boxes (they take no input) and a **Discord** button, "ENTER - Log in with Discord" above it. |
-| L2 | **Discord** (or ENTER, even right after the window opens) | The browser opens Discord's authorize page for your application; after **Authorize** the tab says you are logged in, and KO's server list drops in from the top with "Local Realm". |
+| L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game opens on KO's login screen: the orc with the axe under the moon, KO's copyright line, and the login bar exactly as KO's: ID and Password boxes, **Login**, **Cancel**, **Option**, **Registration** (only Login and Cancel do anything). |
+| L2 | **Login** (or ENTER, even right after the window opens) | The browser opens Discord's authorize page for your application; after **Authorize** the tab says you are logged in, and KO's server list drops in from the top with "Local Realm". |
 | L3 | Double-click the realm (or **Connect**) | The Karus character select hall. With no characters, ENTER opens character create (Tuarek priest, name field). |
 | L4 | Type a name, **Create**; then ENTER (or click the character) | Back in the hall with the new character in the centre slot and "Level 1" in the info bar; ENTER plays its selected animation, then the loading screen, then the world. |
 | L5 | Walk and run | Moves as in the play scripts. |
@@ -97,7 +97,7 @@ publisher (they are unsigned, Q26): **More info → Run anyway**.
 | # | Do | Expect |
 |---|---|---|
 | W1 | `self-test.bat` | Ends with `self-test ok`; its `opengl` line names your GPU, not `llvmpipe` or `GDI Generic`. |
-| W2 | `play.bat`, **Discord** | KO's login screen, as L1; the browser opens Discord; after **Authorize** the server list drops in. |
+| W2 | `play.bat`, **Login** | KO's login screen, as L1; the browser opens Discord; after **Authorize** the server list drops in. |
 | W3 | Connect, create a character, enter the world, walk and run | As L3–L5; note the frame rate if it feels slow. |
 | W4 | Close; `play.bat` again | Logs in without the browser and opens on the server list. |
 | W5 | Discord: `/kick` yourself | Back on the login screen with the disconnect message box, as L9. |

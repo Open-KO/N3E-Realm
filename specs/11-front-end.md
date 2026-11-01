@@ -10,7 +10,7 @@ a text box ("N3E / ADVENTURE", ACCOUNT, SELECT CHARACTER), drawn in code in
 end, cooked from the pinned client tree (`assets/ko/`, spec 10, option C):
 
 1. **Intro and login.** KO's login scene, with the orc and the axe under the moon, and
-   the login bar. Its Login button starts spec 02's Discord login.
+   the login bar, as KO draws it (Q61). Its Login button starts spec 02's Discord login.
 2. **Server list.** KO's server group, with the realm as its one entry.
 3. **Character select.** The Karus select hall in 3D, with up to three characters,
    rotated left and right as KO does, and the info bar (ID, level, class) with KO's
@@ -89,7 +89,7 @@ replace the panels when the client has a Discord realm config.
   and the loader refuse an unknown action, an action bound twice in a screen and a
   screen whose required actions are unbound. Required per screen:
   - login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
-    `realm_connect`, `notice`;
+    `realm_connect` (`notice` is optional; the Moradon package has none, Q61);
   - select: `select_prev`, `select_next`, `back`, `exit`, `char_info`;
   - create: `create_confirm`, `back`, `name_field`, `char_view`;
   - loading: `progress`;
@@ -100,12 +100,13 @@ replace the panels when the client has a Discord realm config.
 - **Scenes.** The intro (camera, lights, the model with its clip and plugs, the moon
   as a screen quad) and the select hall (camera, lights, `character_slots` slots with
   their eye and spot light, the hall meshes, the model with clips 0 and 1, plugs).
-- **`text` overrides.** The Moradon package relabels the login bar's Login button
-  "Discord" and replaces `Text_Rights` (Q56).
-- **`hidden`.** The Moradon package keeps `Edit_ID`, `Edit_PW` and their labels as
-  KO draws them, unbound, so they take no input (Q60), and hides `Btn_Option`, `Btn_Join` (Registration), `Img_Daum`, `Img_MGame`, `premium`, the
-  three notice groups and the select screen's `bt_delete` (Q53). The bar's art has
-  the buttons painted in, so two blank buttons remain (Q58).
+- **`text` overrides.** The format allows them; the Moradon package uses none: the
+  login screen keeps KO's labels and copyright line (Q61, superseding Q56).
+- **`hidden`.** The Moradon package keeps the login bar as KO draws it: `Edit_ID`,
+  `Edit_PW`, `Btn_Option` and `Btn_Join` (Registration) are shown, unbound, so they
+  take no input (Q60, Q61). It hides `Img_Daum` and `Img_MGame` (their texture is
+  not in the pinned tree), `premium` and the three notice groups (KO's news panels,
+  empty without KO's server), and the select screen's `bt_delete` (Q53).
 
 ### Wire (`protocol/wire.proto`)
 
@@ -140,14 +141,15 @@ prev/next).
 
 | State | Shows | Leaves on |
 |---|---|---|
-| login | intro scene looping; login bar; the Discord flow's status line in `notice` | `login` (the Discord button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. |
+| login | intro scene looping; login bar | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. |
 | realms | intro; the server group with the realm's name from `realm.json` | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
 | select | hall; up to 3 characters with the realm's player model and default looks, idle clip; info bar from the character in front | ENTER or a click on the character in front → `SelectCharacter`, its clip 1, → loading; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next turns the camera to the next slot (left to right: 1, 0, 2). |
 | create | KO's create screen; the character turning in `char_view`; name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording; `back` → select. |
 | loading | the loading art; `progress` by real stages: the package and its textures (loaded at start, 2/3), the first `World` (1); `version` shows the client version | the first `World` → in game after the bar shows full. |
 
-Failures keep their spec 02/03 wording and show in the login screen's `notice` line
-(the Discord flow's status), or in KO's message box (`co_MsgBoxOk_us.uif`):
+Failures keep their spec 02/03 wording and show in KO's message box
+(`co_MsgBoxOk_us.uif`): the Discord flow's failures (and the address to open when no
+browser starts), a server that cannot be reached after a login press,
 "You were disconnected by an operator…", "Your account is blocked until…". A dropped
 connection anywhere before the world returns to login with KO's text 1601,
 "Disconnected from server" (KO-FINDINGS §1).

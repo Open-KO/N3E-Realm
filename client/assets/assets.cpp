@@ -2711,7 +2711,7 @@ FrontEnd load_front_end(const Release &release) {
   }
   static const std::array<std::vector<FrontAction>, size_t(FrontScreen::count)> required{{
       {FrontAction::login, FrontAction::exit, FrontAction::login_group, FrontAction::realm_group,
-       FrontAction::realm_list, FrontAction::realm_connect, FrontAction::notice},
+       FrontAction::realm_list, FrontAction::realm_connect},
       {FrontAction::select_prev, FrontAction::select_next, FrontAction::back, FrontAction::exit,
        FrontAction::char_info},
       {FrontAction::create_confirm, FrontAction::back, FrontAction::name_field, FrontAction::char_view},

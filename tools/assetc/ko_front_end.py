@@ -35,7 +35,7 @@ UIF_KINDS = {0: "group", 1: "button", 3: "progress", 4: "image", 6: "text", 8: "
 ACTIONS = ("", "login", "exit", "login_group", "realm_group", "realm_list", "realm_connect", "notice",
            "select_prev", "select_next", "back", "char_info", "create_confirm", "name_field", "char_view",
            "class_desc", "progress", "version", "info", "message", "ok")
-REQUIRED = {"login": {"login", "exit", "login_group", "realm_group", "realm_list", "realm_connect", "notice"},
+REQUIRED = {"login": {"login", "exit", "login_group", "realm_group", "realm_list", "realm_connect"},
             "select": {"select_prev", "select_next", "back", "exit", "char_info"},
             "create": {"create_confirm", "back", "name_field", "char_view"},
             "loading": {"progress"},
@@ -328,7 +328,7 @@ def screen(name, spec, assets, textures, fonts):
     moves = [(resolve(root, m["node"]), m, resolve(root, m["above"][0]) if "above" in m else None)
              for m in spec.get("moves", [])]
     for extra in spec.get("added", []):
-        # A string KO's layout lacks (the Discord flow's notice line), in UIF
+        # A string KO's layout lacks (a status line, say), in UIF
         # coordinates; last among its parent's children, so drawn last.
         node = dict(kind=6, id=extra["id"], rect=vector(extra["rect"], 4), style=extra["style"], reserved=0,
                     children=[], font="Arial", font_size=extra["font"][0], font_flags=extra["font"][1],

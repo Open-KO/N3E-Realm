@@ -5,8 +5,9 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
 - The test client plays the screens with a player's events
   (N3E_TEST_FRONT_FLOW, client/harness/front_end_flow.inc): Discord login on one
   ENTER pressed while the server is paused (SIGSTOP), so before the connection is
-  up; the press is held and the flow starts once the server resumes (the browser
-  step played here on the address it prints) -> realms -> select (no
+  up; the press is held and the flow starts once the server resumes. The first
+  browser step is denied: KO's message box shows the flow's failure, and ENTER
+  again logs in (the browser step played here on the address it prints) -> realms -> select (no
   characters) -> create "Taken", which another account holds: the server's
   refusal in KO's message box -> create a fresh name -> select with it -> start
   -> loading -> the world.
@@ -157,15 +158,19 @@ try:
         env={**env, "XDG_CONFIG_HOME": str(home / "config"), "N3E_TEST_NO_BROWSER": "1",
              "N3E_TEST_FRONT_FLOW": "Taken,Fresh"},
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    lines, flow, kicked = [], [], False
+    lines, flow, kicked, denied = [], [], False, False
     deadline = time.monotonic() + 240
     for line in client.stdout:
         lines.append(line)
         assert time.monotonic() < deadline, "flow timed out"
         if line.startswith("Open this address to log in with Discord: "):
             q = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(line.split(": ", 1)[1].strip()).query))
-            code = discord.authorize(player, q["code_challenge"], q["redirect_uri"])
-            back = q["redirect_uri"] + "?" + urllib.parse.urlencode({"code": code, "state": q["state"]})
+            if not denied:
+                answer = {"error": "access_denied", "state": q["state"]}
+                denied = True
+            else:
+                answer = {"code": discord.authorize(player, q["code_challenge"], q["redirect_uri"]), "state": q["state"]}
+            back = q["redirect_uri"] + "?" + urllib.parse.urlencode(answer)
             with urllib.request.urlopen(back, timeout=5) as r:
                 assert r.status == 200
         if line.startswith("FRONT_FLOW "):
@@ -186,10 +191,11 @@ try:
     enters = [f for f in flow if f.startswith("enter ")]
     assert enters == ["enter connected=0"], flow
     assert screens == ["login", "realms", "select", "create", "select", "loading", "world", "login"], flow
-    assert messages == [REFUSED, "You were disconnected by an operator: flow test."], flow
+    assert messages == ["Discord login was cancelled. ENTER to try again.", REFUSED,
+                        "You were disconnected by an operator: flow test."], flow
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
-    print(f"PASS front-end flow: one ENTER ({enters[0]}) -> Discord login -> realms -> select -> create (Taken refused in the message box, "
+    print(f"PASS front-end flow: one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box, "
           "Fresh created) -> select -> loading -> world; a kick returns to login with the operator's wording")
     assert server.poll() is None, "server exited"
     print("PASS KO front-end flow")

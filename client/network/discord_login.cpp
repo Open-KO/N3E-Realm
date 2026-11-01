@@ -499,6 +499,7 @@ std::optional<Envelope> Flow::begin_browser() {
     callback.reset();
     phase_ = Phase::idle;
     text = "Ports 49152-49155 are all in use. ENTER to try again.";
+    ++alerts_;
     return std::nullopt;
   }
   auto url = authorize_url(realm.discord_client_id, callback->redirect_uri(), pkce);
@@ -508,6 +509,7 @@ std::optional<Envelope> Flow::begin_browser() {
   phase_ = Phase::browser;
   browser_until = std::chrono::steady_clock::now() + BROWSER_WAIT;
   text = opened || !launch ? "Waiting for Discord... ESC cancels" : "Open the address printed in the console. ESC cancels";
+  if (launch && !opened) ++alerts_;
   return std::nullopt;
 }
 
@@ -553,12 +555,14 @@ std::optional<Envelope> Flow::update(const WorldState &world, bool start, bool c
         forget_session(path);
         phase_ = Phase::stopped;
         text = player_text(detail);
+        ++alerts_;
         return std::nullopt;
       }
       phase_ = Phase::idle;
       text = player_text(detail);
       if (text.empty())
         text = detail + ". ENTER to try again.";
+      ++alerts_;
     }
   }
   if (phase_ == Phase::idle && start)
@@ -574,6 +578,7 @@ std::optional<Envelope> Flow::update(const WorldState &world, bool start, bool c
       callback.reset();
       phase_ = Phase::idle;
       text = "Discord did not answer in 5 minutes. ENTER to try again.";
+      ++alerts_;
       return std::nullopt;
     }
     std::string code;
@@ -596,11 +601,13 @@ std::optional<Envelope> Flow::update(const WorldState &world, bool start, bool c
       callback.reset();
       phase_ = Phase::idle;
       text = "Discord login was cancelled. ENTER to try again.";
+      ++alerts_;
       return std::nullopt;
     case Callback::Result::failed:
       callback.reset();
       phase_ = Phase::idle;
       text = "The login callback failed. ENTER to try again.";
+      ++alerts_;
       return std::nullopt;
     }
   }

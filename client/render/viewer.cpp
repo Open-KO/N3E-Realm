@@ -1171,6 +1171,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     // ENTER (or the Discord button) on the login screen: held until the
     // connection is up, so a press while connecting still logs in.
     bool front_login = false;
+    uint64_t front_alerts = 0;
     double front_hold = 0;
     uint64_t front_refusals = 0;
 #if N3E_HARNESS
@@ -2368,6 +2369,19 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
         // wording or KO's text 1601; a refused create or select is shown in
         // the message box in the server's wording.
         if (front) {
+          // KO's login bar has no status line: the Discord flow's failures,
+          // and a server that cannot be reached after a login press, show in
+          // KO's message box.
+          if (discord_flow->alerts() != front_alerts) {
+            front_alerts = discord_flow->alerts();
+            if (front_active()) front->show_message(discord_flow->status());
+          }
+          if (front_login && !world.connected && world.status != "Connecting") {
+            std::string why = world.status;
+            if (const auto bar = why.find(" | F12"); bar != std::string::npos) why.resize(bar);
+            front_login = false;
+            front->show_message(why);
+          }
           if (front_connected && !world.connected) {
             const std::string why = world.disconnect.empty() ? "Disconnected from server" : world.disconnect;
             reset_connection();

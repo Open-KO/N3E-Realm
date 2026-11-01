@@ -80,6 +80,9 @@ public:
   Flow(RealmConfig realm, bool launch_browser) : realm(std::move(realm)), launch(launch_browser) {}
   std::optional<Envelope> update(const WorldState &, bool start, bool cancel, int64_t now);
   const std::string &status() const { return text; }
+  // Counts the texts the player must read (failures, the address to open);
+  // the KO screens show each in their message box.
+  uint64_t alerts() const { return alerts_; }
   Phase phase() const { return phase_; }
   void reset();
 
@@ -88,7 +91,7 @@ private:
   bool launch;
   Phase phase_ = Phase::start;
   std::string text = "Connecting";
-  uint64_t refusals = 0, results = 0;
+  uint64_t refusals = 0, results = 0, alerts_ = 0;
   Pkce pkce;
   std::unique_ptr<Callback> callback;
   std::chrono::steady_clock::time_point browser_until{};

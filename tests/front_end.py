@@ -205,8 +205,13 @@ def patched_action(screen_data, index, action):
     return [bytes(data)] + list(screen_data[1:])
 
 
+# KO's login bar has no status line: a login screen without `notice` cooks
+# and loads.
+plain = {n: spec(n) for n in fe.SCREENS}
+plain["login"]["bindings"].pop("notice")
 valid = blob()
 cases = {
+    "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
     "ok-valid": valid,
     "ok-three-slots": blob(slots=3),
     "ok-plug": blob(plug=0),

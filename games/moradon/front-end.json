@@ -17,20 +17,7 @@
         "Btn_Login": "login",
         "Btn_Cancel": "exit"
       },
-      "added": [
-        {"parent": "Group_LogIn", "id": "notice", "action": "notice", "rect": [30, 424, 960, 448],
-         "style": 76546048, "font": [11, 1], "color": "ffffffff"}
-      ],
-      "text": {
-        "Group_LogIn#11": "Discord",
-        "Group_LogIn#12": "Discord",
-        "Text_Rights": "N3E Realm, a community project. Not affiliated with MGAME or Noahsystem."
-      },
-      "hidden": [
-        "Img_Daum", "Img_MGame", "premium", "Group_Notice_1", "Group_Notice_2", "Group_Notice_3",
-        "Btn_Option", "Btn_Join",
-        "Group_LogIn#15", "Group_LogIn#16", "Group_LogIn#17", "Group_LogIn#18"
-      ]
+      "hidden": ["Img_Daum", "Img_MGame", "premium", "Group_Notice_1", "Group_Notice_2", "Group_Notice_3"]
     },
     "select": {
       "ui": "UI_US/ka_characterselect_us.uif",

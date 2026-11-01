@@ -67,7 +67,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 The loader refuses an unknown action, a screen missing one of its required
 actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
-`realm_connect`, `notice`; select: `select_prev`, `select_next`, `back`, `exit`,
+`realm_connect`; select: `select_prev`, `select_next`, `back`, `exit`,
 `char_info`; create: `create_confirm`, `back`, `name_field`, `char_view`;
 loading: `progress`; message: `message`, `ok`), an action bound twice in a
 screen, and every reference, count and bound above, truncation or trailing
@@ -86,15 +86,13 @@ is where create draws the character.
 
 ## Moradon (`games/moradon/front-end.json`)
 
-- Login (`UI_US/co_login_us.uif`, centred on the bottom edge): the Login button,
-  relabelled "Discord", starts spec 02's flow; Cancel exits. The ID and password
-  fields and their labels stay, as KO draws them, unbound: they take no input
-  (Q60). Hidden: Option, Registration, the MGAME and Daum logos, `premium` and the
-  three notice groups. The bar's art has the four buttons
-  painted in, so Option and Registration leave two blank buttons (Q58). Added:
-  the `notice` line above the bar. `Text_Rights` reads "N3E Realm, a community
-  project. Not affiliated with MGAME or Noahsystem." (Q56). The server group sits
-  at the top of the canvas (`OpenServerList`).
+- Login (`UI_US/co_login_us.uif`, centred on the bottom edge): as KO draws it, with
+  KO's labels and copyright line (Q61). Login starts spec 02's flow; Cancel exits.
+  ID, Password, Option and Registration are unbound: they take no input (Q60, Q61).
+  Hidden: the MGAME and Daum logos (the UIF names `ui_us\service_logos.dxt`, which
+  the pinned tree lacks), `premium` and the three notice groups (KO's news panels,
+  empty without KO's server). No `notice` line: the flow's failures show in the
+  message box. The server group sits at the top of the canvas (`OpenServerList`).
 - Select (`UI_US/ka_characterselect_us.uif`): left, right and exit 10 px above
   the bottom edge, back 15 px above exit, delete hidden (Q53).
 - Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest fixed

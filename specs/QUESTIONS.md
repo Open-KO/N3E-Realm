@@ -355,6 +355,8 @@ the front end; renaming them is a content migration (spec 10, M5b) with a revisi
 
 ### Q56 — The KO copyright line and service logos
 
+*Superseded by Q61: KO's copyright line is kept.*
+
 `co_login_us.uif` carries "Copyright MGAME & Noahsystem all right reserved." and the
 Daum/MGame logos. **Default taken (spec 11), accepted by the maintainer 2026-10-31:** hide the logos; replace the line with
 "N3E Realm, a community project. Not affiliated with MGAME or Noahsystem." The realm
@@ -368,6 +370,8 @@ screens are silent. Music needs a bounded stream (the tracks are minutes long), 
 is its own change.
 
 ### Q58 — Option and Registration in the login bar
+
+*Superseded by Q61: Option and Registration are shown, unbound.*
 
 KO's login bar art (`co_login_us.uif`'s background) has its four buttons painted in.
 Hiding Option and Registration (no account registration here; options are in game)
@@ -389,5 +393,19 @@ later, and an engine 41 package still has N3N4. Both readers say so
 Spec 11 first hid them, since login is Discord. The maintainer asked on 2026-10-31 to
 keep them for KO's look. **Default taken (M4c):** they are drawn as KO draws them,
 with their labels, and bound to no action: they take no clicks or typing, so nobody
-types a password into a field that goes nowhere. Login stays the **Discord** button
+types a password into a field that goes nowhere. Login stays the Login button
 and ENTER.
+
+### Q61 — The login screen stays KO's original
+
+The maintainer asked on 2026-10-31 that the login screen stay original, without the
+UI M4c added. **Default taken (M4c), superseding Q56 and Q58:** the login bar keeps
+KO's labels (**Login**, **Cancel**, **Option**, **Registration**) and `Text_Rights`
+keeps KO's "Copyright MGAME & Noahsystem all right reserved."; Option and
+Registration are shown, unbound, like ID and Password (Q60). The added `notice` line
+is gone (`notice` is now optional in the format); the Discord flow's failures, the
+address to open when no browser starts, and a server that cannot be reached after a
+login press show in KO's message box. Still hidden: the Daum/MGame logos (the UIF
+names `ui_us\service_logos.dxt`, absent from the pinned tree, which has
+`Service_Logos_us.DXT`) and `premium` and the three notice groups (KO's news panels,
+which draw as empty frames with no news to fill them).

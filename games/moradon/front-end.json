@@ -23,10 +23,10 @@
       "ui": "installer-1264:UI_US/ka_characterselect_us.uif",
       "place": "origin",
       "moves": [
-        {"node": "bt_left", "bottom": 10},
-        {"node": "bt_right", "bottom": 10},
-        {"node": "bt_exit", "bottom": 10},
-        {"node": "bt_back", "above": ["bt_exit", 15]}
+        {"node": "bt_left", "x": {"middle": -100, "ratio": -26, "edge": "end"}, "bottom": 10},
+        {"node": "bt_right", "x": {"middle": 100, "ratio": 26}, "bottom": 10},
+        {"node": "bt_exit", "x": "centre", "bottom": 10},
+        {"node": "bt_back", "x": "centre", "above": ["bt_exit", 10]}
       ],
       "bindings": {
         "text00": "char_info",

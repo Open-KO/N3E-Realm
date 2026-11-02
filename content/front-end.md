@@ -9,8 +9,9 @@ hall's front-clip mode (version 6, RQ-086), the select camera's turn mode
 with 1298's recorded camera paths (version 7, RQ-087), a KO zone drawn as
 the select hall with the select camera's fog (version 8, RQ-095), a logo
 screen before the login (version 9, RQ-101: 1264's "K2 Network presents Knight
-Online"), and each message box message's title and wording (version 10,
-RQ-102, Q81).
+Online"), each message box message's title and wording (version 10,
+RQ-102, Q81), and where each layout's nodes go on a window of its own size
+(version 11, RQ-106, Q82).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -24,7 +25,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 10, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 11, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -160,6 +161,30 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    1264's `005d2350`); it refuses a title without a `title` binding on the
    message screen, a row the table lacks or holds twice, and text that is not
    printable ASCII.
+12. The placement (version 11, RQ-106, Q82; `client/assets/front_place.h`):
+   flags (0, or 1: the client scales the canvas to fit the window), then for
+   each of six layouts, the five screens of item 4 in order and then the logo
+   screen's (item 10; none without one), a move count (≤32; 0 for the logo
+   screen without one) and each move: a node of that layout, then its x rule
+   and its y rule. A rule is a kind and two reals a and c (finite, |a| ≤ 4,
+   |c| ≤ 16384): 0 keep (a and c 0: the coordinate stays where the earlier
+   moves left it), 1 linear (trunc(a·S + c)), 2 half
+   (trunc(floor(S / 2) + a·S + c)), S the window's width for x and height for
+   y and trunc C's cast toward zero. A move puts its node's top-left there and
+   moves the node's subtree with it (KO's `MoveOffset`); a layout's moves
+   apply in order, its root's first. The rects of item 4 (and item 10) are the
+   moves applied at the canvas's size, and the loader checks that they are
+   (each within half a pixel). With flags 0 the client draws every layout
+   unscaled on the window's own pixels, its moves applied at the window's size,
+   as KO places its UI by the viewport each time a layout loads
+   (`specs/KO-FINDINGS.md` §9.3): where no node draws the window shows the
+   scene behind the UI or the clear's black. With flags 1, or on a window
+   smaller than the canvas (KO's placements would cut a layout off there), it
+   applies no moves and scales the canvas to fit the window, centred (the
+   realm's look before version 11). Hit tests and the cursor take the same
+   pixels as the drawing; the 3D views (the intro, the hall, the create
+   figure) keep their projection either way, the hall's centre rect a share
+   of the window and the intro backdrop item 6's.
 
 The client samples as KO sets its devices: UIF images with point sampling on whole
 screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
@@ -272,9 +297,11 @@ or from a slot to itself, an entry path not to slot 0, a from and to pair twice,
 the path mode without its entry path or a way between neighbours, a hall with
 a zone, a zone mesh's flags other than above, fog values outside their bounds
 (or not all 0 when off), a message outside the set or named twice, a replace
-flag other than 0 or 1 or a text that does not replace, and every reference,
-count and bound above,
-truncation or trailing bytes.
+flag other than 0 or 1 or a text that does not replace, placement flags
+other than 0 or 1, a move of a node outside its layout or of a logo screen the
+file does not have, a rule of another kind or outside its bounds, a keep rule
+with a or c not 0, moves that do not leave the canvas rects where the file puts
+them, and every reference, count and bound above, truncation or trailing bytes.
 
 ## Actions
 
@@ -451,6 +478,12 @@ recipe's, as "Moradon" below says, or missing, and marked here:
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF
   intro), and the layouts (1298's `UI_US`, as today). The hall lights
   `ka_light_0/1` are the files both clients name.
+- Placement (RQ-106, `specs/KO-FINDINGS.md` §9.3, binary): the 1097 recipe's
+  `place` and `moves` (1264's code). The select layout it cooks, the pinned
+  tree's `ka_characterselect_us.uif`, is byte for byte 1264's, and 1298's binary
+  never places it: 1298's own select is the `co_CharacterSelect_us.uif` bar,
+  which its Load (`00606c10`) puts at ((W − w) >> 1, H − 10 − h). Drawing that
+  bar is a layout change, not a placement one.
 - Lights (`select.light_manager`; RQ-095, `specs/KO-FINDINGS.md` §8.4, binary):
   1298's select Init (`005f98c0`) resets its light manager (`CLightMgr`,
   Release `005ba7a0`) and every select tick (`005faf10`) applies the hall lights
@@ -493,15 +526,29 @@ The five layouts, and the textures they name, are the 1264 install's
 select and create layouts and textures are the pinned tree's bytes too; the message
 box and loading are 1264's.
 
+- Placement (RQ-106, Q82, `specs/KO-FINDINGS.md` §9.3, binary): each screen's
+  `place` (its root: `origin`, `centre` or `bottom`, centred on the bottom
+  edge) and `moves` (a node, then `x`: a number, `centre` or
+  `{"middle": c, "ratio": k, "edge": "start"|"end"}`, the node's start or end
+  edge at (S >> 1) + c + k·S / the root's extent; and one of `y`: a number or
+  `centre`, `bottom`: its bottom edge that far above the window's, or
+  `above` [node, gap]: its bottom edge that far above that node's top) are
+  1264's placements, which the cook writes as item 12's rules. The recipe's
+  `ui_scale` (`native`, the default, or `window`: item 12's flags 1, the
+  realm's scaling to the window before RQ-106) is RQ-103's realm-owner switch.
 - Login (`UI_US/co_login_us.uif`, centred on the bottom edge): as KO draws it, with
   KO's labels and copyright line (Q61). Login starts spec 02's flow; Cancel exits.
   ID, Password, Option and Registration are unbound: they take no input (Q60, Q61).
   Hidden: the MGAME and Daum logos (the UIF names `ui_us\service_logos.dxt`, which
   neither the pinned tree nor the 1264 install has), `premium` and the three notice groups (KO's news panels,
   empty without KO's server). No `notice` line: the flow's failures show in the
-  message box. The server group sits at the top of the canvas (`OpenServerList`).
-- Select (`UI_US/ka_characterselect_us.uif`): left, right and exit 10 px above
-  the bottom edge, back 15 px above exit, delete hidden (Q53).
+  message box. The server group rests at the window's top-left, (0, 0), where
+  1264's login tick slides it (`005c25b0`).
+- Select (`UI_US/ka_characterselect_us.uif`, its root at the window's top-left):
+  1264's CUICharacterSelect::Load (`004448f0`, Q84): left's right edge at
+  (W >> 1) − 100 − 26·W/1024 and right at (W >> 1) + 100 + 26·W/1024, each
+  10 px above the bottom edge; exit centred 10 px above the bottom edge, back
+  centred 10 px above exit; delete hidden (Q53).
 - Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest fixed
   on, every other race, class, face, hair and stat arrow fixed disabled, the
   bonus points and stat highlights hidden (Q52).

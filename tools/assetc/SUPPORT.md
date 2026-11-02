@@ -166,5 +166,11 @@ fade-out from KO's seconds and peak, its music's track, delay and fade-out and
 whether a key skips it and the cursor hides; none without the key); the 1097
 recipe cooks 1264's `co_usa_logo_us.uif` and `Snd/bless.wav` from the 1264
 install.
+N3FE version 11 (RQ-106) adds the placement: each layout's moves, rules linear in
+the window's width or height from the recipe's `place` and `moves`, which put the
+nodes where KO's UI code puts them on a window of any size (the client draws the UI
+unscaled), and the recipe's `ui_scale` (`native`, or `window` for the realm's
+earlier scaling to the window); the 1097 recipe gives 1264's placements
+(`specs/KO-FINDINGS.md` §9.3).
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

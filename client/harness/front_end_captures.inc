@@ -2,12 +2,16 @@
 // (n3e-test-client, N3E_HARNESS=1) only; see client/harness/harness.h.
 // Spec 11 acceptance 6: N3E_TEST_FRONT_END=PREFIX draws each KO screen at rest
 // in the window (--fixed-window), writes PREFIX.<shot>.ppm and prints, per
-// shot, the characters drawn (pixel boxes, y down) and one bound node's rect:
-//   FRONT_SHOT name=N size=WxH path=P rect=x0,y0,x1,y1 drawn=intro|hall|create:x0,y0,x1,y1;...
+// shot, the characters drawn (pixel boxes, y down), one bound node's rect and
+// (RQ-106) where the canvas's (0, 0) is as the screen's root carries it, and
+// the scale (1: KO's placement on the window's own pixels):
+//   FRONT_SHOT name=N size=WxH path=P rect=x0,y0,x1,y1 drawn=intro|hall|create:x0,y0,x1,y1;... origin=X,Y,S
+// then the select's buttons where the select placed them (RQ-106):
+//   FRONT_PLACED select_prev=x0,y0,x1,y1 select_next=... back=... exit=...
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
-// logo-fade half way into the first group's fade-in, with rect= the window's
-// canvas (its pixel rect) and drawn= empty; then
+// logo-fade half way into the first group's fade-in, with rect= the logo
+// layout's canvas (its pixel rect) and drawn= empty; then
 //   FRONT_LOGO groups=G length=L skip=0|1 cursor=0|1 alpha=A0,A1,... before=logo|login end=logo|login
 // (L the screen's seconds; A the alpha of each shot in order; before the
 // screen on a frame 0.1 s before its end, end the screen after a frame that
@@ -39,10 +43,11 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     const std::string path = std::string(prefix) + "." + name + ".ppm";
     capture(path, width, height);
     std::cout << "FRONT_SHOT name=" << name << " size=" << width << "x" << height << " path=" << path << " rect=";
+    const auto origin = front->layout_origin(width, height);
     if (logo >= 0) {
-      const float s = std::min(width / 1024.f, height / 768.f);
-      std::cout << int((width - 1024 * s) / 2) << "," << int((height - 768 * s) / 2) << ","
-                << int((width + 1024 * s) / 2) << "," << int((height + 768 * s) / 2);
+      const float s = origin[2];
+      std::cout << int(origin[0]) << "," << int(origin[1]) << "," << int(origin[0] + 1024 * s) << ","
+                << int(origin[1] + 768 * s);
     } else if (auto r = front->action_rect(bound, width, height))
       std::cout << int((*r)[0]) << "," << int((*r)[1]) << "," << int((*r)[2]) << "," << int((*r)[3]);
     std::cout << " drawn=";
@@ -56,7 +61,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
                 << int(height - v[1] - (b[1] + 1) / 2 * v[3]);
       sep = ";";
     }
-    std::cout << std::endl;
+    std::cout << " origin=" << origin[0] << "," << origin[1] << "," << origin[2] << std::endl;
     SDL_GL_SwapWindow(w);
   };
   using A = n3e::FrontAction;
@@ -64,6 +69,15 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   shot("realms", Screen::realms, 0, "Local Realm", 0, A::realm_list, "");
   shot("realms-unnamed", Screen::realms, 0, "", 0, A::realm_list, "");
   for (int n = 1; n <= 3; ++n) shot("select-" + std::to_string(n), Screen::select, n, "Local Realm", 0, A::char_info, "");
+  front->jump(Screen::select);
+  std::cout << "FRONT_PLACED";
+  for (const auto &[label, action] : {std::pair{"select_prev", A::select_prev}, std::pair{"select_next", A::select_next},
+                                      std::pair{"back", A::back}, std::pair{"exit", A::exit}}) {
+    const auto r = front->action_rect(action, width, height);
+    std::cout << " " << label << "=";
+    if (r) std::cout << int((*r)[0]) << "," << int((*r)[1]) << "," << int((*r)[2]) << "," << int((*r)[3]);
+  }
+  std::cout << std::endl;
   shot("create", Screen::create, 0, "Local Realm", 0, A::name_field, "");
   shot("loading-start", Screen::loading, 1, "Local Realm", 2 / 3.f, A::progress, "");
   shot("loading-world", Screen::loading, 1, "Local Realm", 1, A::progress, "");

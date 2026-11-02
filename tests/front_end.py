@@ -8,7 +8,9 @@ here, and both scenes use the demo package's own N3S1 character. The music
 quadruple, so it decodes to a quiet low tone (tests/audio.cpp decodes it).
 The PCM music (RQ-083) is a synthetic WAV written here with the wave module."""
 import io
+import json
 import math
+import re
 import pathlib
 import shutil
 import struct
@@ -730,10 +732,14 @@ MAX_VERTEX_MESH = fe.mesh_record([[i % 256, 0, i // 256, 0, 1, 0, 0, 0] for i in
 FOG_OFF = u(0) + f([0] * 5)
 
 
-def blob(version=10, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+# Version 11 (RQ-106): no moves and KO's unscaled placement.
+NO_PLACEMENT = u(0) + u(0) * 6
+
+
+def blob(version=11, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
-         logo=u(0), messages=u(0)):
+         logo=u(0), messages=u(0), placement=NO_PLACEMENT):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -751,7 +757,7 @@ def blob(version=10, slots=1, screen_data=None, font_index=None, light=None, plu
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
     out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
     out += character(select_clips, plug=plug) + character(plug=plug)
-    return out + music + logo + messages + extra
+    return out + music + logo + messages + placement + extra
 
 
 # --- the logo screen (version 9, RQ-101) ---------------------------------------
@@ -966,6 +972,191 @@ def patched_action(screen_data, index, action):
     return [bytes(data)] + list(screen_data[1:])
 
 
+# --- the placement (version 11, RQ-106, Q82) ------------------------------------
+
+def frame(ident, kind, rect, children=()):
+    """A node of `kind` at `rect`; a button's four state images share it."""
+    if kind == 1:
+        children = [node(4, reserved=k, rect=rect) for k in range(4)] + list(children)
+    return node(kind, ident, children, rect=rect)
+
+
+# Synthetic layouts at the rects of 1264's (KO-FINDINGS 9.3): the login's root
+# 984 x 506 with its server group at the top-left, the select's buttons, the
+# create's 1025-wide root, the loading's root at a negative origin with its
+# version text, the message box.
+PLACE_TREES = {
+    "login.uif": frame("root", 0, (-1, 0, 983, 506), [
+        frame("Group_LogIn", 0, (0, 0, 983, 505), [frame("Btn_Login", 1, (408, 470, 488, 492)),
+                                                     frame("Btn_Cancel", 1, (496, 470, 576, 492))]),
+        frame("Group_ServerList", 0, (12, 30, 218, 482), [frame("List_Server", 14, (20, 60, 200, 400)),
+                                                            frame("Btn_Connect", 1, (40, 420, 180, 450))])])[1],
+    "select.uif": frame("root", 0, (0, 0, 1024, 768), [
+        frame("text00", 6, (716, 253, 910, 477)), frame("bt_back", 1, (419, 635, 619, 671)),
+        frame("bt_exit", 1, (418, 685, 618, 721)), frame("bt_left", 1, (313, 686, 386, 722)),
+        frame("bt_right", 1, (644, 684, 717, 720))])[1],
+    "create.uif": frame("root", 0, (-1, 0, 1024, 788), [
+        frame("btn_create", 1, (71, 677, 265, 713)), frame("btn_cancel", 1, (755, 677, 949, 713)),
+        node(8, "edit_name", [node(4, texture="", rect=(413, 671, 677, 697)), node(6, rect=(413, 671, 677, 697))],
+             rect=(413, 671, 677, 697)),
+        frame("area_character", 9, (353, 59, 676, 632)), frame("text_desc", 6, (754, 357, 952, 630))])[1],
+    "loading.uif": frame("root", 0, (-12, -20, 666, 413), [
+        frame("Text_Version", 6, (4, 5, 165, 53)),
+        frame("Progress_Loading", 3, (354, 378, 619, 396), [node(4, reserved=0, rect=(354, 378, 619, 396)),
+                                                            node(4, reserved=1, rect=(354, 378, 619, 396))])])[1],
+    "message.uif": frame("root", 0, (0, 0, 327, 156), [frame("text_msg", 6, (21, 28, 304, 86)),
+                                                       frame("btn_ok", 1, (115, 116, 212, 145))])[1],
+}
+PLACE_BINDINGS = {**BINDINGS, "login": {k: v for k, v in BINDINGS["login"].items() if k != "notice"},
+                  "loading": {"Progress_Loading": "progress", "Text_Version": "version"}}
+# games/moradon/front-end.json's (and front-end-1298.json's) placements of the
+# 1264 layouts.
+PLACE_SPECS = {
+    "login": {"place": "bottom", "moves": [{"node": "Group_ServerList", "x": 0, "y": 0}]},
+    "select": {"place": "origin", "moves": [
+        {"node": "bt_left", "x": {"middle": -100, "ratio": -26, "edge": "end"}, "bottom": 10},
+        {"node": "bt_right", "x": {"middle": 100, "ratio": 26}, "bottom": 10},
+        {"node": "bt_exit", "x": "centre", "bottom": 10},
+        {"node": "bt_back", "x": "centre", "above": ["bt_exit", 10]}]},
+    "create": {"place": "centre"},
+    "loading": {"place": "centre", "moves": [{"node": "Text_Version", "x": 10, "y": 10}]},
+    "message": {"place": "centre"},
+}
+
+
+def cook_placed(specs=PLACE_SPECS, trees=PLACE_TREES):
+    assets = Fixture(trees)
+    textures, fonts, placements = fe.Textures(assets), {}, []
+    data = [fe.screen(n, {"ui": n + ".uif", "bindings": dict(PLACE_BINDINGS[n]), **specs[n]}, assets, textures,
+                      fonts, placements=placements) for n in fe.SCREENS]
+    return data, placements
+
+
+def ko_rects(width, height):
+    """KO's own placements of the layouts above at a viewport, written from the
+    binaries (KO-FINDINGS 9.3), each node's top-left: 1264's login Init
+    (005bde22: ((W - w) >> 1, H - h)) and its server list tick (005c25b0:
+    (0, 0) at rest); CUICharacterSelect::Load (004448f0, r = W / 1024 as a
+    float); create (0043cd00) and loading (00401670) centred with C's signed
+    division, the version at (10, 10) (00531c80); the message box
+    ((W - w) >> 1, 0050c730)."""
+    r = struct.unpack("<f", struct.pack("<f", width / 1024))[0]
+    centre = lambda extent, size: int((extent - size) / 2)
+    login_x, login_y = (width - 984) >> 1, height - 506
+    return {
+        "login": {"root": (login_x, login_y), "Btn_Login": (login_x + 409, login_y + 470),
+                  "Group_ServerList": (0, 0), "List_Server": (8, 30)},
+        "select": {"root": (0, 0), "text00": (716, 253),
+                   "bt_left": (int((width >> 1) - 73 - 100 - 26 * r), height - 10 - 36),
+                   "bt_right": (int((width >> 1) + 26 * r + 100), height - 10 - 36),
+                   "bt_exit": ((width - 200) >> 1, height - 10 - 36),
+                   "bt_back": ((width - 200) >> 1, (685 - 721) + (635 - 671) + height - 20)},
+        "create": {"root": (centre(width, 1025), centre(height, 788)),
+                   "area_character": (centre(width, 1025) + 354, centre(height, 788) + 59)},
+        "loading": {"root": (centre(width, 678), centre(height, 433)), "Text_Version": (10, 10),
+                    "Progress_Loading": (centre(width, 678) + 366, centre(height, 433) + 398)},
+        "message": {"root": ((width - 327) >> 1, (height - 156) >> 1)},
+    }
+
+
+placed_screens, placements = cook_placed()
+# At the canvas the moves are where the canvas rects are: the cook's rects are
+# KO's at 1024 x 768 (1264's select: bt_right at 638, exit and back at 412).
+canvas_rects = ko_rects(1024, 768)
+assert len(placements) == 5 and [struct.unpack_from("<I", p)[0] for p in placements] == [2, 5, 1, 2, 1], placements
+PLACED_NODES = {n: {} for n in fe.SCREENS}
+for n, data in zip(fe.SCREENS, placed_screens):
+    at = 4
+    for i in range(struct.unpack_from("<I", data)[0]):
+        rect = struct.unpack_from("<4f", data, at + 8)
+        length = struct.unpack_from("<I", data, at + 24)[0]
+        ident = data[at + 28:at + 28 + length].decode() or ("root" if i == 0 else "")
+        if ident and ident not in PLACED_NODES[n]:
+            PLACED_NODES[n][ident] = (i, rect)
+        at = fe.node_end(data, at)
+for n, want in canvas_rects.items():
+    for ident, xy in want.items():
+        assert PLACED_NODES[n][ident][1][:2] == xy, (n, ident, PLACED_NODES[n][ident], xy)
+# Both Moradon recipes place their layouts as PLACE_SPECS does, so the loader's
+# checks below (KO's placements at 1024x768, 1280x1024, 1600x1200 and
+# 1281x1025) hold for each: the 1298 recipe cooks the pinned tree's
+# ka_characterselect_us.uif, byte for byte 1264's, which 1298's binary never
+# places (its select is co_CharacterSelect_us.uif, KO-FINDINGS 9.3), so it takes
+# 1264's code too; a move without its x would keep the 1024-wide x on a wider
+# window.
+for recipe in ("front-end.json", "front-end-1298.json"):
+    recipe_screens = json.loads((ROOT / "games/moradon" / recipe).read_text())["screens"]
+    specs = {n: {k: v for k, v in recipe_screens[n].items() if k in ("place", "moves")} for n in fe.SCREENS}
+    assert specs == PLACE_SPECS, (recipe, specs)
+    assert cook_placed(specs)[1] == placements, recipe
+placement_problems = {
+    "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
+    "an unknown move key": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "z": 1}]}},
+    "two y rules": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "y": 1,
+                                                                             "bottom": 2}]}},
+    "a middle y": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "y": {"middle": 1}}]}},
+    "a middle without its offset": {**PLACE_SPECS, "message": {"place": "centre", "moves": [
+        {"node": "btn_ok", "x": {"ratio": 1}}]}},
+    "an unknown edge": {**PLACE_SPECS, "message": {"place": "centre", "moves": [
+        {"node": "btn_ok", "x": {"middle": 1, "edge": "left"}}]}},
+    "an offset past its bound": {**PLACE_SPECS, "message": {"place": "centre", "moves": [
+        {"node": "btn_ok", "x": 16385}]}},
+    "a ratio past its bound": {**PLACE_SPECS, "message": {"place": "centre", "moves": [
+        {"node": "btn_ok", "x": {"middle": 0, "ratio": 2000}}]}},
+    "a value that is not a number": {**PLACE_SPECS, "message": {"place": "centre", "moves": [
+        {"node": "btn_ok", "x": "left"}]}},
+    "above a node no move places": {**PLACE_SPECS, "message": {"place": "centre", "moves": [
+        {"node": "btn_ok", "above": ["text_msg", 4]}]}},
+    "a move of no node": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_no", "x": 1}]}},
+    "32 moves": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "x": 1}] * 32}},
+}
+for reason, specs in placement_problems.items():
+    try:
+        cook_placed(specs)
+    except (ValueError, KeyError, TypeError) as error:
+        continue
+    raise AssertionError("placement cook accepted " + reason)
+# A move of a hidden node is not written.
+hidden = cook_placed({**PLACE_SPECS, "loading": {**PLACE_SPECS["loading"], "hidden": ["Text_Version"]}})[1]
+assert hidden[3] == u(1) + u(0) + u(fe.LINEAR) + f([0.5, -339]) + u(fe.LINEAR) + f([0.5, -216.5]), hidden[3]
+print("PASS front-end placement cook: KO's placements at the canvas, the 1097 and 1298 recipes' the same, "
+      "%d refusals" % len(placement_problems))
+PLACEMENT_OK = u(0) + b"".join(placements) + u(0)
+SIZES = ((1024, 768), (1280, 1024), (1600, 1200), (1281, 1025), (800, 600))
+
+
+def moves_raw(*moves, flags=0, layout=4, logo=u(0)):
+    """A placement of no moves but `moves` ((node, (kind, a, c), (kind, a, c)))
+    on layout `layout`."""
+    lists = [u(0)] * 5
+    lists[layout] = u(len(moves)) + b"".join(u(n) + u(x[0]) + f(x[1:]) + u(y[0]) + f(y[1:]) for n, x, y in moves)
+    return u(flags) + b"".join(lists) + logo
+
+
+NAN = struct.unpack("<f", struct.pack("<I", 0x7FC00000))[0]
+PLACEMENT_CASES = {
+    "ok-placed": blob(screen_data=placed_screens, placement=PLACEMENT_OK),
+    "ok-placed-scaled": blob(screen_data=placed_screens, placement=u(1) + PLACEMENT_OK[4:]),
+    "ok-placement-keep": blob(placement=moves_raw((1, (fe.KEEP, 0, 0), (fe.KEEP, 0, 0)))),
+    "bad-placement-flags": blob(placement=u(2) + NO_PLACEMENT[4:]),
+    "bad-placement-missing": blob(placement=b""),
+    "bad-placement-truncated": blob(screen_data=placed_screens, placement=PLACEMENT_OK[:-4]),
+    "bad-move-node": blob(placement=moves_raw((8, (fe.LINEAR, 0, 0), (fe.LINEAR, 0, 0)))),
+    "bad-move-kind": blob(placement=moves_raw((0, (3, 0, 0), (fe.LINEAR, 0, 0)))),
+    "bad-move-nan": blob(placement=moves_raw((0, (fe.LINEAR, NAN, 0), (fe.LINEAR, 0, 0)))),
+    "bad-move-scale": blob(placement=moves_raw((0, (fe.LINEAR, 4.5, 0), (fe.LINEAR, 0, 0)))),
+    "bad-move-offset": blob(placement=moves_raw((0, (fe.LINEAR, 0, 16385), (fe.LINEAR, 0, 0)))),
+    "bad-move-keep-values": blob(placement=moves_raw((1, (fe.KEEP, 1, 0), (fe.KEEP, 0, 0)))),
+    # A move that puts a node elsewhere at the canvas than the file does.
+    "bad-move-off-canvas": blob(placement=moves_raw((0, (fe.LINEAR, 0, 5), (fe.LINEAR, 0, 0)))),
+    "bad-moves-33": blob(placement=moves_raw(*[(0, (fe.LINEAR, 0, 0), (fe.LINEAR, 0, 0))] * 33)),
+    "bad-logo-moves-without-logo": blob(placement=moves_raw(logo=u(1) + u(0) + (u(fe.LINEAR) + f([0, 0])) * 2)),
+    "ok-logo-moves": blob(music=ONE_TRACK, logo=LOGO_OK,
+                          placement=moves_raw(logo=u(1) + u(0) + (u(fe.LINEAR) + f([0.5, -16])) +
+                                              (u(fe.LINEAR) + f([0.5, -8])))),
+}
+
+
 # KO's login bar has no status line: a login screen without `notice` cooks
 # and loads.
 plain = {n: spec(n) for n in fe.SCREENS}
@@ -1018,6 +1209,9 @@ cases = {
     # RQ-102 (version 10): each message's title and wording.
     "bad-version-9": blob(version=9),
     **MESSAGE_CASES,
+    # RQ-106 (version 11): the placement.
+    "bad-version-10": blob(version=10),
+    **PLACEMENT_CASES,
     "ok-textures-256": blob(more_textures=256 - len(textures.list) - 1),
     "bad-textures-257": blob(more_textures=257 - len(textures.list) - 1),
     "ok-zone": blob(hall=0, zone=u(3) + zone_mesh() + zone_mesh(fe.CUT_ZERO | fe.UNLIT) +
@@ -1096,7 +1290,7 @@ try:
         (work / name / "front-end.bin").write_bytes(data)
         args += [name.split("-")[0], str(work / name)]
     run = subprocess.run([str(ROOT / "build/client/n3e-front-end-check"), *args], capture_output=True, text=True)
-    sys.stdout.write(run.stdout)
+    sys.stdout.write("".join(l for l in run.stdout.splitlines(True) if not l.startswith("placed ")))
     assert run.returncode == 0, run.stdout + run.stderr
     # RQ-095: the zone's refusals, each for its own reason.
     for name, reason in (("bad-zone-totals", "front end zone totals"),
@@ -1116,5 +1310,37 @@ try:
         if name.startswith("bad-message-") and name != "bad-message-truncated":
             line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
             assert "front end message" in line or "front end text" in line or "count" in line, line
+    # RQ-106: the placement's refusals are the section's own; the client puts
+    # each node where KO's own code puts it at every size (the window of 800
+    # x 600, smaller than the canvas, scales the canvas down instead), and
+    # with the scale flag the canvas scaled to fit the window.
+    for name in PLACEMENT_CASES:
+        if name.startswith("bad-") and name not in ("bad-placement-missing", "bad-placement-truncated"):
+            line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+            assert "front end placement" in line or "front end move" in line or "count" in line, line
+    placed = {}
+    for m in re.finditer(r"^placed (\S+): layout=(\d) size=(\d+)x(\d+) node=(\d+) rect=(\S+)$", run.stdout, re.M):
+        placed[(m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5)))] = \
+            tuple(float(v) for v in m.group(6).split(","))
+    checked = 0
+    for width, height in SIZES:
+        scale = min(width / 1024, height / 768)
+        for layout, n in enumerate(fe.SCREENS):
+            for ident, (index, rect) in PLACED_NODES[n].items():
+                got = placed[("ok-placed", layout, width, height, index)]
+                scaled = placed[("ok-placed-scaled", layout, width, height, index)]
+                ox, oy = (width - 1024 * scale) / 2, (height - 768 * scale) / 2
+                want = tuple(v * scale + (ox if k % 2 == 0 else oy) for k, v in enumerate(rect))
+                assert all(abs(a - b) < 1e-3 for a, b in zip(scaled, want)), (n, ident, width, scaled, want)
+                if width < 1024:
+                    assert got == scaled, (n, ident, width, got, scaled)
+                    continue
+                ko = ko_rects(width, height)[n].get(ident)
+                if ko is not None:
+                    assert got[:2] == ko and got[2] - got[0] == rect[2] - rect[0], (n, ident, width, got, ko)
+                    checked += 1
+    assert checked == 4 * sum(len(v) for v in ko_rects(1024, 768).values()), checked
+    print("PASS front-end placement: %d nodes where KO's code puts them at 1024x768, 1280x1024, 1600x1200 and "
+          "1281x1025, the canvas scaled at 800x600 and with the scale flag" % checked)
 finally:
     shutil.rmtree(work)

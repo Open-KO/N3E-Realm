@@ -952,7 +952,21 @@ struct FrontMessageText {
   std::string title, text;
   bool replaces = false;  // `text` replaces the client's wording
 };
+// Version 11 (RQ-106, Q82): a move puts a node's top-left, its subtree with
+// it, where KO's UI code places it on a window (render/front_place.h). On an
+// axis S pixels long: KEEP leaves it where the earlier moves left it; LINEAR is
+// trunc(a S + c); HALF is trunc(floor(S / 2) + a S + c). Each layout's moves
+// apply in order (its root's first); at the canvas's size they leave every
+// rect where the file puts it.
+struct FrontAxis {
+  static constexpr uint32_t KEEP = 0, LINEAR = 1, HALF = 2;
+  uint32_t kind = KEEP;
+  float a = 0, c = 0;
+};
+struct FrontMove { uint32_t node = 0; FrontAxis x, y; };
 struct FrontEnd {
+  // The layouts the moves are for: the five screens (FrontScreen), then the logo.
+  static constexpr size_t kLogoLayout = size_t(FrontScreen::count);
   uint32_t character_slots = 0, canvas_width = 0, canvas_height = 0;
   std::vector<HudTexture> textures;
   std::vector<FrontFont> fonts;
@@ -983,6 +997,12 @@ struct FrontEnd {
   std::optional<FrontLogo> logo;
   // Version 10 (RQ-102): each message's title and wording, by FrontMessage.
   std::array<FrontMessageText, size_t(FrontMessage::count)> messages;
+  // Version 11 (RQ-106, Q82): each layout's moves, and whether the client
+  // scales the canvas to fit the window instead (the realm's own look, off
+  // by default; RQ-103's realm-owner option) of placing the layouts on the
+  // window's own pixels as KO does.
+  std::array<std::vector<FrontMove>, size_t(FrontScreen::count) + 1> moves;
+  bool scale_to_window = false;
 };
 FrontEnd load_front_end(const Release &release);
 } // namespace n3e

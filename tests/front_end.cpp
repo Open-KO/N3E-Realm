@@ -11,8 +11,12 @@
 // zone's fog and its BLEND meshes' far-to-near order (client/render/select_zone.h).
 // RQ-101: the logo screen's timeline, alpha and music (client/render/front_logo.h)
 // on 1264's groups and fade. RQ-102: a loaded package's worded messages are
-// printed for tests/front_end.py.
+// printed for tests/front_end.py. RQ-106: a loaded package named ok-placed*
+// prints each layout's node rects in window pixels at KO's window sizes, an
+// odd size and one smaller than the canvas (client/assets/front_place.h), for
+// tests/front_end.py to check against KO's own placements.
 #include "assets/assets.h"
+#include "assets/front_place.h"
 #include "render/front_logo.h"
 #include "render/select_hall.h"
 #include "render/select_path.h"
@@ -20,6 +24,7 @@
 #include "render/select_zone.h"
 #include <algorithm>
 #include <cmath>
+#include <iomanip>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -331,6 +336,20 @@ int main(int argc, char **argv) {
         if (const auto &m = fe.messages[k]; !m.title.empty() || m.replaces)
           std::cout << "message " << release.root.filename().string() << ": " << k << " title='" << m.title
                     << "' replaces=" << m.replaces << " text='" << m.text << "'\n";
+      // RQ-106: placed NAME: layout=L size=WxH node=I rect=x0,y0,x1,y1
+      if (release.root.filename().string().starts_with("ok-placed"))
+        for (const auto [w, h] : {std::pair{1024, 768}, {1280, 1024}, {1600, 1200}, {1281, 1025}, {800, 600}}) {
+          const auto [scale, ox, oy] = n3e::front_view(fe, w, h);
+          for (size_t layout = 0; layout < fe.moves.size(); ++layout) {
+            const auto rects = n3e::front_layout_rects(fe, layout, w, h);
+            for (size_t i = 0; i < rects.size(); ++i) {
+              const auto &r = rects[i];
+              std::cout << std::setprecision(9) << "placed " << release.root.filename().string() << ": layout=" << layout << " size=" << w
+                        << "x" << h << " node=" << i << " rect=" << ox + r[0] * scale << "," << oy + r[1] * scale
+                        << "," << ox + r[2] * scale << "," << oy + r[3] * scale << "\n";
+            }
+          }
+        }
       // RQ-018: every loaded track streams (tests/audio.cpp checks the samples).
       for (const auto &track : fe.music) {
         n3e::MusicStream stream(track);

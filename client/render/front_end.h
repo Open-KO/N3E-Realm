@@ -6,6 +6,7 @@
 // here; the viewer turns each Command into the protocol message it already
 // sends for the legacy panels, and tells this module what the server said.
 #include "assets/assets.h"
+#include "assets/front_place.h"
 #include "platform/gl.h"
 #include "platform/gl_load.h"
 #include "render/animation.h"
@@ -377,25 +378,38 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     std::array<int, 4> viewport;   // GL viewport: x, y (from the bottom), w, h
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
-  std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) const {
+  std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) {
     const auto screen = action == FrontAction::message || action == FrontAction::ok || action == FrontAction::title
                             ? FrontScreen::message
                             : layout();
     const auto &nodes = fe.screens[size_t(screen)];
     for (size_t i = 0; i < nodes.size(); ++i)
       if (nodes[i].action == action) {
-        const float s = scale(width, height), ox = (width - fe.canvas_width * s) / 2,
-                    oy = (height - fe.canvas_height * s) / 2;
+        const auto [s, ox, oy] = view(width, height);
         const auto r = rect(screen, i);
         return std::array<float, 4>{ox + r[0] * s, oy + r[1] * s, ox + r[2] * s, oy + r[3] * s};
       }
     return std::nullopt;
   }
+  // Where the canvas's (0, 0) is in the window as the current layout's root
+  // (the logo's on the logo screen) carries it, and the scale (a test hook):
+  // KO's placement moves the root to the window's own pixels, scale 1.
+  std::array<float, 3> layout_origin(int width, int height) {
+    const auto [s, ox, oy] = view(width, height);
+    const size_t at = state == Screen::logo ? FrontEnd::kLogoLayout : size_t(layout());
+    const auto &nodes = front_layout(fe, at);
+    return {ox + (placed[at][0][0] - nodes[0].rect[0]) * s, oy + (placed[at][0][1] - nodes[0].rect[1]) * s, s};
+  }
+  // Whether the layouts are scaled to the window (fe.scale_to_window, or a
+  // window smaller than the canvas) at this size.
+  bool scaled_at(int width, int height) {
+    place(width, height);
+    return scaled;
+  }
 
   Output event(const SDL_Event &e, float x, float y, int width, int height) {
     Output out;
-    const float s = scale(width, height), ox = (width - fe.canvas_width * s) / 2,
-                oy = (height - fe.canvas_height * s) / 2;
+    const auto [s, ox, oy] = view(width, height);
     const float cx = (x - ox) / s, cy = (y - oy) / s;
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
       pointer = {cx, cy};
@@ -598,6 +612,12 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   bool batch_solid = false;
   float ui_scale = 1, ui_x = 0, ui_y = 0;
   std::vector<Drawn> drawn_boxes;
+  // RQ-106 (Q82): each layout's rects at the window size they were placed
+  // for (the five screens, then the logo), in window pixels as KO places them,
+  // or the canvas rects when `scaled`.
+  std::array<std::vector<std::array<float, 4>>, size_t(FrontScreen::count) + 1> placed;
+  std::array<int, 2> placed_size{-1, -1};
+  bool scaled = false;
 
   Buffer upload(const FrontMesh &mesh) {
     Buffer b;
@@ -617,8 +637,21 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     glBindVertexArray(0);
     return b;
   }
-  float scale(int width, int height) const {
-    return std::min(width / float(fe.canvas_width), height / float(fe.canvas_height));
+  // RQ-106 (Q82): KO draws its UI unscaled, each layout placed on the
+  // window's own pixels by its moves (front_place.h); the realm's scaling of
+  // the canvas to fit the window is the package's option, and the fallback
+  // for a window smaller than the canvas, so nothing is cut off.
+  void place(int width, int height) {
+    if (placed_size[0] == width && placed_size[1] == height) return;
+    placed_size = {width, height};
+    scaled = front_scaled(fe, width, height);
+    for (size_t at = 0; at < placed.size(); ++at) placed[at] = front_layout_rects(fe, at, width, height);
+  }
+  // The transform from the placed rects to window pixels: the scale and the
+  // canvas's offset when scaled, none otherwise.
+  std::array<float, 3> view(int width, int height) {
+    place(width, height);
+    return front_view(fe, width, height);
   }
   FrontScreen layout() const {
     return state == Screen::select ? FrontScreen::select
@@ -696,7 +729,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   }
   // The node rect on the canvas; the server group slides.
   std::array<float, 4> rect(FrontScreen screen, size_t i) const {
-    auto r = fe.screens[size_t(screen)][i].rect;
+    auto r = placed[size_t(screen)].empty() ? fe.screens[size_t(screen)][i].rect : placed[size_t(screen)][i];
     if (screen == FrontScreen::login && state == Screen::realms && in_realm_group(i)) {
       const float dy = slide - realm_height;
       r[1] += dy, r[3] += dy;
@@ -1103,7 +1136,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   void character_view(int width, int height, double now) {
     const auto &nodes = fe.screens[size_t(FrontScreen::create)];
     auto it = std::find_if(nodes.begin(), nodes.end(), [](const auto &n) { return n.action == FrontAction::char_view; });
-    const auto r = it->rect;
+    const auto r = rect(FrontScreen::create, size_t(it - nodes.begin()));
     const int x0 = int(ui_x + r[0] * ui_scale), y0 = int(ui_y + r[1] * ui_scale);
     const int w = std::max(1, int((r[2] - r[0]) * ui_scale)), h = std::max(1, int((r[3] - r[1]) * ui_scale));
     glViewport(x0, height - y0 - h, w, h);
@@ -1138,9 +1171,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     glUniform2f(glGetUniformLocation(flat, "screen"), float(width), float(height));
     glUniform1i(glGetUniformLocation(flat, "tex"), 0);
     glActiveTexture(GL_TEXTURE0);
-    ui_scale = scale(width, height);
-    ui_x = (width - fe.canvas_width * ui_scale) / 2;
-    ui_y = (height - fe.canvas_height * ui_scale) / 2;
+    const auto [s, ox, oy] = view(width, height);
+    ui_scale = s, ui_x = ox, ui_y = oy;
   }
   void flush() {
     if (batch.empty()) return;
@@ -1249,9 +1281,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         if (logo.groups[g].node == i && int(g) != logo_drawn.group) other = true;
       if (other) continue;
       drew[i] = 1;
-      if (n.kind == FrontNode::IMAGE) quad(textures[n.texture], n.rect, n.uv, alpha << 24 | 0xffffff);
+      const auto &r = placed[FrontEnd::kLogoLayout][i];
+      if (n.kind == FrontNode::IMAGE) quad(textures[n.texture], r, n.uv, alpha << 24 | 0xffffff);
       else if (n.kind == FrontNode::TEXT)
-        text(n.text, n.font, (((n.color >> 24) * alpha / 255) << 24) | (n.color & 0xffffff), n.style, n.rect);
+        text(n.text, n.font, (((n.color >> 24) * alpha / 255) << 24) | (n.color & 0xffffff), n.style, r);
     }
   }
   void ui(FrontScreen screen, const Context &context, double now) {

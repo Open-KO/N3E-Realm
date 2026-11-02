@@ -930,9 +930,32 @@ or hears: the music's 1 s delay counts the client's frame time, as the fades do,
 where 1264's procedure reads the performance counter (they part only on a frame
 longer than the client's 0.25 s step); and the realm's fade-out sets the stream's
 gain each frame, mixed up to 128 ms ahead, where Miles sets the volume each sound
-tick. The screen is scaled to the window with the canvas, as every realm screen is
-(1264 draws its UI unscaled, centred). A version 9 package is a new package, so a new
+tick. RQ-101 scaled the screen to the window with the canvas, as every realm screen
+then was (1264 draws its UI unscaled, centred); since RQ-106 it is drawn unscaled and
+centred, as 1264 draws it (below). A version 9 package is a new package, so a new
 realm (Q63).
+
+**Decided (maintainer, 2026-11-02), RQ-106:** the front-end screens are not scaled.
+The maintainer's playtest: "it looks like we are scaling the UI for the login /
+select / create screens. we shouldnt do that I dont think because it looks strange".
+Asked whether that should be fixed or a realm owner's choice, the maintainer chose a
+realm-owner option, whose default is 1264's look, unscaled. KO 1097, 1264 and
+1298 draw their UI on the screen's own pixels and place each screen by the
+viewport's size when it loads, never scaling it, and their 3D scenes (the login
+orc, the select hall, the create figure) take the viewport's aspect
+(KO-FINDINGS §9.3, binary). So the client draws the logo, login, server list,
+select, create, loading and message box unscaled where 1264's code places them on
+the window (centred, or by the screen edges where KO anchors a node), with black
+where no node draws, and hit-tests and draws the cursor on those same pixels; the
+3D views are unchanged. N3FE version 11 carries the placements as data
+(`content/front-end.md` item 12), so no KO rule is in the client. The realm's
+earlier scaling of the canvas to the window is kept behind one switch, the recipe's
+`ui_scale` (`"native"`, the default, or `"window"`), which N3FE carries as the
+placement section's flag for RQ-103's realm-owner option to set. One robustness
+choice: a window smaller than the canvas (1024x768) scales down as before, since
+KO's placements would cut the screens off there (the launcher offers 1024x768,
+1280x1024 and 1600x1200, Q62). A version 11 package is a new package, so a new
+realm (Q63). Where the 1097 choice's select puts its buttons is Q84.
 
 Three robustness choices (RQ-101 review), each keeping 1264's behaviour where the
 realm's platform differs from DirectInput's:
@@ -984,3 +1007,22 @@ the orc starts at its first frame on every entry, as KO's. With
 follows the carried period instead of restarting at its first frame, so it is in step
 when the track starts; KO would restart the orc and leave the track behind. No format
 change.
+
+### Q84 — Where the 1097 choice's select puts its buttons
+
+RQ-106 places each screen as KO's code does at the window's size (Q82). The 1097
+choice draws 1264's layouts (RQ-085), and three codes place the select's buttons
+differently (KO-FINDINGS §9.3, binary and source): 1264's select Init (`004448f0`)
+puts the previous and next buttons at `(W/2) ∓ 100 ∓ W·26/1024` (the previous one by
+its right edge), the exit button centred 10 px above the bottom and the back button
+centred 10 px above the exit; 1097's (`0043faf0`) and the source scale the buttons'
+x by the window's width over 1024 and put the exit 10 px above the bottom (the source
+the back 15 px above it; 1097's layout has none). At 1024x768
+the two part by a few pixels (the next button at 638 rather than 644, the exit and
+back at 412 rather than 418 and 419). Options: (a) 1264's code for 1264's layouts;
+(b) 1097's code on 1264's layouts. **Default taken (RQ-106):** (a), since the layout
+was drawn for the code that places it and the choice already shows 1264's screens;
+the recipe's `moves` say it, so (b) is a recipe change.
+**Decided (maintainer, 2026-11-02):** (a), "Use 1264's placement". The 1298 recipe
+(not offered) takes the same placements: its select layout is the same file, which
+1298's own code never places (KO-FINDINGS §9.3).

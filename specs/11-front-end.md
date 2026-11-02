@@ -82,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 10, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 11, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -168,6 +168,15 @@ replace the panels when the client has a Discord realm config.
   string or a row of a KO client's text table. The 1097 recipe titles and
   words the ones that stand for a box 1264 shows with a title and leaves the
   rest untitled in the realm's words (`content/front-end.md`, "Moradon").
+- **The placement** (N3FE version 11, RQ-106, Q82). KO draws its front end on the
+  screen's own pixels, never scaled, and places each layout's root and some of its
+  nodes by the viewport's size each time the layout loads (`specs/KO-FINDINGS.md`
+  §9.3). The package carries those placements as each layout's moves, rules linear
+  in the window's width or height (`content/front-end.md` section 12), from the
+  recipe's `place` and `moves`; the canvas rects are the moves at 1024 × 768. Its
+  flag, the recipe's `ui_scale` (`native` by default, or `window`), keeps the
+  realm's earlier scaling of the canvas to the window as RQ-103's realm-owner
+  option.
 - **The select arrows' turn sound** (RQ-077, Q70). 1097's hall plays sound 2501,
   `char_select_turn.wav`, for each turn its arrows start. The package names the
   sound-table id (`front-end.json` `select.turn_sound`), and the cook binds it in
@@ -229,8 +238,13 @@ for it (Q52).
 The screens form a state machine in the client's front-end module
 (`client/render/front_end.h`, not in `viewer.cpp`'s frame loop); it returns commands
 and the viewer sends the protocol messages the panels send. The module draws a screen
-in this order: scene, then the UI tree scaled uniformly from `canvas` to fit the
-window (centred, the scene filling the rest), then the message box. The system cursor
+in this order: scene, then the UI tree, then the message box. The UI is drawn
+unscaled on the window's own pixels, each layout placed by its moves at the window's
+size, as KO draws it (RQ-106, Q82); the 3D scenes keep their own projection and fill
+the window, and where no node draws the window shows the scene or black. With the
+package's `ui_scale` `window` flag, or on a window smaller than the canvas, the
+client applies no moves and scales the canvas uniformly to fit the window, centred.
+Hit tests and the cursor use the pixels the UI is drawn on. The system cursor
 stays. Mouse clicks and hover drive the button states; keyboard
 works too (ENTER = the screen's primary action, ESC = back/cancel, arrows =
 prev/next).
@@ -283,8 +297,8 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 10 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, or no message section) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
-| Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
+| A package cooked before N3FE version 11 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, or no placement) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| Window smaller than the canvas (1024 × 768) | KO's placements would cut the layouts off, so the UI scales down uniformly, centred, as with `ui_scale` `window` (RQ-106). No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
 
@@ -374,7 +388,16 @@ CPU (`make test`):
    integer, text outside printable ASCII or past 1024 bytes; the loader
    refuses more than 8 messages, one outside the set or named twice, a replace
    flag other than 0 or 1, a text that does not replace, a title or text out of
-   bounds and truncation.
+   bounds and truncation. RQ-106: the cook writes each layout's `place` and
+   `moves` as rules that give 1264's placements (written independently in
+   `tests/front_end.py`) at 1024×768, 1280×1024, 1600×1200 and an odd size,
+   omits a hidden node's move, writes `ui_scale`, and refuses a bad placement,
+   move key, value or count; the loader refuses placement flags other than 0
+   or 1, a move of a node outside its layout or of an absent logo, a rule of
+   another kind or out of bounds, a keep rule with values, more than 32 moves,
+   moves that do not give the canvas rects and truncation, and places the
+   nodes where 1264 does at those sizes (unscaled) and scaled with the flag or
+   at 800×600.
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.
@@ -399,8 +422,11 @@ KO (`make live-ko`, needs `assets/ko`):
 5. **Cook** (`tests/front_end_live.py`). Each client `front-ends.json` offers
    cooks twice with identical bytes and the client loader takes it; the chosen
    one's bytes are the package's; the section names every screen in the table.
-6. **Captures** (`tests/front_end_live.py`). The test client renders each screen at 1280×800 and 1024×768, and
-   the suite checks each capture: login shows the intro character in frame (its
+6. **Captures** (`tests/front_end_live.py`). The test client renders each screen at 1024×768, 1280×1024 and
+   1600×1200, the launcher's sizes (Q62), and the suite checks each capture: every
+   screen is unscaled, and the login button, the realm list, the select's arrows,
+   exit and back, the create name field, the loading bar and the message text are
+   where 1264's code places them at that size (RQ-106, Q82, Q84); login shows the intro character in frame (its
    projected box is non-empty and covers the view's centre: KO's close-up runs past
    the frame's edges); the login button's rect has its
    art; the realms list shows the realm name; select shows 1, 2 and 3 characters in
@@ -445,4 +471,4 @@ Manual (`docs/manual-testing.md`, Linux and Windows):
 
 ## Open questions
 
-Q50–Q57, Q69, Q71, Q73, Q74, Q81 and Q82 in `QUESTIONS.md`.
+Q50–Q57, Q69, Q71, Q73, Q74, Q81, Q82 and Q84 in `QUESTIONS.md`.

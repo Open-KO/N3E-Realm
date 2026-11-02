@@ -1,4 +1,5 @@
 #include "assets/assets.h"
+#include "assets/front_place.h"
 #include "assets/input_names.h"
 #include <algorithm>
 #include <bit>
@@ -2675,7 +2676,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 10, "front end version");
+  need(r.u() == 11, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -3051,6 +3052,41 @@ FrontEnd load_front_end(const Release &release) {
     m.replaces = replaces == 1;
     m.text = ascii(text(1024));
     need(m.replaces || m.text.empty(), "front end message text");
+  }
+  // 12. Version 11 (RQ-106, Q82): the placement. Its flags (0, or 1: the
+  // client scales the canvas to fit the window), then for each layout (the
+  // five screens, then the logo: none without one) a move count (at most 32)
+  // and each move: a node of the layout, then its x and y rules, each a kind
+  // (0 keep, 1 linear, 2 half) and two reals a and c (finite, |a| at most 4,
+  // |c| at most 16384; 0 and 0 to keep). At the canvas's size the moves leave
+  // every rect where the file puts it.
+  const auto placement = r.u();
+  need(placement <= 1, "front end placement flags");
+  fe.scale_to_window = placement == 1;
+  for (size_t layout = 0; layout < fe.moves.size(); ++layout) {
+    const auto &nodes = front_layout(fe, layout);
+    const auto count = r.count(nodes.empty() ? 0 : 32, 0);
+    auto rule = [&]() {
+      FrontAxis a;
+      a.kind = r.u();
+      a.a = std::bit_cast<float>(r.u());
+      a.c = std::bit_cast<float>(r.u());
+      need(a.kind <= FrontAxis::HALF && std::isfinite(a.a) && std::isfinite(a.c) && std::abs(a.a) <= 4 &&
+               std::abs(a.c) <= 16384 && (a.kind != FrontAxis::KEEP || (a.a == 0 && a.c == 0)),
+           "front end move");
+      return a;
+    };
+    for (uint32_t i = 0; i < count; ++i) {
+      FrontMove m;
+      m.node = r.u();
+      need(m.node < nodes.size(), "front end move node");
+      m.x = rule();
+      m.y = rule();
+      fe.moves[layout].push_back(m);
+    }
+    const auto placed = front_place(nodes, fe.moves[layout], int(fe.canvas_width), int(fe.canvas_height));
+    for (size_t i = 0; i < nodes.size(); ++i)
+      for (int k = 0; k < 4; ++k) need(std::abs(placed[i][k] - nodes[i].rect[k]) < .5f, "front end placement");
   }
   r.end();
   return fe;

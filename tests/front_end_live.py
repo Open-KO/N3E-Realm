@@ -8,9 +8,16 @@ from the player's own KO data.
    (RQ-086), cooks the same way from the pinned tree with 1298's select
    character and camera paths (RQ-087), no hall and its select zone and fog
    (RQ-095), and the loader takes it.
-6. The test client draws each screen at rest at 1280x1024 and 1024x768 (KO's sizes)
-   (N3E_TEST_FRONT_END, client/harness/front_end_captures.inc) and this script
-   checks the frames:
+6. The test client draws each screen at rest at 1024x768, 1280x1024 and
+   1600x1200 (KO's sizes, the launcher's windows; N3E_TEST_FRONT_END,
+   client/harness/front_end_captures.inc) and this script checks the frames:
+   - placement (RQ-106, Q82, KO-FINDINGS 9.3): every layout drawn unscaled on
+     the window's own pixels, where 1264's code places it at that size, worked
+     out here from the 1264 layouts themselves: the login's root centred on the
+     bottom edge and the server group at the window's top-left, the select's
+     buttons on its bottom edge (1264's CUICharacterSelect::Load), create,
+     loading and the message box centred (the version text at 10, 10), the
+     logo centred;
    - login: the intro character is drawn and its projected box covers the view's
      centre (KO's close-up runs past the frame's edges), and the login button's
      rect holds its art (not one flat colour);
@@ -50,6 +57,7 @@ No server or stack.
 import json
 import os
 import re
+import struct
 import subprocess
 import sys
 import tempfile
@@ -161,13 +169,13 @@ def region(path, rect):
     return [body[(y * width + x) * 3:(y * width + x) * 3 + 3] for y in range(y0, y1) for x in range(x0, x1)]
 
 
-def seam_columns(path, width, height):
+def seam_columns(path, width, origin):
     """Columns of the create screen's top stone band (canvas y 10-30, x 20-1000)
     darker than 0.6 of the band's mean: the black texels that border each of
-    KO's tiles, blended in."""
+    KO's tiles, blended in. `origin`: where the canvas's (0, 0) is, and the
+    scale."""
     _, _, body = pixels(path)
-    s = min(width / 1024, height / 768)
-    ox, oy = (width - 1024 * s) / 2, (height - 768 * s) / 2
+    ox, oy, s = origin
     y0, y1 = int(oy + 10 * s), int(oy + 30 * s)
     cols = [sum(sum(body[(y * width + x) * 3:(y * width + x) * 3 + 3]) for y in range(y0, y1)) / (y1 - y0)
             for x in range(int(ox + 20 * s), int(ox + 1000 * s))]
@@ -190,10 +198,63 @@ logo_recipe = json.loads(front_end_choice.choose("games/moradon")["recipe"].read
 logo_tree = ko_hud.parse(ko_front_end.inputs(front_end_choice.resolve("games/moradon", chosen)).get(logo_recipe["ui"]))
 LOGO_GROUPS = [next(c for c in logo_tree["children"] if c["id"] == g["node"]) for g in logo_recipe["groups"]]
 
+# RQ-106 (Q82, KO-FINDINGS 9.3): where 1264 puts the layouts' nodes at a
+# viewport, from the layouts as the choice reads them and 1264's code.
+screen_recipes = json.loads(front_end_choice.choose("games/moradon")["recipe"].read_text())["screens"]
+choice_inputs = ko_front_end.inputs(front_end_choice.resolve("games/moradon", chosen))
+LAYOUTS = {n: ko_hud.parse(choice_inputs.get(screen_recipes[n]["ui"])) for n in ko_front_end.SCREENS}
+
+
+def find(tree, ident):
+    if tree["id"] == ident:
+        return tree
+    return next((hit for c in tree["children"] if (hit := find(c, ident))), None)
+
+
+def ko_placed(width, height):
+    """{name: (x0, y0, x1, y1)} of the nodes the captures print, as 1264
+    places them on a width x height viewport: the login's root at ((W - w) >>
+    1, H - h) (005bde22) and its server group at (0, 0) (005c25b0); the select
+    as CUICharacterSelect::Load (004448f0, r = W / 1024 as a float); create
+    (0043cd00) and loading (00401670) centred, C's signed division; the message
+    box at ((W - w) >> 1, (H - h) >> 1) (0050c730)."""
+    def at(node, x, y):
+        x0, y0, x1, y1 = node["rect"]
+        return (x, y, x + x1 - x0, y + y1 - y0)
+
+    def under(root, ident, x, y):
+        node = find(root, ident)
+        return at(node, x + node["rect"][0] - root["rect"][0], y + node["rect"][1] - root["rect"][1])
+
+    out = {}
+    login = LAYOUTS["login"]
+    w, h = login["rect"][2] - login["rect"][0], login["rect"][3] - login["rect"][1]
+    out["login"] = under(login, "Btn_Login", (width - w) >> 1, height - h)
+    out["realm_list"] = under(find(login, "Group_ServerList"), "List_Server", 0, 0)
+    select = LAYOUTS["select"]
+    r = struct.unpack("<f", struct.pack("<f", width / (select["rect"][2] - select["rect"][0])))[0]
+    size = lambda n: (find(select, n)["rect"][2] - find(select, n)["rect"][0],
+                      find(select, n)["rect"][3] - find(select, n)["rect"][1])
+    (lw, lh), (rw, rh), (ew, eh), (bw, bh) = (size(n) for n in ("bt_left", "bt_right", "bt_exit", "bt_back"))
+    out["select_prev"] = at(find(select, "bt_left"), int((width >> 1) - lw - 100 - 26 * r), height - 10 - lh)
+    out["select_next"] = at(find(select, "bt_right"), int((width >> 1) + 26 * r + 100), height - 10 - rh)
+    out["exit"] = at(find(select, "bt_exit"), (width - ew) >> 1, height - 10 - eh)
+    out["back"] = at(find(select, "bt_back"), (width - bw) >> 1, height - 20 - eh - bh)
+    for name, ident in (("create", "edit_name"), ("loading", "Progress_Loading"), ("message", "Text_Message")):
+        root = LAYOUTS[name]
+        w, h = root["rect"][2] - root["rect"][0], root["rect"][3] - root["rect"][1]
+        if name == "message":
+            x, y = (width - w) >> 1, (height - h) >> 1
+        else:
+            x, y = int((width - w) / 2), int((height - h) / 2)
+        out[name] = under(root, ident, x, y)
+    return out
+
+
 realm = B / "realm.json"
 realm.write_text('{"id": "front-end", "name": "Local Realm", "host": "127.0.0.1", "port": 1, '
                  '"discord_client_id": "0"}')
-for size in ("1280x1024", "1024x768"):
+for size in ("1024x768", "1280x1024", "1600x1200"):
     width, height = map(int, size.split("x"))
     run = subprocess.run(["build/client/n3e-test-client", str(package), "--realm", str(realm),
                           "--fixed-window", size],
@@ -202,13 +263,24 @@ for size in ("1280x1024", "1024x768"):
     (B / f"client-{size}.log").write_text(run.stdout + run.stderr)
     assert run.returncode == 0 and "FRONT_SHOTS done" in run.stdout, (size, run.stdout[-2000:], run.stderr[-2000:])
     shots = {}
-    for m in re.finditer(r"^FRONT_SHOT name=(\S+) size=(\d+)x(\d+) path=(\S+) rect=(\S*) drawn=(\S*)$",
-                         run.stdout, re.M):
-        name, w, h, path, rect, drawn = m.groups()
+    origins = {}
+    for m in re.finditer(r"^FRONT_SHOT name=(\S+) size=(\d+)x(\d+) path=(\S+) rect=(\S*) drawn=(\S*) "
+                         r"origin=(\S+)$", run.stdout, re.M):
+        name, w, h, path, rect, drawn, origin = m.groups()
         assert (int(w), int(h)) == (width, height), (size, m.group(0))
         boxes = [(kind, tuple(map(int, box.split(",")))) for kind, box in
                  (d.split(":") for d in drawn.split(";") if d)]
         shots[name] = (Path(path), tuple(map(int, rect.split(","))) if rect else None, boxes)
+        origins[name] = tuple(map(float, origin.split(",")))
+    # RQ-106: every screen unscaled, each node where 1264 puts it at this size.
+    assert {o[2] for o in origins.values()} == {1.0}, (size, origins)
+    want = ko_placed(width, height)
+    placed = dict(re.findall(r"(\w+)=(\S+)", re.search(r"^FRONT_PLACED (.*)$", run.stdout, re.M).group(1)))
+    got = {k: tuple(map(int, v.split(","))) for k, v in placed.items()}
+    for name, shot_name in (("login", "login"), ("realm_list", "realms"), ("create", "create"),
+                            ("loading", "loading-start"), ("message", "message")):
+        got[name] = shots[shot_name][1]
+    assert got == want, (size, {k: (got.get(k), v) for k, v in want.items() if got.get(k) != v})
     assert set(shots) == {"login", "realms", "realms-unnamed", "select-1", "select-2", "select-3", "create",
                           "loading-start", "loading-world", "message", "message-titled", "logo-0", "logo-1", "logo-2",
                           "logo-fade"}, shots.keys()
@@ -233,6 +305,7 @@ for size in ("1280x1024", "1024x768"):
             else:
                 outside += 1
     assert inside > 50 and outside == 0, (size, rect, inside, outside)
+    realm_name = inside
 
     for n in (1, 2, 3):
         _, _, boxes = shots[f"select-{n}"]
@@ -244,7 +317,7 @@ for size in ("1280x1024", "1024x768"):
     assert [k for k, _ in boxes] == ["create"], (size, boxes)
     x0, y0, x1, y1 = boxes[0][1]
     assert y1 - y0 > 1.5 * (x1 - x0), (size, boxes)
-    seams = seam_columns(path, width, height)
+    seams = seam_columns(path, width, origins["create"])
     assert seams == 0, (size, seams)
 
     start, rect, _ = shots["loading-start"]
@@ -275,8 +348,7 @@ for size in ("1280x1024", "1024x768"):
 
     # RQ-101: the logo screen. Each group's art is its layout's image that is
     # not the full-canvas black backdrop; the frame is black outside it.
-    s = min(width / 1024, height / 768)
-    ox, oy = (width - 1024 * s) / 2, (height - 768 * s) / 2
+    ox, oy, s = origins["logo-0"]
     arts = []
     for group in LOGO_GROUPS:
         x0, y0, x1, y1 = next(c["rect"] for c in group["children"] if c["rect"] != [0, 0, 1024, 768])
@@ -330,8 +402,9 @@ for size in ("1280x1024", "1024x768"):
     assert restarts == "0" and ended == "1" and decoded == frames, streams[2].group(0)
     assert float(peak) > 0.1 and int(audible) > 48000 * 13, streams[2].group(0)
     frames = "%s, %s and %s" % (streams[0].group(5), streams[1].group(5), streams[2].group(5))
-    print(f"PASS front-end captures {size}: intro box {boxes and shots['login'][2][0][1]}, "
-          f"realm name {inside} px in the list, 1-3 characters in the hall, create stands "
+    print(f"PASS front-end captures {size}: every screen unscaled where 1264 places it, "
+          f"intro box {shots['login'][2][0][1]}, "
+          f"realm name {realm_name} px in the list, 1-3 characters in the hall, create stands "
           f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}, the logo's three "
           f"groups (faded {ratio:.2f}), music {frames} PCM frames, restarted, looped and played once")
 print("PASS KO front end graphical")

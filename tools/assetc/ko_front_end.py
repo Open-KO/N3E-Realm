@@ -13,7 +13,9 @@ recorded camera paths, (version 8) a KO zone drawn as the select hall
 screen before the login (1264's "K2 Network presents Knight Online", RQ-101),
 present or absent as the recipe's `logo` says, and (version 10) each message
 box message's title and wording (RQ-102, Q81), from the recipe's `messages`:
-a KO text-table row or the recipe's own string. games/moradon/front-end.json names every KO
+a KO text-table row or the recipe's own string, and (version 11) where each
+layout's nodes go at a window's own size, as KO's UI code places them by the
+viewport (RQ-106, Q82). games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
@@ -43,7 +45,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 10
+VERSION = 11
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -126,6 +128,26 @@ MAX_LOGO_GROUPS = 8
 MAX_LOGO_SECONDS = 60.0
 NO_GROUP = 0xFFFFFFFF
 LOGO_SKIP_KEY, LOGO_HIDE_CURSOR = 1, 2
+# The placement (version 11, RQ-106, Q82). KO draws its UI on the screen's own
+# pixels, never scaled: the device viewport is the back buffer (1264:
+# 004223c0), and each layout's Load or its procedure's Init places its root and
+# some nodes by the viewport's width and height every time it loads
+# (CGameProcLogIn_1098::Init, CUICharacterSelect::Load, CUICharacterCreate::Load,
+# CUILoading::Load, MessageBoxPost; specs/KO-FINDINGS.md 9.3). A move puts a
+# node's top-left, its subtree with it (MoveOffset), by one rule per axis over
+# the window's extent S on that axis: KEEP leaves it where the earlier moves put
+# it; LINEAR is trunc(a S + c); HALF is trunc(floor(S / 2) + a S + c), KO's
+# (S >> 1) + ... (1264's select arrows). trunc is C's cast toward zero. The
+# canvas rects are the moves at CANVAS; the client applies them at its window.
+KEEP, LINEAR, HALF = 0, 1, 2
+MAX_MOVES = 32
+MAX_MOVE_SCALE = 4.0
+MAX_MOVE_OFFSET = 16384.0
+MOVE_KEYS = {"node", "x", "y", "bottom", "above"}
+# The recipe's `ui_scale` (version 11's flags): `native`, KO's (absent), or
+# `window`, the realm's own uniform scaling of the canvas to fit the window
+# (RQ-103's realm-owner option).
+UI_SCALE = {"native": 0, "window": 1}
 # The messages the client raises in its message box (version 10, RQ-102,
 # Q81), the engine's closed set (client/assets/assets.h FrontMessage) in index
 # order. The recipe's `messages` words any of them: a `title` (drawn by the
@@ -588,19 +610,123 @@ def model(assets, source, definition, clips, work, own_blends=None):
 
 # --- UI ---------------------------------------------------------------------
 
+def f32(value):
+    """`value` as the f32 the file holds."""
+    return struct.unpack("<f", struct.pack("<f", value))[0]
+
+
+def axis(kind, a=0.0, c=0.0):
+    """A move's rule on one axis (KEEP, LINEAR, HALF), its reals as stored."""
+    if not (math.isfinite(a) and math.isfinite(c) and abs(a) <= MAX_MOVE_SCALE and abs(c) <= MAX_MOVE_OFFSET):
+        raise ValueError("front-end move bound")
+    return kind, f32(a), f32(c)
+
+
+def axis_at(rule, extent):
+    """Where `rule` puts a top-left coordinate on an axis `extent` pixels long,
+    or None (KEEP). The client's front_place.h computes the same in doubles."""
+    kind, a, c = rule
+    if kind == KEEP:
+        return None
+    return int(a * extent + c + (extent // 2 if kind == HALF else 0))
+
+
+def centred(size):
+    """(S - size) / 2 in C's integer division (SetPosCenter), for S >= size."""
+    return axis(LINEAR, 0.5, -size / 2)
+
+
 def place(root, rule):
-    """The move that puts a screen's root where KO puts it on the 1024 x 768
-    canvas: `origin`; `centre` (CN3UIBase::SetPosCenter); `bottom`, centred
-    on the bottom edge (CGameProcLogIn_1098::Init). C integer division."""
+    """The root's move: where KO puts a screen's root on a window. `origin`
+    (CGameProcCharacterSelect::Init's SetPos(0, 0)); `centre`
+    (CN3UIBase::SetPosCenter, CUICharacterCreate::Load, MessageBoxPost);
+    `bottom`, centred on the bottom edge (CGameProcLogIn_1098::Init: 1264
+    005bde22-005bde3b, 1097 00524147-00524165)."""
     x0, y0, x1, y1 = root["rect"]
     w, h = x1 - x0, y1 - y0
     if rule == "origin":
-        return -x0, -y0
+        return axis(LINEAR), axis(LINEAR)
     if rule == "centre":
-        return int((CANVAS[0] - w) / 2) - x0, int((CANVAS[1] - h) / 2) - y0
+        return centred(w), centred(h)
     if rule == "bottom":
-        return int((CANVAS[0] - w) / 2) - x0, CANVAS[1] - h - y0
+        return centred(w), axis(LINEAR, 1.0, -h)
     raise ValueError("front-end placement %r" % rule)
+
+
+def offset(value):
+    if type(value) not in (int, float) or not math.isfinite(value) or abs(value) > MAX_MOVE_OFFSET:
+        raise ValueError("front-end move value")
+    return float(value)
+
+
+def move_axis(value, size, root_size):
+    """A move's `x` or `y`: a number (that coordinate on the window), `centre`
+    (centred on the window), or (x) {"middle": c, "ratio": k, "edge": "start"
+    or "end"}: the node's start edge, or with `end` its end edge, at
+    (S >> 1) + c + k S / R, R the root's own extent (1264's
+    CUICharacterSelect::Load 004448f0: bt_left's x is (W >> 1) - w - 100 -
+    26 W / 1024, bt_right's (W >> 1) + 26 W / 1024 + 100)."""
+    if value == "centre":
+        return centred(size)
+    if type(value) is dict:
+        if set(value) - {"middle", "ratio", "edge"} or "middle" not in value or \
+                value.get("edge", "start") not in ("start", "end"):
+            raise ValueError("front-end move middle")
+        ratio = offset(value.get("ratio", 0))
+        if ratio and root_size <= 0:
+            raise ValueError("front-end move ratio")
+        return axis(HALF, ratio / root_size if ratio else 0.0,
+                    offset(value["middle"]) - (size if value.get("edge") == "end" else 0))
+    return axis(LINEAR, 0.0, offset(value))
+
+
+def moves(root, spec):
+    """A screen's moves in order, (node, x rule, y rule): the root's `place`,
+    then the recipe's `moves`. A move's `y` is a number or `centre`, or
+    `bottom` (its bottom edge that far above the window's) or `above` [node,
+    gap] (its bottom edge that far above that node's top, a node an earlier
+    move places on y; CUICharacterSelect, CUILoading, OpenServerList); an axis
+    a move does not name keeps where the earlier moves left it."""
+    x0, y0, x1, y1 = root["rect"]
+    out = [(root,) + place(root, spec["place"])]
+    ys = {id(root): out[0][2]}
+    listed = spec.get("moves", [])
+    if type(listed) is not list or len(listed) + 1 > MAX_MOVES:
+        raise ValueError("front-end moves")
+    for m in listed:
+        if type(m) is not dict or "node" not in m or set(m) - MOVE_KEYS or \
+                sum(k in m for k in ("y", "bottom", "above")) > 1:
+            raise ValueError("front-end move keys")
+        node = resolve(root, m["node"])
+        nx0, ny0, nx1, ny1 = node["rect"]
+        x = move_axis(m["x"], nx1 - nx0, x1 - x0) if "x" in m else axis(KEEP)
+        if "y" in m:
+            if type(m["y"]) is dict:
+                raise ValueError("front-end move middle")
+            y = move_axis(m["y"], ny1 - ny0, y1 - y0)
+        elif "bottom" in m:
+            y = axis(LINEAR, 1.0, -offset(m["bottom"]) - (ny1 - ny0))
+        elif "above" in m:
+            if type(m["above"]) is not list or len(m["above"]) != 2:
+                raise ValueError("front-end move above")
+            kind, a, c = ys.get(id(resolve(root, m["above"][0])), (KEEP, 0.0, 0.0))
+            if kind == KEEP:
+                raise ValueError("front-end move above a node no earlier move places")
+            y = axis(kind, a, c - offset(m["above"][1]) - (ny1 - ny0))
+        else:
+            y = axis(KEEP)
+        ys[id(node)] = y
+        out.append((node, x, y))
+    return out
+
+
+def apply_moves(placed, extent=CANVAS):
+    """Each move in order at a window `extent`: the node's top-left where its
+    rules say, its subtree moved with it (MoveOffset)."""
+    for node, x, y in placed:
+        x0, y0 = node["rect"][:2]
+        tx, ty = axis_at(x, extent[0]), axis_at(y, extent[1])
+        shift(node, (x0 if tx is None else tx) - x0, (y0 if ty is None else ty) - y0)
 
 
 def resolve(root, address):
@@ -636,28 +762,16 @@ def shift(node, dx, dy):
         shift(c, dx, dy)
 
 
-def move(node, rule, above):
-    """One of the reference client's per-node placements, after the root's:
-    `x`/`y` set the top-left on the canvas; `bottom` puts the bottom edge
-    that far above the canvas's; `above` [node, gap] puts it that far above
-    another node (CUICharacterSelect, CUILoading, OpenServerList)."""
-    x0, y0, x1, y1 = node["rect"]
-    x, y = rule.get("x", x0), rule.get("y", y0)
-    if "bottom" in rule:
-        y = CANVAS[1] - rule["bottom"] - (y1 - y0)
-    if above is not None:
-        y = above["rect"][1] - rule["above"][1] - (y1 - y0)
-    shift(node, x - x0, y - y0)
-
-
-def screen(name, spec, assets, textures, fonts, find=()):
+def screen(name, spec, assets, textures, fonts, find=(), placements=None):
     """One screen's nodes in draw order, on the canvas. CN3UIBase::Load adds
     each child at the front and Render walks the list backwards, so a parent
     draws before its children and the children in file order; a button draws
     the one state image its state names (the image's reserved field), then
     its other children; an image without a texture draws nothing
     (CN3UIImage::Render). `find`: addresses whose node indices are returned
-    too, as (data, indices); one that is hidden or draws nothing refuses."""
+    too, as (data, indices); one that is hidden or draws nothing refuses.
+    `placements`: a list the screen's moves (version 11) are appended to, as
+    the section writes them: a count and each drawn node's index and rules."""
     tree, ui = split(assets, spec["ui"])
     root = ko_hud.parse(tree.get(ui))
     # Every address resolves on KO's tree as read, before anything moves or is added.
@@ -665,8 +779,6 @@ def screen(name, spec, assets, textures, fonts, find=()):
     bindings, texts, states = table("bindings"), table("text"), table("states")
     hidden = {id(resolve(root, a)) for a in spec.get("hidden", [])}
     wanted = [id(resolve(root, a)) for a in find]
-    moves = [(resolve(root, m["node"]), m, resolve(root, m["above"][0]) if "above" in m else None)
-             for m in spec.get("moves", [])]
     for extra in spec.get("added", []):
         # A string KO's layout lacks (a status line, say), in UIF
         # coordinates; last among its parent's children, so drawn last.
@@ -675,9 +787,8 @@ def screen(name, spec, assets, textures, fonts, find=()):
                     color=int(extra["color"], 16), text="")
         resolve(root, extra["parent"])["children"].append(node)
         bindings[id(node)] = extra["action"]
-    shift(root, *place(root, spec["place"]))
-    for node, rule, above in moves:
-        move(node, rule, above)
+    placed = moves(root, spec)
+    apply_moves(placed)
     nodes, seen = [], set()
 
     def font(size, flags):
@@ -752,6 +863,11 @@ def screen(name, spec, assets, textures, fonts, find=()):
     if missing:
         raise ValueError("front-end %s: unbound %s" % (name, sorted(missing)))
     data = u(len(nodes)) + b"".join(nodes)
+    if placements is not None:
+        # A move of a node that draws nothing (hidden) is not written.
+        drawn = [(found[id(n)], x, y) for n, x, y in placed if id(n) in found]
+        placements.append(u(len(drawn)) + b"".join(u(i) + u(x[0]) + f(x[1:]) + u(y[0]) + f(y[1:])
+                                                   for i, x, y in drawn))
     if not find:
         return data
     if any(w not in found for w in wanted):
@@ -1367,7 +1483,7 @@ def seconds(value, what, low=0.0, high=MAX_LOGO_SECONDS, above=False):
     return float(value)
 
 
-def logo(config, assets, textures, fonts, tracks):
+def logo(config, assets, textures, fonts, tracks, placements=None):
     """Section 10 (version 9, RQ-101): the logo screen, or its absence (0).
     `config` is the recipe's `logo` (None: no logo screen); `tracks` the
     music section's track count. Its layout is cooked as a screen (`screen`)
@@ -1379,8 +1495,11 @@ def logo(config, assets, textures, fonts, tracks):
     (00601360: the divisor 1.5 at 00648f10, 1 for group 1) to the peak 1.5,
     Snd\\bless.wav 1 s after the first tick (005fa7c0, 006489e4), its 4 s
     fade (004371a0(4.0)) from group 2, a key skipping (00601480) and the
-    cursor hidden (00601140: SetCursor(NULL))."""
+    cursor hidden (00601140: SetCursor(NULL)). `placements`: as `screen`'s;
+    no logo appends an empty move list."""
     if config is None:
+        if placements is not None:
+            placements.append(u(0))
         return u(0), None
     if type(config) is not dict or set(config) - LOGO_KEYS or not {"ui", "place", "groups", "peak"} <= set(config):
         raise ValueError("front-end logo keys")
@@ -1390,7 +1509,8 @@ def logo(config, assets, textures, fonts, tracks):
     if any(type(g) is not dict or set(g) != {"node", "seconds"} or type(g["node"]) is not str for g in groups):
         raise ValueError("front-end logo group keys")
     peak = seconds(config["peak"], "peak", 1.0, 10.0, above=True)
-    screen_data, indices = screen("logo", config, assets, textures, fonts, [g["node"] for g in groups])
+    screen_data, indices = screen("logo", config, assets, textures, fonts, [g["node"] for g in groups],
+                                  placements)
     if len(set(indices)) != len(indices):
         raise ValueError("front-end logo group twice")
     data = screen_data
@@ -1537,11 +1657,18 @@ def write(assets, out, config, work):
     if set(config["screens"]) != set(SCREENS):
         raise ValueError("front-end screens")
     textures, fonts = Textures(assets), {}
-    screens = b"".join(screen(n, config["screens"][n], assets, textures, fonts) for n in SCREENS)
+    placements = []
+    screens = b"".join(screen(n, config["screens"][n], assets, textures, fonts, placements=placements)
+                       for n in SCREENS)
     # Version 9 (RQ-101): the logo screen, or none; its textures and fonts
     # join the tables before they are written.
     track_count = len((config.get("music") or {}).get("tracks", []))
-    logo_section, logo_report = logo(config.get("logo"), assets, textures, fonts, track_count)
+    logo_section, logo_report = logo(config.get("logo"), assets, textures, fonts, track_count, placements)
+    # Version 11 (RQ-106, Q82): the placement, its flags (the recipe's
+    # `ui_scale`) and each layout's moves (the five screens, then the logo).
+    if config.get("ui_scale", "native") not in UI_SCALE:
+        raise ValueError("front-end ui_scale")
+    placement_section = u(UI_SCALE[config.get("ui_scale", "native")]) + b"".join(placements)
     strings = config["strings"]
     if set(strings) != set(STRINGS):
         raise ValueError("front-end strings")
@@ -1568,7 +1695,7 @@ def write(assets, out, config, work):
     tracks, played = music(assets, config.get("music"))
     # Version 10 (RQ-102): each message's title and wording.
     message_section, message_report = messages_section(config, assets)
-    data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section + message_section
+    data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section + message_section + placement_section
     if len(data) > MAX_FILE:
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)

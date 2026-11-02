@@ -21,9 +21,12 @@ from the player's own KO data.
    - loading: the progress bar's lit share grows from the start stage (2/3: the
      package and its textures) to the first World (1);
    - message: the box's text rect holds text;
-   - music (RQ-018, Q57): login, the realm list, select and create name one
-     track and loading none, and that track (KO's Snd/Intro_Sound.mp3, 4,096
-     frames at 44.1 kHz stereo) streams audibly past its end without ending.
+   - music (RQ-018, Q57; RQ-083, KO-FINDINGS 9): login and the realm list
+     name one track, select and create another, loading none: 1097's
+     Snd/bgm_login.wav (PCM, 477,749 frames at 22,050 Hz stereo), which
+     restarts at its first sample every 21.66 s, and Snd/bgm_el_battle.wav
+     (PCM, 3,995,263 frames), which loops; each streams audibly one second
+     past its end without ending.
 
 No server or stack.
 """
@@ -179,17 +182,29 @@ for size in ("1280x1024", "1024x768"):
     assert len(set(region(path, rect))) > 10, (size, rect)
 
     music = re.search(r"^FRONT_MUSIC (.*)$", run.stdout, re.M)
-    assert music and music.group(1) == "login=0 realms=0 select=0 create=0 loading=none", (size, music)
-    stream = re.search(r"^FRONT_MUSIC_STREAM rate=(\d+) channels=(\d+) frames=(\d+) decoded=(\d+) peak=(\S+) "
-                       r"audible=(\d+) ended=(\d)$", run.stdout, re.M)
-    assert stream, (size, run.stdout[-2000:])
-    rate, channels, frames, decoded, peak, audible, ended = stream.groups()
-    assert (rate, channels, frames) == ("44100", "2", "4096"), stream.group(0)
-    # One second past the end: the loop decoded the first frames again.
-    assert int(decoded) > int(frames) and ended == "0", stream.group(0)
-    assert float(peak) > 0.1 and int(audible) > 48000 * 60, stream.group(0)
+    assert music and music.group(1) == "login=0 realms=0 select=1 create=1 loading=none", (size, music)
+    streams = {}
+    for m in re.finditer(r"^FRONT_MUSIC_STREAM track=(\d+) kind=(\S+) rate=(\d+) channels=(\d+) frames=(\d+) "
+                         r"loop=(\d) restart=(\S+) decoded=(\d+) restarts=(\d+) peak=(\S+) audible=(\d+) "
+                         r"ended=(\d)$", run.stdout, re.M):
+        streams[int(m.group(1))] = m
+    assert sorted(streams) == [0, 1], (size, run.stdout[-2000:])
+    # The login track (sound 35): restarted at 21.66 s, before its own end
+    # (21.667 s), so once in the pass and a second past it.
+    kind, rate, channels, frames, loop, restart, decoded, restarts, peak, audible, ended = streams[0].groups()[1:]
+    assert (kind, rate, channels, frames, loop, restart) == ("pcm", "22050", "2", "477749", "0", "21.66"), \
+        streams[0].group(0)
+    assert restarts == "1" and ended == "0" and int(decoded) > int(frames), streams[0].group(0)
+    assert float(peak) > 0.1 and int(audible) > 48000 * 20, streams[0].group(0)
+    # The select and create track (sound 20003): looped one second past its end.
+    kind, rate, channels, frames, loop, restart, decoded, restarts, peak, audible, ended = streams[1].groups()[1:]
+    assert (kind, rate, channels, frames, loop, restart) == ("pcm", "22050", "2", "3995263", "1", "0"), \
+        streams[1].group(0)
+    assert restarts == "0" and ended == "0" and int(decoded) > int(frames), streams[1].group(0)
+    assert float(peak) > 0.1 and int(audible) > 48000 * 170, streams[1].group(0)
+    frames = "%s and %s" % (streams[0].group(5), streams[1].group(5))
     print(f"PASS front-end captures {size}: intro box {boxes and shots['login'][2][0][1]}, "
           f"realm name {inside} px in the list, 1-3 characters in the hall, create stands "
           f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}, music "
-          f"{frames} frames looped (peak {float(peak):.2f})")
+          f"{frames} PCM frames, restarted and looped")
 print("PASS KO front end graphical")

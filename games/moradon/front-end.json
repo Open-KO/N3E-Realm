@@ -132,7 +132,10 @@
     }
   },
   "music": {
-    "tracks": [{"path": "Snd/Intro_Sound.mp3", "loop": true}],
-    "screens": {"login": 0, "select": 0, "create": 0}
+    "tracks": [
+      {"path": "Snd/bgm_login.wav", "loop": false, "restart": 21.66},
+      {"path": "Snd/bgm_el_battle.wav", "loop": true}
+    ],
+    "screens": {"login": 0, "select": 1, "create": 1}
   }
 }

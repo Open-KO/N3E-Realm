@@ -380,6 +380,17 @@ has no other sounds in 1298 (Q70).
 `Snd\bgm_login.wav` (21.67 s, in the pinned tree too), restarted every 21.66 s by
 its tick, and its select leaves it running. The 1097 front end (Q73) keeps 1298's
 track until `front-end.bin` carries a PCM track (filed under RQ-078).
+*Done (RQ-083, KO-FINDINGS §9, binary):* `front-end.bin` version 5 carries 16-bit
+PCM tracks and a restart period, and the 1097 front end plays 1097's music. One
+correction to RQ-078: the select does not inherit sound 35. 1097's answer to the
+game server's login (`00525b70`) releases it and starts sound 20003,
+`Snd\bgm_el_battle.wav` (181 s, in the pinned tree too), looping, before it opens
+select; create leaves it; the select releases it after the start clip. So login and
+the realm list play `bgm_login.wav`, restarted every 21.66 s (its stream alone would
+stop after one pass: the login never sets its loop byte), and select and create play
+`bgm_el_battle.wav`. Both are carried as the WAVs' samples (about 1.9 and 16 MB; Q69
+kept MP3 frames to avoid decoding at cook time, which a WAV does not need). Returning
+to the login is Q75.
 
 ### Q58 — Option and Registration in the login bar
 
@@ -678,8 +689,8 @@ then depend on the cooking shell, and CD's cook would not reproduce it), and no
 check in `n3e-server` (it would compare the package with itself). The cooked
 `front-end.bin` carries no client id; the client is in the package's
 `provenance.json`. Moradon offers only `1097` (KO-FINDINGS §9 lists what each
-other client needs); its layouts and music are still 1298's until the format
-carries 1097's (Q57).
+other client needs); its layouts are still 1298's until the format
+carries 1097's; its music is 1097's since RQ-083 (Q57).
 
 
 ### Q74 — Where the player logs out, and what a logout ends
@@ -704,3 +715,18 @@ realm (offline, refused, or an update that exits 3 first) still logs this comput
 out; the realm's row then lapses at its expiry, a kick or the account's cap, and
 no copy of its token remains here. Revisit for an in-game logout once the game has
 a menu that could carry it without changing a KO screen.
+
+### Q75 — The 1097 login music on a return to the login screen
+
+KO 1097's login tick restarts sound 35 off a timer (`006e0344`) that no Init resets
+and that runs only while the login shows (KO-FINDINGS §9, RQ-083, binary). A player
+who goes back from select to the login (KO's Back, which the realm keeps, Q74) hears
+the login Init's new sound 35 only when that timer next passes 21.66 s: up to 21.66 s
+of silence, depending on how long the login showed before. Options: (a) start the
+login track at its first sample on every entry to the login screen; (b) keep a
+per-process timer for the track, as 1097 does.
+**Default taken (RQ-083):** (a). The engine's restart period is the track's own
+(`front-end.bin` version 5, content/front-end.md section 9), counted from the
+track's start; a phase carried across screens would be a second, KO-specific timer
+for a silence that reads as a fault. The first login of a process is the same either
+way (the timer starts at 0, so 1097 plays at once).

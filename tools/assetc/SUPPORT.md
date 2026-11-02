@@ -132,6 +132,10 @@ other irregularity refused), and the track per screen from `front-end.json`'s
 `music` (Q69). N3FE version 4 (RQ-075) adds each model clip's blend time, read
 from its clip record (the select start clip's from `start_blend` instead, the
 select's own 0.6 s, RQ-076), and the select spot's growth rate (`spot_step` a
-tick at 30 ticks a second).
+tick at 30 ticks a second). N3FE version 5 (RQ-083) adds each track's kind and
+restart period: a track file that is a RIFF WAVE is cooked as its 16-bit PCM
+samples (read as `ko_audio` reads a WAV, integer PCM only, other widths made
+16-bit, its own rate and channels kept, the whole file), so 1097's
+`bgm_login.wav` and `bgm_el_battle.wav` play as 1097 plays them.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

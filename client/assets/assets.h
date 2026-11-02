@@ -905,6 +905,8 @@ struct FrontEnd {
   // Version 3 (RQ-018, Q57): the screens' music. A track is shared with the
   // stream that plays it; screen_music names one per screen (login, which
   // includes the realm list, select, create, loading), kNoMusic for silence.
+  // Version 5 (RQ-083): a track is MPEG frames or 16-bit PCM, with a restart
+  // period (music.h).
   static constexpr uint32_t kNoMusic = 0xffffffffu;
   std::vector<std::shared_ptr<const MusicTrack>> music;
   std::array<uint32_t, 4> screen_music{kNoMusic, kNoMusic, kNoMusic, kNoMusic};

@@ -2675,7 +2675,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 4, "front end version");
+  need(r.u() == 5, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2883,15 +2883,22 @@ FrontEnd load_front_end(const Release &release) {
   model(fe.create);
   // 9. Music (version 3, RQ-018): each track's frames checked whole here, so
   // the stream that decodes them later meets only well-formed frames.
+  // Version 5 (RQ-083): each track's kind (MPEG or 16-bit PCM) and restart
+  // period.
   const auto tracks = r.count(kMusicTracks, 0);
   for (uint32_t i = 0; i < tracks; ++i) {
     auto track = std::make_shared<MusicTrack>();
+    const auto kind = r.u();
+    need(kind <= 1, "music kind");
+    track->kind = MusicTrack::Kind(kind);
     track->rate = r.u();
     track->channels = r.u();
     const auto loop = r.u();
     need(loop <= 1, "music loop");
     track->loop = loop == 1;
-    track->frames = r.count(uint32_t(kMusicTrackBytes / 24));
+    track->restart = r.f();  // check_music_track bounds it
+    const bool pcm = track->kind == MusicTrack::Kind::pcm;
+    track->frames = r.count(uint32_t(kMusicTrackBytes / (pcm ? 2 : 24)));
     track->data = r.raw(r.count(uint32_t(kMusicTrackBytes)));
     check_music_track(*track);
     fe.music.push_back(std::move(track));

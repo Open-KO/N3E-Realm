@@ -5,7 +5,9 @@ No reference assets: the UIF trees, the texture and the font atlas are written
 here, and both scenes use the demo package's own N3S1 character. The music
 (RQ-018) is synthetic MPEG-1 Layer III frames written bit by bit here: a
 96-byte mono frame at 48 kHz whose two granules each carry one count1
-quadruple, so it decodes to a quiet low tone (tests/audio.cpp decodes it)."""
+quadruple, so it decodes to a quiet low tone (tests/audio.cpp decodes it).
+The PCM music (RQ-083) is a synthetic WAV written here with the wave module."""
+import io
 import math
 import pathlib
 import shutil
@@ -13,6 +15,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import wave
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools/assetc"))
@@ -70,21 +73,95 @@ for reason, data in music_problems.items():
     raise AssertionError("music cook accepted " + reason)
 
 
+
+
+def wav(frames, rate=22050, channels=2, width=2, comptype="NONE"):
+    """A synthetic WAV: sample i of channel c is (i * 7 + c * 3) % 251 - 125,
+    scaled to the width (unsigned for 8-bit, as WAV is)."""
+    out = io.BytesIO()
+    with wave.open(out, "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(width)
+        w.setframerate(rate)
+        raw = bytearray()
+        for i in range(frames):
+            for c in range(channels):
+                v = (i * 7 + c * 3) % 251 - 125
+                raw += (v + 128).to_bytes(1, "little") if width == 1 else \
+                    (v << (width * 8 - 8)).to_bytes(width, "little", signed=True)
+        w.writeframes(bytes(raw))
+    data = out.getvalue()
+    if comptype != "NONE":  # the format tag at byte 20 (1 is PCM)
+        data = data[:20] + struct.pack("<H", 3) + data[22:]
+    return data
+
+
+WAV = wav(100)
+PCM = b"".join(struct.pack("<h", ((i * 7 + c * 3) % 251 - 125) << 8) for i in range(100) for c in range(2))
+assert fe.pcm_track(WAV) == (22050, 2, 100, PCM, 2)
+# Other widths become 16-bit as ko_audio's samples do: 8-bit (v + 128) and
+# 24-bit (v << 16) give v << 8.
+assert fe.pcm_track(wav(100, width=1)) == (22050, 2, 100, PCM, 1)
+assert fe.pcm_track(wav(100, width=3)) == (22050, 2, 100, PCM, 3)
+assert fe.pcm_track(wav(10, rate=8000, channels=1))[:3] == (8000, 1, 10)
+pcm_problems = {
+    "not a WAV": b"RIFF\0\0\0\0WAVEjunk",
+    "a float format": wav(10, comptype="float"),
+    "a rate below 8 kHz": wav(10, rate=7999),
+    "a rate above 96 kHz": wav(10, rate=96001),
+    "no frames": wav(0),
+    "truncated samples": WAV[:-1],
+}
+for reason, data in pcm_problems.items():
+    try:
+        fe.pcm_track(data)
+    except ValueError:
+        continue
+    raise AssertionError("music cook accepted a WAV with " + reason)
+# The bound counts the cooked 16-bit bytes, not the file's.
+saved = fe.MAX_TRACK_BYTES
+fe.MAX_TRACK_BYTES = 399
+try:
+    fe.pcm_track(WAV)
+    raise AssertionError("music cook accepted a PCM track past its bound")
+except ValueError:
+    pass
+finally:
+    fe.MAX_TRACK_BYTES = saved
+
+
 class Tracks:
     def get(self, path):
-        return TRACK
+        return WAV if path.endswith(".wav") else TRACK
 
 
 one = {"tracks": [{"path": "a.mp3", "loop": True}], "screens": {"login": 0, "select": 0}}
 section, played = fe.music(Tracks(), one)
-assert section == u(1) + u(48000) + u(1) + u(1) + u(10) + u(len(TRACK)) + TRACK + u(0) + u(0) + u(fe.NO_MUSIC) * 2
-assert played == [dict(path="a.mp3", rate=48000, channels=1, frames=10, bytes=960, dropped=0, loop=True)], played
+assert section == (u(1) + u(fe.MPEG) + u(48000) + u(1) + u(1) + f([0]) + u(10) + u(len(TRACK)) + TRACK + u(0) + u(0)
+                   + u(fe.NO_MUSIC) * 2)
+assert played == [dict(path="a.mp3", kind="mpeg", rate=48000, channels=1, frames=10, bytes=960, dropped=0, loop=True,
+                       restart=0)], played
 assert fe.music(Tracks(), None)[0] == u(0) + u(fe.NO_MUSIC) * 4
+# RQ-083: a WAV is a PCM track; a restart period is carried as a real.
+two = {"tracks": [{"path": "a.wav", "loop": False, "restart": 21.66}, {"path": "b.wav", "loop": True}],
+       "screens": {"login": 0, "select": 1, "create": 1}}
+section, played = fe.music(Tracks(), two)
+pcm = u(fe.PCM) + u(22050) + u(2)
+assert section == (u(2) + pcm + u(0) + f([21.66]) + u(100) + u(400) + PCM + pcm + u(1) + f([0]) + u(100) + u(400) + PCM
+                   + u(0) + u(1) + u(1) + u(fe.NO_MUSIC)), section[:80]
+assert [(t["kind"], t["loop"], t["restart"], t["width"]) for t in played] == [("pcm", False, 21.66, 2),
+                                                                             ("pcm", True, 0, 2)], played
 config_problems = {
     "an unknown screen": dict(one, screens={"message": 0}),
     "a screen past the tracks": dict(one, screens={"login": 1}),
     "a loop that is not a flag": dict(one, tracks=[{"path": "a.mp3", "loop": 1}]),
     "five tracks": dict(one, tracks=[{"path": "a.mp3", "loop": True}] * 5),
+    "an unknown track key": dict(one, tracks=[{"path": "a.mp3", "loop": True, "loops": 2}]),
+    "a restart below 0.1 s": dict(one, tracks=[{"path": "a.mp3", "loop": True, "restart": 0.05}]),
+    "a restart past an hour": dict(one, tracks=[{"path": "a.mp3", "loop": True, "restart": 3601}]),
+    "a negative restart": dict(one, tracks=[{"path": "a.mp3", "loop": True, "restart": -1}]),
+    "a restart that is a flag": dict(one, tracks=[{"path": "a.mp3", "loop": True, "restart": True}]),
+    "a restart that is text": dict(one, tracks=[{"path": "a.mp3", "loop": True, "restart": "21.66"}]),
 }
 for reason, config in config_problems.items():
     try:
@@ -92,8 +169,8 @@ for reason, config in config_problems.items():
     except ValueError:
         continue
     raise AssertionError("music cook accepted " + reason)
-print("PASS front-end music cook: frames, tags and a cut last frame; %d refusals"
-      % (len(music_problems) + len(config_problems)))
+print("PASS front-end music cook: frames, tags and a cut last frame, WAVs as PCM, restart periods; %d refusals"
+      % (len(music_problems) + len(pcm_problems) + 1 + len(config_problems)))
 
 # --- synthetic UIF (ko_hud.parse's layout) ------------------------------------
 
@@ -280,8 +357,21 @@ def raw_light(l):
 NO_MUSIC = u(0) + u(fe.NO_MUSIC) * 4
 
 
-def track(data=TRACK, rate=48000, channels=1, loop=1, frames=None):
-    return u(rate) + u(channels) + u(loop) + u(len(data) // 96 if frames is None else frames) + u(len(data)) + data
+def track(data=TRACK, rate=48000, channels=1, loop=1, frames=None, kind=None, restart=0.0):
+    """A version 5 track record: MPEG frames by default, `kind` PCM for
+    16-bit samples (`frames` sample frames)."""
+    pcm = kind == fe.PCM
+    if frames is None:
+        frames = len(data) // (2 * channels) if pcm else len(data) // 96
+    head = u(fe.MPEG if kind is None else kind) + u(rate) + u(channels) + u(loop)
+    restart = struct.pack("<I", restart) if type(restart) is int else f([restart])
+    return head + restart + u(frames) + u(len(data)) + data
+
+
+def pcm_track(data=PCM, rate=22050, channels=2, kind=fe.PCM, frames=None, **kw):
+    """A PCM track record; `kind` other than PCM sizes it as PCM still."""
+    return track(data, rate, channels, kind=kind, frames=len(data) // (2 * channels) if frames is None else frames,
+                 **kw)
 
 
 _, TRACKS, _ = fe.scene_tracks(model)
@@ -295,7 +385,7 @@ def character(clips=1, blends=None, plug=None):
     return u(len(model)) + model + u(clips - 1) + further + f([0.3] * clips if blends is None else blends) + plugs
 
 
-def blob(version=4, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=5, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [FONT]
@@ -351,7 +441,7 @@ cases = {
     "bad-truncated": valid[:-1],
     "bad-trailing": valid + b"\0",
     "bad-magic": blob(magic=b"N3FX"),
-    "bad-version": blob(version=3),
+    "bad-version": blob(version=4),
     "bad-clip-blend": blob(blends=[-0.1]),
     "bad-clip-blend-nan": blob(blends=[float("nan")]),
     "bad-spot-rate": blob(spot_rate=0),
@@ -368,6 +458,23 @@ cases = {
     "bad-music-empty": blob(music=u(1) + track(b"", frames=1) + u(fe.NO_MUSIC) * 4),
     "bad-music-screen": blob(music=u(1) + track() + u(1) + u(fe.NO_MUSIC) * 3),
     "bad-music-missing": valid[:-len(NO_MUSIC)],
+    # RQ-083 (version 5): PCM tracks and restart periods.
+    "ok-music-pcm": blob(music=u(2) + pcm_track(loop=0, restart=21.66) + pcm_track() + u(0) + u(1) * 2 +
+                        u(fe.NO_MUSIC)),
+    "ok-music-pcm-mono": blob(music=u(1) + pcm_track(PCM[:100], rate=8000, channels=1) + u(0) + u(fe.NO_MUSIC) * 3),
+    "ok-music-mpeg-restart": blob(music=u(1) + track(restart=3600.0) + u(0) + u(fe.NO_MUSIC) * 3),
+    "bad-music-kind": blob(music=u(1) + pcm_track(kind=2) + u(fe.NO_MUSIC) * 4),
+    "bad-music-pcm-rate": blob(music=u(1) + pcm_track(rate=96001) + u(fe.NO_MUSIC) * 4),
+    "bad-music-pcm-rate-low": blob(music=u(1) + pcm_track(rate=7999) + u(fe.NO_MUSIC) * 4),
+    "bad-music-pcm-channels": blob(music=u(1) + pcm_track(channels=3, frames=100) + u(fe.NO_MUSIC) * 4),
+    "bad-music-pcm-frames": blob(music=u(1) + pcm_track(frames=99) + u(fe.NO_MUSIC) * 4),
+    "bad-music-pcm-odd": blob(music=u(1) + pcm_track(PCM[:-1], frames=100) + u(fe.NO_MUSIC) * 4),
+    "bad-music-pcm-empty": blob(music=u(1) + pcm_track(b"", frames=0) + u(fe.NO_MUSIC) * 4),
+    "bad-music-pcm-as-mpeg": blob(music=u(1) + track(PCM, rate=22050, channels=2, frames=100) + u(fe.NO_MUSIC) * 4),
+    "bad-music-restart-low": blob(music=u(1) + pcm_track(restart=0.05) + u(fe.NO_MUSIC) * 4),
+    "bad-music-restart-high": blob(music=u(1) + pcm_track(restart=3601.0) + u(fe.NO_MUSIC) * 4),
+    "bad-music-restart-negative": blob(music=u(1) + pcm_track(restart=-21.66) + u(fe.NO_MUSIC) * 4),
+    "bad-music-restart-nan": blob(music=u(1) + pcm_track(restart=0x7FC00000) + u(fe.NO_MUSIC) * 4),
     "bad-slots": blob(slots=4),
     "bad-slot-count": blob(slot_count=2),
     "bad-canvas": blob(canvas=(800, 600)),

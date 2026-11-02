@@ -23,10 +23,12 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   operator's wording in the message box.
 - `character_slots` (3, front-end.bin) refuses a fourth character at the wire,
   in the server's wording; the Characters list names the levels.
-- Music (RQ-018): one stream starts on the login screen and plays on through the
-  realm list, select, create and select again, stops on loading, before the
-  world, and (when the client runs a frame more after the kick) a new one starts
-  on the login screen.
+- Music (RQ-018; RQ-083, KO-FINDINGS 9): one stream starts on the login screen
+  and plays on through the realm list (1097's sound 35, restarting in place), a
+  second replaces it on select (sound 20003, as 1097's game-server login answer
+  does) and plays on through create and select again, stops on loading, before
+  the world, and (when the client runs a frame more after the kick) a new one
+  starts on the login screen.
 """
 import hashlib
 import json
@@ -207,9 +209,9 @@ try:
     assert messages == ["Discord login was cancelled. ENTER to try again.", REFUSED,
                         "You were disconnected by an operator: flow test."], flow
     order = [f.split()[0] for f in flow if f.startswith(("screen=", "music="))]
-    want = ["screen=login", "music=stream1", "screen=realms", "screen=select", "screen=create", "screen=select",
-            "screen=loading", "music=none", "screen=world", "screen=login"]
-    assert order in (want, want + ["music=stream2"]), flow
+    want = ["screen=login", "music=stream1", "screen=realms", "screen=select", "music=stream2", "screen=create",
+            "screen=select", "screen=loading", "music=none", "screen=world", "screen=login"]
+    assert order in (want, want + ["music=stream3"]), flow
     # RQ-066, RQ-075 (KO-FINDINGS 8.1, the 1097 hall): with the pointer on the
     # character in front, the hover clip (pre_select) blends in over its own
     # 0.3 s on its first frame, plays once and holds its last frame; off it,
@@ -293,7 +295,7 @@ try:
           "the spot widens and the info text shows only while the pointer is on it; the arrows turn the camera one slot each way, "
           "ending where 1097's check ends it, each with the turn sound) -> start (blends in over 0.6 s, then plays) -> loading -> world; "
           "a kick returns to login with the operator's wording; "
-          "one music stream from login to loading")
+          "one music stream on login and the realm list, another from select to loading")
     assert server.poll() is None, "server exited"
     print("PASS KO front-end flow")
 finally:

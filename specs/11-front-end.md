@@ -60,9 +60,11 @@ choice" below); the engine knows none of them.
 | Loading | none | `ka_loading_us.uif` |
 | Message box | over any screen | `co_MsgBoxOk_us.uif` |
 
-Music (Q57, RQ-018): KO 1298's front-end track, `Snd/Intro_Sound.mp3`, looping from
-login through the realm list, select and create, stopped when the chosen character's
-clip has played; its frames are carried as they are (Q69). Text is drawn with
+Music (Q57, RQ-018, RQ-083): the chosen client's. For 1097 (Moradon's), `Snd/bgm_login.wav`
+on the login and the realm list, restarted every 21.66 s, and `Snd/bgm_el_battle.wav`,
+looping, on select and create, stopped when the chosen character's clip has played;
+both carried as their 16-bit samples (KO-FINDINGS §9). KO 1298's own track,
+`Snd/Intro_Sound.mp3`, would be carried as its MPEG frames (Q69). Text is drawn with
 Liberation Sans regular and bold for KO's Arial, at points × 96 / 72, baked as N3H9's
 nameplate fonts are.
 
@@ -76,7 +78,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 4, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 5, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -109,12 +111,15 @@ replace the panels when the client has a Discord realm config.
   own for the start clip, RQ-076),
   and the create model (the race's own looks joint and animation, `ANI_BREATH`, no
   plugs; N3FE version 2).
-- **Music** (N3FE version 3, RQ-018). Up to 4 tracks of MPEG-1 or MPEG-2 Layer III
-  frames (each ≤ 16 MiB, every frame checked at load), and the track the login,
-  select, create and loading screens play, or none. The client streams the track
-  (one frame decoded at a time, `client/assets/music.h`); a screen naming the track
-  already playing keeps it, so it runs on across the screens; entering the world
-  stops it. Option.ini `[Sound] Effect=0` silences it with every other sound, as in
+- **Music** (N3FE version 3, RQ-018; version 5, RQ-083). Up to 4 tracks, each MPEG-1
+  or MPEG-2 Layer III frames (every frame checked at load) or, since version 5,
+  16-bit PCM samples (KO 1097's WAVs), each ≤ 16 MiB, looping or not, with an
+  optional restart period (the track starts again at its first sample after that
+  much playback: 1097's login restarts its track every 21.66 s); and the track the
+  login, select, create and loading screens play, or none. The client streams the
+  track (one MPEG frame or 1152 sample frames at a time, `client/assets/music.h`); a
+  screen naming the track already playing keeps it, so it runs on across the
+  screens; entering the world stops it. Option.ini `[Sound] Effect=0` silences it with every other sound, as in
   KO 1298 (Q70).
 - **The select arrows' turn sound** (RQ-077, Q70). 1097's hall plays sound 2501,
   `char_select_turn.wav`, for each turn its arrows start. The package names the
@@ -215,7 +220,7 @@ stays private.
 | Package without `front_end` | Today's panels, unchanged. |
 | `realm-config.json` names a client `front-ends.json` does not offer, or one whose input tree is missing, or either file is malformed | The cook stops before the survey with the reason and the file or input to fix (`content/front-end.md`, "Choosing the client"); nothing is written. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 4 (no music section, or no clip blend times and spot rate) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 5 (no music section, no clip blend times and spot rate, or no track kinds and restart periods) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -246,15 +251,18 @@ CPU (`make test`):
 
 1. **Cook bounds** (`tests/front_end.py`). `ko_front_end` refuses truncated inputs,
    trees over the bounds, unknown actions, unbound required actions and missing
-   screens, and music that is not whole Layer III frames of one format or names an
-   unknown screen or track. It works on synthetic UIF fixtures and synthetic MPEG
-   frames (original bytes). (The wrapped-UV
+   screens, and music that is not whole Layer III frames of one format, a WAV that
+   is not integer PCM within the rate and byte bounds, a restart period out of
+   bounds, or that names an unknown screen or track. It works on synthetic UIF
+   fixtures, synthetic MPEG frames and synthetic WAVs (original bytes). (The wrapped-UV
    `ka_login_intro_us.uif` is not an input: the 1098 intro scene replaced it.)
 2. **Loader bounds** (`tests/front_end.py`, `tests/front_end.cpp`). The client loader
    refuses malformed blobs, each with its own message and no crash. The music stream
    (`tests/audio.cpp`) plays a synthetic track once and looping, resamples 32 kHz to
    48 kHz, ends a track that decodes to nothing, and the mixer keeps, replaces and
-   stops it.
+   stops it; a synthetic PCM track plays its samples once and looping, resampled from
+   22,050 Hz, and a restart period starts a track again on time, ended or not
+   (RQ-083).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.
@@ -276,9 +284,10 @@ KO (`make live-ko`, needs `assets/ko`):
    projected box is non-empty and covers the view's centre: KO's close-up runs past
    the frame's edges); the login button's rect has its
    art; the realms list shows the realm name; select shows 1, 2 and 3 characters in
-   the slots; loading shows a progress bar that advances. Music: login, the realm
-   list, select and create name KO's track, loading none, and the track streams
-   audibly past its end.
+   the slots; loading shows a progress bar that advances. Music: login and the realm
+   list name one track, select and create another, loading none (1097's
+   `bgm_login.wav`, which restarts at 21.66 s, and `bgm_el_battle.wav`, which loops,
+   RQ-083), and each streams audibly past its end.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

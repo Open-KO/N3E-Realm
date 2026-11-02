@@ -4,8 +4,9 @@ KO's 1098 login scene (the orc with the axe under the moon, GameProcLogIn_1098),
 its login and server-list layout, the Karus character select hall
 (GameProcCharacterSelect), character create, loading and the OK message box,
 cooked from the pinned client tree, (version 3) the screens' music, KO's
-MP3 frames carried as they are, and (version 4) each model clip's blend time
-and the select spot's growth rate. games/moradon/front-end.json names every KO
+MP3 frames carried as they are, (version 4) each model clip's blend time
+and the select spot's growth rate, and (version 5) PCM music tracks from KO's
+WAVs and a track's restart period. games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
@@ -17,6 +18,7 @@ import json
 import math
 import pathlib
 import struct
+import wave
 
 from common import count, f, load, string, u, vector
 import gltf
@@ -27,7 +29,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 4
+VERSION = 5
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -75,6 +77,11 @@ MAX_FILE = 64 * 1024 * 1024
 MAX_TRACKS = 4
 MAX_TRACK_BYTES = 16 * 1024 * 1024
 NO_MUSIC = 0xFFFFFFFF
+# Version 5 (RQ-083): a track's kind, a PCM track's rate bounds (as ko_audio's
+# WAVs) and a restart period's bounds in seconds (0: none).
+MPEG, PCM = 0, 1
+PCM_RATES = (8000, 96000)
+RESTART = (0.1, 3600.0)
 # The screens a track is named for, in file order (login includes the realm list).
 MUSIC_SCREENS = ("login", "select", "create", "loading")
 # ISO/IEC 11172-3 and 13818-3 Layer III bitrates (kbit/s) and MPEG-1 rates (Hz).
@@ -661,16 +668,61 @@ def music_track(data):
     return form[0], form[1], frames, body, len(data) - len(body)
 
 
+def wav_format(data):
+    """The format tag of a RIFF WAVE's first `fmt ` chunk, or None."""
+    if data[:4] != b"RIFF" or data[8:12] != b"WAVE":
+        return None
+    at = 12
+    while at + 8 <= len(data):
+        size = struct.unpack_from("<I", data, at + 4)[0]
+        if data[at:at + 4] == b"fmt ":
+            return struct.unpack_from("<H", data, at + 8)[0] if size >= 2 and at + 10 <= len(data) else None
+        at += 8 + size + (size & 1)
+    return None
+
+
+def pcm_track(data):
+    """A KO WAV file as the music's PCM: (rate, channels, sample frames, s16le
+    bytes, source sample width). Read as ko_audio.pcm reads a WAV (the wave
+    module: uncompressed PCM, 1 or 2 channels, 1-4 byte samples, 8-96 kHz),
+    but kept at its own rate and channels and whole, not cut to 10 s; samples
+    of another width become 16-bit as ko_audio's do (round(x * 32768)). The
+    format tag must be 1, integer PCM: the wave module of newer Pythons also
+    reads other tags (IEEE float) and reports them as uncompressed."""
+    if wav_format(data) != 1:
+        raise ValueError("music WAV format")
+    try:
+        with wave.open(io.BytesIO(data)) as w:
+            channels, width, rate, frames, compression, _ = w.getparams()
+            if channels not in (1, 2) or width not in (1, 2, 3, 4) or compression != "NONE":
+                raise ValueError("music WAV format")
+            if not PCM_RATES[0] <= rate <= PCM_RATES[1] or frames <= 0:
+                raise ValueError("music WAV format")
+            if frames * channels * 2 > MAX_TRACK_BYTES:
+                raise ValueError("music track past its bound")
+            raw = w.readframes(frames)
+    except (wave.Error, EOFError) as e:
+        raise ValueError("music WAV: %s" % e)
+    if len(raw) != frames * channels * width:
+        raise ValueError("music WAV truncated")
+    if width != 2:
+        samples = []
+        for i in range(frames * channels):
+            sample = int.from_bytes(raw[i * width:(i + 1) * width], "little", signed=width > 1)
+            value = (sample - 128) / 128 if width == 1 else sample / (1 << (width * 8 - 1))
+            samples.append(max(-32768, min(32767, round(value * 32768))))
+        raw = struct.pack("<%dh" % len(samples), *samples)
+    return rate, channels, frames, raw, width
+
+
 def music(assets, config):
-    """Section 9: the tracks and the track each screen plays. KO 1298
-    (binary, KnightOnLine.exe): the login (005f68e0) creates the BGM stream
-    `Snd\\Intro_Sound.mp3` (0044d240), loops it (004504a0(1)) and plays it
-    (004501b0), keeping a stream of the same file already playing; the select
-    (005f98c0) restarts it only when 00818408 is set and otherwise keeps it;
-    the create proc leaves it (source: GameProcCharacterCreate.cpp has no
-    BGM); and the select releases it when the chosen character's clip ends,
-    before "Loading data..." (005fea70, 005fe280). games/moradon/front-end.json
-    names the file and the screens."""
+    """Section 9: the tracks and the track each screen plays, as the client
+    the recipe names plays them (content/front-end.md, "Moradon"). A track
+    file that is a RIFF WAVE is cooked as PCM (version 5, `pcm_track`), any
+    other as MPEG Layer III frames (`music_track`); `loop` starts it again at
+    its end, and `restart` (seconds, version 5) starts it again at its first
+    sample after that much playback, ended or not (KO 1097's login tick,
+    005248f5-00524957, restarts sound 35 every 21.66 s)."""
     config = config or {"tracks": [], "screens": {}}
     tracks = config["tracks"]
     count(len(tracks), MAX_TRACKS, 0)
@@ -678,12 +730,26 @@ def music(assets, config):
         raise ValueError("music screens")
     data, report = u(len(tracks)), []
     for track in tracks:
+        if set(track) - {"path", "loop", "restart"}:
+            raise ValueError("music track keys")
         if type(track.get("loop")) is not bool:
             raise ValueError("music loop")
-        rate, channels, frames, body, dropped = music_track(assets.get(track["path"]))
-        data += u(rate) + u(channels) + u(int(track["loop"])) + u(frames) + u(len(body)) + body
-        report.append(dict(path=track["path"], rate=rate, channels=channels, frames=frames, bytes=len(body),
-                           dropped=dropped, loop=track["loop"]))
+        restart = track.get("restart", 0)
+        if type(restart) not in (int, float) or not (restart == 0 or RESTART[0] <= restart <= RESTART[1]):
+            raise ValueError("music restart")
+        source = assets.get(track["path"])
+        entry = dict(path=track["path"])
+        if source[:4] == b"RIFF" and source[8:12] == b"WAVE":
+            rate, channels, frames, body, width = pcm_track(source)
+            kind = PCM
+            entry.update(kind="pcm", rate=rate, channels=channels, frames=frames, bytes=len(body), width=width)
+        else:
+            rate, channels, frames, body, dropped = music_track(source)
+            kind = MPEG
+            entry.update(kind="mpeg", rate=rate, channels=channels, frames=frames, bytes=len(body), dropped=dropped)
+        data += u(kind) + u(rate) + u(channels) + u(int(track["loop"])) + f([restart]) + u(frames) + u(len(body))
+        data += body
+        report.append(dict(entry, loop=track["loop"], restart=restart))
     for name in MUSIC_SCREENS:
         index = config["screens"].get(name)
         if index is not None and (type(index) is not int or not 0 <= index < len(tracks)):

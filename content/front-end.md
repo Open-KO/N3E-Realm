@@ -2,8 +2,9 @@
 
 `front-end.bin` is an optional presentation file (spec 11): KO's 1098 login scene,
 login and server list, the Karus character select hall, character create, loading
-and the OK message box, the screens' music (version 3, Q57), and each model
-clip's blend time and the select spot's growth rate (version 4, RQ-075).
+and the OK message box, the screens' music (version 3, Q57), each model
+clip's blend time and the select spot's growth rate (version 4, RQ-075), and
+PCM music tracks with a restart period (version 5, RQ-083).
 `tools/assetc/ko_front_end.py` cooks it from the pinned client tree with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -17,7 +18,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 4, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 5, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤64), each width and height (1–1024) then RGBA8 rows.
 3. Fonts: a count (≤8), each texture index, pixel size (6–48), cap height, atlas
@@ -54,20 +55,29 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    player (`InitChr`: the race's `UPC_DefaultLooks` joint, animation and default
    parts) with one clip, `ANI_BREATH` (0), and no plugs (a new character holds
    nothing). The select model's seated clips are for the hall's thrones.
-9. Music (version 3, RQ-018): a track count (≤4), each its sample rate,
-   channels (1 or 2), loop (0 or 1), an MPEG frame count and a byte length
-   (1 to 16 MiB) and then that many bytes: MPEG-1 or MPEG-2 Layer III frames
-   back to back, every one whole, at the track's rate and channel count (free
-   format, MPEG 2.5 and reserved header values refused; a CRC is allowed). Then
-   four track indices, `0xffffffff` for none: the login screen (the realm list
-   too), select, create and loading. The client (`client/assets/music.h`)
-   checks every frame at load and streams a track while its screen shows:
-   one frame decoded at a time (minimp3, `UPSTREAM.md`), resampled linearly
-   to 48 kHz, mixed unpositioned at the voices' gain and kept up to six audio
-   chunks (128 ms) ahead. A screen naming the track already playing keeps it
-   (an ended one too); another track starts at its first frame; none, and
-   entering the world, stops it. A looping track starts again at its first
-   frame, with a fresh decoder; one whose whole pass decodes nothing ends.
+9. Music (version 3, RQ-018; version 5, RQ-083): a track count (≤4), each
+   its kind (version 5: 0 MPEG, 1 PCM), sample rate, channels (1 or 2), loop
+   (0 or 1), restart period (version 5: a real, seconds, 0 for none or
+   0.1–3600), a frame count and a byte length (1 to 16 MiB) and then that many
+   bytes. An MPEG track's bytes are MPEG-1 or MPEG-2 Layer III frames back to
+   back, every one whole, at the track's rate and channel count (free format,
+   MPEG 2.5 and reserved header values refused; a CRC is allowed), and its
+   frame count counts them. A PCM track's bytes are signed 16-bit
+   little-endian samples, the channels interleaved, at 8,000–96,000 Hz, and its
+   frame count is the sample frames: the byte length is exactly frames ×
+   channels × 2. Then four track indices, `0xffffffff` for none: the login
+   screen (the realm list too), select, create and loading. The client
+   (`client/assets/music.h`) checks every track at load and streams one while
+   its screen shows: an MPEG track one frame decoded at a time (minimp3,
+   `UPSTREAM.md`), a PCM track 1152 sample frames at a time, resampled
+   linearly to 48 kHz, mixed unpositioned at the voices' gain and kept up to
+   six audio chunks (128 ms) ahead. A screen naming the track already playing
+   keeps it (an ended one too); another track starts at its first frame;
+   none, and entering the world, stops it. A looping track starts again at its
+   first frame, with a fresh decoder; one whose whole pass decodes nothing
+   ends. A track with a restart period starts again at its first sample each
+   time it has played that long, whether it has ended (silent meanwhile) or
+   not, so it never ends; the period takes precedence over the loop.
 
 The client samples as KO sets its devices: UIF images with point sampling on whole
 screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
@@ -169,7 +179,7 @@ The clients, per screen, and what the format expresses for each, are in
 
 | Client | Recipe | Inputs | Status |
 |---|---|---|---|
-| `1097` | `front-end.json` | `assets/ko` | Default. 1097's login scene, select hall and turn sound. Still 1298's: the layouts (`UI_US`, since `ko_hud` does not read 1097's UIF version) and the music (`Intro_Sound.mp3`; 1097 plays sound 35, `bgm_login.wav`, and the format carries only MPEG frames) |
+| `1097` | `front-end.json` | `assets/ko` | Default. 1097's login scene, select hall, turn sound and music (RQ-083: `bgm_login.wav` restarting every 21.66 s, `bgm_el_battle.wav` looping). Still 1298's: the layouts (`UI_US`, since `ko_hud` does not read 1097's UIF version) |
 
 Not offered yet: `1298` (needs the select's front-clip mode, the recorded camera
 paths, 1298's UIF login intro and per-race looks), `2145` (its UIF versions, its
@@ -246,18 +256,36 @@ Each is its own queue item; until it lands the cook refuses it as above.
   hall from other files and loops a clip on the character in front without
   the pointer (`specs/KO-FINDINGS.md` §8, Q71).
 - Fonts: Liberation Sans regular and bold for Arial, at points × 96 / 72.
-- Music: `Snd/Intro_Sound.mp3` (44.1 kHz stereo, 4,096 frames, 107 s; the
-  file's cut-short 4,097th frame is dropped), looping, on login, select and
-  create; loading is silent. KO 1298 (binary, `KnightOnLine.exe`): the login
-  proc `005f68e0` creates the BGM stream for that file (`0044d240`), loops it
-  (`004504a0(1)`) and plays it (`004501b0`), or keeps a BGM of the same file
-  already playing; the select proc `005f98c0` restarts it only when the flag
-  `00818408` is set (not decoded; the realm's flow never returns from the
-  world to select) and otherwise keeps it; the select releases it when the
-  chosen character's clip has played, before "Loading data..." (`005fea70`,
-  `005fe280`). The create proc does not touch it (source:
-  `GameProcCharacterCreate.cpp`). The 1098 scene's own login sound (sound
-  table 35, `GameProcLogIn_1098.cpp`) is not 1298's and is not used.
+- Music (RQ-083, `specs/KO-FINDINGS.md` §9, binary): 1097's. Login and the
+  realm list: `Snd/bgm_login.wav`, 1097's sound 35 (PCM, 22,050 Hz stereo
+  16-bit, 477,749 frames, 21.67 s), not looping, restarted every 21.66 s.
+  Select and create: `Snd/bgm_el_battle.wav`, 1097's sound 20003 (PCM, the
+  same format, 3,995,263 frames, 181.19 s), looping. Loading is silent. The
+  recipe names the files, not the sound ids: the pinned tree is 1298's, whose
+  `sound.tbl` rows 35 and 20003 name MP3s; 1097's name these WAVs, which the
+  pinned tree holds byte for byte. KO 1097 (binary, the 1097 image): the login
+  Init creates the BGM stream from sound 35 (`0052409d`–`005240b3`) and its
+  tick plays it when its timer is 0 and stops it past 21.66 s, setting the
+  timer back to 0 (`005248f5`–`00524957`), so it restarts about every 21.66 s,
+  just before its own end; its stream alone would stop after one pass, as the
+  login sets no loop byte (`00432f60`). The login's answer to the game
+  server's login (`00525b70`) releases it and creates sound 20003, sets its
+  loop byte and plays it, then opens select; select (`0043a950`,
+  `0043b550`) and create leave it; the select releases it when the chosen
+  character's clip has played, before loading (`0043ed20`; `0043db70` too).
+  Not KO's (Q75): back on the login from select, the realm starts sound 35 at
+  once; 1097 waits for its login timer, which no Init resets, to pass 21.66 s
+  again. KO 1298 plays `Snd/Intro_Sound.mp3` instead (44.1 kHz stereo, 4,096
+  frames, 107 s; the file's cut-short 4,097th frame is dropped), looping on
+  login, select and create, carried as its frames (Q69); RQ-018 to RQ-078 cooked
+  it, and a 1298 choice would name it. KO 1298 (binary, `KnightOnLine.exe`):
+  the login proc `005f68e0` creates the BGM stream for that file (`0044d240`),
+  loops it (`004504a0(1)`) and plays it (`004501b0`), or keeps a BGM of the
+  same file already playing; the select proc `005f98c0` restarts it only when
+  the flag `00818408` is set (not decoded) and otherwise keeps it; the select
+  releases it when the chosen character's clip has played, before "Loading
+  data..." (`005fea70`, `005fe280`). The create proc does not touch it
+  (source: `GameProcCharacterCreate.cpp`).
 - The select arrows' turn sound (RQ-077, Q70): `select.turn_sound`, sound
   table 2501 (`Snd/char_select_turn.wav`, up to 9 at once), cooked into
   `audio.bin` as `front:select-turn` by `tools/assetc/ko_bake.py`. The client

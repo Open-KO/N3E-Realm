@@ -44,6 +44,64 @@ std::pair<uint64_t,float> drain(n3e::MusicStream&s,uint64_t limit){
     for(unsigned i=0;i<n*2;++i)peak=std::max(peak,std::abs(out[i]));written+=n;if(n<4800)break;}
   return {written,peak};
 }
+// RQ-083: a 16-bit PCM track (KO 1097's WAVs) of `frames` sample frames,
+// each channel a ramp, and the restart period KO 1097's login tick gives
+// sound 35 (005248f5-00524957).
+std::shared_ptr<n3e::MusicTrack> pcm_track(unsigned frames,unsigned rate,unsigned channels,bool loop,float restart=0){
+  auto t=std::make_shared<n3e::MusicTrack>();t->kind=n3e::MusicTrack::Kind::pcm;t->rate=rate;t->channels=channels;
+  t->loop=loop;t->restart=restart;t->frames=frames;
+  for(unsigned i=0;i<frames;++i)for(unsigned c=0;c<channels;++c){
+    const int16_t v=int16_t(c?-int(i%100)*200:int(i%100)*200);t->data+=char(uint16_t(v)&0xff);t->data+=char(uint16_t(v)>>8);}
+  return t;
+}
+void pcm_checks(const std::shared_ptr<n3e::MusicTrack>&mpeg){
+  // Every sample once at 48 kHz, its value as KO's 16-bit sample / 32768,
+  // the right channel its own; then the stream ends.
+  auto once=pcm_track(4000,48000,2,false);n3e::check_music_track(*once);
+  {n3e::MusicStream s(once);std::vector<float> out(5000*2,0.f);need(s.mix(out.data(),5000,1)==4000&&s.ended());
+   need(near(out[0],0)&&near(out[2*7],7*200/32768.f)&&near(out[2*7+1],-7*200/32768.f)&&near(out[2*3999],99*200/32768.f));
+   need(s.decoded_frames()==4000);}
+  // 22,050 Hz stereo (bgm_login.wav's form) resampled: 48000/22050 output
+  // frames a sample; looping, it never ends.
+  auto low=pcm_track(22050,22050,2,false);n3e::check_music_track(*low);
+  {n3e::MusicStream s(low);auto[written,peak]=drain(s,1<<20);need(written>=47998&&written<=48002&&peak>.5f&&s.ended());}
+  auto loop=pcm_track(2205,22050,2,true);
+  {n3e::MusicStream s(loop);auto[written,peak]=drain(s,5*48000);need(written==5*48000&&!s.ended()&&s.decoded_frames()>=10*2205);}
+  // Mono plays the one channel on both sides.
+  {n3e::MusicStream s(pcm_track(100,48000,1,false));std::vector<float> out(200*2,0.f);need(s.mix(out.data(),200,1)==100);
+   need(near(out[2*9],9*200/32768.f)&&near(out[2*9+1],out[2*9]));}
+  // A restart period: a track that does not loop and is shorter than the
+  // period plays once, is silent, and starts again at its first sample on
+  // the period, ended or not, without ending; one longer than the period is
+  // cut there (bgm_login.wav's last 6.6 ms, 21.667 s against 21.66 s).
+  {auto t=pcm_track(1000,48000,1,false,0.1f);n3e::check_music_track(*t);n3e::MusicStream s(t);
+   std::vector<float> out(9600*2,0.f);need(s.mix(out.data(),9600,1)==9600&&!s.ended()&&s.restarts()==1);
+   need(near(out[2*999],99*200/32768.f)&&out[2*1000]==0&&out[2*4799]==0&&near(out[2*4800],0)&&near(out[2*4807],7*200/32768.f));
+   need(s.decoded_frames()==2000);}
+  {auto t=pcm_track(48000,48000,1,true,0.5f);n3e::MusicStream s(t);auto[written,peak]=drain(s,48000*2);
+   need(written==96000&&s.restarts()==3&&s.decoded_frames()<=4*24000+1152&&!s.ended());}
+  // An MPEG track restarts the same way, with a fresh decoder.
+  {auto t=std::make_shared<n3e::MusicTrack>(*mpeg);t->restart=0.5f;n3e::check_music_track(*t);n3e::MusicStream s(t);
+   auto[written,peak]=drain(s,48000*3);need(written==3*48000&&s.restarts()==5&&!s.ended()&&peak>.1f);}
+  // The loader's PCM checks.
+  auto t=*once;need(!refused(t));
+  t=*once;t.frames=3999;need(refused(t));
+  t=*once;t.data.pop_back();need(refused(t));
+  t=*once;t.rate=7999;need(refused(t));
+  t=*once;t.rate=96001;need(refused(t));
+  t=*once;t.channels=3;need(refused(t));
+  t=*once;t.data.clear();t.frames=0;need(refused(t));
+  t=*once;t.restart=0.05f;need(refused(t));
+  t=*once;t.restart=3601;need(refused(t));
+  t=*once;t.restart=-1;need(refused(t));
+  t=*once;t.restart=0.1f;need(!refused(t));
+  t=*once;t.kind=n3e::MusicTrack::Kind(2);need(refused(t));
+  t=*once;t.kind=n3e::MusicTrack::Kind::mpeg;need(refused(t)); // samples are not frames
+  // The mixer keeps a restarting stream across its restarts.
+  n3e::AudioMixer m;auto r=pcm_track(1000,48000,1,false,0.1f);m.play_music(r);auto*stream=m.music.get();
+  for(int i=0;i<10;++i)m.mix(i*.1,4800,{});need(m.music.get()==stream&&m.music_playing()&&stream->restarts()==9);
+  std::cout<<"PASS music pcm: 16-bit samples once and looping, 22,050 Hz resampling, mono, restart periods, loader checks\n";
+}
 void music_checks(){
   const auto tone=mp3_frame();need(tone.size()==96);
   auto f=n3e::mpeg_frame(reinterpret_cast<const unsigned char*>(tone.data()),tone.size());
@@ -85,6 +143,7 @@ void music_checks(){
   auto*ended=m.music.get();m.play_music(once);need(m.music.get()==ended&&!m.music_playing());
   m.play_music(nullptr);need(!m.music&&energy(m.mix(9,4800,{}))==0);
   std::cout<<"PASS music: frame checks, a track once and looping, 32 kHz resampling, undecodable frames end, mixer keeps and replaces streams\n";
+  pcm_checks(once);
 }
 // PQ-013: KO effect start test, listener frame, curves and fixed source positions.
 void spatial_checks(){

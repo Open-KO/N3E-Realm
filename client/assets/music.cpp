@@ -5,6 +5,8 @@
 #define MINIMP3_ONLY_MP3
 #define MINIMP3_FLOAT_OUTPUT
 #include "third_party/minimp3/minimp3.h"
+#include <algorithm>
+#include <cmath>
 #include <stdexcept>
 
 namespace n3e {
@@ -38,6 +40,15 @@ std::optional<MpegFrame> mpeg_frame(const unsigned char *p, size_t available) {
 void check_music_track(const MusicTrack &track) {
   need(track.channels == 1 || track.channels == 2, "music channels");
   need(!track.data.empty() && track.data.size() <= kMusicTrackBytes, "music track bytes");
+  need(track.restart == 0 || (track.restart >= kMusicMinRestart && track.restart <= kMusicMaxRestart),
+       "music restart");
+  if (track.kind == MusicTrack::Kind::pcm) {
+    // RQ-083: 16-bit sample frames, nothing else.
+    need(track.rate >= kMusicPcmMinRate && track.rate <= kMusicPcmMaxRate, "music pcm rate");
+    need(track.frames > 0 && uint64_t(track.frames) * track.channels * 2 == track.data.size(), "music pcm frames");
+    return;
+  }
+  need(track.kind == MusicTrack::Kind::mpeg, "music kind");
   const auto *p = reinterpret_cast<const unsigned char *>(track.data.data());
   size_t at = 0;
   uint32_t frames = 0;
@@ -61,6 +72,7 @@ MusicStream::MusicStream(std::shared_ptr<const MusicTrack> track)
   need(source != nullptr && source->rate > 0, "music stream without a track");
   mp3dec_init(&decoder->dec);
   step = double(source->rate) / kRate;
+  if (source->restart > 0) restart_frames = std::max<uint64_t>(1, uint64_t(std::llround(double(source->restart) * kRate)));
 }
 MusicStream::~MusicStream() = default;
 
@@ -75,6 +87,23 @@ bool MusicStream::decode() {
       offset = 0;
       pass_samples = 0;
       mp3dec_init(&decoder->dec);
+    }
+    if (source->kind == MusicTrack::Kind::pcm) {
+      // RQ-083: up to 1152 sample frames (one MPEG-1 frame's worth) at a time,
+      // as floats in [-1, 1); check_music_track made the data whole frames.
+      channels = source->channels;
+      const size_t width = size_t(channels) * 2;
+      const size_t n = std::min<size_t>(1152, (data.size() - offset) / width);
+      for (size_t i = 0; i < n * channels; ++i) {
+        const auto *s = p + offset + i * 2;
+        pcm[i] = float(int16_t(uint16_t(s[0] | (s[1] << 8)))) / 32768.f;
+      }
+      offset += n * width;
+      decoded += n;
+      available = n;
+      cursor = 0;
+      pass_samples += n;
+      return true;
     }
     const auto frame = mpeg_frame(p + offset, data.size() - offset);
     if (!frame) return false;  // check_music_track ran at load
@@ -101,39 +130,63 @@ bool MusicStream::next(float &left, float &right) {
   return true;
 }
 
-unsigned MusicStream::mix(float *out, unsigned frames, float gain) {
-  if (done) return 0;
+void MusicStream::rewind() {
+  mp3dec_init(&decoder->dec);
+  offset = cursor = available = 0;
+  phase = 1;
+  a[0] = a[1] = b[0] = b[1] = 0;
+  pass_samples = played = 0;
+  done = primed = ending = false;
+  ++restarted;
+}
+
+bool MusicStream::output(float &left, float &right) {
+  if (done) return false;
   if (!primed) {
     primed = true;
     if (!next(b[0], b[1])) {
       done = true;
-      return 0;
+      return false;
     }
   }
   // Linear interpolation from the track's rate (as ko_audio.pcm resamples
   // effect sounds at cook time). At the end of a track that does not loop
-  // the last sample is held for its own interval, then the stream ends.
-  unsigned i = 0;
-  for (; i < frames; ++i) {
-    while (phase >= 1) {
-      if (ending) {
-        done = true;
-        return i;
-      }
-      a[0] = b[0];
-      a[1] = b[1];
-      if (!next(b[0], b[1])) {
-        b[0] = a[0];
-        b[1] = a[1];
-        ending = true;
-      }
-      phase -= 1;
+  // the last sample is held for its own interval, then the pass ends.
+  while (phase >= 1) {
+    if (ending) {
+      done = true;
+      return false;
     }
-    const auto t = float(phase);
-    out[i * 2] += gain * (a[0] + (b[0] - a[0]) * t);
-    out[i * 2 + 1] += gain * (a[1] + (b[1] - a[1]) * t);
-    phase += step;
+    a[0] = b[0];
+    a[1] = b[1];
+    if (!next(b[0], b[1])) {
+      b[0] = a[0];
+      b[1] = a[1];
+      ending = true;
+    }
+    phase -= 1;
   }
-  return i;
+  const auto t = float(phase);
+  left = a[0] + (b[0] - a[0]) * t;
+  right = a[1] + (b[1] - a[1]) * t;
+  phase += step;
+  return true;
+}
+
+unsigned MusicStream::mix(float *out, unsigned frames, float gain) {
+  for (unsigned i = 0; i < frames; ++i) {
+    // RQ-083: a restarting track starts again at its first sample once it
+    // has played `restart` seconds, and is silent meanwhile if it ended.
+    if (restart_frames && played >= restart_frames) rewind();
+    float left, right;
+    if (output(left, right)) {
+      out[i * 2] += gain * left;
+      out[i * 2 + 1] += gain * right;
+    } else if (!restart_frames) {
+      return i;
+    }
+    ++played;
+  }
+  return frames;
 }
 }  // namespace n3e

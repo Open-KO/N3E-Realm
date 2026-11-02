@@ -492,15 +492,10 @@ pub fn load(root: &Path) -> Result<Release> {
         if engine < 42 || !presentation {
             return Err(bad("front end compatibility"));
         }
-        let mut p = Reader::open_bounded(&root.join("front-end.bin"), MAX_FRONT_END_ASSET)?;
-        if p.take(4)? != b"N3FE" || p.u()? != 4 {
-            return Err(bad("front end magic/version"));
-        }
-        let slots = p.u()?;
-        if !(1..=3).contains(&slots) {
-            return Err(bad("front end character slots"));
-        }
-        slots
+        front_end_slots(Reader::open_bounded(
+            &root.join("front-end.bin"),
+            MAX_FRONT_END_ASSET,
+        )?)?
     } else {
         8
     };
@@ -924,6 +919,55 @@ impl Release {
     }
 }
 
+/// front-end.bin's header (spec 11, content/front-end.md): the N3FE version
+/// this server's client reads (5 since RQ-083: the music's PCM tracks and
+/// restart period) and the character slot count, 1 to 3.
+fn front_end_slots(mut p: Reader) -> Result<u32> {
+    if p.take(4)? != b"N3FE" || p.u()? != 5 {
+        return Err(bad("front end magic/version"));
+    }
+    let slots = p.u()?;
+    if !(1..=3).contains(&slots) {
+        return Err(bad("front end character slots"));
+    }
+    Ok(slots)
+}
+
+#[cfg(test)]
+mod front_end_tests {
+    use super::{front_end_slots, Reader};
+    fn header(magic: &[u8], version: u32, slots: u32) -> Reader {
+        let mut b = magic.to_vec();
+        for v in [version, slots, 1024, 768] {
+            b.extend_from_slice(&v.to_le_bytes());
+        }
+        Reader::from_bytes(b)
+    }
+    #[test]
+    fn reads_the_slot_count_of_version_5() {
+        for slots in 1..=3 {
+            assert_eq!(front_end_slots(header(b"N3FE", 5, slots)).unwrap(), slots);
+        }
+    }
+    #[test]
+    fn refuses_other_versions_and_slot_counts() {
+        assert!(
+            front_end_slots(header(b"N3FE", 4, 3)).is_err(),
+            "version 4 (no PCM music)"
+        );
+        assert!(front_end_slots(header(b"N3FE", 6, 3)).is_err(), "version 6");
+        assert!(front_end_slots(header(b"N3FX", 5, 3)).is_err(), "magic");
+        assert!(front_end_slots(header(b"N3FE", 5, 0)).is_err(), "no slots");
+        assert!(
+            front_end_slots(header(b"N3FE", 5, 4)).is_err(),
+            "four slots"
+        );
+        assert!(
+            front_end_slots(Reader::from_bytes(b"N3FE\x05\0\0".to_vec())).is_err(),
+            "truncated"
+        );
+    }
+}
 #[cfg(test)]
 mod item_heads_tests {
     use super::{item_heads, Reader};

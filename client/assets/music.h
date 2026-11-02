@@ -5,7 +5,10 @@
 // decodes it one frame at a time (client/third_party/minimp3) and resamples it
 // to the mixer's 48 kHz stereo, so a track minutes long never becomes PCM in
 // memory: the stream holds one decoded frame (at most 1152 samples a channel).
-// No file access, threads or device calls.
+// RQ-083 (N3FE version 5): a track can instead be 16-bit PCM (KO 1097's WAV
+// tracks), streamed 1152 sample frames at a time the same way, and can restart
+// at its first sample every `restart` seconds of playback (KO 1097's login
+// tick, 005248f5-00524957). No file access, threads or device calls.
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -16,20 +19,31 @@
 namespace n3e {
 inline constexpr size_t kMusicTrackBytes = 16 * 1024 * 1024;
 inline constexpr uint32_t kMusicTracks = 4;
+// A PCM track's sample rate bounds (Hz), as tools/assetc/ko_audio.py's WAVs.
+inline constexpr uint32_t kMusicPcmMinRate = 8000, kMusicPcmMaxRate = 96000;
+// A restart period's bounds (seconds); 0 is none.
+inline constexpr float kMusicMinRestart = 0.1f, kMusicMaxRestart = 3600;
 struct MusicTrack {
-  uint32_t rate = 0;      // the frames' sample rate (Hz)
+  enum class Kind : uint32_t { mpeg = 0, pcm = 1 };
+  Kind kind = Kind::mpeg;
+  uint32_t rate = 0;      // the sample rate (Hz)
   uint32_t channels = 0;  // 1 (mono) or 2
   bool loop = false;      // starts again at its first frame when it ends
-  uint32_t frames = 0;    // MPEG frames in `data`
-  std::string data;       // the frames, back to back
+  // Seconds of playback after which the track starts again at its first
+  // sample, ended or not (0: never). Takes precedence over `loop`.
+  float restart = 0;
+  uint32_t frames = 0;    // MPEG frames, or PCM sample frames, in `data`
+  std::string data;       // the MPEG frames back to back, or s16le samples interleaved
 };
 // One MPEG-1 or MPEG-2 Layer III frame header (free format, MPEG 2.5 and the
 // reserved values refused): its length in bytes (padding included), sample
 // rate and channel count, or nothing.
 struct MpegFrame { uint32_t bytes = 0, rate = 0, channels = 0; bool mpeg1 = false; };
 std::optional<MpegFrame> mpeg_frame(const unsigned char *p, size_t available);
-// Throws std::runtime_error unless `data` is exactly `frames` whole Layer III
-// frames, every one at the track's rate and channel count.
+// Throws std::runtime_error unless the restart period is 0 or within its
+// bounds and, for an MPEG track, `data` is exactly `frames` whole Layer III
+// frames, every one at the track's rate and channel count; for a PCM track,
+// exactly `frames` 16-bit sample frames of `channels` at a rate within bounds.
 void check_music_track(const MusicTrack &track);
 
 class MusicStream {
@@ -41,16 +55,22 @@ class MusicStream {
   MusicStream &operator=(const MusicStream &) = delete;
   // Adds up to `frames` 48 kHz stereo frames, times `gain`, to `out`
   // (interleaved left, right); returns the frames written, fewer only when a
-  // track that does not loop has ended.
+  // track that neither loops nor restarts has ended. A restarting track that
+  // has ended is silent until its restart.
   unsigned mix(float *out, unsigned frames, float gain);
-  bool ended() const { return done; }
+  bool ended() const { return done && restart_frames == 0; }
   const std::shared_ptr<const MusicTrack> &track() const { return source; }
-  uint64_t decoded_frames() const { return decoded; }  // MPEG frames, loops included
+  // Source frames decoded (MPEG frames, or PCM sample frames), loops and
+  // restarts included.
+  uint64_t decoded_frames() const { return decoded; }
+  uint64_t restarts() const { return restarted; }
 
  private:
   struct Decoder;
+  bool output(float &left, float &right); // the next 48 kHz frame of this pass
   bool next(float &left, float &right);  // the next source sample pair
-  bool decode();                          // the next MPEG frame into pcm
+  bool decode();                          // the next MPEG frame (or PCM run) into pcm
+  void rewind();                          // back to the first sample
   std::shared_ptr<const MusicTrack> source;
   std::unique_ptr<Decoder> decoder;
   std::vector<float> pcm;  // the current frame, interleaved by its channels
@@ -58,7 +78,8 @@ class MusicStream {
   unsigned channels = 2;
   double phase = 1, step = 1;
   float a[2]{}, b[2]{};
-  uint64_t decoded = 0, pass_samples = 0;
+  uint64_t decoded = 0, pass_samples = 0, restarted = 0;
+  uint64_t restart_frames = 0, played = 0;  // 48 kHz frames; 0: no restart
   bool done = false, primed = false, ending = false;
 };
 }  // namespace n3e

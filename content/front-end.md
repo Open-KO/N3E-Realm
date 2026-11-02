@@ -89,8 +89,10 @@ address mode); the font atlases and the moon linear.
 - Model: a byte length and an N3S1 or N3SM scene (`tools/assetc/gltf.py`, atlas
   up to 2048 a side), then a count of further clips and each clip's byte length
   and track list (N3S1's track encoding, on the model's nodes), then (version 4)
-  each clip's blend time, seconds, 0–10: the KO clip record's `fTimeBlend`,
-  which `CN3Chr::AniCurSet` blends over when the caller names no time of its own.
+  each clip's blend time, seconds, 0–10: the time the client blends into the
+  clip over. That is the KO clip record's `fTimeBlend`, which `CN3Chr::AniCurSet`
+  takes when the caller names no time of its own, or the caller's own time where
+  the package's choices name one (Moradon: the start clip's, `start_blend`).
 - Plug: the KO joint index (below the model's joint count), then a mesh in that
   joint's space: world = instance × `Scene::joint_matrix` × vertex.
 - Mesh: texture, flags (1 double-sided, 2 alpha test at 0.5), material diffuse
@@ -138,8 +140,10 @@ is where create draws the character.
   and camera from `CGameProcCharacterSelect::Init`, and the Tuarek priest
   (`upc_ka_tu_pri.n3joint`, default looks, the mace plug) with the clips of
   `upc_ka_at_wa.n3anim` the 1097 client plays there: 0 `pre_select` (hover), 1
-  `selected` (start) and 2 `dummy` (rest, `pre_select`'s first frame), each
-  with its record's 0.3 s blend time. The hall plays as 1097's does
+  `selected` (start) and 2 `dummy` (rest, `pre_select`'s first frame). The
+  hover and rest clips blend over their records' 0.3 s (`0043f280` names
+  `FLT_MIN`); the start clip over `start_blend`, the select's own 0.6 s
+  (`0043ea30`: `push 0x3f19999a` at `0043ea77`), not its record's 0.3 s. The hall plays as 1097's does
   (`specs/KO-FINDINGS.md` §8.1, binary, Q71): at rest, every tick, the
   character in front plays `pre_select` once while the pointer is in the centre
   rect and `dummy` once otherwise; setting the clip already set changes
@@ -147,7 +151,10 @@ is where create draws the character.
   blends from the frame the previous clip had reached over the new clip's own
   blend time and holds the new clip's first frame meanwhile (`00447e30`,
   `00445bb0`): going in, `pre_select` stays on its first frame for 0.3 s; going
-  out, the pose returns to `dummy` over 0.3 s. Only the character in front is
+  out, the pose returns to `dummy` over 0.3 s. A change during a blend starts
+  from the frame the interrupted clip was held on, not from the blended pose,
+  so the pose jumps there first, as KO's does (`00447e30` keeps only the frame,
+  `00445e90` blends two frames). Only the character in front is
   ticked; the others stand where they were. The spot (`spot_step`, 0.02 a tick,
   `0043f280`'s Karus step; cooked as 0.6 a second at 30 ticks a second, the
   rate KO's frame-scaled code is written for) widens while the pointer is
@@ -155,9 +162,18 @@ is where create draws the character.
   info text (`text00`, `select_info` or, for an empty slot, `select_hint`:
   KO's 1201 and 1202) shows only while the pointer is there. While the camera
   turns nothing is ticked, the spot is off (`0043b550` turns every light off
-  each tick) and keeps its theta for the next slot; starting turns the spot to
-  its full theta (`0043ea30`) and plays `selected` to its end. Not taken:
-  1097's 0.6 s blend into `selected` (the clip starts at once). 1298 draws the
+  each tick) and keeps its theta for the next slot. ENTER or a click starts
+  only at rest, never while the camera turns or the start clip plays (the
+  click: `0043b550` outside state 1, with `PtInRect` on the rect truncated to
+  whole pixels; the hover wants the pointer strictly inside, `0043f280`; the
+  start: `0043ea30` in state 2 only). Starting turns the spot to its full theta
+  (`0043ea30`), blends into `selected` over 0.6 s on its first frame and plays
+  it to its end; loading follows once it has played (`IsAnimEnd`, `0043ed20`:
+  the loop count, counted only past the clip's end, after the blend). A refused
+  start returns the character in front to the hover or rest clip at once, so
+  the next start plays `selected` again. Not 1097's (Q72): 1097 starts the
+  clip on the server's answer, takes ENTER during the turn, and a second ENTER
+  loads at once (`0043db70`); the realm starts on the press. 1298 draws the
   hall from other files and loops a clip on the character in front without
   the pointer (`specs/KO-FINDINGS.md` §8, Q71).
 - Fonts: Liberation Sans regular and bold for Arial, at points × 96 / 72.

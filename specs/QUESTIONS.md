@@ -590,3 +590,29 @@ spot step (0.02, Karus) is cooked as 0.6 a second, at the 30 ticks a second KO's
 frame-scaled code is written for (`30 / s_fFrmPerSec`). The turn keeps the spot's
 theta and turns the spot off while it runs, as 1097 does. Still not 1097's: the
 0.6 s blend into `selected` at start (proposed as its own item).
+
+**RQ-076:** the start blends into `selected` over 1097's 0.6 s (the package's start
+clip blend, `start_blend`), and loading follows the blend and the clip. How the start
+is triggered is Q72.
+
+### Q72 — The select start: on the press, or on the server's answer as 1097
+
+1097 (KO-FINDINGS §8.1, binary) sends the select request on ENTER or the click and
+starts `selected` only when the server's answer says yes (`0043db30` → `0043ea30`),
+and only if the camera is at rest then (state 2). Its click is taken outside the turn,
+but its ENTER (`00440690` → `0043f860`) is taken in any state, so ENTER during the
+turn goes to create or sends the select; the answer then starts no clip, and the next
+ENTER outside the turn loads at once (`0043db70`). Once the answer has come, ENTER
+during `selected` skips it the same way.
+
+The realm starts `selected` on the press and sends `SelectCharacter` with it; its
+server answers by entering the world (or a refusal, which returns the hall to rest).
+
+Options: (a) keep the start on the press, taking ENTER and the click at rest only and
+ignoring them while `selected` plays; (b) start on the server's answer and take
+1097's ENTER paths, including the turn and the skip.
+
+**Default taken (RQ-076):** (a). The realm's answer is world entry, not a separate
+select result, and 1097's ENTER-during-turn path ends in a hall that waits for a
+second ENTER with no clip played, which reads as a fault rather than a feature.
+The visible start (blend, clip, spot, loading after the clip) is 1097's either way.

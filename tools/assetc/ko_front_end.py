@@ -39,6 +39,7 @@ MAX_BLEND = 10.0
 # the start clip (selected) and the rest clip (dummy), as DoProcPreselect and
 # the select (1097: 0043f280, 0043ea30) name them.
 SELECT_CLIPS = 3
+START_CLIP = 1
 # ANI_BREATH (GameDef.h): the idle InventoryChrAnimationInitialize plays.
 BREATH = 0
 CANVAS = (1024, 768)
@@ -249,20 +250,23 @@ def plug_record(assets, textures, name):
         vertices, mesh["indices"], tex, ALPHA_TEST if textures.masked(tex) else 0, material[:3], material[4:7])
 
 
-def model(assets, source, definition, clips, work):
+def model(assets, source, definition, clips, work, own_blends=None):
     """A character for the front end (ko_character.convert's front-end
     switch): the first clip's N3SM, then each further clip's tracks, each
-    length-prefixed, then (version 4) each clip's blend time, the clip
-    record's fTimeBlend: the time CN3Chr::AniCurSet blends into the clip over
-    when the caller names no time of its own (FLT_MIN; 1097 binary: 00447e30
-    reads the record's +0x2c)."""
+    length-prefixed, then (version 4) each clip's blend time: the time the
+    client blends into the clip over. That is the clip record's fTimeBlend,
+    which CN3Chr::AniCurSet takes when the caller names no time of its own
+    (FLT_MIN; 1097 binary: 00447e30 reads the record's +0x2c), or, where
+    own_blends names one for the clip's position, the caller's own."""
     table = character.animations(assets.get(definition["animation"]), unused_word=True)
     blends = []
-    for clip in clips:
+    for at, clip in enumerate(clips):
         if not 0 <= clip < len(table):
             raise ValueError("front-end clip %d past the table's %d clips" % (clip, len(table)))
         blend = table[clip]["blend_seconds"]
-        if not (math.isfinite(blend) and 0 <= blend <= MAX_BLEND):
+        if own_blends and own_blends.get(at) is not None:
+            blend = own_blends[at]
+        if not (isinstance(blend, (int, float)) and math.isfinite(blend) and 0 <= blend <= MAX_BLEND):
             raise ValueError("front-end clip blend time")
         blends.append(blend)
     blobs = []
@@ -547,11 +551,16 @@ def select_scene(assets, textures, config, work):
     look = config["character"]
     if len(look["clips"]) != SELECT_CLIPS:
         raise ValueError("front-end select clips: the hover, start and rest clips")
+    # The start clip's blend: the select's own time (1097 binary: 0043ea30
+    # sets clip 1 with 0.6 s, `push 0x3f19999a` at 0043ea77), not the
+    # record's; the hover and rest clips keep their records' (0043f280 names
+    # FLT_MIN).
     definition = dict(joint=look["joint"], animation=look["animation"], parts=default_parts(assets, look["race"]))
     out = camera_record(camera) + lights(assets, config["lights"]) + f(vector(config["ambient"], 3))
     out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND])
     out += hall(assets, textures, config["hall"])
-    out += model(assets, look["joint"], definition, look["clips"], work / "select")
+    out += model(assets, look["joint"], definition, look["clips"], work / "select",
+                 own_blends={START_CLIP: config["start_blend"]})
     return out + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
 
 

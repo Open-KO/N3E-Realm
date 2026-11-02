@@ -20,7 +20,9 @@
 //   the pointer off the centre rect at rest; `in`, the first frame after it
 //   comes on; `play`, a second later; `hold`, after the clip's end;
 //   `back`, the first frame after it leaves; `rest`, a second and a half
-//   later)
+//   later. RQ-076, after ENTER: `start`, the first frame on the start clip;
+//   `blend`, 0.3 s later, still blending; `started`, a second after `start`,
+//   the clip playing)
 {
   static const char *flow_names = std::getenv("N3E_TEST_FRONT_FLOW");
   static std::vector<std::string> names;
@@ -79,7 +81,9 @@
       // (its clip blends in, plays once and holds the last frame, the spot
       // widens, the info text shows), then off again (the rest clip blends
       // back, the spot narrows to off, the text hides); then ENTER: the new
-      // character, in focus, starts. Run every frame: the blends last 0.3 s.
+      // character, in focus, starts: its start clip blends in over 0.6 s on
+      // its first frame, then plays (RQ-076). Run every frame: the blends last
+      // 0.3 and 0.6 s.
       static int phase = 0;
       static uint64_t phase_at = 0;
       const auto pose = front->front_pose();
@@ -123,6 +127,15 @@
         next();
         last_push = now_ms;
         key(SDLK_RETURN);
+      } else if (phase == 7 && pose.clip == 1) {
+        report("start");
+        next();
+      } else if (phase == 8 && now_ms - phase_at > 300) {
+        report("blend");
+        next();
+      } else if (phase == 9 && now_ms - phase_at > 700) {
+        report("started");
+        next();
       }
     } else if (screen < 5 && !front->showing_message() && now_ms - last_push > 700) {
       last_push = now_ms;

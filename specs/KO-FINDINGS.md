@@ -209,8 +209,22 @@ RQ-075 also read what the turn does to them (binary, the same image):
 | The spot's theta `+0x2d0` is stored only by the constructor (`0043a4e0`, which sets the vtable `0058cd10`; the store at `0043a56c`), by Init (`0043a950`: `0043a9b8`, `0043aabf`), by Select (`0043eabc`) and by `0043f280`: a byte scan of the select proc's code (`0043a000`–`00441000`) for the displacement `0x2d0`. The turn does not reset it, so the next slot's spot comes on at the theta the last one had | `0043a4e0`, `0043a950`, `0043ea30`, `0043f280` | binary |
 | The per-tick steps: KO's frame-scaled code elsewhere scales a per-frame step by `30 / s_fFrmPerSec` (the select's own fade-out, `m_fFadeOut += (30.0f / CN3Base::s_fFrmPerSec) * 1.5f`), so 30 ticks a second is the rate the steps are written for; the realm cooks the spot's 0.02 a tick as 0.6 a second | `GameProcCharacterSelect.cpp` `FadeOutProcess` | source |
 
-Not aligned: Select's 0.6 s blend into `selected` (`0043ea77`); the realm's clip
-starts at once, as before (proposed as its own item).
+RQ-076 read the start (binary, the same image) and aligned the blend into
+`selected`, the rest-only start and the rect tests (`content/front-end.md`,
+"Moradon"):
+
+| Observation | Where | Label |
+|---|---|---|
+| Select sets clip 1 once with its own 0.6 s (`push 0x3f19999a` at `0043ea77`), not `FLT_MIN`, so the record's 0.3 s does not apply; the package cooks the start clip's blend as 0.6 (`start_blend`). During the blend the frame stays on `selected`'s start; the loop count `0043ed20` waits for (`+0x1d0`) grows only when the frame passes the clip's end (`00445bb0`), so loading follows the blend and the whole clip | `0043ea30`, `00445bb0`, `0043ed20` | binary |
+| The setter keeps the frame the old clip was on (`+0x1c8`, read before it clears the frame control) as the previous frame `+0x1d4` when the blend is above 0; it keeps no previous clip or blend weight. The joints blend those two frames by `+0x1d8 / +0x1dc` (`00445e90`, the call to `0041fb30`). A blend begun during another takes the interrupted clip's held start frame, so KO's pose jumps there and blends on; the realm does the same | `00447e30`, `00445e90` | binary |
+| The hover tests the pointer strictly inside the scaled reals (`0043f280`: `w·0.36 < x < w·0.64`, `h·0.44 < y < h·0.86`). The click builds a `RECT` of the same products truncated by `__ftol` (`0043b6f7`–`0043b747`) and asks `PtInRect`, which counts the left and top edges | `0043f280`, `0043b550` | binary |
+| The click is taken only outside state 1 (`0043b6c4`, `+0x2cc`) and with UI operation on (`+0xac`); it calls the inlined `CharacterSelectOrCreate` (`0043f860` elsewhere): create for an empty slot, else the select request. The server's answer (`0043db30`) runs Select `0043ea30` on success, which starts the clip only in state 2, or `0043eb60` on failure (clears `+0x2d9`, shows string 6066). Either path through Select leaves UI operation off and the received flag `+0x2d9` on | `0043b550`, `0043f860`, `0043db30`, `0043ea30` | binary |
+| ENTER: the select UI's key handler (`00440690`, while UI operation is on) calls `0043f860` for `DIK_RETURN` with no state check, so during the turn it goes to create or sends the select, whose answer then starts no clip. The tick's own check at its tail (`0043b550`: no UI key taken, `005471a0`, and the input's `+0x2dc`, the later source's `IsKeyPress(DIK_RETURN)` before `ProcessOnReturn`) calls `0043db70`, which, once the answer has come (`+0x2d9`) and outside the turn, goes straight to the main proc with "Loading data...": a second ENTER skips the clip | `00440690`, `0043db70` | binary |
+
+The realm starts the clip on the press and its server answers by entering the world,
+so it takes ENTER and the click at rest only and ignores them while the clip plays;
+1097's start on the answer, ENTER during the turn and the skipping ENTER are not
+taken (**Q72**).
 
 ## Not re-derived here
 
@@ -228,3 +242,4 @@ notes.
 | Q10 | Wording fixed (above). |
 | Q21 | Unchanged (KO's `+monsummon` is untimed; ours gets a bounded duration). |
 | Q71 | §8.1: 1097, the client whose files the package cooks, plays the hall as (a) does, so (a) is KO's behaviour; its three remaining details aligned (RQ-075). |
+| Q72 | §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. |

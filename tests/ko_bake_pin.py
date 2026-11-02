@@ -262,9 +262,15 @@ CLIENT = Path("assets/ko")
 # rate and the select model's third clip (dummy). Default features 82d75a6a...
 # -> 5d175721...; classic 9c3e3d02... -> 61fc225d...; 1097 5f715c99... ->
 # 9d8fa202.... The plain cooks and the homelands keep their pins.
+# RQ-076 (KO-FINDINGS 8.1, 0043ea30) changed the three --features pins: the select
+# model's start clip blends over the select's own 0.6 s (`start_blend`), not its
+# record's 0.3 s. Against the earlier cooks only that real in front-end.bin
+# (0x3e99999a -> 0x3f19999a), recipe.json and the release index change. Default
+# features 5d175721... -> f89bdc01...; classic 61fc225d... -> 128d73ba...; 1097
+# 9d8fa202... -> 07000937.... The plain cooks and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "5d175721c7f3c698c95ad90bc40f27a699033cb8e803ee6baba147a4b925eaa6"),
+    "features": (["--features"], "f89bdc013b44b0b4fbe1c53ebb4210dbf812af7915639a9a02811d3592a16632"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -285,13 +291,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "61fc225dbf89b93da3ee0951872402ce87409bfd89364880684679724783708f"),
+    "features": (["--features"], "128d73baec694f83a63529ff75cdae4ea80d761de4f34066a9b40ab62d92e89c"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "9d8fa202bfc995738b63aa46cd3ed6dfc8f5d3af17880a61525fcac79e6696df"),
+    "features": (["--features"], "070009372937775298501094d565e0e9fdd10b82646bb05cff161c2a01390348"),
 }
 
 

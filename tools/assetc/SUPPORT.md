@@ -127,7 +127,8 @@ N3FE version 3 (RQ-018) adds the screens' music: each track's MPEG-1/2 Layer III
 frames as the KO file has them (ID3 tags and a cut-short last frame dropped, any
 other irregularity refused), and the track per screen from `front-end.json`'s
 `music` (Q69). N3FE version 4 (RQ-075) adds each model clip's blend time, read
-from its clip record, and the select spot's growth rate (`spot_step` a tick at
-30 ticks a second).
+from its clip record (the select start clip's from `start_blend` instead, the
+select's own 0.6 s, RQ-076), and the select spot's growth rate (`spot_step` a
+tick at 30 ticks a second).
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

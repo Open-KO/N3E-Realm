@@ -268,6 +268,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     } else if (state == Screen::loading || choosing >= 0) {
       state = Screen::select;
       choosing = -1;
+      // Back at rest (1097: state 2) the character in front leaves the start
+      // clip now, for the clip DoProcPreselect sets, so a start right after
+      // the refusal plays the start clip again rather than finding it ended.
+      if (focus < characters_shown()) set_clip(players.at(size_t(focus)), in_front() ? kHover : kRest, -1);
       show_message(detail);
     }
   }
@@ -313,7 +317,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const float cx = (x - ox) / s, cy = (y - oy) / s;
     if (e.type == SDL_EVENT_MOUSE_MOTION) {
       pointer = {cx, cy};
-      screen_pointer = {x / float(std::max(width, 1)), y / float(std::max(height, 1))};
+      screen_pointer = {x, y};
+      screen_size = {width, height};
       return out;
     }
     if (message) {
@@ -346,9 +351,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       pressed = hit(ui, cx, cy);
       if (pressed == FrontAction::realm_list && e.button.clicks >= 2) return act(FrontAction::realm_connect);
       // CGameProcCharacterSelect: a click in the centre of the screen
-      // chooses the character in front (ENTER does the same).
-      screen_pointer = {x / float(std::max(width, 1)), y / float(std::max(height, 1))};
-      if (state == Screen::select && pressed == FrontAction::none && in_front()) return primary();
+      // chooses the character in front (ENTER does the same); primary()
+      // takes it only at rest.
+      screen_pointer = {x, y};
+      screen_size = {width, height};
+      if (state == Screen::select && pressed == FrontAction::none && clicked_front()) return primary();
       return out;
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
@@ -380,7 +387,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     if (state == Screen::login || state == Screen::realms) intro(width, height, now);
     if (state == Screen::select) hall(width, height, dt);
-    // IsAnimEnd: the start clip has played once.
+    // IsAnimEnd: the start clip has played once, after its blend (1097:
+    // 0043ed20 reads the loop count, which 00445bb0 counts only past the
+    // clip's end, and the frame stays on the start during the blend).
     if (state == Screen::select && choosing >= 0 && ended(players.at(size_t(choosing)))) {
       choosing = -1;
       state = Screen::loading;
@@ -428,7 +437,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   bool spot_on = false;
   int info_slot = -1;
   FrontPose front_shown;
-  std::array<float, 2> screen_pointer{-1, -1};  // the pointer as a share of the window
+  std::array<float, 2> screen_pointer{-1, -1};  // the pointer in window pixels
+  std::array<int, 2> screen_size{0, 0};          // the window those pixels are of
   bool pending_create = false;
   std::string name;
   const Characters *list = nullptr;
@@ -539,15 +549,18 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     if (state == Screen::login) return act(FrontAction::login);
     if (state == Screen::realms) return act(FrontAction::realm_connect);
     if (state == Screen::create) return act(FrontAction::create_confirm);
-    if (state == Screen::select && choosing < 0) {
+    // Only at rest: 1097 takes the click outside the turn (0043b550) and
+    // starts the clip only in state 2 (Select 0043ea30); nothing while the
+    // camera turns or the start clip plays.
+    if (state == Screen::select && choosing < 0 && !turning()) {
       Output out;
       if (focus < characters_shown()) {
         // GameProcCharacterSelect: the chosen character plays its "selected"
         // clip; the loading screen follows when it ends.
-        // The select (1097: 0043ea30) widens the spot to its theta. Its 0.6 s
-        // blend into the start clip is not taken here: the clip starts at once.
+        // The select (1097: 0043ea30) sets it once with its own 0.6 s blend
+        // (the package's start blend) and widens the spot to its theta.
         choosing = focus;
-        set_clip(players.at(size_t(focus)), kStart, 0);
+        set_clip(players.at(size_t(focus)), kStart, -1);
         theta = fe.slots[focus].spot.theta;
         spot_on = true;
         out.command = Command::select;
@@ -713,11 +726,25 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       draw_mesh(plugs[i], plug.mesh, vp, detail::mul(model, j));
     }
   }
-  // CGameProcCharacterSelect's centre rect: the character in front.
+  // CGameProcCharacterSelect's centre rect, 0.36-0.64 of the viewport's
+  // width by 0.44-0.86 of its height, on the pointer's whole pixel. The hover
+  // (1097: DoProcPreselect 0043f280) wants the pointer strictly inside the
+  // scaled reals; the click (the tick 0043b550) uses PtInRect on the rect
+  // truncated to whole pixels, so its left and top edges count.
+  static constexpr double kFrontRect[4] = {double(.36f), double(.44f), double(.64f), double(.86f)};
   bool in_front() const {
-    const auto [x, y] = screen_pointer;
-    return x >= .36f && x <= .64f && y >= .44f && y <= .86f;
+    const double w = screen_size[0], h = screen_size[1];
+    const double x = std::floor(screen_pointer[0]), y = std::floor(screen_pointer[1]);
+    return w * kFrontRect[0] < x && x < w * kFrontRect[2] && h * kFrontRect[1] < y && y < h * kFrontRect[3];
   }
+  bool clicked_front() const {
+    const double w = screen_size[0], h = screen_size[1];
+    const double x = std::floor(screen_pointer[0]), y = std::floor(screen_pointer[1]);
+    return x >= std::trunc(w * kFrontRect[0]) && x < std::trunc(w * kFrontRect[2]) &&
+           y >= std::trunc(h * kFrontRect[1]) && y < std::trunc(h * kFrontRect[3]);
+  }
+  // The camera still turning to the slot in focus (1097: state 1).
+  bool turning() const { return std::abs(target_angle() - angle) > 1e-4f; }
   const Scene &clip_scene(size_t scene, size_t clip) const {
     return clips[scene][std::min(clip, clips[scene].size() - 1)];
   }
@@ -740,7 +767,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // changes nothing; a negative blend is the clip's own blend time (FLT_MIN);
   // a blend starts from the frame the previous clip had reached and keeps
   // the new clip on its first frame until it ends; a clip played once holds
-  // its last frame.
+  // its last frame. A blend set during another starts from the frame that
+  // one's clip was held on (its first): KO keeps only the frame, not the
+  // blended pose (00447e30 stores +0x1c8 as the previous frame, +0x1d4, and
+  // the joints blend those two frames, 00445e90), so its pose jumps there.
   void set_clip(Player &p, size_t clip, float blend) {
     if (clip == p.clip) return;
     p.from_time = played(p);
@@ -800,16 +830,17 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // the info text shows only while the pointer is there. While the camera
   // turns (state 1) nothing is ticked and the spot is off (0043b550 turns
   // every light off each tick). Starting (state 3, 0043ed20) ticks the
-  // chosen character's start clip under the full spot.
+  // chosen character's start clip under the full spot: its blend first, on
+  // the clip's first frame, then the clip, whose end (IsAnimEnd) comes after
+  // both.
   void hall(int width, int height, double dt) {
     const float goal = target_angle();
     float d = goal - angle;
     angle += std::clamp(d, -float(dt) * 1.5f, float(dt) * 1.5f);
-    const bool turning = std::abs(goal - angle) > 1e-4f;
     const float widest = fe.slots[focus].spot.theta;
     if (choosing >= 0)
       players.at(size_t(choosing)).elapsed += float(dt);
-    else if (!turning) {
+    else if (!turning()) {
       const bool over = in_front();
       if (focus < characters_shown()) {
         set_clip(players.at(size_t(focus)), over ? kHover : kRest, -1);

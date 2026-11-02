@@ -103,8 +103,9 @@ replace the panels when the client has a Discord realm config.
 - **Scenes.** The intro (camera, lights, the model with its clip and plugs, the moon
   as a screen quad) and the select hall (camera, lights, `character_slots` slots with
   their eye and spot light, the spot's growth rate, the hall meshes, the model with
-  clips 0, 1 and 2 (hover, start, rest), plugs), each model clip with its blend time
-  (N3FE version 4, RQ-075),
+  clips 0, 1 and 2 (hover, start, rest), plugs), each model clip with the time the
+  client blends into it over (N3FE version 4, RQ-075; the record's, or the package's
+  own for the start clip, RQ-076),
   and the create model (the race's own looks joint and animation, `ANI_BREATH`, no
   plugs; N3FE version 2).
 - **Music** (N3FE version 3, RQ-018). Up to 4 tracks of MPEG-1 or MPEG-2 Layer III
@@ -157,7 +158,7 @@ prev/next).
 |---|---|---|
 | login | intro scene looping; login bar | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. |
 | realms | intro; the server group with the realm's name from `realm.json` | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
-| select | hall; up to 3 characters with the realm's player model and default looks, each standing on clip 0's first frame; the one in front, at rest, plays clip 0 (`pre_select`) once while the pointer is in `DoProcPreselect`'s centre rect and holds its last frame, and clip 2 (`dummy`, clip 0's first frame) otherwise, each change blending over the clip's own blend time from the frame reached, the new clip held on its first frame meanwhile; the front slot's spot widens at the package's rate while the pointer is there, narrows when it leaves and is off at 0; the info text (char_info) shows only while the pointer is there. This is the 1097 client's hall for this asset set (KO-FINDINGS §8.1, Q71), not 1298's | ENTER or a click on the character in front → `SelectCharacter`, the spot at its full theta, its clip 1 to the end (`IsAnimEnd`), → loading; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next turns the camera to the next slot (left to right: 1, 0, 2); while it turns nothing is ticked and the spot is off. |
+| select | hall; up to 3 characters with the realm's player model and default looks, each standing on clip 0's first frame; the one in front, at rest, plays clip 0 (`pre_select`) once while the pointer is in `DoProcPreselect`'s centre rect and holds its last frame, and clip 2 (`dummy`, clip 0's first frame) otherwise, each change blending over the clip's own blend time from the frame reached, the new clip held on its first frame meanwhile; the front slot's spot widens at the package's rate while the pointer is there, narrows when it leaves and is off at 0; the info text (char_info) shows only while the pointer is there. This is the 1097 client's hall for this asset set (KO-FINDINGS §8.1, Q71), not 1298's | At rest only (not while the camera turns or the start clip plays): ENTER or a click on the character in front (`PtInRect` on the centre rect) → `SelectCharacter`, the spot at its full theta, its clip 1 blended in over the package's start blend (Moradon: 1097's 0.6 s) on its first frame and played to the end (`IsAnimEnd`, after the blend), → loading; a refusal returns it to the hover or rest clip; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next turns the camera to the next slot (left to right: 1, 0, 2); while it turns nothing is ticked and the spot is off. |
 | create | KO's create screen; the create model breathing in `char_view` (standing, no weapon); name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording; `back` → select. |
 | loading | the loading art; `progress` by real stages: the package and its textures (loaded at start, 2/3), the first `World` (1); `version` shows the client version | the first `World` → in game after the bar shows full. |
 
@@ -255,7 +256,8 @@ KO (`make live-ko`, needs `assets/ko`):
    - on select, with the pointer on the character in front, its clip blends in on its
      first frame, plays once and holds its last frame; off it, the rest clip blends
      back; the spot widens only while the pointer is on it and is off at 0; the info
-     text shows only then (RQ-066, RQ-075);
+     text shows only then (RQ-066, RQ-075); ENTER then blends clip 1 in over 0.6 s on
+     its first frame, under the full spot, before it plays (RQ-076);
    - a kick returns to login with the operator's wording;
    - `character_slots` refuses a fourth character.
 

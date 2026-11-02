@@ -13,7 +13,9 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   pointer off, on and off the character in front: its hover clip blends in on
   its first frame, plays once and holds its last frame, the rest clip blends
   back, the spot widens and narrows to off and the info text shows only while
-  the pointer is on it; RQ-066, RQ-075) -> start -> loading -> the world.
+  the pointer is on it; RQ-066, RQ-075) -> start (the start clip blends in over
+  1097's 0.6 s on its first frame under the full spot, then plays; RQ-076) ->
+  loading -> the world.
 - An operator kick (admin API) returns the client to the login screen with the
   operator's wording in the message box.
 - `character_slots` (3, front-end.bin) refuses a fourth character at the wire,
@@ -212,10 +214,11 @@ try:
     # leaves and is off at 0; the info text shows only while it is on.
     hovers = {h["phase"]: h for h in ({k: v for k, v in (kv.split("=") for kv in f.split()[1:])}
                                       for f in flow if f.startswith("hover "))}
-    assert list(hovers) == ["out", "in", "play", "hold", "back", "rest"], flow
+    assert list(hovers) == ["out", "in", "play", "hold", "back", "rest", "start", "blend", "started"], flow
     v = {phase: {k: (int(x) if k in ("clip", "spot", "info") else float(x)) for k, x in h.items() if k != "phase"}
          for phase, h in hovers.items()}
-    out_, in_, play, hold, back, rest = (v[p] for p in ("out", "in", "play", "hold", "back", "rest"))
+    out_, in_, play, hold, back, rest, start, blend, started = (
+        v[p] for p in ("out", "in", "play", "hold", "back", "rest", "start", "blend", "started"))
     widest, rate = 0.5, 0.02 * 30
     assert out_["clip"] == 2 and out_["blend"] == 1 and out_["theta"] == 0, v
     assert out_["spot"] == 0 and out_["info"] == 0, v
@@ -231,11 +234,22 @@ try:
     assert widest - rate * 0.25 <= back["theta"] < widest and back["spot"] == 1, v
     assert rest["clip"] == 2 and rest["blend"] == 1 and abs(rest["t"] - rest["end"]) < 1e-4, v
     assert rest["theta"] == 0 and rest["spot"] == 0 and rest["info"] == 0, v
+    # RQ-076 (KO-FINDINGS 8.1, 0043ea30): ENTER sets the start clip (selected)
+    # with the select's own 0.6 s blend, not the record's 0.3 s: 0.3 s in it is
+    # still blending, held on its first frame; once the blend is done it plays.
+    # The spot is at its full theta throughout.
+    assert start["clip"] == 1 and start["t"] == 0 and 0 < start["blend"] < 1, v
+    assert start["end"] > 2 and blend["end"] == started["end"] == start["end"], v
+    assert blend["clip"] == 1 and blend["t"] == 0 and 0.45 < blend["blend"] < 1, v
+    assert started["clip"] == 1 and started["blend"] == 1 and 0.2 < started["t"] < 1.2 < started["end"], v
+    for h in (start, blend, started):
+        assert h["theta"] == widest and h["spot"] == 1 and h["info"] == 0, v
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
     print(f"PASS front-end flow: one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box, "
           "Fresh created) -> select (the front character's hover clip blends in on its first frame, plays once and holds, the rest clip blends back; "
-          "the spot widens and the info text shows only while the pointer is on it) -> loading -> world; a kick returns to login with the operator's wording; "
+          "the spot widens and the info text shows only while the pointer is on it) -> start (blends in over 0.6 s, then plays) -> loading -> world; "
+          "a kick returns to login with the operator's wording; "
           "one music stream from login to loading")
     assert server.poll() is None, "server exited"
     print("PASS KO front-end flow")

@@ -11,7 +11,8 @@ message Envelope { oneof body { Handshake handshake = 1; Input input = 2; Snapsh
     FriendRequest friend_request = 38; FriendResult friend_result = 39;
     FriendPresenceQuery friend_presence_query = 40; FriendPresence friend_presence = 41;
     PartyRequest party_request = 42; PartyState party_state = 43; PartyResult party_result = 44; Rest rest = 45;
-    DiscordLogin discord_login = 46; SessionLogin session_login = 47; LoginResult login_result = 48; } }
+    DiscordLogin discord_login = 46; SessionLogin session_login = 47; LoginResult login_result = 48;
+    SessionLogout session_logout = 49; } }
 
 // Phase 2 world protocol. Legacy Input/Snapshot remain golden fixtures only.
 // Movement is one 50ms step; seq starts at 1, strictly increases, never wraps.
@@ -23,6 +24,10 @@ message Login { string account = 1; string password = 2; }
 message DiscordLogin { string code = 1; string code_verifier = 2; string redirect_uri = 3; string client_label = 4; }
 message SessionLogin { bytes token = 1; string client_label = 2; }
 message LoginResult { bytes token = 1; uint64 expires_at_unix = 2; string discord_id = 3; string discord_name = 4; }
+// Spec 02 logout: the player ends the session `token` names. Accepted where the
+// logins are; answered LoggedOut whether or not the session still existed, and the
+// socket stays open for a login.
+message SessionLogout { bytes token = 1; }
 message Characters { repeated Character characters = 1; }
 // Spec 11: `level` as the HUD shows it, for the front end's select screen.
 message Character { uint64 id = 1; string name = 2; uint32 level = 3; }

@@ -681,3 +681,26 @@ check in `n3e-server` (it would compare the package with itself). The cooked
 other client needs); its layouts and music are still 1298's until the format
 carries 1097's (Q57).
 
+
+### Q74 — Where the player logs out, and what a logout ends
+
+The maintainer's playtest (2026-11-01, RQ-068): once logged in with Discord there is
+no way to log out. The KO screens stay as KO draws them (Q61), so the logout cannot
+be a new button, and the login bar's unbound Option and Registration cannot be
+relabelled into one. Options: bind an existing KO button (Registration, or the
+select screen's Back) to a logout, which changes what KO's button does without
+saying so; an in-game menu entry; a command-line logout off the KO screens.
+**Default taken (RQ-068):** off the KO screens. `realm-launcher --logout` starts
+the client with `--logout` (spec 04); the client, which owns `session.json`,
+deletes it at once, sends `SessionLogout` (wire 49, spec 02) once connected, and
+waits on KO's login screen. The next Discord login in that process asks with
+`prompt=consent`, so Discord's authorize page shows which Discord account the
+browser is logged in as and lets the player switch. KO's select screen Back keeps
+its meaning (return to login; the stored session logs in again). A logout ends only
+this computer's session, not the account's others (the architecture's "Player
+logout → delete that one row"); ending all of them stays an operator's kick. The
+token is forgotten before the realm answers, so a logout that cannot reach the
+realm (offline, refused, or an update that exits 3 first) still logs this computer
+out; the realm's row then lapses at its expiry, a kick or the account's cap, and
+no copy of its token remains here. Revisit for an in-game logout once the game has
+a menu that could carry it without changing a KO screen.

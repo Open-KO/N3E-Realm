@@ -6,12 +6,13 @@ and the game client (after migration, spec 09).
 ## Purpose
 
 Replace account/password login with Discord identity, issue a long-lived revocable
-session token, and give operators a kick/ban that actually ends a live connection.
+session token, let the player log out (end that token, so the next start asks
+Discord), and give operators a kick/ban that actually ends a live connection.
 
 ## Scope
 
 In: OAuth2 code exchange (server), account record keyed by Discord user id, session
-mint / verify / revoke, concurrency cap, bans, the client-side OAuth flow and token
+mint / verify / revoke, the player's logout, concurrency cap, bans, the client-side OAuth flow and token
 storage. Out: Discord role sync into the game; guild-membership enforcement (Q4);
 character management (`Characters` / `CreateCharacter` / `SelectCharacter` are
 unchanged after login); attack-disable (deferred, Q14). Mute is in scope (spec 03 routes; `muted_until` below).
@@ -74,9 +75,10 @@ no migration of players from passwords to Discord: the realm launches with Disco
 message DiscordLogin { string code = 1; string code_verifier = 2; string redirect_uri = 3; string client_label = 4; }
 message SessionLogin { bytes token = 1; string client_label = 2; }
 message LoginResult  { bytes token = 1; uint64 expires_at_unix = 2; string discord_id = 3; string discord_name = 4; }
+message SessionLogout { bytes token = 1; }
 ```
 
-Added to `Envelope.body` as 46, 47 and 48. Both login messages are accepted
+Added to `Envelope.body` as 46, 47, 48 and 49 (`SessionLogout`, RQ-068). Both login messages are accepted
 exactly where `Login` is today; a refused one leaves the socket able to try again. On
 success the server sends `LoginResult` **then** `Characters`, and the flow continues
 unchanged. A `SessionLogin`'s `LoginResult` has an empty `token` (the client keeps the
@@ -88,8 +90,15 @@ one it holds) and the session's `expires_at_unix` (Q36). Failures use the existi
 (transport failure, timeout, a 5xx or 429), `rejected`, `bad_response`, or Discord's own
 OAuth `error` code (`invalid_grant`, …), never its free text. The throttle answers
 `RATE_LIMITED` `login rate limit`; more than 16 exchanges in flight, `RATE_LIMITED`
-`discord login busy`. Goldens `golden-discord-login`, `golden-session-login` and
-`golden-login-result` are in `protocol/`, written by both languages (`tests/check.py`).
+`discord login busy`. Goldens `golden-discord-login`, `golden-session-login`,
+`golden-session-logout` and `golden-login-result` are in `protocol/`, written by both
+languages (`tests/check.py`).
+
+`SessionLogout` (the player's logout, below) is accepted where the login messages
+are, before a login. It is answered with the existing `LoggedOut {}` (13), whether
+or not a session had that token, and the socket stays open for a login. Its refusals
+name request 49: `Error{UNAUTHENTICATED, "dependency", 49}` and
+`Error{RATE_LIMITED, "login rate limit", 49}`.
 
 ### Logical operations (server)
 
@@ -124,6 +133,13 @@ OAuth `error` code (`invalid_grant`, …), never its free text. The throttle ans
 
 Expiry is checked **only here**. A live connection whose token ages out is not kicked.
 
+**`session_logout(token)`** (RQ-068) — the player's own logout: delete the one
+`sessions` row `sha256(token)` names, if there is one, and answer `LoggedOut`. It is
+the same answer for a token that is unknown, already ended, expired or malformed, so
+it says nothing a `SessionLogin` would not. No live connection is closed: the
+client sends it before it logs in again. One log line names the account, never the
+token.
+
 **`revoke_account(account_id, kick)`** — delete all sessions; if `kick`, close every
 live connection for the account (any character, or none selected yet) within one tick,
 with `Error{UNAUTHENTICATED, detail: "kicked:<reason>"}` sent first if output permits.
@@ -139,10 +155,10 @@ later ones silently. The mute is read at login, so one set while offline applies
 columns; `ban` calls `revoke_account(kick=true)`. Exposed via spec 03.
 
 The existing Redis login throttle (`10/account/min`, `30/IP/min`, `cache.rs`) applies
-to both new messages: the "account" key is `sha256(discord_id)` for `DiscordLogin` and
-`sha256(token_hash)` for `SessionLogin`. A `DiscordLogin`'s Discord id is known only
+to the new messages: the "account" key is `sha256(discord_id)` for `DiscordLogin` and
+`sha256(token_hash)` for `SessionLogin` and `SessionLogout`. A `DiscordLogin`'s Discord id is known only
 after the exchange, so its IP is counted before step 1 and its account after step 2
-(Q34); a `SessionLogin` counts both at once.
+(Q34); a `SessionLogin` or `SessionLogout` counts both at once.
 
 ### Client-side OAuth flow
 
@@ -163,13 +179,34 @@ application. Implemented in `client/network/discord_login.{h,cpp}`.
    `SO_REUSEADDR`, so a retry within a minute is not pushed off a port by the last
    attempt's `TIME_WAIT` (Linux semantics; Windows needs `SO_EXCLUSIVEADDRUSE`, M4b).
 4. Open the system browser at `https://discord.com/oauth2/authorize?client_id=…&response_type=code&scope=identify&redirect_uri=…&state=…&code_challenge=…&code_challenge_method=S256&prompt=none`
-   (`xdg-open` on Linux; the address is always printed to stdout as well).
+   (`prompt=consent` after a logout, below; `xdg-open` on Linux; the address is always printed to stdout as well).
    Show "Waiting for Discord…"; ESC cancels; 5-minute timeout. The listener is polled
    once a frame, never blocking it.
 5. Serve requests until one carries the expected `state`: a wrong `state` is answered
    `400` and the wait goes on; the right one (or Discord's `error=`) gets a tiny "You
    can close this tab" page and closes the listener.
 6. Send `DiscordLogin`. On `LoginResult`, write `session.json`.
+
+**Logout** (RQ-068, Q74). `n3e-client … --realm realm.json --logout` (what
+`realm-launcher --logout` starts, spec 04) logs out before the login screen does
+anything else:
+
+1. Read the stored token, expired or not, and delete `session.json` at once: from
+   here on this computer holds no login, whatever the realm answers.
+2. Once connected, send `SessionLogout{token}` before any login; after a reconnect,
+   again, until the realm answers. A Login press meanwhile is held, as a press while
+   connecting is.
+3. On `LoggedOut`, print `client: logged out; the realm ended this computer's
+   session` and wait for the Login press. On a refusal (request 49, or none from an
+   older realm that does not know the message), show "This computer no longer keeps
+   your login, but the realm could not end the session (<detail>). It ends when it
+   expires." (KO's message box on the KO screens) and wait for the press.
+4. The Discord login after a logout, in that process, asks with `prompt=consent`
+   instead of `prompt=none`: Discord shows its authorize page, with the Discord
+   account the browser is logged in as, so the player can switch accounts there.
+
+`--logout` without a realm config naming a Discord application is refused at start.
+There is no logout on the KO screens (Q61); the client exits as usual from them.
 
 Token storage: `$XDG_CONFIG_HOME/n3e-realm/<realm.id>/session.json` (`$HOME/.config`
 without it; Windows `%APPDATA%` in M4b), mode `0600`, written through a temporary file
@@ -192,7 +229,9 @@ account is blocked until <when|further notice>: <reason>." and deletes the file.
   mismatch → "Your client is version X; the realm requires Y. Close this window and run
   the launcher to update."
 - `prompt=none` means a player already logged into Discord in their browser sees no
-  consent screen on re-login; Discord still shows it the first time.
+  consent screen on re-login; Discord still shows it the first time. After a logout the client asks
+  with `prompt=consent`, so Discord shows that screen and its account, which the
+  player can switch.
 
 ## Failure modes
 
@@ -202,6 +241,8 @@ account is blocked until <when|further notice>: <reason>." and deletes the file.
 | Postgres down | Login fails closed (`dependency`). Matches the server's existing admission rule. |
 | Token file unreadable | Fall back to the Discord flow. |
 | Player revokes the app in Discord settings | Nothing until expiry; then re-prompt. |
+| `--logout` while the realm cannot be reached, refuses it, or wants an update (exit 3) | `session.json` is already gone, so this computer is logged out. The realm's row lapses at its expiry, an operator's kick or ban, or the account's cap; nobody holds its token (Q74). |
+| `--logout` with no `session.json` | Nothing is sent; the next login still asks with `prompt=consent`. |
 | Two first logins race | Upsert on `discord_id` is idempotent. |
 | Browser fails to open | Show the URL for copy-paste. |
 
@@ -231,16 +272,25 @@ account is blocked until <when|further notice>: <reason>." and deletes the file.
 8. **Throttle.** 31 `SessionLogin`s from one IP in a minute → the 31st is `RATE_LIMITED`.
 9. **No secrets in logs.** Grep for the token, the Discord access token: zero hits.
 10. **Goldens.** New message goldens round-trip in C++ and Rust.
+11. **Logout.** `SessionLogout` with a live token → `LoggedOut`, that row gone, the
+    token `revoked`, the account's other sessions working, and the socket still able
+    to log in; an unknown, repeated or malformed token → `LoggedOut`. The client with
+    `--logout`: `session.json` gone, the row gone, the next login asks Discord with
+    `prompt=consent`, and the restart after it logs in without the browser.
 
-Evidence (M3): `tests/discord_login_live.py` runs tests 1–9 against a loopback stand-in
+Evidence (M3): `tests/discord_login_live.py` runs tests 1–9 and 11 against a loopback stand-in
 for Discord's OAuth2 API (`N3E_DISCORD_API`) that checks the client secret and the PKCE
 verifier, plus the account routes, mute, the events and the start-up refusals; its
 graphical branch runs the real test client through realm.json, the printed authorize
 address, the loopback callback, `session.json`, a restart without Discord and a
-server-side expiry. `tests/check.py` covers test 10; `build/client/n3e-login-check` the
-client's helpers. Test 1 **against a real Discord test application** is not yet run: it
-needs a browser and the maintainer's application (README, "Discord login").
+server-side expiry, then a `--logout` run (test 11). `tests/check.py` covers test 10;
+`build/client/n3e-login-check` the client's helpers, including the logout's order (the
+file first, the message once connected and again after a reconnect, a press held,
+`prompt=consent` after it, a refusal shown). Test 1 **against a real Discord test application** is not yet run: it
+needs a browser and the maintainer's application (README, "Discord login"); so does
+the account switch on Discord's own `prompt=consent` page (`docs/manual-testing.md`
+L13).
 
 ## Open questions
 
-Q4.
+Q4, Q74.

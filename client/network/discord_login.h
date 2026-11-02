@@ -49,7 +49,10 @@ struct Pkce {
   std::string verifier, challenge, state;
 };
 Pkce make_pkce();
-std::string authorize_url(const std::string &client_id, const std::string &redirect, const Pkce &);
+// `consent`: prompt=consent instead of prompt=none, so Discord shows its authorize
+// page (and who is logged in there) even to a player who authorized before.
+std::string authorize_url(const std::string &client_id, const std::string &redirect, const Pkce &,
+                          bool consent = false);
 // What a refusal's detail means for the player (spec 02 wording), or "" for none.
 std::string player_text(const std::string &detail);
 
@@ -78,7 +81,7 @@ bool open_browser(const std::string &url);
 // Discord" (ENTER), the browser, the code. `update` returns a message to send.
 class Flow {
 public:
-  enum class Phase { start, idle, session, browser, code, done, stopped };
+  enum class Phase { start, idle, session, logout, browser, code, done, stopped };
   Flow(RealmConfig realm, bool launch_browser) : realm(std::move(realm)), launch(launch_browser) {}
   std::optional<Envelope> update(const WorldState &, bool start, bool cancel, int64_t now);
   const std::string &status() const { return text; }
@@ -87,13 +90,20 @@ public:
   uint64_t alerts() const { return alerts_; }
   Phase phase() const { return phase_; }
   void reset();
+  // Spec 02 logout (--logout): forgets this machine's session now; once connected,
+  // SessionLogout asks the realm to end it (again after a reconnect until answered).
+  // The Discord login after it asks with prompt=consent, so the player sees who is
+  // logged in to Discord and may switch accounts there.
+  void logout();
 
 private:
   RealmConfig realm;
   bool launch;
   Phase phase_ = Phase::start;
   std::string text = "Connecting";
-  uint64_t refusals = 0, results = 0, alerts_ = 0;
+  uint64_t refusals = 0, results = 0, logouts = 0, alerts_ = 0;
+  std::string revoke; // the forgotten token, until the realm answers its SessionLogout
+  bool consent = false;
   Pkce pkce;
   std::unique_ptr<Callback> callback;
   std::chrono::steady_clock::time_point browser_until{};

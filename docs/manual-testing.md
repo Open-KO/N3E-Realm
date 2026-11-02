@@ -88,6 +88,7 @@ KO's sizes, and `--fullscreen` for full screen at that size (Q62).
 | L10 | Discord: `/ban` yourself for 30m, then start the game | "Your account is blocked until … UTC: <reason>."; no login. |
 | L11 | Discord: `/unban`, start the game | The browser flow again (a ban revokes the session), then logged in. |
 | L12 | Discord: `/mute` yourself for 30m, chat in game; `/unmute`, chat again | The game refuses the chat line while muted (note its wording); it goes through after. |
+| L13 | Close the game; the launcher command again with `--logout` | KO's login screen, and the console prints `client: logged out; the realm ended this computer's session`. **Login** opens Discord's authorize page again (not skipped), naming the Discord account the browser is logged in as; switch accounts there and **Authorize**: the server list, as the other account (no characters yet). Close and run the launcher without `--logout`: no browser, logged in as the account you chose (RQ-068). |
 
 ## Windows: the client on a real GPU
 
@@ -110,7 +111,7 @@ publisher (they are unsigned, Q26): **More info → Run anyway**.
 | W3 | Connect, create a character, enter the world, walk and run | As L3–L5; note the frame rate if it feels slow. |
 | W4 | Close; `play.bat` again | Logs in without the browser and opens on the server list. |
 | W5 | Discord: `/kick` yourself | Back on the login screen with the disconnect message box, as L9. |
-| W6 | `forget-login.bat`, then `play.bat` | The browser flow again. |
+| W6 | `play.bat --logout`, **Login** | Discord's authorize page again, as L13. (`forget-login.bat` only deletes the token here; the realm keeps the session until it expires.) |
 | W7 | Command prompt in the kit: `realm-launcher.exe --version` | `realm-launcher … (windows-x86_64)`. |
 
 If the game says it cannot connect, the Linux firewall is the usual cause. Docker

@@ -189,7 +189,9 @@ target/release/realm-launcher --add-realm my-fork https://example.org/realm/mani
 target/release/realm-launcher --realm my-fork
 ```
 
-`--check` lists what would change; `--no-update` starts what is installed. A fork
+`--check` lists what would change; `--no-update` starts what is installed; `--logout`
+logs out of the realm (the client forgets its session token and the realm ends it), so
+Login asks Discord again and offers to switch accounts. A fork
 builds its own default with `REALM_DEFAULT_NAME` and `REALM_DEFAULT_MANIFEST` set at
 compile time.
 

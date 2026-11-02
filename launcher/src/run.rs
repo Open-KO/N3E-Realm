@@ -38,6 +38,8 @@ pub struct Options {
     /// KO's window sizes (spec 04); the client opens at 1280x1024 without one.
     pub window: Option<String>,
     pub fullscreen: bool,
+    /// Spec 02 logout: the client forgets its session and ends it on the realm.
+    pub logout: bool,
 }
 
 /// The window sizes KO is drawn for.
@@ -86,12 +88,18 @@ pub fn parse(args: &[String]) -> Result<Options, String> {
                 i += 1;
             }
             "--fullscreen" => o.fullscreen = true,
+            "--logout" => o.logout = true,
             other => return Err(format!("unknown argument `{other}`")),
         }
         i += 1;
     }
     if o.realm.is_some() && o.manifest.is_some() {
         return Err("--realm and --manifest are alternatives".into());
+    }
+    if o.logout && (o.check || o.no_start) {
+        return Err(
+            "--logout starts the client, which logs out; not with --check or --no-start".into(),
+        );
     }
     Ok(o)
 }
@@ -325,6 +333,10 @@ fn start(dirs: &Dirs, m: &Manifest, o: &Options) -> i32 {
     }
     if o.fullscreen {
         cmd.arg("--fullscreen");
+    }
+    // The client owns session.json (spec 02); the launcher only passes the request.
+    if o.logout {
+        cmd.arg("--logout");
     }
     println!("Starting {} (client {})", m.realm.name, m.client.version);
     match cmd.status() {
@@ -667,6 +679,10 @@ mod tests {
         assert!(o.window.as_deref() == Some("1024x768") && o.fullscreen);
         assert!(parse(&args(&["--fixed-window", "1280x800"])).is_err());
         assert!(parse(&args(&["--fixed-window"])).is_err());
+        let o = parse(&args(&["--realm", "a", "--no-update", "--logout"])).unwrap();
+        assert!(o.logout && o.no_update);
+        assert!(parse(&args(&["--logout", "--check"])).is_err());
+        assert!(parse(&args(&["--logout", "--no-start"])).is_err());
     }
 
     #[test]

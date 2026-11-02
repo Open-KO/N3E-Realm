@@ -11,8 +11,10 @@ intentionally tiny and boring because it also updates itself.
 ## Scope
 
 In: manifest format; fetch/verify/install of launcher, client, content; self-update;
-starting the client; surfacing "update required"; realm profiles. Out: authentication
-(the client does the Discord flow, spec 02; the Launcher only hands it the realm config); a UI beyond a small progress window / console; mods; settings; multiple
+starting the client; surfacing "update required"; realm profiles; passing the
+player's logout to the client. Out: authentication
+(the client does the Discord flow and the logout, spec 02; the Launcher only hands it
+the realm config and the request); a UI beyond a small progress window / console; mods; settings; multiple
 realms (one realm is hardcoded by hostname; a second realm is a second manifest URL).
 
 ## Interfaces
@@ -144,7 +146,14 @@ realm-launcher --manifest URL       # one-off manifest URL (dev realms; not save
 realm-launcher --ca PATH            # pass through to the client (dev only)
 realm-launcher --fixed-window SIZE  # KO's window size: 1024x768, 1280x1024 or 1600x1200
 realm-launcher --fullscreen         # fullscreen at that size (1280x1024 without one)
+realm-launcher --logout             # log out of the realm, then play: the next login asks Discord (spec 02)
 ```
+
+`--logout` (RQ-068) updates as usual and starts the client with `--logout`, which
+forgets the stored session, ends it on the realm and shows the login screen; Login
+then asks Discord, offering to switch accounts. It combines with `--realm`,
+`--manifest` and `--no-update`; with `--check` or `--no-start` (which start no
+client) it is a usage error, exit `2`.
 
 Exit codes: `0` client exited normally; `2` usage (unknown option, bad profile file);
 `10` network error with nothing installed;
@@ -160,7 +169,7 @@ already running" and exits `0`.
 
 ```
 n3e-client <content dir> --realm <realms/<id>/realm.json> [--ca PATH]
-           [--fixed-window SIZE [--fullscreen]]
+           [--fixed-window SIZE [--fullscreen]] [--logout]
 ```
 
 With `--realm` the client opens a fixed window at one of KO's sizes (1024x768,
@@ -170,8 +179,9 @@ size, which the monitor must offer.
 
 The first positional is the content package directory (client convention). `--realm`
 replaces `--connect`: the client reads host, port and `discord_client_id` from it (and
-keeps `--connect` for dev). The Launcher passes nothing about authentication; the
-client owns `session.json` (spec 02).
+keeps `--connect` for dev). The Launcher passes nothing about authentication but the
+player's `--logout`; the client owns `session.json` (spec 02). A client older than
+the logout ignores the flag; a Release ships launcher and client together.
 
 Client exit codes the Launcher recognises: `0` normal; `3` "update required"
 (handshake refused with `VERSION` or `CONTENT`, Q10). The client prints why to stderr
@@ -282,8 +292,10 @@ hotbars and panels under `%LOCALAPPDATA%\n3e`. It trusts the Windows `ROOT` stor
 10. **Lock.** Two concurrent launches → one client process.
 11. **Profiles.** `--add-realm` a second manifest; `--realm` it; the client receives that
     realm's `realm.json`; a manifest whose `realm.id` changes is refused.
+12. **Logout.** `--logout` reaches the client's argv; with `--no-start` it is exit 2
+    and no client starts.
 
-Evidence: `tests/launcher_live.py` (`make live` suite `launcher_live`) runs 1–11 against
+Evidence: `tests/launcher_live.py` (`make live` suite `launcher_live`) runs 1–12 against
 releases on a loopback file server, with a stub client, plus refusals of an unknown
 schema, a client archive entry `../evil`, and plain http off this machine. Its graphical
 branch puts the real test client and the `demo` package in a release, starts a native
@@ -293,4 +305,4 @@ server, and checks the client connects and starts the Discord login; then it pub
 
 ## Open questions
 
-Q10, Q26.
+Q10, Q26, Q74.

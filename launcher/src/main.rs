@@ -6,7 +6,7 @@ fn usage() -> ! {
     eprintln!(
         "realm-launcher [--realm NAME] [--check] [--no-update] [--no-start] \
          [--add-realm NAME URL] [--manifest URL] [--ca PATH] \
-         [--fixed-window 1024x768|1280x1024|1600x1200] [--fullscreen] [--version]"
+         [--fixed-window 1024x768|1280x1024|1600x1200] [--fullscreen] [--logout] [--version]"
     );
     std::process::exit(run::USAGE)
 }

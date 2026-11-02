@@ -31,6 +31,7 @@ pub mod request {
     pub const FRIEND_PRESENCE: u32 = 40;
     pub const PARTY: u32 = 42;
     pub const REST: u32 = 45;
+    pub const SESSION_LOGOUT: u32 = 49;
 }
 /// An Error that answers no single request: handshake, login and connection
 /// limits (`request` 0).
@@ -230,6 +231,7 @@ mod refusal_tests {
             (request::FRIEND_PRESENCE, Body::FriendPresenceQuery(Default::default())),
             (request::PARTY, Body::PartyRequest(Default::default())),
             (request::REST, Body::Rest(Default::default())),
+            (request::SESSION_LOGOUT, Body::SessionLogout(Default::default())),
         ] {
             assert_eq!(tag(body.clone()), want, "{body:?}");
         }
@@ -417,6 +419,39 @@ async fn login(
         _ => unreachable!("only login bodies reach login()"),
     }
 }
+/// Spec 02 logout: `SessionLogout` deletes the session its token names and is
+/// answered `LoggedOut`; refusals name request 49. Throttled as `SessionLogin`.
+async fn logout(world: &WorldService, l: wire::SessionLogout, ip: &str, ready: &crate::persistence::Health) -> Envelope {
+    use crate::{cache, sessions};
+    const REQUEST: u32 = request::SESSION_LOGOUT;
+    if !ready.ready() {
+        return refusal(5, REQUEST, "dependency");
+    }
+    // The account key is the token's stored hash, as for SessionLogin.
+    let key = openssl::sha::sha256(&l.token);
+    match cache::throttle(&world.cache, world.owner.realm.as_str(), Some(&key), Some(ip)).await {
+        Err(_) => return refusal(5, REQUEST, "dependency"),
+        Ok(false) => return refusal(4, REQUEST, "login rate limit"),
+        Ok(true) => {}
+    }
+    match sessions::session_logout(&world.db, l.token).await {
+        Ok(ended) => {
+            if let Some(account) = ended {
+                logged_out(&format!("session ended by its player: account {account}"));
+            }
+            Envelope { body: Some(Body::LoggedOut(wire::LoggedOut {})) }
+        }
+        Err(e) => {
+            login_refused(ip, &format!("session logout: {e}"));
+            refusal(5, REQUEST, "dependency")
+        }
+    }
+}
+/// One line per player logout, bounded like the refusals.
+fn logged_out(line: &str) {
+    static LOGOUTS: std::sync::Mutex<Lines> = std::sync::Mutex::new(Lines { window: None, lines: 0, skipped: 0 });
+    bounded(&LOGOUTS, line.to_string(), "logouts");
+}
 #[allow(clippy::too_many_arguments)]
 async fn peer(
     t: TcpStream,
@@ -563,6 +598,7 @@ async fn peer(
                         }
                     }
                 }
+                Some(Body::SessionLogout(l)) if account.is_none() => Some(logout(&world, l, &ip, &ready).await),
                 Some(Body::CreateCharacter(c)) if account.is_some() && selected.is_none() => {
                     match world
                         .db

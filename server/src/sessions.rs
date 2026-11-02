@@ -253,6 +253,21 @@ pub async fn session_login(
     .await
 }
 
+/// Spec 02 `session_logout`: the player's own logout deletes that one session. The
+/// account it belonged to, or None when no session had that token (already ended,
+/// expired and cleaned, or never minted): the answer is the same either way.
+pub async fn session_logout(db: &Database, token: Vec<u8>) -> Result<Option<i64>> {
+    if token.len() != 32 {
+        return Ok(None);
+    }
+    let hash = openssl::sha::sha256(&token);
+    db.call(move |c| {
+        Ok(c.query_opt("DELETE FROM sessions WHERE token_hash=$1 RETURNING account_id", &[&&hash[..]])?
+            .map(|r| r.get(0)))
+    })
+    .await
+}
+
 /// An account's mute, read at a legacy login (a Discord or session login reads it
 /// with the session).
 pub async fn mute(db: &Database, account: i64) -> Result<Option<Sanction>> {

@@ -98,6 +98,14 @@ def session_login(peer, token, label="test-host"):
     peer.send(47, blob(1, token) + blob(2, label))
 
 
+def session_logout(peer, token):
+    peer.send(49, blob(1, token))
+
+
+def count_sessions(who):
+    return sql(f"SELECT count(*) FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE a.discord_id='{who['id']}'")
+
+
 def sql(query):
     return run("docker", "exec", name, "psql", "-U", "n3e", "-d", "n3e", "-Atc", query).stdout.strip()
 
@@ -290,6 +298,28 @@ try:
     count = sql(f"SELECT count(*) FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE a.discord_id='{cap['id']}'")
     assert count == "5", count
     print("PASS 4 cap: six sessions -> the oldest revoked, five work, five rows")
+
+    # Logout (spec 02 session_logout): SessionLogout ends that one session and is
+    # answered LoggedOut on an open socket, whether or not the session still existed;
+    # the token is then revoked, the account's other sessions keep working, and a
+    # login on the same socket still succeeds.
+    p = connect("127.0.0.13")
+    session_logout(p, minted[1])
+    assert p.until(13, 4, seconds=5)[0] == 13
+    assert sql(f"SELECT count(*) FROM sessions WHERE token_hash=sha256('\\x{minted[1].hex()}'::bytea)") == "0"
+    assert count_sessions(cap) == "4"
+    for again in [minted[1], secrets.token_bytes(32), b"short"]:
+        session_logout(p, again)
+        assert p.until(13, 4, seconds=5)[0] == 13, again
+    session_login(p, minted[1])
+    assert refusal(p) == (5, "revoked")
+    session_login(p, minted[2])
+    receive_login(p)
+    p.s.close()
+    assert count_sessions(cap) == "4"
+    assert "session ended by its player: account" in (out / "server.log").read_text(errors="replace")
+    print("PASS logout: SessionLogout -> LoggedOut, that one row gone and the token revoked, the other four work; "
+          "an unknown, repeated or malformed token is answered the same; the socket can still log in")
 
     # Discord failures: a wrong verifier (PKCE) and a slow API.
     p = connect("127.0.0.14")
@@ -515,12 +545,12 @@ try:
                                           "port": listen, "discord_client_id": CLIENT_ID}))
         session_json = home / "config/n3e-realm/test-realm/session.json"
 
-        def client(run_name, browse):
+        def client(run_name, browse, *extra):
             """Run the client; `browse` plays the browser on the address it prints."""
             log_path = out / f"client-{run_name}.log"
             proc = subprocess.Popen(
                 ["build/client/n3e-test-client", str(package), "--realm", str(realm_json),
-                 "--ca", "deploy/local/ca.pem", "--auto-login", "--world-smoke", "10"],
+                 "--ca", "deploy/local/ca.pem", "--auto-login", "--world-smoke", "10", *extra],
                 env={**env, "XDG_CONFIG_HOME": str(home / "config"), "N3E_TEST_NO_BROWSER": "1"},
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
             lines, urls = [], []
@@ -533,14 +563,14 @@ try:
             log_path.write_text("".join(lines))
             text = "".join(lines)
             assert code == 0 and "ENTERED map" in text, (run_name, code, text[-3000:])
-            return urls
+            return urls, text
 
-        def browser(url):
+        def browser(url, prompt="none"):
             parsed = urllib.parse.urlsplit(url)
             q = dict(urllib.parse.parse_qsl(parsed.query))
             assert f"{parsed.scheme}://{parsed.netloc}{parsed.path}" == "https://discord.com/oauth2/authorize", url
             assert (q["client_id"], q["response_type"], q["scope"], q["code_challenge_method"], q["prompt"]) == (
-                CLIENT_ID, "code", "identify", "S256", "none"), q
+                CLIENT_ID, "code", "identify", "S256", prompt), q
             assert q["redirect_uri"].startswith("http://127.0.0.1:4915") and q["redirect_uri"].endswith("/callback"), q
             stale = q["redirect_uri"] + "?" + urllib.parse.urlencode({"code": "x", "state": "not-the-state"})
             try:
@@ -556,7 +586,7 @@ try:
         def no_browser(url):
             raise AssertionError(("the client asked Discord again", url))
 
-        assert len(client("first", browser)) == 1
+        assert len(client("first", browser)[0]) == 1
         stored = json.loads(session_json.read_text())
         assert oct(session_json.stat().st_mode & 0o777) == "0o600", oct(session_json.stat().st_mode)
         raw = base64.urlsafe_b64decode(stored["token"] + "==")
@@ -568,17 +598,30 @@ try:
         print("PASS client first login: realm.json, the authorize address (identify, S256, prompt=none), "
               "a stale state refused, the callback answered, session.json mode 0600 holding the token, world entered")
         seen = sql(f"SELECT last_seen_at FROM sessions WHERE token_hash=sha256('\\x{raw.hex()}'::bytea)")
-        assert client("second", no_browser) == []
+        assert client("second", no_browser)[0] == []
         assert sql(f"SELECT count(*) FROM sessions WHERE account_id={client_account}") == sessions_before
         assert sql(f"SELECT last_seen_at>'{seen}'::timestamptz FROM sessions "
                    f"WHERE token_hash=sha256('\\x{raw.hex()}'::bytea)") == "t"
         print("PASS client restart: no browser, the stored token logs in, last_seen_at advanced, no new session")
         sql(f"UPDATE sessions SET expires_at=now()-interval '1 second' WHERE account_id={client_account}")
-        assert len(client("expired", browser)) == 1
+        assert len(client("expired", browser)[0]) == 1
         renewed = json.loads(session_json.read_text())
         assert renewed["token"] != stored["token"], renewed
         tokens.append(base64.urlsafe_b64decode(renewed["token"] + "=="))
         print("PASS client expiry: the server says expired, the client drops session.json and runs the browser flow")
+        # Logout (spec 02): --logout forgets session.json, the realm ends that session,
+        # and the next login asks Discord with prompt=consent (where the player may
+        # switch accounts); the restart after it logs in with the new token.
+        old = base64.urlsafe_b64decode(renewed["token"] + "==")
+        urls, text = client("logout", lambda url: browser(url, "consent"), "--logout")
+        assert len(urls) == 1 and "client: logged out" in text, text[-3000:]
+        assert sql(f"SELECT count(*) FROM sessions WHERE token_hash=sha256('\\x{old.hex()}'::bytea)") == "0"
+        after = json.loads(session_json.read_text())
+        assert after["token"] != renewed["token"], after
+        tokens.append(base64.urlsafe_b64decode(after["token"] + "=="))
+        assert client("after-logout", no_browser)[0] == []
+        print("PASS client logout: --logout ends the stored session on the realm and forgets it; the next login "
+              "asks Discord (prompt=consent) and stores a new token; the restart after it needs no browser")
         text = (out / "server.log").read_text(errors="replace")
         for t in tokens[-2:]:
             assert t.hex() not in text and b64url(t) not in text

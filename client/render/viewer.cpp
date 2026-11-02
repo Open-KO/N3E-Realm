@@ -136,6 +136,8 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     std::optional<n3e::login::RealmConfig> realm_config;
     int fixed_width = 0, fixed_height = 0;
     bool fullscreen = false;
+    // Spec 02 logout: forget this computer's session and end it on the realm.
+    bool logout = false;
     for (int i = 2; i < argc; ++i) {
       std::string a = argv[i];
       if (a == "--fixed-window" && i + 1 < argc) {
@@ -154,6 +156,8 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
       }
       else if (a == "--fullscreen")
         fullscreen = true;
+      else if (a == "--logout")
+        logout = true;
       else if (a == "--connect" && i + 1 < argc)
         endpoint = argv[++i];
       else if (a == "--realm" && i + 1 < argc) {
@@ -489,6 +493,10 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
       launch = !std::getenv("N3E_TEST_NO_BROWSER");
 #endif
       discord_flow = std::make_unique<n3e::login::Flow>(*realm_config, launch);
+    }
+    if (logout) {
+      if (!discord_flow) throw std::runtime_error("--logout needs --realm naming a Discord application");
+      discord_flow->logout();
     }
     n3e::WorldState world;
     // PQ-406 (D-209): the world notices (chat, whisper, rest and admin refusals)
@@ -2378,7 +2386,9 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           // A suite's client starts the Discord flow itself.
           discord_start = discord_start || auto_login || world_smoke;
 #endif
-          if (front_login && world.connected && discord_flow->phase() != n3e::login::Flow::Phase::start) {
+          // A press is held through the connection and a --logout's answer.
+          if (front_login && world.connected && discord_flow->phase() != n3e::login::Flow::Phase::start &&
+              discord_flow->phase() != n3e::login::Flow::Phase::logout) {
             discord_start = discord_flow->phase() == n3e::login::Flow::Phase::idle;
             front_login = false;
           }

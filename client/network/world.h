@@ -65,6 +65,8 @@ struct WorldState {
   std::string refusal_detail;
   LoginResult login_result;
   uint64_t login_results = 0;
+  // Spec 02 logout: LoggedOut answers to SessionLogout before a login.
+  uint64_t logged_outs = 0;
   // Spec 02: why an operator ended the session, shown once the connection closes.
   std::string disconnect;
   // Spec 04 / Q10: the realm refused this client's protocol or content at the

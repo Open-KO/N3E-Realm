@@ -36,6 +36,9 @@ README = """N3E local realm test kit, for Windows (docs/manual-testing.md in the
                    1280x1024; for another of KO's sizes run it from a command
                    prompt as  play.bat --fixed-window 1024x768  (or 1600x1200),
                    and add --fullscreen for full screen at that size.
+   play.bat --logout  logs out: the game forgets that token, the realm ends
+                   the session, and Login asks Discord again, where you can
+                   switch Discord accounts.
 3. forget-login.bat deletes that token, so the next start asks Discord again.
 
 Windows may warn that the program is from an unknown publisher (it is unsigned):

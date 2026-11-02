@@ -6,6 +6,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <netinet/in.h>
 #include <openssl/sha.h>
 #include <stdexcept>
@@ -174,6 +175,55 @@ int main() {
     check(banned.phase() == Flow::Phase::stopped && banned.status() == player_text("banned:perm:cheating") &&
               !std::filesystem::exists(session_path(realm.id)), "banned: stopped with the reason");
     std::cout << "PASS login screen: stored session first, ENTER/ESC, token stored, expired -> browser, ban stops\n";
+
+    // Logout (--logout): the file goes at once; once connected the token is sent in
+    // SessionLogout, again after a reconnect until answered; a press waits for the
+    // answer; the next Discord login asks with prompt=consent.
+    check(authorize_url("123", "http://127.0.0.1:49152/callback", p, true).ends_with("&prompt=consent"),
+          "consent authorize address");
+    n3e::WorldState fresh;
+    fresh.connected = true;
+    save_session(session_path(realm.id), {token, 1800000000, "Nelly"}); // already expired at 1900000000
+    Flow out(realm, false);
+    out.logout();
+    check(!std::filesystem::exists(session_path(realm.id)), "logout forgets session.json at once");
+    n3e::WorldState offline;
+    check(!out.update(offline, true, false, 1900000000), "nothing is sent before the connection");
+    auto bye = out.update(fresh, true, false, 1900000000);
+    check(bye && bye->has_session_logout() && bye->session_logout().token() == token &&
+              out.phase() == Flow::Phase::logout, "an expired token is still ended on the realm");
+    out.reset(); // the connection dropped before the answer
+    bye = out.update(fresh, false, false, 1900000000);
+    check(bye && bye->has_session_logout() && bye->session_logout().token() == token, "resent after a reconnect");
+    check(!out.update(fresh, true, false, 1900000000) && out.phase() == Flow::Phase::logout,
+          "a press waits for the realm's answer");
+    ++fresh.logged_outs;
+    std::stringstream printed;
+    auto *saved = std::cout.rdbuf(printed.rdbuf());
+    out.update(fresh, true, false, 1900000000);
+    std::cout.rdbuf(saved);
+    check(out.phase() == Flow::Phase::browser && printed.str().find("&prompt=consent") != std::string::npos &&
+              out.alerts() == 0, "after the answer ENTER asks Discord with prompt=consent: " + printed.str());
+    out.reset();
+    check(!out.update(fresh, false, false, 1900000000) && out.phase() == Flow::Phase::idle,
+          "an answered logout is not sent again");
+    Flow nothing(realm, false);
+    nothing.logout();
+    check(!nothing.update(fresh, false, false, 1900000000) && nothing.phase() == Flow::Phase::idle,
+          "logout without a stored session sends nothing");
+    save_session(session_path(realm.id), {token, 2000000000, "Nelly"});
+    Flow refused(realm, false);
+    refused.logout();
+    refused.update(fresh, false, false, 1900000000);
+    fresh.refused_request = n3e::Envelope::kSessionLogoutFieldNumber;
+    fresh.refusal_detail = "dependency";
+    ++fresh.refusals;
+    refused.update(fresh, false, false, 1900000000);
+    check(refused.phase() == Flow::Phase::idle && refused.alerts() == 1 &&
+              refused.status().find("could not end the session (dependency)") != std::string::npos &&
+              !std::filesystem::exists(session_path(realm.id)), "a refused logout says so; the file stays gone");
+    std::cout << "PASS logout: session.json forgotten, SessionLogout sent (expired too, again after a reconnect), "
+                 "a press held until LoggedOut, then prompt=consent; a refusal shown\n";
     std::filesystem::remove_all(dir);
     std::cout << "PASS client Discord login checks\n";
     return 0;

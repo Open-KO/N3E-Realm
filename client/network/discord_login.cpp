@@ -4,6 +4,7 @@
 #include <ctime>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/sha.h>
@@ -354,10 +355,11 @@ Pkce make_pkce() {
   p.state = base64url(random_bytes(16));
   return p;
 }
-std::string authorize_url(const std::string &client_id, const std::string &redirect, const Pkce &p) {
+std::string authorize_url(const std::string &client_id, const std::string &redirect, const Pkce &p,
+                          bool consent) {
   return AUTHORIZE + "?client_id=" + url_encode(client_id) + "&response_type=code&scope=identify&redirect_uri=" +
          url_encode(redirect) + "&state=" + url_encode(p.state) + "&code_challenge=" + url_encode(p.challenge) +
-         "&code_challenge_method=S256&prompt=none";
+         "&code_challenge_method=S256&prompt=" + (consent ? "consent" : "none");
 }
 
 std::string player_text(const std::string &detail) {
@@ -491,8 +493,17 @@ bool open_browser(const std::string &url) {
 void Flow::reset() {
   phase_ = Phase::start;
   text = "Connecting";
-  refusals = results = 0;
+  refusals = results = logouts = 0;
   callback.reset();
+}
+
+void Flow::logout() {
+  const auto path = session_path(realm.id);
+  // Any well-formed token, expired or not: the realm deletes its row either way.
+  if (auto s = load_session(path, std::numeric_limits<int64_t>::min()))
+    revoke = s->token;
+  forget_session(path);
+  consent = true;
 }
 
 std::optional<Envelope> Flow::begin_browser() {
@@ -505,7 +516,7 @@ std::optional<Envelope> Flow::begin_browser() {
     ++alerts_;
     return std::nullopt;
   }
-  auto url = authorize_url(realm.discord_client_id, callback->redirect_uri(), pkce);
+  auto url = authorize_url(realm.discord_client_id, callback->redirect_uri(), pkce, consent);
   // Always printed, so a player whose browser did not open can copy it (spec 02).
   std::cout << "Open this address to log in with Discord: " << url << std::endl;
   bool opened = launch && open_browser(url);
@@ -526,6 +537,14 @@ std::optional<Envelope> Flow::update(const WorldState &world, bool start, bool c
   if (phase_ == Phase::start) {
     refusals = world.refusals;
     results = world.login_results;
+    logouts = world.logged_outs;
+    if (!revoke.empty()) {
+      Envelope e;
+      e.mutable_session_logout()->set_token(revoke);
+      phase_ = Phase::logout;
+      text = "Logging out";
+      return e;
+    }
     if (auto s = load_session(path, now)) {
       Envelope e;
       e.mutable_session_login()->set_token(s->token);
@@ -546,9 +565,25 @@ std::optional<Envelope> Flow::update(const WorldState &world, bool start, bool c
     text = "Logged in as " + r.discord_name();
     return std::nullopt;
   }
+  if (phase_ == Phase::logout && world.logged_outs != logouts) {
+    logouts = world.logged_outs;
+    revoke.clear();
+    std::cout << "client: logged out; the realm ended this computer's session" << std::endl;
+    phase_ = Phase::idle;
+    text = "ENTER - Log in with Discord";
+  }
   if (world.refusals != refusals) {
     refusals = world.refusals;
-    if (phase_ == Phase::session || phase_ == Phase::code) {
+    if (phase_ == Phase::logout) {
+      // The refusal names request 49, or 0 from a realm that predates the logout.
+      // The token is already gone from this computer; the realm's copy lapses at
+      // its expiry or an operator's kick.
+      revoke.clear();
+      phase_ = Phase::idle;
+      text = "This computer no longer keeps your login, but the realm could not end the session (" +
+             world.refusal_detail + "). It ends when it expires.";
+      ++alerts_;
+    } else if (phase_ == Phase::session || phase_ == Phase::code) {
       const auto &detail = world.refusal_detail;
       if (detail == "expired" || detail == "revoked") {
         forget_session(path);

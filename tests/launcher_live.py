@@ -290,6 +290,13 @@ try:
     code, text, _ = launch("--realm", "test", "--no-update", "--fixed-window", "1280x800")
     assert code == 2 and stub_runs() == [], (code, text)
     print("PASS window: --fixed-window 1024x768 --fullscreen reach the client; 1280x800 is refused (exit 2)")
+    # Spec 02 logout: the request reaches the client, which owns session.json.
+    code, text, _ = launch("--realm", "test", "--no-update", "--logout")
+    [run] = stub_runs()
+    assert code == 0 and run["argv"][-1] == "--logout", (code, text, run)
+    code, text, _ = launch("--realm", "test", "--logout", "--no-start")
+    assert code == 2 and stub_runs() == [], (code, text)
+    print("PASS logout: --logout reaches the client; with --no-start it is a usage error (exit 2)")
 
     # 9. Index paths that would leave the package; a client archive entry that would.
     for bad in ["../x", "/abs"]:

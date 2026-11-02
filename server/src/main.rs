@@ -369,6 +369,8 @@ async fn main() -> Result<()> {
         std::fs::write(format!("{}-discord-login.bin",args[2]),login.encode_to_vec())?;
         let login=wire::Envelope{body:Some(wire::envelope::Body::SessionLogin(wire::SessionLogin{token:token.clone(),client_label:"host".into()}))};
         std::fs::write(format!("{}-session-login.bin",args[2]),login.encode_to_vec())?;
+        let logout=wire::Envelope{body:Some(wire::envelope::Body::SessionLogout(wire::SessionLogout{token:token.clone()}))};
+        std::fs::write(format!("{}-session-logout.bin",args[2]),logout.encode_to_vec())?;
         let login=wire::Envelope{body:Some(wire::envelope::Body::LoginResult(wire::LoginResult{token,expires_at_unix:1_795_996_800,discord_id:"80351110224678912".into(),discord_name:"Nelly".into()}))};
         std::fs::write(format!("{}-login-result.bin",args[2]),login.encode_to_vec())?;
         // Spec 11: the character list with levels.

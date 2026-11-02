@@ -245,6 +245,7 @@ void WorldClient::run(std::stop_token stop) {
         state.login_result = e.login_result();
         ++state.login_results;
       }
+      if (e.has_logged_out()) ++state.logged_outs;
       if(e.has_admin_result()) state.admin=e.admin_result();
       if (e.has_characters()) {
         state.characters = e.characters();

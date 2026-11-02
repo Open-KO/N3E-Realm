@@ -1,5 +1,6 @@
 #pragma once
-// Spec 11's KO front end: login (the 1098 intro scene), the realm list, the
+// Spec 11's KO front end: the logo screen when the package has one (RQ-101,
+// 1264's), login (the 1098 intro scene), the realm list, the
 // Karus character select hall, create, loading and the OK message box, drawn
 // from front-end.bin (content/front-end.md). The screens are a state machine
 // here; the viewer turns each Command into the protocol message it already
@@ -8,6 +9,7 @@
 #include "platform/gl.h"
 #include "platform/gl_load.h"
 #include "render/animation.h"
+#include "render/front_logo.h"
 #include "render/select_hall.h"
 #include "render/select_path.h"
 #include "render/select_turn.h"
@@ -26,7 +28,8 @@
 
 namespace n3e::front {
 
-enum class Screen { login, realms, select, create, loading };
+// logo (RQ-101) is last so the others keep their numbers.
+enum class Screen { login, realms, select, create, loading, logo };
 enum class Command { none, login, exit, enter_realm, select, create, back };
 struct Output {
   Command command = Command::none;
@@ -150,6 +153,9 @@ class View {
  public:
   explicit View(FrontEnd data) : fe(std::move(data)) {
     using namespace detail;
+    // RQ-101: KO 1264's WinMain makes the logo the first procedure
+    // (00602506: ProcActiveSet of the logo, once per process).
+    if (fe.logo) state = Screen::logo;
     for (const auto &t : fe.textures) textures.push_back(texture(t.width, t.height, t.pixels.data()));
     // Samplers as KO sets them. UIF images: CUIManager::RenderStateSet's
     // point sampling (KO's atlases border each tile with black texels that
@@ -256,9 +262,22 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // viewer hands it to the mixer every frame, which keeps a track already
   // playing, so it runs on across the screens that share it.
   std::shared_ptr<const MusicTrack> music() const {
+    // RQ-101: the logo's track from its delay until its fade-out has run;
+    // the login's Init then releases it (1264: 005bd9b0 at 005bdd80), so a
+    // skip cuts it off.
+    if (state == Screen::logo)
+      return logo_music_on(*fe.logo, logo_time) ? fe.music[fe.logo->music] : nullptr;
     const auto index = fe.screen_music[size_t(layout())];
     return index == FrontEnd::kNoMusic ? nullptr : fe.music[index];
   }
+  // The music's gain (1, or the logo track's fade-out).
+  float music_gain() const { return state == Screen::logo ? logo_music_gain(*fe.logo, logo_time) : 1.f; }
+  // RQ-101: 1264's logo UI hides the system cursor (00601140: SetCursor(NULL)).
+  bool cursor_hidden() const { return state == Screen::logo && (fe.logo->flags & FrontLogo::HIDE_CURSOR); }
+  const std::optional<FrontLogo> &logo() const { return fe.logo; }
+  // The logo screen as the last frame drew it, and its time (a test hook).
+  LogoFrame logo_shown() const { return logo_drawn; }
+  double logo_seconds() const { return logo_time; }
   bool has_music() const { return !fe.music.empty(); }
   // The Discord login finished: KO's OpenServerList.
   void logged_in() {
@@ -267,13 +286,20 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     state = Screen::realms;
     slide = 0;
   }
-  // Back to the login screen (a dropped or reset connection).
+  // Back to the login screen (a dropped or reset connection). The logo
+  // screen plays on: KO 1264 connects only from its login, after it.
   void reset() {
-    state = Screen::login;
+    if (state != Screen::logo) state = Screen::login;
     choosing = -1;
     pending_create = false;
   }
-  void show_message(std::string text) { message = std::move(text); }
+  // KO's message box. During the logo screen it waits for the login (Q82):
+  // 1264 connects and logs in only from its login procedure, so nothing it
+  // reports can show over the logo; the latest waiting message shows then.
+  void show_message(std::string text) {
+    if (state == Screen::logo) deferred = std::move(text);
+    else message = std::move(text);
+  }
   bool showing_message() const { return message.has_value(); }
   bool creating() const { return pending_create; }
   // The character in front as the last select frame showed it; the test
@@ -316,13 +342,22 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // last frame drew (their boxes in normalised device coordinates of the
   // viewport they were drawn in), and a bound node's rect in pixels.
   void jump(Screen to) {
-    state = to;
+    state = to == Screen::logo && !fe.logo ? Screen::login : to;
+    logo_time = 0;
+    logo_start_ns = 0;
+    deferred.reset();
     message.reset();
     choosing = -1;
     pending_create = false;
     slide = realm_height;
     reset_hall();
     face(0);
+  }
+  // The logo screen `t` seconds in (a test hook; nothing without one).
+  void logo_at(double t) {
+    if (!fe.logo) return;
+    jump(Screen::logo);
+    logo_time = t;
   }
   struct Drawn {
     size_t which;                  // 0 intro, 1 select, 2 create
@@ -364,6 +399,20 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       return out;
     }
     if (state == Screen::loading) return out;
+    // RQ-101: 1264's logo UI takes every key press (OnKeyPress 00601480,
+    // which ProcessUIKeyInput 005f97a0 calls for each DirectInput key down
+    // on the focused UI) and starts the login; a click does nothing (it
+    // keeps CN3UIBase's MouseProc).
+    // Only a press during the screen counts (logo_key_skips, Q82): not one
+    // queued before its first frame, nor a modifier reported as held when
+    // the window gains focus.
+    if (state == Screen::logo) {
+      if (e.type == SDL_EVENT_WINDOW_FOCUS_GAINED) focus_ns = e.window.timestamp;
+      if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat && (fe.logo->flags & FrontLogo::SKIP_KEY) &&
+          logo_key_skips(logo_start_ns, focus_ns, e.key.timestamp, modifier(e.key.key)))
+        leave_logo();
+      return out;
+    }
     const auto ui = layout();
     if (e.type == SDL_EVENT_TEXT_INPUT && state == Screen::create) {
       for (const char *c = e.text.text; *c; ++c)
@@ -426,6 +475,15 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       float delta = float(5000 * dt) * (realm_height - slide) / realm_height;
       slide = std::min(realm_height, slide + std::max(delta, dt > 0 ? 2.f : 0.f));
     }
+    if (state == Screen::logo) {
+      // KO's frame time drives the fade (00601360 adds s_fSecPerFrm); the
+      // first frame is the screen's start. After the last group the login
+      // starts (005f7f30).
+      if (logo_start_ns == 0) logo_start_ns = SDL_GetTicksNS();
+      logo_time += dt;
+      logo_drawn = logo_frame(*fe.logo, logo_time);
+      if (logo_drawn.done) leave_logo();
+    }
     if (state == Screen::login || state == Screen::realms) intro(width, height, now);
     if (state == Screen::select) hall(width, height, dt);
     // IsAnimEnd: the start clip has played once, after its blend (1097:
@@ -436,7 +494,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       state = Screen::loading;
     }
     begin_ui(width, height);
-    ui(layout(), context, now);
+    if (state == Screen::logo)
+      logo_ui();
+    else
+      ui(layout(), context, now);
     if (state == Screen::create) {
       flush();
       character_view(width, height, now);
@@ -474,6 +535,27 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // or ESC that skips to its last frame on the next tick.
   PathCamera path_camera;
   bool skip = false;
+  // RQ-101: seconds since the logo screen started, and its last frame; its
+  // first frame's and the last focus gain's SDL times (0: none yet); a
+  // message waiting for the login.
+  double logo_time = 0;
+  LogoFrame logo_drawn;
+  uint64_t logo_start_ns = 0, focus_ns = 0;
+  std::optional<std::string> deferred;
+  void leave_logo() {
+    state = Screen::login;
+    if (deferred) message = std::move(deferred), deferred.reset();
+  }
+  // The modifiers SDL reports as held on a focus gain (SDL 3.4, Wayland).
+  static bool modifier(SDL_Keycode k) {
+    switch (k) {
+      case SDLK_LSHIFT: case SDLK_RSHIFT: case SDLK_LCTRL: case SDLK_RCTRL: case SDLK_LALT:
+      case SDLK_RALT: case SDLK_LGUI: case SDLK_RGUI: case SDLK_MODE: case SDLK_LEVEL5_SHIFT:
+        return true;
+      default:
+        return false;
+    }
+  }
   FrontTurn turn_shown;
   double last_frame = -1;
   // The select camera this frame drew the hall with, for the zone's BLEND
@@ -1127,6 +1209,28 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       s = detail::replace(s, "{name}", c->name());
     }
     return s;
+  }
+  // RQ-101: the logo screen (1264: 00600ce0), its nodes in draw order with the
+  // groups other than the one showing hidden (00601360 shows each alone), all
+  // at the frame's alpha over the black clear.
+  void logo_ui() {
+    const auto &logo = *fe.logo;
+    const auto &nodes = logo.nodes;
+    if (logo_drawn.group < 0) return;
+    const uint32_t alpha = uint32_t(std::lround(logo_drawn.alpha * 255));
+    std::vector<char> drew(nodes.size(), 0);
+    for (size_t i = 0; i < nodes.size(); ++i) {
+      const auto &n = nodes[i];
+      if (i > 0 && !drew[n.parent]) continue;
+      bool other = false;
+      for (size_t g = 0; g < logo.groups.size(); ++g)
+        if (logo.groups[g].node == i && int(g) != logo_drawn.group) other = true;
+      if (other) continue;
+      drew[i] = 1;
+      if (n.kind == FrontNode::IMAGE) quad(textures[n.texture], n.rect, n.uv, alpha << 24 | 0xffffff);
+      else if (n.kind == FrontNode::TEXT)
+        text(n.text, n.font, (((n.color >> 24) * alpha / 255) << 24) | (n.color & 0xffffff), n.style, n.rect);
+    }
   }
   void ui(FrontScreen screen, const Context &context, double now) {
     const auto &nodes = fe.screens[size_t(screen)];

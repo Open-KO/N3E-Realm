@@ -9,7 +9,10 @@
 // 1298's loop, on synthetic clip lengths. RQ-087: 1298's recorded camera
 // paths (client/render/select_path.h) on synthetic keys. RQ-095: the select
 // zone's fog and its BLEND meshes' far-to-near order (client/render/select_zone.h).
+// RQ-101: the logo screen's timeline, alpha and music (client/render/front_logo.h)
+// on 1264's groups and fade.
 #include "assets/assets.h"
+#include "render/front_logo.h"
 #include "render/select_hall.h"
 #include "render/select_path.h"
 #include "render/select_turn.h"
@@ -239,7 +242,57 @@ std::string zone_check() {
   return "";
 }
 
+// RQ-101: 1264's logo (KO-FINDINGS 9.2): groups of 1.5, 1 and 1.5 s to the
+// peak 1.5 (each fading in over its seconds, holding as long, fading out as
+// long), the music 1 s in and its 4 s fade from group 2; KO's alpha in
+// 255ths; the login after 12 s.
+std::string logo_check() {
+  using namespace n3e::front;
+  n3e::FrontLogo logo;
+  logo.groups = {{1, 1.5f, 1.5f, 1.5f}, {4, 1, 1, 1}, {7, 1.5f, 1.5f, 1.5f}};
+  logo.music = 0, logo.music_delay = 1, logo.fade_group = 2, logo.fade = 4;
+  auto at = [&](double t, int group, float alpha) {
+    const auto f = logo_frame(logo, t);
+    return f.group == group && !f.done && std::abs(f.alpha - alpha) < 1e-6f;
+  };
+  if (std::abs(logo_length(logo) - 12) > 1e-9 || std::abs(logo_group_start(logo, 2) - 7.5) > 1e-9)
+    return "1264's logo is not 12 s, group 2 from 7.5 s";
+  if (!at(0, 0, 0) || !at(.75, 0, 127 / 255.f) || !at(1.5, 0, 1) || !at(2.9, 0, 1) || !at(3.75, 0, 127 / 255.f))
+    return "group 0 does not fade in over 1.5 s, hold 1.5 s and fade out over 1.5 s";
+  if (!at(4.5, 1, 0) || !at(5, 1, 127 / 255.f) || !at(6, 1, 1) || !at(7.4, 1, 25 / 255.f) || !at(9, 2, 1))
+    return "groups 1 and 2 do not follow";
+  if (!logo_frame(logo, 12).done || logo_frame(logo, 12).group != -1 || logo_frame(logo, 11.99).done)
+    return "the logo does not end at 12 s";
+  if (logo_music_on(logo, .99) || !logo_music_on(logo, 1) || logo_music_gain(logo, 7.5) != 1)
+    return "the music does not start 1 s in at full gain";
+  if (std::abs(logo_music_gain(logo, 9.5) - .5f) > 1e-6f || logo_music_on(logo, 11.5) || logo_music_gain(logo, 11.6))
+    return "the music does not fade out linearly over 4 s from group 2";
+  logo.fade_group = n3e::FrontLogo::kNone, logo.fade = 0;
+  if (!logo_music_on(logo, 11.9) || logo_music_gain(logo, 11.9) != 1) return "music without a fade does not play on";
+  logo.music = n3e::FrontLogo::kNone;
+  if (logo_music_on(logo, 5)) return "a logo without music plays";
+  // Q82: only a press during the screen skips it (1264's DirectInput press
+  // edge). Shown at 5 s, a focus gain at 7 s (SDL nanoseconds).
+  constexpr uint64_t s = 1'000'000'000;
+  if (logo_key_skips(0, 0, 3 * s, false)) return "a key before the first frame skips the logo";
+  if (logo_key_skips(5 * s, 0, 4 * s, false)) return "a key stamped before the screen started skips it";
+  if (!logo_key_skips(5 * s, 0, 5 * s, false) || !logo_key_skips(5 * s, 0, 6 * s, true))
+    return "a key or modifier pressed during the screen does not skip it";
+  if (logo_key_skips(5 * s, 7 * s, 7 * s, true) || logo_key_skips(5 * s, 7 * s, 7 * s + 50'000'000, true))
+    return "a modifier right after a focus gain skips the logo";
+  if (!logo_key_skips(5 * s, 7 * s, 7 * s, false)) return "a key right after a focus gain does not skip it";
+  if (!logo_key_skips(5 * s, 7 * s, 7 * s + 200'000'000, true))
+    return "a modifier pressed well after a focus gain does not skip it";
+  return "";
+}
+
 int main(int argc, char **argv) {
+  if (const auto e = logo_check(); !e.empty()) {
+    std::cerr << "FAIL logo screen: " << e << "\n";
+    return 1;
+  }
+  std::cout << "PASS logo screen: 1264's groups fade in, hold and fade out in 255ths; its music from 1 s, faded over 4 s; "
+               "a key stamped before it or a modifier right after a focus gain does not skip it\n";
   if (const auto e = turn_check(); !e.empty()) {
     std::cerr << "FAIL select turn: " << e << "\n";
     return 1;
@@ -270,6 +323,8 @@ int main(int argc, char **argv) {
     try {
       const auto fe = n3e::load_front_end(release);
       if (fe.screens.size() != 5 || fe.slots.size() != fe.character_slots) error = "loaded inconsistently";
+      if (fe.logo) std::cout << "logo " << release.root.filename().string() << ": " << fe.logo->nodes.size()
+                             << " nodes, " << fe.logo->groups.size() << " groups, flags " << fe.logo->flags << "\n";
       // RQ-018: every loaded track streams (tests/audio.cpp checks the samples).
       for (const auto &track : fe.music) {
         n3e::MusicStream stream(track);

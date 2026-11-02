@@ -151,8 +151,12 @@ class WorldClient {
 
 public:
   // `edge`: the realm's WebSocket edge URL (spec 12), or "" for TCP to `endpoint`.
-  WorldClient(const Release &, const Scene &, std::string, std::string, std::string = "");
+  // `connect_now` false: the connection waits for `start` (a KO front end
+  // connects from its login, after a logo screen; RQ-101, Q82).
+  WorldClient(const Release &, const Scene &, std::string, std::string, std::string = "", bool connect_now = true);
   ~WorldClient();
+  // Starts the connection if it has not started (idempotent).
+  void start();
   WorldState poll();
   void send(Envelope);
   void direction(float, float, uint32_t = 0, bool = false);

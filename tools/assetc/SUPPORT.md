@@ -160,5 +160,11 @@ the far plane to it), and lets a front end carry 256 textures; the 1298 recipe
 cooks zone 10001, `karus_intro`, with its camera files' white fog, lit
 as 1298's select lights it: its light manager's lights (`select.light_manager`,
 in the format's light list) replace the hall lights of their number.
+N3FE version 9 (RQ-101) adds a logo screen before the login (the recipe's
+`logo`: a layout of groups, images and strings, each group's fade-in, hold and
+fade-out from KO's seconds and peak, its music's track, delay and fade-out and
+whether a key skips it and the cursor hides; none without the key); the 1097
+recipe cooks 1264's `co_usa_logo_us.uif` and `Snd/bless.wav` from the 1264
+install.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

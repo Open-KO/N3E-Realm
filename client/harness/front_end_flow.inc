@@ -8,7 +8,17 @@
 // may come before the connection is up, and once more after a message box on
 // the login screen (a failed Discord login). It prints, for
 // tests/front_end_flow_live.py:
-//   FRONT_FLOW screen=login|realms|select|create|loading|world characters=N
+//   FRONT_FLOW screen=logo|login|realms|select|create|loading|world characters=N
+//   FRONT_FLOW logo phase=stray|click|skip t=T group=G alpha=A music=0|1 gain=X cursor=0|1
+//   (RQ-101: the package's logo screen, first; 0.5 s in, a focus gain with
+//   a Left Shift down right after it (SDL's Wayland enter for a held
+//   modifier) and a SPACE down stamped before the screen started, neither a
+//   press during it (Q82); 1.1 s in, just after its music starts, a left
+//   click, which 1264's logo ignores; 1.3 s in, SPACE, which skips it to the
+//   login. T is
+//   its time, G and A the group showing and its alpha, music whether the
+//   mixer streams, gain the music's gain, cursor whether the system cursor
+//   shows)
 //   FRONT_FLOW enter connected=0|1
 //   FRONT_FLOW message='...'
 //   FRONT_FLOW music=none|streamK (RQ-018: K counts the streams started; a
@@ -63,8 +73,8 @@
       ev.key.down = false;
       SDL_PushEvent(&ev);
     };
-    const int screen = !front_active() ? 5 : int(front->screen());
-    static const char *labels[] = {"login", "realms", "select", "create", "loading", "world"};
+    const int screen = !front_active() ? 6 : int(front->screen());
+    static const char *labels[] = {"login", "realms", "select", "create", "loading", "logo", "world"};
     if (screen != last_screen) {
       std::cout << "FRONT_FLOW screen=" << labels[screen] << " characters=" << world.characters.characters_size()
                 << std::endl;
@@ -78,7 +88,7 @@
       std::cout << "FRONT_FLOW music=" << (last_stream ? "stream" + std::to_string(streams) : std::string("none"))
                 << std::endl;
     }
-    was_in_world = was_in_world || screen == 5;
+    was_in_world = was_in_world || screen == 6;
     const uint64_t now_ms = SDL_GetTicks();
     if (front->showing_message() && front_active() && now_ms - last_push > 500) {
       std::cout << "FRONT_FLOW message='" << front->message_text() << "'" << std::endl;
@@ -90,6 +100,52 @@
         SDL_PushEvent(&quit);
       } else
         key(SDLK_RETURN);
+    } else if (screen == 5) {
+      // RQ-101: the logo screen: a click (ignored), then a key (the skip).
+      static int logo_phase = 0;
+      const double t = front->logo_seconds();
+      auto report = [&](const char *phase) {
+        const auto shown = front->logo_shown();
+        std::cout << "FRONT_FLOW logo phase=" << phase << " t=" << t << " group=" << shown.group
+                  << " alpha=" << shown.alpha << " music=" << (audio.mixer.music != nullptr)
+                  << " gain=" << audio.mixer.music_gain << " cursor=" << SDL_CursorVisible() << std::endl;
+      };
+      if (logo_phase == 0 && t >= 0.5) {
+        report("stray");
+        SDL_Event focus{};
+        focus.type = SDL_EVENT_WINDOW_FOCUS_GAINED;
+        focus.window.windowID = SDL_GetWindowID(w);
+        SDL_PushEvent(&focus);
+        key(SDLK_LSHIFT);
+        SDL_Event stale{};
+        stale.type = SDL_EVENT_KEY_DOWN;
+        stale.key.timestamp = 1;
+        stale.key.key = SDLK_SPACE;
+        stale.key.scancode = SDL_SCANCODE_SPACE;
+        stale.key.down = true;
+        SDL_PushEvent(&stale);
+        ++logo_phase;
+      } else if (logo_phase == 1 && t >= 1.1) {
+        report("click");
+        int lw = 0, lh = 0;
+        SDL_GetWindowSize(w, &lw, &lh);
+        SDL_Event ev{};
+        ev.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+        ev.button.button = SDL_BUTTON_LEFT;
+        ev.button.down = true;
+        ev.button.clicks = 1;
+        ev.button.x = lw * .5f;
+        ev.button.y = lh * .5f;
+        SDL_PushEvent(&ev);
+        ev.type = SDL_EVENT_MOUSE_BUTTON_UP;
+        ev.button.down = false;
+        SDL_PushEvent(&ev);
+        ++logo_phase;
+      } else if (logo_phase == 2 && t >= 1.3) {
+        report("skip");
+        key(SDLK_SPACE);
+        ++logo_phase;
+      }
     } else if (screen == 2 && next_name > 0 && world.characters.characters_size() && !front->showing_message()) {
       // RQ-066, RQ-075: the pointer off the character in front, then on it
       // (its clip blends in, plays once and holds the last frame, the spot

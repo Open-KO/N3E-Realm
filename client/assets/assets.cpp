@@ -2675,7 +2675,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 8, "front end version");
+  need(r.u() == 9, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2719,8 +2719,8 @@ FrontEnd load_front_end(const Release &release) {
       {FrontAction::progress},
       {FrontAction::message, FrontAction::ok},
   }};
-  for (size_t screen = 0; screen < fe.screens.size(); ++screen) {
-    auto &nodes = fe.screens[screen];
+  // A screen's nodes in draw order (and, version 9, the logo screen's).
+  auto read_nodes = [&](std::vector<FrontNode> &nodes) {
     const auto count = r.count(1024);
     std::set<FrontAction> bound;
     for (uint32_t i = 0; i < count; ++i) {
@@ -2763,6 +2763,10 @@ FrontEnd load_front_end(const Release &release) {
            "front end font index");
       nodes.push_back(std::move(n));
     }
+    return bound;
+  };
+  for (size_t screen = 0; screen < fe.screens.size(); ++screen) {
+    const auto bound = read_nodes(fe.screens[screen]);
     for (auto action : required[screen]) need(bound.contains(action), "front end screen action unbound");
   }
   for (auto &s : fe.strings) s = ascii(text(1024));
@@ -2983,6 +2987,53 @@ FrontEnd load_front_end(const Release &release) {
   for (auto &screen : fe.screen_music) {
     screen = r.u();
     need(screen == FrontEnd::kNoMusic || screen < fe.music.size(), "music screen track");
+  }
+  // 10. Version 9 (RQ-101): the logo screen, 0 for none or 1 and then its
+  // nodes (groups, images and strings, none bound to an action), 1-8 groups
+  // (a group node each, once, and its fade-in, hold and fade-out, 0-60 s
+  // together, some above 0), its music (a track or none, a delay 0-60 s, the
+  // group its fade-out starts with or none, the fade's seconds: above 0 and
+  // at most 60 with a group, 0 without), and its flags (1 a key skips it, 2
+  // it hides the cursor).
+  const auto has_logo = r.u();
+  need(has_logo <= 1, "front end logo");
+  if (has_logo) {
+    FrontLogo logo;
+    const auto bound = read_nodes(logo.nodes);
+    need(bound.empty(), "front end logo action");
+    for (const auto &n : logo.nodes)
+      need(n.kind == FrontNode::GROUP || n.kind == FrontNode::IMAGE || n.kind == FrontNode::TEXT,
+           "front end logo node");
+    const auto groups = r.count(8);
+    auto seconds = [&](float v) { return std::isfinite(v) && v >= 0 && v <= 60; };
+    for (uint32_t i = 0; i < groups; ++i) {
+      FrontLogoGroup g;
+      g.node = r.u();
+      need(g.node < logo.nodes.size() && logo.nodes[g.node].kind == FrontNode::GROUP, "front end logo group");
+      for (const auto &other : logo.groups) need(other.node != g.node, "front end logo group twice");
+      g.fade_in = std::bit_cast<float>(r.u());
+      g.hold = std::bit_cast<float>(r.u());
+      g.fade_out = std::bit_cast<float>(r.u());
+      const float total = g.fade_in + g.hold + g.fade_out;
+      need(seconds(g.fade_in) && seconds(g.hold) && seconds(g.fade_out) && total > 0 && total <= 60,
+           "front end logo group times");
+      logo.groups.push_back(g);
+    }
+    logo.music = r.u();
+    need(logo.music == FrontLogo::kNone || logo.music < fe.music.size(), "front end logo music");
+    logo.music_delay = std::bit_cast<float>(r.u());
+    need(seconds(logo.music_delay), "front end logo music delay");
+    logo.fade_group = r.u();
+    logo.fade = std::bit_cast<float>(r.u());
+    if (logo.fade_group == FrontLogo::kNone)
+      need(logo.fade == 0, "front end logo fade");
+    else
+      need(logo.fade_group < logo.groups.size() && logo.music != FrontLogo::kNone && seconds(logo.fade) &&
+               logo.fade > 0,
+           "front end logo fade");
+    logo.flags = r.u();
+    need(logo.flags <= (FrontLogo::SKIP_KEY | FrontLogo::HIDE_CURSOR), "front end logo flags");
+    fe.logo = std::move(logo);
   }
   r.end();
   return fe;

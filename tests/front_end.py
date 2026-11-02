@@ -722,9 +722,10 @@ MAX_VERTEX_MESH = fe.mesh_record([[i % 256, 0, i // 256, 0, 1, 0, 0, 0] for i in
 FOG_OFF = u(0) + f([0] * 5)
 
 
-def blob(version=8, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=9, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
-         spot_rate=0.6, front_clip=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0):
+         spot_rate=0.6, front_clip=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
+         logo=u(0)):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -742,7 +743,115 @@ def blob(version=8, slots=1, screen_data=None, font_index=None, light=None, plug
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
     out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
     out += character(select_clips, plug=plug) + character(plug=plug)
-    return out + music + extra
+    return out + music + logo + extra
+
+
+# --- the logo screen (version 9, RQ-101) ---------------------------------------
+
+LOGO_UIF = node(0, "root", [node(0, "g0", [node(4, rect=(0, 0, 1024, 768)), node(4)]),
+                            node(0, "g1", [node(4), text("by")]), node(0, "g2", [node(4)])])[1]
+LOGO = {"ui": "logo.uif", "place": "centre",
+        "groups": [{"node": "g0", "seconds": 1.5}, {"node": "g1", "seconds": 1}, {"node": "g2", "seconds": 1.5}],
+        "peak": 1.5, "music": {"track": 0, "delay": 1, "fade_group": 2, "fade": 4}, "skip": "key", "cursor": "hidden"}
+
+
+def logo_section(config=LOGO, tracks=1, uif=LOGO_UIF):
+    assets = Fixture({"logo.uif": uif})
+    return fe.logo(config, assets, fe.Textures(assets), {}, tracks)
+
+
+assert fe.logo(None, None, None, None, 0) == (u(0), None)
+LOGO_OK, report = logo_section()
+assert [(g["fade_in"], g["hold"], g["fade_out"]) for g in report["groups"]] == [(1.5, 1.5, 1.5), (1, 1, 1),
+                                                                                 (1.5, 1.5, 1.5)], report
+assert (report["music"], report["delay"], report["fade_group"], report["fade"]) == (0, 1, 2, 4), report
+assert LOGO_OK[:4] == u(1) and LOGO_OK[-4:] == u(fe.LOGO_SKIP_KEY | fe.LOGO_HIDE_CURSOR), LOGO_OK[-8:]
+# The root, three groups, four images and a string; g0, g1 and g2 at 1, 4 and 7.
+LOGO_NODES, LOGO_INDICES = fe.screen("logo", LOGO, Fixture({"logo.uif": LOGO_UIF}), fe.Textures(None), {},
+                                     ["g0", "g1", "g2"])
+assert struct.unpack_from("<I", LOGO_NODES)[0] == 9 and LOGO_INDICES == [1, 4, 7], LOGO_INDICES
+assert LOGO_OK == u(1) + LOGO_NODES + u(3) + b"".join(
+    u(i) + f(t) for i, t in zip(LOGO_INDICES, ([1.5] * 3, [1] * 3, [1.5] * 3))) + u(0) + f([1]) + u(2) + f([4]) + u(3)
+silent, report = logo_section({k: v for k, v in LOGO.items() if k not in ("music", "skip", "cursor")}, tracks=0)
+assert silent.endswith(u(fe.NO_MUSIC) + f([0]) + u(fe.NO_GROUP) + f([0]) + u(0)) and report["music"] is None, report
+logo_problems = {
+    "an unknown key": dict(config={**LOGO, "bindings": {"g0": "ok"}}),
+    "no groups": dict(config={**LOGO, "groups": []}),
+    "nine groups": dict(config={**LOGO, "groups": [{"node": "g0", "seconds": 1}] * 9}),
+    "a group that is an image": dict(config={**LOGO, "groups": [{"node": "g0#0", "seconds": 1}]}),
+    "a group twice": dict(config={**LOGO, "groups": [{"node": "g0", "seconds": 1}, {"node": "g0", "seconds": 1}]}),
+    "a hidden group": dict(config={**LOGO, "hidden": ["g1"]}),
+    "a group of no seconds": dict(config={**LOGO, "groups": [{"node": "g0", "seconds": 0}]}),
+    "a group past 60 s": dict(config={**LOGO, "groups": [{"node": "g0", "seconds": 21}]}),
+    "a peak of 1": dict(config={**LOGO, "peak": 1}),
+    "a music track past the tracks": dict(tracks=0),
+    "a fade group without its fade": dict(config={**LOGO, "music": {"track": 0, "fade_group": 2}}),
+    "a fade group past the groups": dict(config={**LOGO, "music": {"track": 0, "fade_group": 3, "fade": 4}}),
+    "a fade of 0": dict(config={**LOGO, "music": {"track": 0, "fade_group": 2, "fade": 0}}),
+    "a delay past 60 s": dict(config={**LOGO, "music": {"track": 0, "delay": 61}}),
+    "an unknown skip": dict(config={**LOGO, "skip": "click"}),
+    "an unknown cursor": dict(config={**LOGO, "cursor": "off"}),
+    "a button in the layout": dict(uif=node(0, "root", [node(0, "g0", [button("b")]), node(0, "g1"),
+                                                        node(0, "g2")])[1]),
+}
+for reason, kw in logo_problems.items():
+    try:
+        logo_section(**kw)
+    except (ValueError, KeyError) as error:
+        continue
+    raise AssertionError("logo cook accepted " + reason)
+print("PASS front-end logo cook: 1264's groups as fade-in, hold and fade-out, its music and flags; %d refusals"
+      % len(logo_problems))
+
+
+def logo_raw(groups=((1, 1.5, 1.5, 1.5), (4, 1, 1, 1), (7, 1.5, 1.5, 1.5)), music=0, delay=1.0, fade_group=2,
+             fade=4.0, flags=3, nodes=None, count=None):
+    out = u(1) + (nodes or LOGO_NODES) + u(len(groups) if count is None else count)
+    out += b"".join(u(g[0]) + f(g[1:]) for g in groups)
+    return out + u(music) + f([delay]) + u(fade_group) + f([fade]) + (b"" if flags is None else u(flags))
+
+
+def logo_node_patched(index, offset, value):
+    """LOGO_NODES with node `index`'s u32 at `offset` (0 kind, then past the
+    rect and id: the action) set to `value`."""
+    data = bytearray(LOGO_NODES)
+    at = 4
+    for _ in range(index):
+        at = fe.node_end(bytes(data), at)
+    if offset == "action":
+        at += 4 + 4 + 16
+        offset = 4 + struct.unpack_from("<I", data, at)[0]
+    struct.pack_into("<I", data, at + offset, value)
+    return bytes(data)
+
+
+ONE_TRACK = u(1) + track() + u(0) * 3 + u(fe.NO_MUSIC)
+LOGO_CASES = {
+    "ok-logo": blob(music=ONE_TRACK, logo=LOGO_OK),
+    "ok-logo-silent": blob(logo=silent),
+    "ok-logo-raw": blob(music=ONE_TRACK, logo=logo_raw()),
+    "ok-logo-no-fade": blob(music=ONE_TRACK, logo=logo_raw(fade_group=fe.NO_GROUP, fade=0.0, flags=0)),
+    "bad-logo-flag": blob(logo=u(2)),
+    "bad-logo-music": blob(logo=LOGO_OK),
+    "bad-logo-action": blob(music=ONE_TRACK, logo=logo_raw(nodes=logo_node_patched(2, "action", 19))),
+    "bad-logo-button": blob(music=ONE_TRACK, logo=logo_raw(nodes=logo_node_patched(0, 0, 2))),
+    "bad-logo-groups-none": blob(music=ONE_TRACK, logo=logo_raw(groups=(), fade_group=fe.NO_GROUP, fade=0.0)),
+    "bad-logo-groups-nine": blob(music=ONE_TRACK, logo=logo_raw(groups=[(1, 1, 1, 1)] * 9)),
+    "bad-logo-group-image": blob(music=ONE_TRACK, logo=logo_raw(groups=((2, 1, 1, 1),), fade_group=0)),
+    "bad-logo-group-past": blob(music=ONE_TRACK, logo=logo_raw(groups=((9, 1, 1, 1),), fade_group=0)),
+    "bad-logo-group-twice": blob(music=ONE_TRACK, logo=logo_raw(groups=((1, 1, 1, 1), (1, 1, 1, 1)))),
+    "bad-logo-time-negative": blob(music=ONE_TRACK, logo=logo_raw(groups=((1, -1, 1, 1),), fade_group=0)),
+    "bad-logo-time-nan": blob(music=ONE_TRACK, logo=logo_raw(groups=((1, float("nan"), 1, 1),), fade_group=0)),
+    "bad-logo-time-none": blob(music=ONE_TRACK, logo=logo_raw(groups=((1, 0, 0, 0),), fade_group=0)),
+    "bad-logo-time-past": blob(music=ONE_TRACK, logo=logo_raw(groups=((1, 20, 20, 20.5),), fade_group=0)),
+    "bad-logo-delay": blob(music=ONE_TRACK, logo=logo_raw(delay=61.0)),
+    "bad-logo-fade-no-group": blob(music=ONE_TRACK, logo=logo_raw(fade_group=fe.NO_GROUP)),
+    "bad-logo-fade-no-music": blob(logo=logo_raw(music=fe.NO_MUSIC)),
+    "bad-logo-fade-zero": blob(music=ONE_TRACK, logo=logo_raw(fade=0.0)),
+    "bad-logo-fade-group": blob(music=ONE_TRACK, logo=logo_raw(fade_group=3)),
+    "bad-logo-flags": blob(music=ONE_TRACK, logo=logo_raw(flags=4)),
+    "bad-logo-truncated": blob(music=ONE_TRACK, logo=logo_raw(flags=None)),
+}
 
 
 def unbound(name, action):
@@ -814,6 +923,10 @@ cases = {
     # with it; each mesh UNLIT or lit, and CUT_ZERO or BLEND, with its sort
     # point) and the camera's fog (on, colour, start, end within the far).
     "bad-version-7": blob(version=7),
+    # RQ-101 (version 9): the logo screen, absent (0) or its nodes, groups,
+    # music and flags.
+    "bad-version-8": blob(version=8),
+    **LOGO_CASES,
     "ok-textures-256": blob(more_textures=256 - len(textures.list) - 1),
     "bad-textures-257": blob(more_textures=257 - len(textures.list) - 1),
     "ok-zone": blob(hall=0, zone=u(3) + zone_mesh() + zone_mesh(fe.CUT_ZERO | fe.UNLIT) +
@@ -854,7 +967,7 @@ cases = {
     "bad-music-cut-frame": blob(music=u(1) + track(TRACK[:-1], frames=10) + u(fe.NO_MUSIC) * 4),
     "bad-music-empty": blob(music=u(1) + track(b"", frames=1) + u(fe.NO_MUSIC) * 4),
     "bad-music-screen": blob(music=u(1) + track() + u(1) + u(fe.NO_MUSIC) * 3),
-    "bad-music-missing": valid[:-len(NO_MUSIC)],
+    "bad-music-missing": valid[:-len(NO_MUSIC) - 4],
     # RQ-083 (version 5): PCM tracks and restart periods.
     "ok-music-pcm": blob(music=u(2) + pcm_track(loop=0, restart=21.66) + pcm_track() + u(0) + u(1) * 2 +
                         u(fe.NO_MUSIC)),

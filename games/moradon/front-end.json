@@ -138,8 +138,22 @@
   "music": {
     "tracks": [
       {"path": "Snd/bgm_login.wav", "loop": false, "restart": 21.66},
-      {"path": "Snd/bgm_el_battle.wav", "loop": true}
+      {"path": "Snd/bgm_el_battle.wav", "loop": true},
+      {"path": "installer-1264:Snd/bless.wav", "loop": false}
     ],
     "screens": {"login": 0, "select": 1, "create": 1}
+  },
+  "logo": {
+    "ui": "installer-1264:UI_US/co_usa_logo_us.uif",
+    "place": "centre",
+    "groups": [
+      {"node": "group_k2", "seconds": 1.5},
+      {"node": "group_presents", "seconds": 1},
+      {"node": "group_knight", "seconds": 1.5}
+    ],
+    "peak": 1.5,
+    "music": {"track": 2, "delay": 1, "fade_group": 2, "fade": 4},
+    "skip": "key",
+    "cursor": "hidden"
   }
 }

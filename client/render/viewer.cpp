@@ -479,9 +479,12 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     }
     std::map<uint64_t,std::vector<n3e::character_lod::AttachmentState>> attachment_states;
     std::unique_ptr<n3e::WorldClient> network;
+    // RQ-101 (Q82): with a KO front end the connection starts on the first
+    // frame that is not its logo screen, as KO 1264 connects from its login
+    // procedure (CGameProcLogIn::Init), after the logo.
     if (!endpoint.empty())
       network =
-          std::make_unique<n3e::WorldClient>(release, scene, endpoint, ca, edge);
+          std::make_unique<n3e::WorldClient>(release, scene, endpoint, ca, edge, !release.front_end);
     // Spec 02: with a realm config naming a Discord application the login screen
     // is "Log in with Discord"; ENTER starts it, ESC cancels the browser wait.
     std::unique_ptr<n3e::login::Flow> discord_flow;
@@ -1672,7 +1675,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     auto reset_connection=[&]{
       network.reset();
       network = std::make_unique<n3e::WorldClient>(release, scene,
-                                                   endpoint, ca, edge);
+                                                   endpoint, ca, edge, !release.front_end);
       if (discord_flow) discord_flow->reset();
       world = {};
       notices_seen = 0;
@@ -1702,6 +1705,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     auto front_active=[&]{ return front && (entry < 4 || front_entering); };
     while (run) {
       profile_mark(-1);
+      if (network && !(front && front->screen() == n3e::front::Screen::logo)) network->start();
       SDL_Event e;
       while (SDL_PollEvent(&e)) {
         window_stack.sync(open_windows());
@@ -2942,6 +2946,16 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
 #endif
       // Spec 11: the KO screens draw the whole frame until the world is in.
       const bool front_frame = network && front_active();
+      // RQ-101: 1264's logo screen hides the system cursor while it shows.
+      if (front) {
+        static bool cursor_hidden = false;
+        const bool hide = front_frame && front->cursor_hidden();
+        if (hide != cursor_hidden) {
+          cursor_hidden = hide;
+          if (hide) SDL_HideCursor();
+          else SDL_ShowCursor();
+        }
+      }
       if (front_frame) {
         const double now = SDL_GetTicksNS() / 1e9;
         if (front_entering) {
@@ -2961,7 +2975,9 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
                     {realm_config ? realm_config->name : endpoint, world.status, release.version,
                      &world.characters, front_progress});
         // RQ-018 (Q57): the screen's track, streamed; no listener (music is
-        // not positioned and the screens play no effects).
+        // not positioned and the screens play no effects). RQ-101: at the
+        // gain the screen gives it (the logo track's fade-out).
+        audio.mixer.music_gain = front->music_gain();
         audio.mixer.play_music(front->music());
         audio.tick(SDL_GetTicks() / 1000., n3e::AudioListener{});
         glUseProgram(p);
@@ -2971,6 +2987,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
         glBindTexture(GL_TEXTURE_2D, texture);
       } else {
       // KO releases the BGM when the world is entered (1298 005fea70).
+      audio.mixer.music_gain = 1;
       audio.mixer.play_music(nullptr);
       glViewport(0, 0, width, height);
       if (release.exploration) {

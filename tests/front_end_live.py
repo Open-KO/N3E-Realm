@@ -25,12 +25,21 @@ from the player's own KO data.
      package and its textures) to the first World (1);
    - message: the box's text rect holds text (RQ-085: 1264's El_MessageBox_us,
      its OK button only, as KO's MessageBoxPost shows an MB_OK box);
+   - logo (RQ-101, KO-FINDINGS 9.2: 1264's logo procedure, first in the
+     process): each of co_usa_logo_us.uif's three groups in its hold draws its
+     art (K2 Network, presents, Knight Online) in the layout's rect and black
+     everywhere else; half way into the first group's fade-in its art is drawn
+     at 127/255 of its brightness; the screen is 12 s long (1.5, 1 and 1.5 s
+     fades to KO's peak 1.5), skips on a key, hides the cursor and gives way to
+     the login once it has run;
    - music (RQ-018, Q57; RQ-083, KO-FINDINGS 9): login and the realm list
      name one track, select and create another, loading none: 1097's
      Snd/bgm_login.wav (PCM, 477,749 frames at 22,050 Hz stereo), which
      restarts at its first sample every 21.66 s, and Snd/bgm_el_battle.wav
      (PCM, 3,995,263 frames), which loops; each streams audibly one second
-     past its end without ending.
+     past its end without ending. The logo (RQ-101): 1264's Snd/bless.wav
+     (PCM, 305,280 frames at 22,050 Hz mono), once, from 1 s in, faded out
+     over 4 s from the third group.
 
 No server or stack.
 """
@@ -166,6 +175,13 @@ def lit_share(path, rect):
     return sum(sum(p) > 200 for p in row) / len(row)
 
 
+# RQ-101: the logo layout's groups, as the 1097 choice reads it.
+import ko_hud  # noqa: E402
+
+logo_recipe = json.loads(front_end_choice.choose("games/moradon")["recipe"].read_text())["logo"]
+logo_tree = ko_hud.parse(ko_front_end.inputs(front_end_choice.resolve("games/moradon", chosen)).get(logo_recipe["ui"]))
+LOGO_GROUPS = [next(c for c in logo_tree["children"] if c["id"] == g["node"]) for g in logo_recipe["groups"]]
+
 realm = B / "realm.json"
 realm.write_text('{"id": "front-end", "name": "Local Realm", "host": "127.0.0.1", "port": 1, '
                  '"discord_client_id": "0"}')
@@ -186,7 +202,8 @@ for size in ("1280x1024", "1024x768"):
                  (d.split(":") for d in drawn.split(";") if d)]
         shots[name] = (Path(path), tuple(map(int, rect.split(","))) if rect else None, boxes)
     assert set(shots) == {"login", "realms", "realms-unnamed", "select-1", "select-2", "select-3", "create",
-                          "loading-start", "loading-world", "message"}, shots.keys()
+                          "loading-start", "loading-world", "message", "logo-0", "logo-1", "logo-2",
+                          "logo-fade"}, shots.keys()
 
     path, rect, boxes = shots["login"]
     assert [k for k, _ in boxes] == ["intro"], boxes
@@ -230,14 +247,43 @@ for size in ("1280x1024", "1024x768"):
     path, rect, _ = shots["message"]
     assert len(set(region(path, rect))) > 10, (size, rect)
 
+    # RQ-101: the logo screen. Each group's art is its layout's image that is
+    # not the full-canvas black backdrop; the frame is black outside it.
+    s = min(width / 1024, height / 768)
+    ox, oy = (width - 1024 * s) / 2, (height - 768 * s) / 2
+    arts = []
+    for group in LOGO_GROUPS:
+        x0, y0, x1, y1 = next(c["rect"] for c in group["children"] if c["rect"] != [0, 0, 1024, 768])
+        arts.append((int(ox + x0 * s), int(oy + y0 * s), int(ox + x1 * s) + 1, int(oy + y1 * s) + 1))
+    brightness = []
+    for g, art in enumerate(arts):
+        path, rect, boxes = shots["logo-%d" % g]
+        assert boxes == [] and rect == (int(ox), int(oy), int(ox + 1024 * s), int(oy + 768 * s)), (size, rect)
+        inside = region(path, art)
+        # The art is drawn (group 1's grey "presents" has 16 colours as cooked).
+        lit_art = sum(1 for p in inside if p != b"\0\0\0") / len(inside)
+        assert len(set(inside)) > 10 and lit_art > 0.05, (size, g, len(set(inside)), lit_art)
+        brightness.append(sum(sum(p) for p in inside) / len(inside))
+        _, _, body = pixels(path)
+        lit = sum(1 for i in range(0, len(body), 3) if body[i:i + 3] != b"\0\0\0"
+                  and not (art[0] <= (i // 3) % width < art[2] and art[1] <= (i // 3) // width < art[3]))
+        assert lit == 0, (size, g, lit)
+    faded = region(shots["logo-fade"][0], arts[0])
+    ratio = sum(sum(p) for p in faded) / len(faded) / brightness[0]
+    assert 0.45 < ratio < 0.53, (size, ratio)
+    logo = re.search(r"^FRONT_LOGO (.*)$", run.stdout, re.M)
+    assert logo and logo.group(1) == ("groups=3 length=12 skip=1 cursor=1 alpha=1.000000,1.000000,1.000000,0.498039 "
+                                      "before=logo end=login"), (size, logo and logo.group(1))
+
     music = re.search(r"^FRONT_MUSIC (.*)$", run.stdout, re.M)
-    assert music and music.group(1) == "login=0 realms=0 select=1 create=1 loading=none", (size, music)
+    assert music and music.group(1) == ("login=0 realms=0 select=1 create=1 loading=none logo=2 delay=1 "
+                                        "fade_group=2 fade=4"), (size, music)
     streams = {}
     for m in re.finditer(r"^FRONT_MUSIC_STREAM track=(\d+) kind=(\S+) rate=(\d+) channels=(\d+) frames=(\d+) "
                          r"loop=(\d) restart=(\S+) decoded=(\d+) restarts=(\d+) peak=(\S+) audible=(\d+) "
                          r"ended=(\d)$", run.stdout, re.M):
         streams[int(m.group(1))] = m
-    assert sorted(streams) == [0, 1], (size, run.stdout[-2000:])
+    assert sorted(streams) == [0, 1, 2], (size, run.stdout[-2000:])
     # The login track (sound 35): restarted at 21.66 s, before its own end
     # (21.667 s), so once in the pass and a second past it.
     kind, rate, channels, frames, loop, restart, decoded, restarts, peak, audible, ended = streams[0].groups()[1:]
@@ -251,9 +297,15 @@ for size in ("1280x1024", "1024x768"):
         streams[1].group(0)
     assert restarts == "0" and ended == "0" and int(decoded) > int(frames), streams[1].group(0)
     assert float(peak) > 0.1 and int(audible) > 48000 * 170, streams[1].group(0)
-    frames = "%s and %s" % (streams[0].group(5), streams[1].group(5))
+    # The logo's track (1264's Snd\\bless.wav, 005fa500): played once, to its end.
+    kind, rate, channels, frames, loop, restart, decoded, restarts, peak, audible, ended = streams[2].groups()[1:]
+    assert (kind, rate, channels, frames, loop, restart) == ("pcm", "22050", "1", "305280", "0", "0"), \
+        streams[2].group(0)
+    assert restarts == "0" and ended == "1" and decoded == frames, streams[2].group(0)
+    assert float(peak) > 0.1 and int(audible) > 48000 * 13, streams[2].group(0)
+    frames = "%s, %s and %s" % (streams[0].group(5), streams[1].group(5), streams[2].group(5))
     print(f"PASS front-end captures {size}: intro box {boxes and shots['login'][2][0][1]}, "
           f"realm name {inside} px in the list, 1-3 characters in the hall, create stands "
-          f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}, music "
-          f"{frames} PCM frames, restarted and looped")
+          f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}, the logo's three "
+          f"groups (faded {ratio:.2f}), music {frames} PCM frames, restarted, looped and played once")
 print("PASS KO front end graphical")

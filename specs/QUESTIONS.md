@@ -355,7 +355,10 @@ the front end; renaming them is a content migration (spec 10, M5b) with a revisi
 
 ### Q56 — The KO copyright line and service logos
 
-*Superseded by Q61: KO's copyright line is kept.*
+*Superseded by Q61: KO's copyright line is kept.* *RQ-101 (the maintainer,
+2026-11-02, "lets keep it looking and feeling as close to the original as
+possible"): the realm no longer avoids KO's publisher branding where KO shows it:
+the 1097 choice shows 1264's "K2 Network presents Knight Online" logo screen (Q82).*
 
 `co_login_us.uif` carries "Copyright MGAME & Noahsystem all right reserved." and the
 Daum/MGame logos. **Default taken (spec 11), accepted by the maintainer 2026-10-31:** hide the logos; replace the line with
@@ -432,6 +435,11 @@ login press show in KO's message box. Still hidden: the Daum/MGame logos (the UI
 names `ui_us\service_logos.dxt`, absent from the pinned tree, which has
 `Service_Logos_us.DXT`) and `premium` and the three notice groups (KO's news panels,
 which draw as empty frames with no news to fill them).
+*RQ-101 (Q82):* that keeps the login itself as KO draws it; it is not a stance
+against KO's other screens. Before the login, the 1097 choice now shows 1264's logo
+screen, as the maintainer asked (2026-11-02: "lets keep it looking and feeling as
+close to the original as possible"). The login's Daum/MGame images stay hidden for
+their missing texture.
 
 ### Q62 — The realm client's window size
 
@@ -864,3 +872,48 @@ caller.
 **Default taken (RQ-085):** (a): `front-end.json` sets `Text_title` to the empty
 string. A title per message would be wording the realm adds to a KO screen; revisit
 if a message needs one.
+
+### Q82 — 1264's logo screen before the login
+
+1264's WinMain starts the process on a logo procedure (KO-FINDINGS §9.2, binary
+`00602506`): "K2 Network", "presents" and "Knight Online" (`co_usa_logo_us.uif`), each
+fading in, holding and fading out on black, 12 s in all, `Snd\bless.wav` from 1 s
+faded out over 4 s, any key skipping it, the cursor hidden; then the login. Q56 and
+Q61 kept the realm's screens free of KO's service branding, and RQ-085 recorded "the
+realm shows no logo screen". The maintainer (2026-11-02), asked whether the 1097
+choice shows it: "lets keep it looking and feeling as close to the original as
+possible." **Default taken (RQ-101):** the 1097 choice shows it as 1264 does, cooked
+from the 1264 install (N3FE version 9's logo section; `content/front-end.md` section
+10). Whether a package has the screen is one value, the recipe's `logo` (absent: no
+section, the client starts on the login), so a realm-config switch (RQ-103) only has
+to drop or keep it. Two details are the realm's, neither changing what a player sees
+or hears: the music's 1 s delay counts the client's frame time, as the fades do,
+where 1264's procedure reads the performance counter (they part only on a frame
+longer than the client's 0.25 s step); and the realm's fade-out sets the stream's
+gain each frame, mixed up to 128 ms ahead, where Miles sets the volume each sound
+tick. The screen is scaled to the window with the canvas, as every realm screen is
+(1264 draws its UI unscaled, centred). A version 9 package is a new package, so a new
+realm (Q63).
+
+Three robustness choices (RQ-101 review), each keeping 1264's behaviour where the
+realm's platform differs from DirectInput's:
+- **Which key skips it.** 1264 calls the logo UI's OnKeyPress for each key whose
+  press state is set (ProcessUIKeyInput, binary `005f97a0`: the array at input
+  `+0x26c`), and that state is the frame's DirectInput edge, up at the last poll and
+  down at this one (source `LocalInput.cpp`, `m_bKeyPresses`); its `007ad12e` flag
+  only pairs a press with its release, it does not wait for every key to be up. So
+  only a press during the screen skips it. The realm drops a key-down stamped before
+  the screen's first frame (queued while the client loaded) and a modifier key-down
+  (Shift, Ctrl, Alt, GUI, Mode, Level 5) within 100 ms after a focus gain: SDL 3.4's
+  Wayland keyboard enter reports each modifier held as the window gains focus as a
+  key-down (often the compositor's Super as the window maps), which is no press
+  during the screen. Any other key, a modifier included, skips it as in 1264
+  (`client/render/front_logo.h`, `logo_key_skips`).
+- **When the realm connection starts.** 1264 connects from its login procedure
+  (source `GameProcLogIn_1098.cpp`, `CGameProcLogIn::Init`), after the logo; the
+  client with a KO front end starts its connection on the first frame that is not
+  the logo screen (`WorldClient`'s deferred start), so nothing about the realm
+  happens during the logo.
+- **Messages.** A message box raised during the logo (a reset connection, a Discord
+  alert) waits and shows on the login, the latest one, since 1264 has nothing to
+  report before its login runs.

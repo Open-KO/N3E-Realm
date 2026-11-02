@@ -3,9 +3,16 @@ on the Moradon package cooked from the player's own KO data, with the Discord
 stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
 
 - The test client plays the screens with a player's events
-  (N3E_TEST_FRONT_FLOW, client/harness/front_end_flow.inc): Discord login on one
-  ENTER pressed while the server is paused (SIGSTOP), so before the connection is
-  up; the press is held and the flow starts once the server resumes. The first
+  (N3E_TEST_FRONT_FLOW, client/harness/front_end_flow.inc): first the logo
+  screen (RQ-101, 1264's, KO-FINDINGS 9.2), its music starting 1 s in and the
+  cursor hidden, which a focus gain with a modifier and a key stamped before
+  it 0.5 s in leave (Q82), a click 1.1 s in leaves and SPACE 1.3 s in skips, the
+  login starting its own track at once; then Discord login on one
+  ENTER pressed while the realm connection is held, so before it is up; the
+  press is held and the flow starts once the connection goes through. (The
+  client connects when the login first shows, as 1264 does (Q82); the test
+  holds that connection in a TCP relay until ENTER, not by pausing the
+  server, whose 2 s admission lease a paused logo would outlast.) The first
   browser step is denied: KO's message box shows the flow's failure, and ENTER
   again logs in (the browser step played here on the address it prints) -> realms -> select (no
   characters) -> create "Taken", which another account holds: the server's
@@ -23,7 +30,9 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   operator's wording in the message box.
 - `character_slots` (3, front-end.bin) refuses a fourth character at the wire,
   in the server's wording; the Characters list names the levels.
-- Music (RQ-018; RQ-083, KO-FINDINGS 9): one stream starts on the login screen
+- Music (RQ-018; RQ-083, KO-FINDINGS 9): the logo's (bless.wav) 1 s into it,
+  replaced by the login's when SPACE skips it (1264's login Init releases it);
+  then one stream starts on the login screen
   and plays on through the realm list (1097's sound 35, restarting in place), a
   second replaces it on select (sound 20003, as 1097's game-server login answer
   does) and plays on through create and select again, stops on loading, before
@@ -36,9 +45,10 @@ import math
 import os
 from pathlib import Path
 import secrets
-import signal
+import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -77,6 +87,65 @@ def run(*cmd, env=None):
     return p
 
 
+class Relay:
+    """A TCP relay to the realm that holds each connection (reading nothing
+    from the client) until `released` is set, then joins it to `port`.
+    `held_at`: when the first connection arrived. `close` closes the
+    listener and every socket it opened."""
+
+    def __init__(self, port):
+        self.port, self.released, self.held_at = port, threading.Event(), None
+        self.sockets, self.lock = [], threading.Lock()
+        self.listener = socket.create_server(("127.0.0.1", 0))
+        self.listen = self.listener.getsockname()[1]
+        threading.Thread(target=self.accept, daemon=True).start()
+
+    def keep(self, s):
+        with self.lock:
+            self.sockets.append(s)
+        return s
+
+    def accept(self):
+        while True:
+            try:
+                client, _ = self.listener.accept()
+            except OSError:
+                return
+            self.held_at = self.held_at or time.monotonic()
+            threading.Thread(target=self.join, args=(self.keep(client),), daemon=True).start()
+
+    def join(self, client):
+        self.released.wait(240)
+        try:
+            server = self.keep(socket.create_connection(("127.0.0.1", self.port), timeout=5))
+            server.settimeout(None)
+        except OSError:
+            client.close()
+            return
+        for a, b in ((client, server), (server, client)):
+            threading.Thread(target=self.pump, args=(a, b), daemon=True).start()
+
+    @staticmethod
+    def pump(a, b):
+        try:
+            while data := a.recv(65536):
+                b.sendall(data)
+        except OSError:
+            pass
+        for s in (a, b):
+            try:
+                s.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+    def close(self):
+        self.listener.close()
+        with self.lock:
+            for s in self.sockets:
+                s.close()
+            self.sockets.clear()
+
+
 def sql(query):
     return run("docker", "exec", name, "psql", "-U", "n3e", "-d", "n3e", "-Atc", query).stdout.strip()
 
@@ -110,7 +179,7 @@ def peer_login(who, source):
 
 
 discord = Discord(CLIENT_ID, SECRET, REDIRECT)
-containers, server, client = [], None, None
+containers, server, client, relay = [], None, None, None
 try:
     for suffix, image, cp, extra in [
         ("", "postgres:17.4-bookworm@sha256:304ab813518754228f9f792f79d6da36359b82d8ecf418096c636725f8c930ad", 5432,
@@ -163,17 +232,17 @@ try:
     subprocess.run(["rm", "-rf", str(home)])
     (home / "config").mkdir(parents=True)
     realm_json = home / "realm.json"
-    # The client's ENTER must come before the connection is up: pause the
-    # server until the client has pressed it.
-    server.send_signal(signal.SIGSTOP)
+    # The client's ENTER must come before the connection is up: hold it in
+    # the relay until the client has pressed it.
+    relay = Relay(listen)
     realm_json.write_text(json.dumps({"id": "front-end", "name": "Front End Realm", "host": "localhost",
-                                      "port": listen, "discord_client_id": CLIENT_ID}))
+                                      "port": relay.listen, "discord_client_id": CLIENT_ID}))
     client = subprocess.Popen(
         ["build/client/n3e-test-client", str(package), "--realm", str(realm_json), "--ca", "deploy/local/ca.pem"],
         env={**env, "XDG_CONFIG_HOME": str(home / "config"), "N3E_TEST_NO_BROWSER": "1",
              "N3E_TEST_FRONT_FLOW": "Taken,Fresh"},
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    lines, flow, kicked, denied = [], [], False, False
+    lines, flow, kicked, denied, held = [], [], False, False, None
     deadline = time.monotonic() + 240
     for line in client.stdout:
         lines.append(line)
@@ -191,7 +260,11 @@ try:
         if line.startswith("FRONT_FLOW "):
             flow.append(line.strip()[len("FRONT_FLOW "):])
             if flow[-1].startswith("enter "):
-                server.send_signal(signal.SIGCONT)
+                held = time.monotonic() - relay.held_at if relay.held_at else None
+                relay.released.set()
+                # The client connects from the login (RQ-101, Q82), so the
+                # hold is a frame or two, far inside its 3 s receive timeout.
+                assert held is None or held < 2, ("the realm connection was held %.2f s" % held, flow)
             if flow[-1].startswith("screen=world") and not kicked:
                 account = sql(f"SELECT id FROM accounts WHERE discord_id='{player['id']}'")
                 status, body = call("POST", f"/v1/accounts/{account}/kick", ops, {"reason": "flow test"})
@@ -205,13 +278,31 @@ try:
     messages = [f[len("message='"):-1] for f in flow if f.startswith("message=")]
     enters = [f for f in flow if f.startswith("enter ")]
     assert enters == ["enter connected=0"], flow
-    assert screens == ["login", "realms", "select", "create", "select", "loading", "world", "login"], flow
+    assert screens == ["logo", "login", "realms", "select", "create", "select", "loading", "world", "login"], flow
     assert messages == ["Discord login was cancelled. ENTER to try again.", REFUSED,
                         "You were disconnected by an operator: flow test."], flow
     order = [f.split()[0] for f in flow if f.startswith(("screen=", "music="))]
-    want = ["screen=login", "music=stream1", "screen=realms", "screen=select", "music=stream2", "screen=create",
-            "screen=select", "screen=loading", "music=none", "screen=world", "screen=login"]
-    assert order in (want, want + ["music=stream3"]), flow
+    want = ["screen=logo", "music=stream1", "screen=login", "music=stream2", "screen=realms", "screen=select",
+            "music=stream3", "screen=create", "screen=select", "screen=loading", "music=none", "screen=world",
+            "screen=login"]
+    assert order in (want, want + ["music=stream4"]), flow
+    # RQ-101 (KO-FINDINGS 9.2, 1264's logo procedure): the first group fades in
+    # over 1.5 s (its alpha in KO's 255ths); the music (bless.wav) plays from
+    # 1 s at full gain; the cursor is hidden; a click leaves the screen
+    # (00601480 takes keys only) and a key skips it to the login.
+    logos = {g["phase"]: g for g in ({k: v for k, v in (kv.split("=") for kv in f.split()[1:])}
+                                     for f in flow if f.startswith("logo "))}
+    # The stray keys 0.5 s in (a modifier right after a focus gain, a key-down
+    # stamped before the screen) leave it showing (Q82): the click still
+    # finds the first group.
+    assert list(logos) == ["stray", "click", "skip"], flow
+    stray, click, skip = logos["stray"], logos["click"], logos["skip"]
+    assert 0.5 <= float(stray["t"]) < 0.65 and stray["group"] == "0" and stray["music"] == "0", logos
+    assert 1.1 <= float(click["t"]) < 1.25 and 1.3 <= float(skip["t"]) < 1.45, logos
+    for g in (click, skip):
+        assert g["group"] == "0" and abs(float(g["alpha"]) - math.floor(float(g["t"]) / 1.5 * 255) / 255) < 1e-4, logos
+        assert g["music"] == "1" and float(g["gain"]) == 1 and g["cursor"] == "0", logos
+    assert flow.index("screen=login characters=0") > flow.index(next(f for f in flow if f.startswith("logo phase=skip")))
     # RQ-066, RQ-075 (KO-FINDINGS 8.1, the 1097 hall): with the pointer on the
     # character in front, the hover clip (pre_select) blends in over its own
     # 0.3 s on its first frame, plays once and holds its last frame; off it,
@@ -290,19 +381,22 @@ try:
     assert edges == [{"slot": 1, "focus": 1, "sounds": 0, "clip": 1}], edges
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
-    print(f"PASS front-end flow: one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box, "
+    print(f"PASS front-end flow: the logo (its music 1 s in, the cursor hidden, a click ignored, SPACE skips it) -> "
+          f"one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box, "
           "Fresh created) -> select (the front character's hover clip blends in on its first frame, plays once and holds, the rest clip blends back; "
           "the spot widens and the info text shows only while the pointer is on it; the arrows turn the camera one slot each way, "
           "ending where 1097's check ends it, each with the turn sound) -> start (blends in over 0.6 s, then plays) -> loading -> world; "
           "a kick returns to login with the operator's wording; "
-          "one music stream on login and the realm list, another from select to loading")
+          "the logo's music, then one stream on login and the realm list, another from select to loading")
     assert server.poll() is None, "server exited"
-    print("PASS KO front-end flow")
+    print("PASS KO front-end flow (%s)" % ("the realm connection held %.2f s before ENTER" % held if held is not None
+                                           else "the realm connection not yet opened at ENTER"))
 finally:
     if client is not None and client.poll() is None:
         client.kill()
+    if relay is not None:
+        relay.close()
     if server is not None:
-        server.send_signal(signal.SIGCONT)
         server.terminate()
         try:
             server.wait(10)

@@ -121,9 +121,13 @@ struct Transport {
 };
 } // namespace
 WorldClient::WorldClient(const Release &r, const Scene &s, std::string e,
-                         std::string c, std::string g)
-    : release(r), scene(s), endpoint(std::move(e)), ca(std::move(c)), edge(std::move(g)),
-      worker([this](std::stop_token stop) { run(stop); }) {}
+                         std::string c, std::string g, bool connect_now)
+    : release(r), scene(s), endpoint(std::move(e)), ca(std::move(c)), edge(std::move(g)) {
+  if (connect_now) start();
+}
+void WorldClient::start() {
+  if (!worker.joinable()) worker = std::jthread([this](std::stop_token stop) { run(stop); });
+}
 WorldClient::~WorldClient() { worker.request_stop(); }
 WorldState WorldClient::poll() {
   std::lock_guard lock(mutex);

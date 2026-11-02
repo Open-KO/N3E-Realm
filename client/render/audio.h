@@ -48,6 +48,9 @@ struct AudioMixer {
   // tick's own timer (006e0344, 007ac9d0) plays it. At most kMusicTracks
   // phases are kept, those of tracks no longer loaded dropped first.
   std::unique_ptr<MusicStream> music;
+  // RQ-101: the music's gain under the voices' (1, or a fade-out the screen
+  // sets each frame: 1264's logo fades its track, 004371a0).
+  float music_gain=1;
   struct MusicPhase {std::weak_ptr<const MusicTrack> track;uint64_t frames=0;};
   std::vector<MusicPhase> music_phases;
   uint64_t music_phase(const std::shared_ptr<const MusicTrack>&track)const{
@@ -87,7 +90,7 @@ struct AudioMixer {
       v.checked=true;if(!effect_starts(v.position,listener.eye,spatial.start_distance()))v.clip=nullptr;
     }
     std::erase_if(voices,[](const auto&v){return !v.clip;});
-    if(music)music->mix(out.data(),frames,.6f);
+    if(music)music->mix(out.data(),frames,.6f*std::clamp(music_gain,0.f,1.f));
     for(const auto&v:voices){
       float gain=.6f,pan=0;
       if(v.positional){

@@ -10,6 +10,8 @@ a text box ("N3E / ADVENTURE", ACCOUNT, SELECT CHARACTER), drawn in code in
 end, cooked from the pinned client tree (`assets/ko/`, spec 10, option C) and,
 for the 1097 choice's screens, the pinned 1264 install (RQ-085, "The client choice"):
 
+0. **Logo** (RQ-101, Q82). 1264's "K2 Network presents Knight Online", before the
+   login, once a process, when the chosen client shows one (the 1097 choice does).
 1. **Intro and login.** KO's login scene, with the orc and the axe under the moon, and
    the login bar, as KO draws it (Q61). Its Login button starts spec 02's Discord login.
 2. **Server list.** KO's server group, with the realm as its one entry.
@@ -80,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 8, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 9, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -145,6 +147,18 @@ replace the panels when the client has a Discord realm config.
   its end; `specs/KO-FINDINGS.md` §8.4). The recipe names it (`select.turn`, with
   `select.paths` in the path mode); `games/moradon/front-end.json` uses `rotate`,
   `games/moradon/front-end-1298.json` `path`.
+- **The logo screen** (N3FE version 9, RQ-101, Q82). A package may hold a logo
+  screen: its nodes (groups, images and strings, no action), up to 8 groups each
+  with its fade-in, hold and fade-out, its music (a track, its delay, the group its
+  fade-out starts with and the fade's length) and its flags (a key skips it; it
+  hides the cursor). The client starts on it, shows each group alone in turn at
+  its alpha over black, then opens the login; a key pressed while it shows skips
+  it with the flag (not one queued before its first frame, nor a modifier the
+  window system reports as held on a focus gain), a click never does. The realm
+  connection starts when it ends, as 1264's login connects; a message raised
+  meanwhile shows on the login. Whether a package has one is the recipe's `logo` key alone
+  (`content/front-end.md`, section 10 and "Moradon"); the 1097 recipe has 1264's
+  (`specs/KO-FINDINGS.md` §9.2).
 - **The select arrows' turn sound** (RQ-077, Q70). 1097's hall plays sound 2501,
   `char_select_turn.wav`, for each turn its arrows start. The package names the
   sound-table id (`front-end.json` `select.turn_sound`), and the cook binds it in
@@ -214,6 +228,7 @@ prev/next).
 
 | State | Shows | Leaves on |
 |---|---|---|
+| logo | only with a logo section, first, once a process (1264's WinMain); each group alone in turn on black, fading in, holding and fading out; the system cursor hidden with the flag; its track from the delay, faded out from its fade group | the last group's end, or a key pressed while it shows with the skip flag (not a click) → login, whose own track starts at once and whose first frame starts the realm connection. A reset connection leaves it playing; a message waits for the login. |
 | login | intro scene looping; login bar | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. Started with `--logout` (spec 02, RQ-068), the client first ends the stored session; a press meanwhile is held until the realm answers. The KO screens have no logout of their own (Q61, Q74). |
 | realms | intro; the server group with the realm's name from `realm.json` | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
 | select | hall; up to 3 characters with the realm's player model and default looks, each standing on clip 0's first frame; the one in front, at rest, plays clip 0 (`pre_select`) once while the pointer is in `DoProcPreselect`'s centre rect and holds its last frame, and clip 2 (`dummy`, clip 0's first frame) otherwise, each change blending over the clip's own blend time from the frame reached, the new clip held on its first frame meanwhile; the front slot's spot widens at the package's rate while the pointer is there, narrows when it leaves and is off at 0; the info text (char_info) shows only while the pointer is there. This is the 1097 client's hall for this asset set (KO-FINDINGS §8.1, Q71), not 1298's | At rest only (not while the camera turns or the start clip plays): ENTER or a click on the character in front (`PtInRect` on the centre rect) → `SelectCharacter`, the spot at its full theta, its clip 1 blended in over the package's start blend (Moradon: 1097's 0.6 s) on its first frame and played to the end (`IsAnimEnd`, after the blend), → loading; a refusal returns it to the hover or rest clip; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next (the arrow buttons, LEFT, RIGHT) turns the camera one slot, the short way about `at` at 1.2 rad/s, to where 1097's check ends the turn (left to right: 1, 0, 2; nothing at the end of the row or while it turns; KO-FINDINGS §8.2); while it turns nothing is ticked and the spot is off. |
@@ -253,7 +268,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 8 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, or no zone and fog) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 9 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, or no logo section) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -322,7 +337,21 @@ CPU (`make test`):
    more than 256 zone meshes, a zone one mesh past the vertex total (196,608) or
    the index total (589,824), a zone cut inside a mesh, and a fog out of its
    range or an off fog with values (RQ-095); the cook refuses a zone past its
-   mesh, vertex or index bound.
+   mesh, vertex or index bound. RQ-101: the cook writes a recipe's `logo` as its
+   groups' fade-in, hold and fade-out (from KO's seconds and peak), its music and
+   flags, and nothing without one, and refuses an unknown key, no group or more
+   than 8, a group that is no group node, hidden or named twice, seconds out of
+   bounds, a peak of 1 or less, a track past the tracks, a fade group without its
+   fade or past the groups, an unknown skip or cursor, and a layout node other
+   than a group, image or string; the loader refuses a logo flag other than 0 or
+   1, a bound action, a node of another kind, 0 or 9 groups, a group that is not
+   a group node or is named twice, group times out of bounds (negative, NaN, all
+   0 or past 60 s), a delay past 60 s, a fade without a group or a track or of
+   0, a fade group past the groups, unknown flags and truncation; the logo
+   helpers (`client/render/front_logo.h`, `tests/front_end.cpp`) give 1264's
+   12 s, each group's alpha in 255ths and the music from 1 s, faded over 4 s,
+   and skip on a key stamped during the screen but not on one stamped before it
+   or a modifier right after a focus gain (Q82).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.
@@ -352,13 +381,21 @@ KO (`make live-ko`, needs `assets/ko`):
    projected box is non-empty and covers the view's centre: KO's close-up runs past
    the frame's edges); the login button's rect has its
    art; the realms list shows the realm name; select shows 1, 2 and 3 characters in
-   the slots; loading shows a progress bar that advances. Music: login and the realm
+   the slots; loading shows a progress bar that advances; the logo (RQ-101) draws
+   each group's art in its rect and black elsewhere, half bright half way into
+   the first fade-in, and gives way to the login after 12 s. Music: login and the realm
    list name one track, select and create another, loading none (1097's
    `bgm_login.wav`, which restarts at 21.66 s, and `bgm_el_battle.wav`, which loops,
-   RQ-083), and each streams audibly past its end.
+   RQ-083), and each streams audibly past its end; the logo names a third,
+   `bless.wav`, from 1 s with its 4 s fade from group 2, which plays once
+   (RQ-101).
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:
+   - the logo first (RQ-101): its music 1 s in and the cursor hidden; a focus gain
+     with a modifier right after it and a key stamped before the screen leave it
+     (Q82), a click leaves it, SPACE skips it to the login, whose track replaces
+     the logo's;
    - Discord login → realms → create a character (the name refusal path, then success)
      → select → start → loading → in world;
    - on select, with the pointer on the character in front, its clip blends in on its
@@ -381,4 +418,4 @@ Manual (`docs/manual-testing.md`, Linux and Windows):
 
 ## Open questions
 
-Q50–Q57, Q69, Q71, Q73 and Q74 in `QUESTIONS.md`.
+Q50–Q57, Q69, Q71, Q73, Q74 and Q82 in `QUESTIONS.md`.

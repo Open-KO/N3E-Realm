@@ -6,8 +6,10 @@ and the OK message box, the screens' music (version 3, Q57), each model
 clip's blend time and the select spot's growth rate (version 4, RQ-075),
 PCM music tracks with a restart period (version 5, RQ-083), the select
 hall's front-clip mode (version 6, RQ-086), the select camera's turn mode
-with 1298's recorded camera paths (version 7, RQ-087), and a KO zone drawn as
-the select hall with the select camera's fog (version 8, RQ-095).
+with 1298's recorded camera paths (version 7, RQ-087), a KO zone drawn as
+the select hall with the select camera's fog (version 8, RQ-095), and a logo
+screen before the login (version 9, RQ-101: 1264's "K2 Network presents Knight
+Online").
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -21,7 +23,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 8, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 9, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -91,6 +93,34 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    naming the track shows, and stops while another track or none plays. The
    first entry starts the track at once; a later one starts it only when the
    clock next reaches the period, silent until then.
+10. The logo screen (version 9, RQ-101; `client/render/front_logo.h`): 0 for
+   none, or 1 and then its nodes (a node count, 1–1024, and the nodes as a
+   screen's, item 4: groups, images and strings only, none bound to an action),
+   a group count (1–8) and each group: its node (a group node of the screen, each
+   once) and its fade-in, hold and fade-out (reals, seconds, each 0–60, together
+   above 0 and at most 60); then the music: a track (an index of item 9's tracks,
+   or `0xffffffff` for none), its delay (seconds, 0–60), the group its fade-out
+   starts with (or `0xffffffff` for none; a group needs a track) and the
+   fade-out's seconds (above 0 and at most 60 with a group, 0 without); then the
+   flags (1: a key press skips the screen; 2: the system cursor is hidden while
+   it shows; nothing else). A package with a logo screen starts on it, once a
+   process, before the login (1264's WinMain, `00602506`). The groups show one at
+   a time, in order, each alone (the screen's other nodes, outside every group,
+   always): a group's alpha rises linearly over its fade-in, holds at 1 and falls
+   linearly over its fade-out, cut to 255ths as KO's texture factor is, and the
+   whole screen draws at it over the black clear (no scene). After the last group
+   the login starts. Its music starts its track at its first sample once the
+   delay has run, at full gain, and from the start of its fade group the gain
+   falls linearly to 0 over the fade, after which the track stops; the login
+   then plays its own track, so a skip cuts the logo's off. The time is the sum
+   of the client's frame times from the screen's first frame (each at most
+   0.25 s). With the skip flag a key pressed while the screen shows starts the
+   login: a key down (not a repeat) stamped at or after its first frame, other
+   than a modifier within 100 ms after a focus gain (a window system reporting
+   a key already held; Q82); a click does nothing. The realm connection starts
+   when the screen ends, as 1264 connects from its login; a message raised
+   while it shows (the latest) waits for the login. A reset connection leaves
+   the screen playing.
 
 The client samples as KO sets its devices: UIF images with point sampling on whole
 screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
@@ -297,7 +327,7 @@ The clients, per screen, and what the format expresses for each, are in
 
 | Client | Recipe | Inputs | Status |
 |---|---|---|---|
-| `1097` | `front-end.json` | `assets/ko`, `installer-1264` (`build/ko-reference/installer-1264/client`) | Default. 1097's login scene, select hall (`front_clip` `hover`), turn sound and music (RQ-083: `bgm_login.wav` restarting every 21.66 s, `bgm_el_battle.wav` looping); the 1264 client's English screens (RQ-085, the maintainer's choice over 1097's Korean art): its layouts and their textures from the 1264 install, its message box and its no-victor loading screen (`specs/KO-FINDINGS.md` §9.2) |
+| `1097` | `front-end.json` | `assets/ko`, `installer-1264` (`build/ko-reference/installer-1264/client`) | Default. 1097's login scene, select hall (`front_clip` `hover`), turn sound and music (RQ-083: `bgm_login.wav` restarting every 21.66 s, `bgm_el_battle.wav` looping); the 1264 client's English screens (RQ-085, the maintainer's choice over 1097's Korean art): its layouts and their textures from the 1264 install, its message box and its no-victor loading screen, and (RQ-101) its logo screen before the login (`specs/KO-FINDINGS.md` §9.2) |
 
 Not offered yet: `1298`, `2145` (its UIF versions, its Ogg sounds, its clip
 format) and `steam` (its packs, its protected exe, the pin). Each is its own
@@ -398,6 +428,24 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   recipe names none: its lights are as before.
 
 ## Moradon (`games/moradon/front-end.json`)
+
+- Logo (RQ-101, Q82, `specs/KO-FINDINGS.md` §9.2, binary): 1264's, first in the
+  process. `logo` names the layout (`installer-1264:UI_US/co_usa_logo_us.uif`,
+  `place` `centre`: its root is the canvas), its `groups` (`group_k2`,
+  `group_presents`, `group_knight`) each with KO's `seconds` (1.5, 1 and 1.5:
+  `00601360` raises its fade value by the frame time over them) and KO's `peak`
+  (1.5, `00648f10`), from which the cook writes each group's fade-in (`seconds`),
+  hold (2 × (`peak` − 1) × `seconds`) and fade-out (`seconds`): 4.5, 3 and 4.5 s,
+  12 s in all; `music` (`track` 2, `installer-1264:Snd/bless.wav`, once, 22,050 Hz
+  mono, 13.84 s; `delay` 1 s, `005fa7c0`; `fade_group` 2 and `fade` 4 s,
+  `004371a0(4.0)`); `skip` `key` (`00601480`: any key, no click) and `cursor`
+  `hidden` (`00601140`). **Whether the screen shows is this one key** (and so the
+  logo section's first word in `front-end.bin`): without `logo` the cook writes
+  0 and the client starts on the login; RQ-103 can expose it as a
+  `realm-config.json` switch that drops or keeps the key. The screen's music and
+  the login's are separate tracks: the login's first entry starts
+  `bgm_login.wav` at once, as 1264's first login does (its timer `007ac9d0`
+  starts at 0), and its restart clock (Q75) counts only from there.
 
 The five layouts, and the textures they name, are the 1264 install's
 (`installer-1264:UI_US/...`, RQ-085, `specs/KO-FINDINGS.md` §9.2): the login,
@@ -536,7 +584,8 @@ box and loading are 1264's.
   each sound string in `co_login_us.uif`, `ka_characterselect_us.uif`,
   `Ka_CharacterCreate_us.uif`, `ka_loading_us.uif` and `co_MsgBoxOk_us.uif`
   is empty; RQ-085: `co_loading_us.uif` and `el_messagebox_us.uif` name no
-  sound file either). So do 1097's Karus layouts (`co_login.uif`,
+  sound file either; RQ-101: nor does `co_usa_logo_us.uif`, whose only strings
+are its group names and its texture's). So do 1097's Karus layouts (`co_login.uif`,
   `Ka_CharacterSelect.uif`, `Ka_CharacterCreate.uif`, `Ka_MessageBox.uif`,
   `Co_Loading.uif`, `ka_loading.uif`). So `front-end.bin` carries no UI sounds.
 - Option.ini (`client/render/options.h`): `[Sound] Effect=0` silences the

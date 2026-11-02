@@ -8,8 +8,10 @@ MP3 frames carried as they are, (version 4) each model clip's blend time
 and the select spot's growth rate, and (version 5) PCM music tracks from KO's
 WAVs and a track's restart period, (version 6) the select hall's
 front-clip mode, (version 7) the select camera's turn mode with 1298's
-recorded camera paths, and (version 8) a KO zone drawn as the select hall
-(1298's `karus_intro`) and the select camera's fog. games/moradon/front-end.json names every KO
+recorded camera paths, (version 8) a KO zone drawn as the select hall
+(1298's `karus_intro`) and the select camera's fog, and (version 9) a logo
+screen before the login (1264's "K2 Network presents Knight Online", RQ-101),
+present or absent as the recipe's `logo` says. games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
@@ -39,7 +41,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 8
+VERSION = 9
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -105,6 +107,23 @@ MAX_TEXTURES = 256
 MAX_FONTS = 8
 MAX_TEXT = 1024
 MAX_FILE = 64 * 1024 * 1024
+# The logo screen (version 9, RQ-101; 1264's logo procedure, Init 005fa500 and
+# Tick 005fa7c0, its UI's Load 00601140, Tick 00601360, Render 00600ce0 and
+# OnKeyPress 00601480). Its layout draws groups, images and strings and binds
+# no action. Each listed group shows alone in turn: KO's tick raises a fade
+# value by the frame time over the group's `seconds` up to `peak`, then lowers
+# it the same way until it is below 0, and Render draws the UI with the value,
+# clamped to 1, as its alpha; so a group fades in over `seconds`, holds for
+# 2 (peak - 1) `seconds` and fades out over `seconds`. The music starts
+# `delay` seconds after the screen does and fades out over `fade` seconds
+# from the start of group `fade_group`. `skip` "key": a key press ends the
+# screen; `cursor` "hidden": the system cursor is hidden while it shows.
+LOGO_KEYS = {"ui", "place", "moves", "hidden", "groups", "peak", "music", "skip", "cursor"}
+LOGO_KINDS = {"group", "image", "text"}
+MAX_LOGO_GROUPS = 8
+MAX_LOGO_SECONDS = 60.0
+NO_GROUP = 0xFFFFFFFF
+LOGO_SKIP_KEY, LOGO_HIDE_CURSOR = 1, 2
 # Music (version 3, RQ-018): the client's bounds (client/assets/music.h).
 MAX_TRACKS = 4
 MAX_TRACK_BYTES = 16 * 1024 * 1024
@@ -227,6 +246,7 @@ def recipe_paths(config):
     tracks = section(config.get("music")).get("tracks")
     for at, track in enumerate(tracks if type(tracks) is list else []):
         add("music.tracks[%d].path" % at, section(track).get("path"))
+    add("logo.ui", section(config.get("logo")).get("ui"))
     return out
 
 
@@ -615,19 +635,21 @@ def move(node, rule, above):
     shift(node, x - x0, y - y0)
 
 
-def screen(name, spec, assets, textures, fonts):
+def screen(name, spec, assets, textures, fonts, find=()):
     """One screen's nodes in draw order, on the canvas. CN3UIBase::Load adds
     each child at the front and Render walks the list backwards, so a parent
     draws before its children and the children in file order; a button draws
     the one state image its state names (the image's reserved field), then
     its other children; an image without a texture draws nothing
-    (CN3UIImage::Render)."""
+    (CN3UIImage::Render). `find`: addresses whose node indices are returned
+    too, as (data, indices); one that is hidden or draws nothing refuses."""
     tree, ui = split(assets, spec["ui"])
     root = ko_hud.parse(tree.get(ui))
     # Every address resolves on KO's tree as read, before anything moves or is added.
     table = lambda key: {id(resolve(root, a)): v for a, v in spec.get(key, {}).items()}
     bindings, texts, states = table("bindings"), table("text"), table("states")
     hidden = {id(resolve(root, a)) for a in spec.get("hidden", [])}
+    wanted = [id(resolve(root, a)) for a in find]
     moves = [(resolve(root, m["node"]), m, resolve(root, m["above"][0]) if "above" in m else None)
              for m in spec.get("moves", [])]
     for extra in spec.get("added", []):
@@ -655,7 +677,7 @@ def screen(name, spec, assets, textures, fonts):
         if id(n) in hidden:
             return
         kind = UIF_KINDS.get(n["kind"])
-        if kind is None:
+        if kind is None or (name == "logo" and kind not in LOGO_KINDS):
             raise ValueError("front-end UI type %d" % n["kind"])
         action = bindings.get(id(n), "")
         if action not in ACTIONS:
@@ -693,6 +715,7 @@ def screen(name, spec, assets, textures, fonts):
             size, color, bold, _italic = n["list_font"]
             record += u(font(size, bold)) + u(color)
         index = len(nodes)
+        found[id(n)] = index
         nodes.append(record)
         if len(nodes) > MAX_NODES:
             raise ValueError("front-end node count")
@@ -708,11 +731,17 @@ def screen(name, spec, assets, textures, fonts):
                 child_flags = FOREGROUND
             emit(c, index, child_mask, child_flags)
 
+    found = {}
     emit(root, None, 15, 0)
-    missing = REQUIRED[name] - seen
+    missing = REQUIRED.get(name, set()) - seen
     if missing:
         raise ValueError("front-end %s: unbound %s" % (name, sorted(missing)))
-    return u(len(nodes)) + b"".join(nodes)
+    data = u(len(nodes)) + b"".join(nodes)
+    if not find:
+        return data
+    if any(w not in found for w in wanted):
+        raise ValueError("front-end %s: a node it names is not drawn" % name)
+    return data, [found[w] for w in wanted]
 
 
 # --- scenes -----------------------------------------------------------------
@@ -1316,6 +1345,102 @@ def music(assets, config):
     return data, report
 
 
+def seconds(value, what, low=0.0, high=MAX_LOGO_SECONDS, above=False):
+    if type(value) not in (int, float) or not math.isfinite(value) or value > high or \
+            (value <= low if above else value < low):
+        raise ValueError("front-end logo %s" % what)
+    return float(value)
+
+
+def logo(config, assets, textures, fonts, tracks):
+    """Section 10 (version 9, RQ-101): the logo screen, or its absence (0).
+    `config` is the recipe's `logo` (None: no logo screen); `tracks` the
+    music section's track count. Its layout is cooked as a screen (`screen`)
+    that binds nothing and draws groups, images and strings only; then each
+    group (its node, fade-in, hold and fade-out seconds), the music (a track
+    or none, its delay, the group its fade-out starts with or none, the fade's
+    seconds) and the flags (`LOGO_SKIP_KEY`, `LOGO_HIDE_CURSOR`). 1264's: the
+    groups group_k2, group_presents and group_knight at 1.5, 1 and 1.5 s
+    (00601360: the divisor 1.5 at 00648f10, 1 for group 1) to the peak 1.5,
+    Snd\\bless.wav 1 s after the first tick (005fa7c0, 006489e4), its 4 s
+    fade (004371a0(4.0)) from group 2, a key skipping (00601480) and the
+    cursor hidden (00601140: SetCursor(NULL))."""
+    if config is None:
+        return u(0), None
+    if type(config) is not dict or set(config) - LOGO_KEYS or not {"ui", "place", "groups", "peak"} <= set(config):
+        raise ValueError("front-end logo keys")
+    groups = config["groups"]
+    if type(groups) is not list or not 1 <= len(groups) <= MAX_LOGO_GROUPS:
+        raise ValueError("front-end logo groups")
+    if any(type(g) is not dict or set(g) != {"node", "seconds"} or type(g["node"]) is not str for g in groups):
+        raise ValueError("front-end logo group keys")
+    peak = seconds(config["peak"], "peak", 1.0, 10.0, above=True)
+    screen_data, indices = screen("logo", config, assets, textures, fonts, [g["node"] for g in groups])
+    if len(set(indices)) != len(indices):
+        raise ValueError("front-end logo group twice")
+    data = screen_data
+    nodes = struct.unpack_from("<I", data)[0]
+    report = dict(nodes=nodes, groups=[])
+    data = u(1) + data + u(len(groups))
+    for g, index in zip(groups, indices):
+        if data_kind(screen_data, index) != KINDS["group"]:
+            raise ValueError("front-end logo group %r is not a group" % g["node"])
+        t = seconds(g["seconds"], "group seconds", above=True)
+        fade_in, hold, fade_out = t, 2 * (peak - 1) * t, t
+        if fade_in + hold + fade_out > MAX_LOGO_SECONDS:
+            raise ValueError("front-end logo group seconds")
+        data += u(index) + f([fade_in, hold, fade_out])
+        report["groups"].append(dict(node=g["node"], fade_in=fade_in, hold=hold, fade_out=fade_out))
+    music_config = config.get("music")
+    track, delay, fade_group, fade = NO_MUSIC, 0.0, NO_GROUP, 0.0
+    if music_config is not None:
+        if type(music_config) is not dict or set(music_config) - {"track", "delay", "fade_group", "fade"} or \
+                "track" not in music_config or ("fade_group" in music_config) != ("fade" in music_config):
+            raise ValueError("front-end logo music keys")
+        track = music_config["track"]
+        if type(track) is not int or not 0 <= track < tracks:
+            raise ValueError("front-end logo music track")
+        delay = seconds(music_config.get("delay", 0), "music delay")
+        if "fade_group" in music_config:
+            fade_group = music_config["fade_group"]
+            if type(fade_group) is not int or not 0 <= fade_group < len(groups):
+                raise ValueError("front-end logo fade group")
+            fade = seconds(music_config["fade"], "music fade", above=True)
+    flags = 0
+    skip, cursor = config.get("skip", "none"), config.get("cursor", "shown")
+    if skip not in ("key", "none") or cursor not in ("hidden", "shown"):
+        raise ValueError("front-end logo skip or cursor")
+    flags |= LOGO_SKIP_KEY if skip == "key" else 0
+    flags |= LOGO_HIDE_CURSOR if cursor == "hidden" else 0
+    report.update(music=None if track == NO_MUSIC else track, delay=delay,
+                  fade_group=None if fade_group == NO_GROUP else fade_group, fade=fade, skip=skip, cursor=cursor)
+    return data + u(track) + f([delay]) + u(fade_group) + f([fade]) + u(flags), report
+
+
+def data_kind(data, index):
+    """The kind of node `index` in a cooked screen (`screen`'s bytes)."""
+    at = 4
+    for _ in range(index):
+        at = node_end(data, at)
+    return struct.unpack_from("<I", data, at)[0]
+
+
+def node_end(data, at):
+    """The offset past the cooked node record at `at` (`screen`'s `emit`)."""
+    kind = struct.unpack_from("<I", data, at)[0]
+    at += 4 + 4 + 16
+    at += 4 + struct.unpack_from("<I", data, at)[0] + 12
+    if kind == KINDS["image"]:
+        at += 4 + 16
+    elif kind == KINDS["text"]:
+        at += 4 + struct.unpack_from("<I", data, at)[0] + 12
+    elif kind == KINDS["edit"]:
+        at += 12
+    elif kind == KINDS["list"]:
+        at += 8
+    return at
+
+
 def cook(assets, out, config_path, work):
     """Writes front-end.bin into the directory `out`; returns its provenance.
     `assets` is the choice's `Inputs`, or one tree."""
@@ -1340,6 +1465,10 @@ def write(assets, out, config, work):
         raise ValueError("front-end screens")
     textures, fonts = Textures(assets), {}
     screens = b"".join(screen(n, config["screens"][n], assets, textures, fonts) for n in SCREENS)
+    # Version 9 (RQ-101): the logo screen, or none; its textures and fonts
+    # join the tables before they are written.
+    track_count = len((config.get("music") or {}).get("tracks", []))
+    logo_section, logo_report = logo(config.get("logo"), assets, textures, fonts, track_count)
     strings = config["strings"]
     if set(strings) != set(STRINGS):
         raise ValueError("front-end strings")
@@ -1364,10 +1493,10 @@ def write(assets, out, config, work):
     data = b"N3FE" + u(VERSION) + u(count(config["character_slots"], 3)) + u(CANVAS[0]) + u(CANVAS[1])
     data += u(len(textures.list)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in textures.list)
     tracks, played = music(assets, config.get("music"))
-    data += u(len(fonts)) + atlases + screens + table + scenes + tracks
+    data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section
     if len(data) > MAX_FILE:
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)
     return dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), textures=len(textures.list),
-                fonts=len(fonts), music=played, font_substitutes=sorted(str(p) for p in sources.values()),
+                fonts=len(fonts), music=played, logo=logo_report, font_substitutes=sorted(str(p) for p in sources.values()),
                 sources=dict(sorted(assets.sources.items())), **zone_report)

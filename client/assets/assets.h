@@ -918,6 +918,21 @@ struct FrontPath {
   float eye_rate = 30, at_rate = 30;  // keys a second
   std::vector<V> eye, at;
 };
+// Version 9 (RQ-101): a logo screen before the login (1264's "K2 Network
+// presents Knight Online", KO-FINDINGS 9.2). Its nodes (groups, images and
+// strings, no action) on the canvas; each group shows alone in turn, fading
+// in, holding and fading out on black (render/front_logo.h); the music, a
+// track of `FrontEnd::music` or none, starts `music_delay` seconds in and
+// fades out over `fade` seconds from the start of group `fade_group`.
+struct FrontLogoGroup { uint32_t node = 0; float fade_in = 0, hold = 0, fade_out = 0; };
+struct FrontLogo {
+  static constexpr uint32_t kNone = 0xffffffffu;
+  static constexpr uint32_t SKIP_KEY = 1, HIDE_CURSOR = 2;  // flags
+  std::vector<FrontNode> nodes;
+  std::vector<FrontLogoGroup> groups;
+  uint32_t music = kNone, fade_group = kNone, flags = 0;
+  float music_delay = 0, fade = 0;
+};
 struct FrontEnd {
   uint32_t character_slots = 0, canvas_width = 0, canvas_height = 0;
   std::vector<HudTexture> textures;
@@ -945,6 +960,8 @@ struct FrontEnd {
   static constexpr uint32_t kNoMusic = 0xffffffffu;
   std::vector<std::shared_ptr<const MusicTrack>> music;
   std::array<uint32_t, 4> screen_music{kNoMusic, kNoMusic, kNoMusic, kNoMusic};
+  // Version 9 (RQ-101): the logo screen, when the package has one.
+  std::optional<FrontLogo> logo;
 };
 FrontEnd load_front_end(const Release &release);
 } // namespace n3e

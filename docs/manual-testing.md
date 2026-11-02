@@ -82,12 +82,12 @@ KO's sizes, and `--fullscreen` for full screen at that size (Q62).
 
 | # | Do | Expect |
 |---|---|---|
-| L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game opens on KO's login screen: the orc with the axe under the moon, KO's copyright line, and the login bar exactly as KO's: ID and Password boxes, **Login**, **Cancel**, **Option**, **Registration** (only Login and Cancel do anything). KO 1097's login music plays (`bgm_login.wav`, starting again every 21.66 s, RQ-083); with `[Sound] Effect=0` in the client's `Option.ini` (`~/.config/n3e/`, `%APPDATA%\n3e\` on Windows) the game is silent (Q70). |
-| L2 | **Login** (or ENTER, even right after the window opens) | The browser opens Discord's authorize page for your application; after **Authorize** the tab says you are logged in, and KO's server list drops in from the top with "Local Realm". |
+| L1 | The second command | `Downloading client …`, `Downloading content …`, `Starting Local Realm`; the game opens on KO 1264's logo screen (RQ-101): "K2 Network", "presents" and "Knight Online", each fading in and out on black, with no mouse cursor and `bless.wav` from a second in, fading out under the last; after 12 s, or at once on a key pressed while it shows (a click does nothing, nor does a key or modifier already held as the window opens or gains focus, Q82), KO's login screen: the orc with the axe under the moon, KO's copyright line, and the login bar exactly as KO's: ID and Password boxes, **Login**, **Cancel**, **Option**, **Registration** (only Login and Cancel do anything). KO 1097's login music plays (`bgm_login.wav`, starting again every 21.66 s, RQ-083); with `[Sound] Effect=0` in the client's `Option.ini` (`~/.config/n3e/`, `%APPDATA%\n3e\` on Windows) the game is silent (Q70). |
+| L2 | **Login** (or ENTER, even right after the login screen shows: the realm connection starts only then, as KO's does, and the press waits for it; an ENTER on the logo screen only skips the logo) | The browser opens Discord's authorize page for your application; after **Authorize** the tab says you are logged in, and KO's server list drops in from the top with "Local Realm". |
 | L3 | Double-click the realm (or **Connect**) | The Karus character select hall. With no characters, ENTER opens character create (Tuarek priest, name field). |
 | L4 | Type a name, **Create**; then ENTER (or click the character) | Back in the hall with the new character in the centre slot and "Level 1" in the info bar; ENTER plays its selected animation, then the loading screen, then the world. The login music plays on through the realm list; on select another track takes over (1097's `bgm_el_battle.wav`, RQ-083) and plays on without restarting through create and back to select, and stops when the loading screen shows. |
 | L5 | Walk and run | Moves as in the play scripts. |
-| L6 | Close the game; run the launcher again | No downloads; the game logs in without the browser and opens on the server list. |
+| L6 | Close the game; run the launcher again | No downloads; after the logo screen the game logs in without the browser and opens on the server list. |
 | L7 | Discord: `/status`; `/whois` and pick yourself | One player online; your account, its characters and session. |
 | L8 | Discord: `/notice` some text | It appears in the game; the bot posts it to the announcements channel. |
 | L9 | Discord: `/kick` yourself with a reason | The game returns to the login screen with a message box: "You were disconnected by an operator: <reason>."; the ops channel shows the kick by your name. |
@@ -113,7 +113,7 @@ publisher (they are unsigned, Q26): **More info → Run anyway**.
 | # | Do | Expect |
 |---|---|---|
 | W1 | `self-test.bat` | Ends with `self-test ok`; its `opengl` line names your GPU, not `llvmpipe` or `GDI Generic`. |
-| W2 | `play.bat`, **Login** | KO's login screen, as L1; the browser opens Discord; after **Authorize** the server list drops in. |
+| W2 | `play.bat`, **Login** | The logo screen, then KO's login screen, as L1; the browser opens Discord; after **Authorize** the server list drops in. |
 | W3 | Connect, create a character, enter the world, walk and run | As L3–L5; note the frame rate if it feels slow. |
 | W4 | Close; `play.bat` again | Logs in without the browser and opens on the server list. |
 | W5 | Discord: `/kick` yourself | Back on the login screen with the disconnect message box, as L9. |

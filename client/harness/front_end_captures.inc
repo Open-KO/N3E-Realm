@@ -4,7 +4,14 @@
 // in the window (--fixed-window), writes PREFIX.<shot>.ppm and prints, per
 // shot, the characters drawn (pixel boxes, y down) and one bound node's rect:
 //   FRONT_SHOT name=N size=WxH path=P rect=x0,y0,x1,y1 drawn=intro|hall|create:x0,y0,x1,y1;...
-// then the screens' music (FRONT_MUSIC, below), and exits.
+// then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
+// screen's shots are logo-<group> at a time in each group's hold and
+// logo-fade half way into the first group's fade-in, with rect= the window's
+// canvas (its pixel rect) and drawn= empty; then
+//   FRONT_LOGO groups=G length=L skip=0|1 cursor=0|1 alpha=A0,A1,... before=logo|login end=logo|login
+// (L the screen's seconds; A the alpha of each shot in order; before the
+// screen on a frame 0.1 s before its end, end the screen after a frame that
+// runs it 0.1 s past it).
 // tests/front_end_live.py checks the frames and the music. No server.
 if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   if (!front) throw std::runtime_error("N3E_TEST_FRONT_END needs front-end.bin and a Discord realm");
@@ -13,7 +20,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   n3e::Characters list;
   using Screen = n3e::front::Screen;
   auto shot = [&](const std::string &name, Screen screen, int characters, const std::string &realm, float progress,
-                  n3e::FrontAction bound, const std::string &message) {
+                  n3e::FrontAction bound, const std::string &message, double logo = -1) {
     SDL_PumpEvents();
     list.Clear();
     for (int i = 0; i < characters; ++i) {
@@ -23,6 +30,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       c->set_level(10 * (i + 1));
     }
     front->jump(screen);
+    if (logo >= 0) front->logo_at(logo);
     if (!message.empty()) front->show_message(message);
     const n3e::front::Context context{realm, "ENTER - Log in with Discord", release.version, &list, progress};
     front->draw(width, height, 1.0, context);
@@ -30,7 +38,11 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     const std::string path = std::string(prefix) + "." + name + ".ppm";
     capture(path, width, height);
     std::cout << "FRONT_SHOT name=" << name << " size=" << width << "x" << height << " path=" << path << " rect=";
-    if (auto r = front->action_rect(bound, width, height))
+    if (logo >= 0) {
+      const float s = std::min(width / 1024.f, height / 768.f);
+      std::cout << int((width - 1024 * s) / 2) << "," << int((height - 768 * s) / 2) << ","
+                << int((width + 1024 * s) / 2) << "," << int((height + 768 * s) / 2);
+    } else if (auto r = front->action_rect(bound, width, height))
       std::cout << int((*r)[0]) << "," << int((*r)[1]) << "," << int((*r)[2]) << "," << int((*r)[3]);
     std::cout << " drawn=";
     const char *sep = "";
@@ -55,6 +67,29 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   shot("loading-start", Screen::loading, 1, "Local Realm", 2 / 3.f, A::progress, "");
   shot("loading-world", Screen::loading, 1, "Local Realm", 1, A::progress, "");
   shot("message", Screen::login, 0, "Local Realm", 0, A::message, "Disconnected from server");
+  if (const auto &logo = front->logo()) {
+    // RQ-101: each group in its hold, and the first half way into its fade-in.
+    std::string alphas;
+    auto logo_shot = [&](const std::string &name, double t) {
+      shot(name, Screen::logo, 0, "Local Realm", 0, A::none, "", t);
+      alphas += (alphas.empty() ? "" : ",") + std::to_string(front->logo_shown().alpha);
+    };
+    for (size_t g = 0; g < logo->groups.size(); ++g)
+      logo_shot("logo-" + std::to_string(g),
+                n3e::front::logo_group_start(*logo, g) + logo->groups[g].fade_in + logo->groups[g].hold / 2);
+    logo_shot("logo-fade", logo->groups[0].fade_in / 2);
+    const double length = n3e::front::logo_length(*logo);
+    front->logo_at(length - .1);
+    const n3e::front::Context context{"Local Realm", "", release.version, &list, 0};
+    front->draw(width, height, 1.0, context);
+    const bool before = front->screen() == Screen::logo;
+    front->draw(width, height, 1.2, context);
+    std::cout << "FRONT_LOGO groups=" << logo->groups.size() << " length=" << length
+              << " skip=" << bool(logo->flags & n3e::FrontLogo::SKIP_KEY)
+              << " cursor=" << bool(logo->flags & n3e::FrontLogo::HIDE_CURSOR) << " alpha=" << alphas
+              << " before=" << (before ? "logo" : "login")
+              << " end=" << (front->screen() == Screen::login ? "login" : "logo") << std::endl;
+  }
   // RQ-018 (Q57): each screen's track (its index among the tracks the
   // screens name, or none), then each of those tracks streamed one second
   // past its end (RQ-083: a PCM track's pass is its sample frames; a track
@@ -72,6 +107,19 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     auto at = std::find(tracks.begin(), tracks.end(), track);
     if (track && at == tracks.end()) at = tracks.insert(tracks.end(), track);
     std::cout << " " << label << "=" << (track ? std::to_string(at - tracks.begin()) : std::string("none"));
+  }
+  // RQ-101: the logo screen's track once its delay has run, with its delay
+  // and the group its fade-out starts with:
+  //   FRONT_MUSIC ... logo=K|none delay=D fade_group=G|none fade=F
+  if (const auto &logo = front->logo()) {
+    front->logo_at(logo->music_delay);
+    const auto track = front->music();
+    auto at = std::find(tracks.begin(), tracks.end(), track);
+    if (track && at == tracks.end()) at = tracks.insert(tracks.end(), track);
+    std::cout << " logo=" << (track ? std::to_string(at - tracks.begin()) : std::string("none"))
+              << " delay=" << logo->music_delay << " fade_group="
+              << (logo->fade_group == n3e::FrontLogo::kNone ? std::string("none") : std::to_string(logo->fade_group))
+              << " fade=" << logo->fade;
   }
   std::cout << std::endl;
   front->jump(Screen::login);

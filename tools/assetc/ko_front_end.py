@@ -15,7 +15,9 @@ present or absent as the recipe's `logo` says, and (version 10) each message
 box message's title and wording (RQ-102, Q81), from the recipe's `messages`:
 a KO text-table row or the recipe's own string, and (version 11) where each
 layout's nodes go at a window's own size, as KO's UI code places them by the
-viewport (RQ-106, Q82). games/moradon/front-end.json names every KO
+viewport (RQ-106, Q82), and (version 12) the action `login_closed`, a node
+drawn only while the login group is not (1264's SetVisibleLogInUIs, RQ-108).
+games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
@@ -45,7 +47,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 11
+VERSION = 12
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -85,9 +87,15 @@ KINDS = {"image": 0, "text": 1, "button": 2, "edit": 3, "progress": 4, "group": 
 # The UIF node types (CN3UIBase) the front-end layouts use; any other refuses.
 UIF_KINDS = {0: "group", 1: "button", 3: "progress", 4: "image", 6: "text", 8: "edit", 9: "area", 14: "list"}
 # The engine's closed action set (spec 11); the client gives each its behaviour.
+# `title` is version 10's (RQ-102), `login_closed` version 12's (RQ-108): a
+# login screen node drawn only while the login group is not (a login waiting
+# for its answer, and the realm list), as 1264's SetVisibleLogInUIs (005c2820)
+# shows Text_Rights.
 ACTIONS = ("", "login", "exit", "login_group", "realm_group", "realm_list", "realm_connect", "notice",
            "select_prev", "select_next", "back", "char_info", "create_confirm", "name_field", "char_view",
-           "class_desc", "progress", "version", "info", "message", "ok", "title")
+           "class_desc", "progress", "version", "info", "message", "ok", "title", "login_closed")
+# Actions bound on one screen only (the others never draw or use them).
+ONLY_ON = {"login_closed": "login"}
 REQUIRED = {"login": {"login", "exit", "login_group", "realm_group", "realm_list", "realm_connect"},
             "select": {"select_prev", "select_next", "back", "exit", "char_info"},
             "create": {"create_confirm", "back", "name_field", "char_view"},
@@ -806,7 +814,7 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None):
         if kind is None or (name == "logo" and kind not in LOGO_KINDS):
             raise ValueError("front-end UI type %d" % n["kind"])
         action = bindings.get(id(n), "")
-        if action not in ACTIONS:
+        if action not in ACTIONS or ONLY_ON.get(action, name) != name:
             raise ValueError("front-end action %r" % action)
         if action in seen:
             raise ValueError("front-end action %r bound twice" % action)

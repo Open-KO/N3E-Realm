@@ -11,6 +11,7 @@
 #include "platform/gl_load.h"
 #include "render/animation.h"
 #include "render/front_logo.h"
+#include "render/front_login.h"
 #include "render/scene_clock.h"
 #include "render/select_hall.h"
 #include "render/select_path.h"
@@ -230,8 +231,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       }
       clips.push_back(std::move(poses));
     }
-    for (const auto &node : fe.screens[size_t(FrontScreen::login)])
+    for (const auto &node : fe.screens[size_t(FrontScreen::login)]) {
       if (node.action == FrontAction::realm_group) realm_height = node.rect[3] - node.rect[1];
+      if (node.action == FrontAction::login_closed) login_closes = true;
+    }
     seats.mode = fe.front_clip;
     for (size_t i = 0; i < seats.length.size(); ++i) {
       seats.length[i] = clip_length(1, i);
@@ -286,6 +289,20 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   void heard_music(const HeardMusic &h) { heard = h; }
   // The login scene's clock as the last frame left it (a test hook).
   const SceneClock &scene() const { return scene_clock; }
+  // RQ-108: whether a login is under way (the viewer's, each frame): KO hides
+  // the login group from a login press until its answer and shows the node
+  // bound to login_closed meanwhile (render/front_login.h).
+  void login_waiting(bool on) { waiting = on; }
+  // Whether the current layout's node bound to `action` draws in this state
+  // (a test hook; false without one).
+  bool action_shown(FrontAction action) const {
+    const auto screen = layout();
+    const auto &nodes = fe.screens[size_t(screen)];
+    const auto shown = visible(screen);
+    for (size_t i = 0; i < nodes.size(); ++i)
+      if (nodes[i].action == action) return shown[i];
+    return false;
+  }
   // The Discord login finished: KO's OpenServerList.
   void logged_in() {
     // A message box (a kick, a drop) stays over the login screen until OK.
@@ -297,6 +314,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // screen plays on: KO 1264 connects only from its login, after it.
   void reset() {
     if (state != Screen::logo) state = Screen::login;
+    waiting = false;  // the connection, and any login on it, is gone
     choosing = -1;
     pending_create = false;
   }
@@ -362,6 +380,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     message.reset();
     choosing = -1;
     pending_create = false;
+    waiting = false;
     slide = realm_height;
     reset_hall();
     face(0);
@@ -558,6 +577,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::array<float, 2> pointer{-1, -1};
   FrontAction pressed = FrontAction::none;
   float realm_height = 0, slide = 0;
+  bool waiting = false;  // RQ-108: a login under way (login_waiting)
+  // RQ-108: whether the login layout has a node bound to login_closed; only
+  // then does a login under way hide the login group (front_login.h).
+  bool login_closes = false;
   // The select camera: the slot it is at and the slot in focus, which is the
   // one it turns to from the press on (1097: CGameProcCharacterSelect's
   // positions +0x2c4 and +0x2c8, the selected index 006e04d0), and its turn
@@ -715,8 +738,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     if (screen == FrontScreen::select && ui_hidden()) return shown;
     for (size_t i = 0; i < nodes.size(); ++i) {
       bool on = i == 0 || shown[nodes[i].parent];
-      if (nodes[i].action == FrontAction::login_group) on = on && state == Screen::login;
-      if (nodes[i].action == FrontAction::realm_group) on = on && state == Screen::realms;
+      // The login group, the realm group and (RQ-108) the node KO shows while
+      // the login group is hidden, each in its states only.
+      on = on && login_state_shows(nodes[i].action, state == Screen::login, state == Screen::realms, waiting,
+                                   login_closes);
       if (nodes[i].kind == FrontNode::BUTTON && on) {
         // Prev and next only where there is a neighbour to turn to.
         const auto order = slot_order();

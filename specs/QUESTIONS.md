@@ -440,6 +440,10 @@ against KO's other screens. Before the login, the 1097 choice now shows 1264's l
 screen, as the maintainer asked (2026-11-02: "lets keep it looking and feeling as
 close to the original as possible"). The login's Daum/MGame images stay hidden for
 their missing texture.
+*RQ-108 (Q85, KO-FINDINGS §9.4):* `Text_Rights` keeps KO's text and is drawn as
+1264 draws it: only while the login bar is hidden (a login under way, and the realm
+list), centred 20 px above the bottom edge. 1264 never shows the Daum/MGame images
+either.
 
 ### Q62 — The realm client's window size
 
@@ -1026,3 +1030,26 @@ the recipe's `moves` say it, so (b) is a recipe change.
 **Decided (maintainer, 2026-11-02):** (a), "Use 1264's placement". The 1298 recipe
 (not offered) takes the same placements: its select layout is the same file, which
 1298's own code never places (KO-FINDINGS §9.3).
+
+### Q85 — The login bar while the Discord login waits
+
+RQ-108 takes 1264's SetVisibleLogInUIs for the 1097 choice (KO-FINDINGS §9.4):
+1264 hides its login bar from a login press until the login's answer and shows its
+copyright line instead; a failure shows the bar again and a success keeps the line
+into the server list. The realm's login is the Discord flow, so its wait is the
+browser step (up to 5 minutes) and the code, where 1264's is one round trip to the
+login server. KO has no Discord step, so it does not settle what the bar does during
+that wait. Options: (a) hide the bar, as 1264 does from the press, for the whole
+wait, the line shown; the bar's Cancel cannot be clicked then, and ESC cancels the
+browser step as before; (b) keep the bar during the browser step (Cancel clickable,
+no line) and hide it only once the code goes to the realm. **Default taken
+(RQ-108):** (a), as close to 1264 as the flow allows: a press always hides the bar
+until the flow ends; a stored session's login, which sends no press, does the same,
+as 1264's auto-login would. A login server 1264 cannot reach shows its box over the
+line and quits on OK; the realm's box over an unreachable realm returns to the
+login, so it takes a failed answer's look (the bar, no line). (b) is a client change
+in `client/render/viewer.cpp`'s login_waiting, not package data.
+**Decided (maintainer, 2026-11-02):** (a), "Hide the bar, as 1264": the bar is
+hidden for the whole Discord wait and the copyright line shown, ESC cancelling the
+browser step. Only a layout that binds `login_closed` does this; one without it
+(the 1298 recipe) keeps its bar, as before.

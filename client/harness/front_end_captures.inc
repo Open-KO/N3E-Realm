@@ -8,6 +8,12 @@
 //   FRONT_SHOT name=N size=WxH path=P rect=x0,y0,x1,y1 drawn=intro|hall|create:x0,y0,x1,y1;... origin=X,Y,S
 // then the select's buttons where the select placed them (RQ-106):
 //   FRONT_PLACED select_prev=x0,y0,x1,y1 select_next=... back=... exit=...
+// then (RQ-108) whether the login layout's login group, realm group and
+// login_closed node draw at rest, with a login under way and on the realm
+// list, each 0 or 1:
+//   FRONT_LOGIN idle=G,R,C waiting=G,R,C realms=G,R,C
+// (the shot login-waiting is the login with a login under way, rect= the
+// login_closed node's).
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
 // logo-fade half way into the first group's fade-in, with rect= the logo
@@ -25,7 +31,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   using Screen = n3e::front::Screen;
   auto shot = [&](const std::string &name, Screen screen, int characters, const std::string &realm, float progress,
                   n3e::FrontAction bound, const std::string &message, double logo = -1,
-                  n3e::FrontMessage kind = n3e::FrontMessage::disconnected) {
+                  n3e::FrontMessage kind = n3e::FrontMessage::disconnected, bool waiting = false) {
     SDL_PumpEvents();
     list.Clear();
     for (int i = 0; i < characters; ++i) {
@@ -35,6 +41,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       c->set_level(10 * (i + 1));
     }
     front->jump(screen);
+    front->login_waiting(waiting);
     if (logo >= 0) front->logo_at(logo);
     if (!message.empty()) front->show_message(kind, message);
     const n3e::front::Context context{realm, "ENTER - Log in with Discord", release.version, &list, progress};
@@ -66,6 +73,9 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   };
   using A = n3e::FrontAction;
   shot("login", Screen::login, 0, "Local Realm", 0, A::login, "");
+  // RQ-108: a login under way: KO's copyright line instead of the login bar.
+  shot("login-waiting", Screen::login, 0, "Local Realm", 0, A::login_closed, "", -1,
+       n3e::FrontMessage::disconnected, true);
   shot("realms", Screen::realms, 0, "Local Realm", 0, A::realm_list, "");
   shot("realms-unnamed", Screen::realms, 0, "", 0, A::realm_list, "");
   for (int n = 1; n <= 3; ++n) shot("select-" + std::to_string(n), Screen::select, n, "Local Realm", 0, A::char_info, "");
@@ -76,6 +86,16 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     const auto r = front->action_rect(action, width, height);
     std::cout << " " << label << "=";
     if (r) std::cout << int((*r)[0]) << "," << int((*r)[1]) << "," << int((*r)[2]) << "," << int((*r)[3]);
+  }
+  std::cout << std::endl;
+  std::cout << "FRONT_LOGIN";
+  for (const auto &[label, screen, waiting] :
+       {std::tuple{"idle", Screen::login, false}, std::tuple{"waiting", Screen::login, true},
+        std::tuple{"realms", Screen::realms, false}}) {
+    front->jump(screen);
+    front->login_waiting(waiting);
+    std::cout << " " << label << "=" << front->action_shown(A::login_group) << ","
+              << front->action_shown(A::realm_group) << "," << front->action_shown(A::login_closed);
   }
   std::cout << std::endl;
   shot("create", Screen::create, 0, "Local Realm", 0, A::name_field, "");

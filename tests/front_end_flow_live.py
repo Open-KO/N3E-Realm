@@ -30,6 +30,12 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   loading -> the world.
 - An operator kick (admin API) returns the client to the login screen with the
   operator's wording in the message box.
+- The login bar and KO's copyright line (RQ-108, Q85, KO-FINDINGS 9.4: 1264's
+  SetVisibleLogInUIs): the bar shows at rest, and the line instead from each
+  ENTER (the first held through the connection) until the login's answer; the
+  denied Discord step shows the bar again under its message box; the realm
+  list keeps the line; the return after the kick shows the bar (and, if the
+  client logs in again with its stored session before it stops, the line).
 - `character_slots` (3, front-end.bin) refuses a fourth character at the wire,
   in the server's wording; the Characters list names the levels.
 - Music (RQ-018; RQ-083, KO-FINDINGS 9): the logo's (bless.wav) 1 s into it,
@@ -313,6 +319,17 @@ try:
             "music=stream3", "screen=create", "screen=select", "screen=loading", "music=none", "screen=world",
             "screen=login"]
     assert order in (want, want + ["music=stream4"]), flow
+    # RQ-108: the bar at rest, the line instead while a login is under way and
+    # on the realm list.
+    bars = [f[len("bar "):] for f in flow if f.startswith("bar ")]
+    rest, wait = "screen=login group=1 line=0", "screen=login group=0 line=1"
+    assert bars[:6] == [rest, wait, rest, wait, "screen=realms group=0 line=1", rest], flow
+    assert bars[6:] in ([], [wait]), flow
+    # The first ENTER hid the bar; the denied step showed it again under its
+    # box, before the box was answered.
+    at = [i for i, f in enumerate(flow) if f.startswith("bar ")]
+    denied_box = next(i for i, f in enumerate(flow) if f.startswith("message='Discord login was cancelled."))
+    assert flow.index("enter connected=0") < at[1] < at[2] < denied_box < at[3], flow
     # RQ-101 (KO-FINDINGS 9.2, 1264's logo procedure): the first group fades in
     # over 1.5 s (its alpha in KO's 255ths); the music (bless.wav) plays from
     # 1 s at full gain; the cursor is hidden; a click leaves the screen

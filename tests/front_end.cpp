@@ -14,9 +14,12 @@
 // printed for tests/front_end.py. RQ-106: a loaded package named ok-placed*
 // prints each layout's node rects in window pixels at KO's window sizes, an
 // odd size and one smaller than the canvas (client/assets/front_place.h), for
-// tests/front_end.py to check against KO's own placements.
+// tests/front_end.py to check against KO's own placements. RQ-108: the login
+// screen's state-bound nodes in each of the realm's login states
+// (client/render/front_login.h), as 1264's SetVisibleLogInUIs shows them.
 #include "assets/assets.h"
 #include "assets/front_place.h"
+#include "render/front_login.h"
 #include "render/front_logo.h"
 #include "render/select_hall.h"
 #include "render/select_path.h"
@@ -319,6 +322,38 @@ int main(int argc, char **argv) {
     return 1;
   }
   std::cout << "PASS select zone: the camera's linear range fog, the alpha parts far to near\n";
+  {
+    // RQ-108 (KO-FINDINGS 9.4, 1264 005c2820): with a login_closed node, idle
+    // on the login, the bar and no line; a login under way (the press, the
+    // browser step, the code, a stored session's login), the line and no bar,
+    // with a message box over it or not; the realm list, the server group and
+    // the line (a success never shows the bar again); a failure or a reset
+    // back to idle. A layout without one (the 1298 recipe) keeps its bar
+    // while a login is under way, as before version 12.
+    using A = n3e::FrontAction;
+    struct Want { const char *state; bool login, realms, waiting, closes, bar, list, line; };
+    for (const auto &w : {Want{"idle", true, false, false, true, true, false, false},
+                          Want{"waiting", true, false, true, true, false, false, true},
+                          Want{"realm list", false, true, false, true, false, true, true},
+                          Want{"realm list, waiting", false, true, true, true, false, true, true},
+                          Want{"select", false, false, false, true, false, false, false},
+                          Want{"select, waiting", false, false, true, true, false, false, false},
+                          Want{"no login_closed: idle", true, false, false, false, true, false, false},
+                          Want{"no login_closed: waiting", true, false, true, false, true, false, true},
+                          Want{"no login_closed: realm list", false, true, false, false, false, true, true}}) {
+      const bool bar = n3e::front::login_state_shows(A::login_group, w.login, w.realms, w.waiting, w.closes),
+                 list = n3e::front::login_state_shows(A::realm_group, w.login, w.realms, w.waiting, w.closes),
+                 line = n3e::front::login_state_shows(A::login_closed, w.login, w.realms, w.waiting, w.closes),
+                 other = n3e::front::login_state_shows(A::login, w.login, w.realms, w.waiting, w.closes);
+      if (bar != w.bar || list != w.list || line != w.line || !other) {
+        std::cerr << "FAIL login states: " << w.state << ": bar " << bar << " list " << list << " line " << line
+                  << " other " << other << "\n";
+        return 1;
+      }
+    }
+    std::cout << "PASS login states: the bar at rest, KO's line instead while a login is under way and on the "
+                 "realm list; a layout without that line keeps its bar\n";
+  }
   int loaded = 0, refused = 0;
   for (int i = 1; i + 1 < argc; i += 2) {
     const std::string want = argv[i];

@@ -82,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 11, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 12, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -95,8 +95,12 @@ replace the panels when the client has a Discord realm config.
 - **Actions** form a closed engine set, by index: `none`, `login`, `exit`,
   `login_group`, `realm_group`, `realm_list`, `realm_connect`, `notice`,
   `select_prev`, `select_next`, `back`, `char_info`, `create_confirm`, `name_field`,
-  `char_view`, `class_desc`, `progress`, `version`, `info`, `message`, `ok`, `title`. The cook
-  and the loader refuse an unknown action, an action bound twice in a screen and a
+  `char_view`, `class_desc`, `progress`, `version`, `info`, `message`, `ok`, `title`,
+  `login_closed` (N3FE version 12, RQ-108: a login node drawn only while the login
+  group is not, KO's copyright line; a layout that binds it hides its login
+  group while a login is under way, one that does not keeps the group drawn). The cook
+  and the loader refuse an unknown action, an action bound twice in a screen, a
+  `login_closed` off the login screen and a
   screen whose required actions are unbound. Required per screen:
   - login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
     `realm_connect` (`notice` is optional; the Moradon package has none, Q61);
@@ -184,11 +188,12 @@ replace the panels when the client has a Discord realm config.
   each turn an arrow starts; a new turn restarts it. The screens have no other
   sounds: neither 1298's nor 1097's layouts name a button sound (Q70).
 - **`text` overrides.** The format allows them; the Moradon package uses none: the
-  login screen keeps KO's labels and copyright line (Q61, superseding Q56).
+  login screen keeps KO's labels and copyright line (Q61, superseding Q56), the
+  line bound to `login_closed` at 1264's place (RQ-108, Q85).
 - **`hidden`.** The Moradon package keeps the login bar as KO draws it: `Edit_ID`,
   `Edit_PW`, `Btn_Option` and `Btn_Join` (Registration) are shown, unbound, so they
   take no input (Q60, Q61). It hides `Img_Daum` and `Img_MGame` (their texture is
-  not in the pinned tree), `premium` and the three notice groups (KO's news panels,
+  not in the pinned tree, and 1264 never shows them, KO-FINDINGS §9.4), `premium` and the three notice groups (KO's news panels,
   empty without KO's server), and the select screen's `bt_delete` (Q53).
 
 ### The client choice (RQ-078)
@@ -252,8 +257,8 @@ prev/next).
 | State | Shows | Leaves on |
 |---|---|---|
 | logo | only with a logo section, first, once a process (1264's WinMain); each group alone in turn on black, fading in, holding and fading out; the system cursor hidden with the flag; its track from the delay, faded out from its fade group | the last group's end, or a key pressed while it shows with the skip flag (not a click) → login, whose own track starts at once and whose first frame starts the realm connection. A reset connection leaves it playing; a message waits for the login. |
-| login | intro scene looping; login bar | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. Started with `--logout` (spec 02, RQ-068), the client first ends the stored session; a press meanwhile is held until the realm answers. The KO screens have no logout of their own (Q61, Q74). |
-| realms | intro; the server group with the realm's name from `realm.json` | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
+| login | intro scene looping; login bar; while a login is under way (from the press, or a stored session's login, to the answer) the bar hidden and the package's `login_closed` node shown instead, when the layout binds one (otherwise the bar stays) (KO's copyright line, RQ-108, Q85) | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms; a failure shows the bar again. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. Started with `--logout` (spec 02, RQ-068), the client first ends the stored session; a press meanwhile is held until the realm answers. The KO screens have no logout of their own (Q61, Q74). |
+| realms | intro; the server group with the realm's name from `realm.json`; the `login_closed` node (RQ-108) | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
 | select | hall; up to 3 characters with the realm's player model and default looks, each standing on clip 0's first frame; the one in front, at rest, plays clip 0 (`pre_select`) once while the pointer is in `DoProcPreselect`'s centre rect and holds its last frame, and clip 2 (`dummy`, clip 0's first frame) otherwise, each change blending over the clip's own blend time from the frame reached, the new clip held on its first frame meanwhile; the front slot's spot widens at the package's rate while the pointer is there, narrows when it leaves and is off at 0; the info text (char_info) shows only while the pointer is there. This is the 1097 client's hall for this asset set (KO-FINDINGS §8.1, Q71), not 1298's | At rest only (not while the camera turns or the start clip plays): ENTER or a click on the character in front (`PtInRect` on the centre rect) → `SelectCharacter`, the spot at its full theta, its clip 1 blended in over the package's start blend (Moradon: 1097's 0.6 s) on its first frame and played to the end (`IsAnimEnd`, after the blend), → loading; a refusal returns it to the hover or rest clip; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next (the arrow buttons, LEFT, RIGHT) turns the camera one slot, the short way about `at` at 1.2 rad/s, to where 1097's check ends the turn (left to right: 1, 0, 2; nothing at the end of the row or while it turns; KO-FINDINGS §8.2); while it turns nothing is ticked and the spot is off. |
 | create | KO's create screen; the create model breathing in `char_view` (standing, no weapon); name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording, under the package's title for it (RQ-102); `back` → select. |
 | loading | the loading art; `progress` by real stages: the package and its textures (loaded at start, 2/3), the first `World` (1); `version` shows the client version | the first `World` → in game after the bar shows full. |
@@ -297,7 +302,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 11 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, or no placement) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 12 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, or no `login_closed` action) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas (1024 × 768) | KO's placements would cut the layouts off, so the UI scales down uniformly, centred, as with `ui_scale` `window` (RQ-106). No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -397,7 +402,13 @@ CPU (`make test`):
    another kind or out of bounds, a keep rule with values, more than 32 moves,
    moves that do not give the canvas rects and truncation, and places the
    nodes where 1264 does at those sizes (unscaled) and scaled with the flag or
-   at 800×600.
+   at 800×600. RQ-108: the cook refuses `login_closed` off the login screen and
+   places a synthetic copyright line where 1264's SetVisibleLogInUIs does; the
+   loader takes `login_closed` on the login and refuses it elsewhere and version
+   11; the login states (`client/render/front_login.h`, `tests/front_end.cpp`)
+   draw the login group at rest and the `login_closed` node instead while a
+   login is under way and on the realm list, and keep the login group drawn
+   while a login is under way in a layout without a `login_closed` node.
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.
@@ -439,7 +450,11 @@ KO (`make live-ko`, needs `assets/ko`):
    `bless.wav`, from 1 s with its 4 s fade from group 2, which plays once
    (RQ-101). The message box with a message the package titles differs from
    the same message untitled only at the title (its rect and the few pixels its
-   glyphs stand past it; RQ-102).
+   glyphs stand past it; RQ-102). The login with a login under way (RQ-108)
+   draws the copyright line, where 1264 places it at that size, and not the bar:
+   it differs from the login at rest only within the bar and the line, and from
+   the realm list only within the server group; the login group, the server
+   group and the line draw in exactly their states.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:
@@ -460,6 +475,9 @@ KO (`make live-ko`, needs `assets/ko`):
      clip 1 in over 0.6 s on its first frame, under the full spot, before it plays
      (RQ-076);
    - a kick returns to login with the operator's wording;
+   - the login bar shows at rest and after the denied Discord step, and the
+     copyright line instead from each ENTER through the login and on the realm
+     list (RQ-108);
    - the Discord failure and the kick show untitled, the name refusal under the
      package's create failure title in the server's wording (RQ-102, Q81);
    - `character_slots` refuses a fourth character.

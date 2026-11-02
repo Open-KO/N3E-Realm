@@ -289,6 +289,12 @@ problems = {
                                       "message": spec("message", bindings={**BINDINGS["message"], "btn_no": "back"})}),
     "action bound twice": dict(specs={**{n: spec(n) for n in fe.SCREENS},
                                       "select": spec("select", bindings={**BINDINGS["select"], "bt_left": "exit"})}),
+    # RQ-108 (version 12): login_closed is the login screen's only.
+    "login_closed off the login": dict(
+        trees={**trees, "select.uif": node(0, "root", [button("bt_left"), button("bt_right"), button("bt_back"),
+                                                       button("bt_exit"), text("text00"), text("rights")])[1]},
+        specs={**{n: spec(n) for n in fe.SCREENS},
+               "select": spec("select", bindings={**BINDINGS["select"], "rights": "login_closed"})}),
     "edit with two strings": dict(trees={**trees, "create.uif": node(0, "root", [
         button("btn_create"), button("btn_cancel"), node(8, "edit_name", [text(""), text("")]),
         node(9, "area_character")])[1]}),
@@ -736,7 +742,7 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=11, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=12, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
          logo=u(0), messages=u(0), placement=NO_PLACEMENT):
@@ -982,7 +988,8 @@ def frame(ident, kind, rect, children=()):
 
 
 # Synthetic layouts at the rects of 1264's (KO-FINDINGS 9.3): the login's root
-# 984 x 506 with its server group at the top-left, the select's buttons, the
+# 984 x 506 with its server group at the top-left and its copyright line
+# (RQ-108), the select's buttons, the
 # create's 1025-wide root, the loading's root at a negative origin with its
 # version text, the message box.
 PLACE_TREES = {
@@ -990,7 +997,8 @@ PLACE_TREES = {
         frame("Group_LogIn", 0, (0, 0, 983, 505), [frame("Btn_Login", 1, (408, 470, 488, 492)),
                                                      frame("Btn_Cancel", 1, (496, 470, 576, 492))]),
         frame("Group_ServerList", 0, (12, 30, 218, 482), [frame("List_Server", 14, (20, 60, 200, 400)),
-                                                            frame("Btn_Connect", 1, (40, 420, 180, 450))])])[1],
+                                                            frame("Btn_Connect", 1, (40, 420, 180, 450))]),
+        frame("Text_Rights", 6, (213, 307, 814, 332))])[1],
     "select.uif": frame("root", 0, (0, 0, 1024, 768), [
         frame("text00", 6, (716, 253, 910, 477)), frame("bt_back", 1, (419, 635, 619, 671)),
         frame("bt_exit", 1, (418, 685, 618, 721)), frame("bt_left", 1, (313, 686, 386, 722)),
@@ -1007,12 +1015,14 @@ PLACE_TREES = {
     "message.uif": frame("root", 0, (0, 0, 327, 156), [frame("text_msg", 6, (21, 28, 304, 86)),
                                                        frame("btn_ok", 1, (115, 116, 212, 145))])[1],
 }
-PLACE_BINDINGS = {**BINDINGS, "login": {k: v for k, v in BINDINGS["login"].items() if k != "notice"},
+PLACE_BINDINGS = {**BINDINGS, "login": {**{k: v for k, v in BINDINGS["login"].items() if k != "notice"},
+                                        "Text_Rights": "login_closed"},
                   "loading": {"Progress_Loading": "progress", "Text_Version": "version"}}
-# games/moradon/front-end.json's (and front-end-1298.json's) placements of the
-# 1264 layouts.
+# games/moradon/front-end.json's placements of the 1264 layouts (and, but for
+# the copyright line's, RQ-108, front-end-1298.json's).
 PLACE_SPECS = {
-    "login": {"place": "bottom", "moves": [{"node": "Group_ServerList", "x": 0, "y": 0}]},
+    "login": {"place": "bottom", "moves": [{"node": "Group_ServerList", "x": 0, "y": 0},
+                                           {"node": "Text_Rights", "x": "centre", "bottom": 20}]},
     "select": {"place": "origin", "moves": [
         {"node": "bt_left", "x": {"middle": -100, "ratio": -26, "edge": "end"}, "bottom": 10},
         {"node": "bt_right", "x": {"middle": 100, "ratio": 26}, "bottom": 10},
@@ -1035,8 +1045,9 @@ def cook_placed(specs=PLACE_SPECS, trees=PLACE_TREES):
 def ko_rects(width, height):
     """KO's own placements of the layouts above at a viewport, written from the
     binaries (KO-FINDINGS 9.3), each node's top-left: 1264's login Init
-    (005bde22: ((W - w) >> 1, H - h)) and its server list tick (005c25b0:
-    (0, 0) at rest); CUICharacterSelect::Load (004448f0, r = W / 1024 as a
+    (005bde22: ((W - w) >> 1, H - h)), its server list tick (005c25b0:
+    (0, 0) at rest) and SetVisibleLogInUIs (005c2820: the copyright line at
+    ((W - w) / 2, H - h - 20), C's signed division); CUICharacterSelect::Load (004448f0, r = W / 1024 as a
     float); create (0043cd00) and loading (00401670) centred with C's signed
     division, the version at (10, 10) (00531c80); the message box
     ((W - w) >> 1, 0050c730)."""
@@ -1045,7 +1056,8 @@ def ko_rects(width, height):
     login_x, login_y = (width - 984) >> 1, height - 506
     return {
         "login": {"root": (login_x, login_y), "Btn_Login": (login_x + 409, login_y + 470),
-                  "Group_ServerList": (0, 0), "List_Server": (8, 30)},
+                  "Group_ServerList": (0, 0), "List_Server": (8, 30),
+                  "Text_Rights": (centre(width, 601), height - 25 - 20)},
         "select": {"root": (0, 0), "text00": (716, 253),
                    "bt_left": (int((width >> 1) - 73 - 100 - 26 * r), height - 10 - 36),
                    "bt_right": (int((width >> 1) + 26 * r + 100), height - 10 - 36),
@@ -1063,7 +1075,7 @@ placed_screens, placements = cook_placed()
 # At the canvas the moves are where the canvas rects are: the cook's rects are
 # KO's at 1024 x 768 (1264's select: bt_right at 638, exit and back at 412).
 canvas_rects = ko_rects(1024, 768)
-assert len(placements) == 5 and [struct.unpack_from("<I", p)[0] for p in placements] == [2, 5, 1, 2, 1], placements
+assert len(placements) == 5 and [struct.unpack_from("<I", p)[0] for p in placements] == [3, 5, 1, 2, 1], placements
 PLACED_NODES = {n: {} for n in fe.SCREENS}
 for n, data in zip(fe.SCREENS, placed_screens):
     at = 4
@@ -1079,16 +1091,22 @@ for n, want in canvas_rects.items():
         assert PLACED_NODES[n][ident][1][:2] == xy, (n, ident, PLACED_NODES[n][ident], xy)
 # Both Moradon recipes place their layouts as PLACE_SPECS does, so the loader's
 # checks below (KO's placements at 1024x768, 1280x1024, 1600x1200 and
-# 1281x1025) hold for each: the 1298 recipe cooks the pinned tree's
+# 1281x1025) hold for each, but for the copyright line, which only the 1097
+# choice places and shows as 1264 does (RQ-108): the 1298 recipe cooks the pinned tree's
 # ka_characterselect_us.uif, byte for byte 1264's, which 1298's binary never
 # places (its select is co_CharacterSelect_us.uif, KO-FINDINGS 9.3), so it takes
 # 1264's code too; a move without its x would keep the 1024-wide x on a wider
 # window.
-for recipe in ("front-end.json", "front-end-1298.json"):
+PLACE_SPECS_1298 = {**PLACE_SPECS, "login": {"place": "bottom",
+                                             "moves": [{"node": "Group_ServerList", "x": 0, "y": 0}]}}
+for recipe, want in (("front-end.json", PLACE_SPECS), ("front-end-1298.json", PLACE_SPECS_1298)):
     recipe_screens = json.loads((ROOT / "games/moradon" / recipe).read_text())["screens"]
     specs = {n: {k: v for k, v in recipe_screens[n].items() if k in ("place", "moves")} for n in fe.SCREENS}
-    assert specs == PLACE_SPECS, (recipe, specs)
-    assert cook_placed(specs)[1] == placements, recipe
+    assert specs == want, (recipe, specs)
+    assert cook_placed(specs)[1][1:] == placements[1:], recipe
+# The 1097 choice binds the line it places to login_closed (RQ-108).
+assert json.loads((ROOT / "games/moradon/front-end.json").read_text())["screens"]["login"]["bindings"][
+    "Text_Rights"] == "login_closed"
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
     "an unknown move key": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "z": 1}]}},
@@ -1119,8 +1137,8 @@ for reason, specs in placement_problems.items():
 # A move of a hidden node is not written.
 hidden = cook_placed({**PLACE_SPECS, "loading": {**PLACE_SPECS["loading"], "hidden": ["Text_Version"]}})[1]
 assert hidden[3] == u(1) + u(0) + u(fe.LINEAR) + f([0.5, -339]) + u(fe.LINEAR) + f([0.5, -216.5]), hidden[3]
-print("PASS front-end placement cook: KO's placements at the canvas, the 1097 and 1298 recipes' the same, "
-      "%d refusals" % len(placement_problems))
+print("PASS front-end placement cook: KO's placements at the canvas, the 1097 and 1298 recipes' the same "
+      "but for the 1097 choice's copyright line, %d refusals" % len(placement_problems))
 PLACEMENT_OK = u(0) + b"".join(placements) + u(0)
 SIZES = ((1024, 768), (1280, 1024), (1600, 1200), (1281, 1025), (800, 600))
 
@@ -1162,6 +1180,29 @@ PLACEMENT_CASES = {
 plain = {n: spec(n) for n in fe.SCREENS}
 plain["login"]["bindings"].pop("notice")
 valid = blob()
+
+
+# RQ-108 (version 12): a login screen node bound to login_closed (KO's
+# copyright line, drawn only while the login group is not); the loader
+# refuses one on another screen (cooked here without the cook's own check).
+def rights(screen):
+    trees = {n + ".uif": TREES[n]()[1] for n in fe.SCREENS}
+    root = {"login": lambda: node(0, "root", [
+                node(0, "Group_LogIn", [button("Btn_Login"), button("Btn_Cancel"), text("notice")]),
+                node(0, "Group_ServerList", [node(14, "List_Server"), button("Btn_Connect")]), text("rights")]),
+            "select": lambda: node(0, "root", [button("bt_left"), button("bt_right"), button("bt_back"),
+                                               button("bt_exit"), text("text00"), text("rights")])}[screen]
+    trees[screen + ".uif"] = root()[1]
+    specs = {n: spec(n) for n in fe.SCREENS}
+    specs[screen]["bindings"]["rights"] = "login_closed"
+    saved = dict(fe.ONLY_ON)
+    fe.ONLY_ON.clear()
+    try:
+        return cook_screens(trees=trees, specs=specs)[0]
+    finally:
+        fe.ONLY_ON.update(saved)
+
+
 cases = {
     "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
     "ok-valid": valid,
@@ -1212,6 +1253,10 @@ cases = {
     # RQ-106 (version 11): the placement.
     "bad-version-10": blob(version=10),
     **PLACEMENT_CASES,
+    # RQ-108 (version 12): the action login_closed, on the login screen only.
+    "bad-version-11": blob(version=11),
+    "ok-login-closed": blob(screen_data=rights("login")),
+    "bad-login-closed-off-login": blob(screen_data=rights("select")),
     "ok-textures-256": blob(more_textures=256 - len(textures.list) - 1),
     "bad-textures-257": blob(more_textures=257 - len(textures.list) - 1),
     "ok-zone": blob(hall=0, zone=u(3) + zone_mesh() + zone_mesh(fe.CUT_ZERO | fe.UNLIT) +
@@ -1300,6 +1345,9 @@ try:
         assert reason in line, (name, line)
     line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-zone-truncated:"))
     assert "fog" not in line, line
+    # RQ-108: login_closed off the login screen, for that reason.
+    line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-login-closed-off-login:"))
+    assert "login_closed off the login" in line, line
     # RQ-102: the loaded messages, by FrontMessage index; the message refusals
     # are the section's own.
     worded = [l for l in run.stdout.splitlines() if l.startswith("message ok-messages: ")]

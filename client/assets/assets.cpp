@@ -2676,7 +2676,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 11, "front end version");
+  need(r.u() == 12, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2769,6 +2769,9 @@ FrontEnd load_front_end(const Release &release) {
   for (size_t screen = 0; screen < fe.screens.size(); ++screen) {
     const auto bound = read_nodes(fe.screens[screen]);
     for (auto action : required[screen]) need(bound.contains(action), "front end screen action unbound");
+    // Version 12 (RQ-108): login_closed is the login screen's only.
+    need(screen == size_t(FrontScreen::login) || !bound.contains(FrontAction::login_closed),
+         "front end login_closed off the login");
   }
   for (auto &s : fe.strings) s = ascii(text(1024));
   // D3DLIGHT9's range is unclamped (the intro's point lights carry 1e6 and

@@ -352,9 +352,17 @@ CLIENT = Path("assets/ko")
 # Default features 32d07415... -> 0443e894...; classic 9079db74... ->
 # e616f08b...; 1097 9417c9fd... -> 4a8ebcac.... The plain cooks and the
 # homelands keep their pins.
+# RQ-108 (Q85, KO-FINDINGS 9.4) changed the three --features pins:
+# front-end.bin is N3FE version 12 with the action login_closed, which the 1097
+# recipe binds to the login's Text_Rights, moved to 1264's place (centred, 20 px
+# above the bottom edge: one more login move). Against the earlier cooks only
+# front-end.bin (53,802,028 -> 53,802,056 bytes), recipe.json and the release
+# index change. Default features 0443e894... -> 94dcf450...; classic
+# e616f08b... -> 69b24c2a...; 1097 4a8ebcac... -> ffe2e20c.... The plain cooks
+# and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "0443e89414dfc8caaf8d7b3c1a5759c54d2131cff4d6b36a40a404b0804a2448"),
+    "features": (["--features"], "94dcf450d0f85c551ac37a75b97b6f63c07d3d7fd2c4392b20baa2265c4d9c6b"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -375,13 +383,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "e616f08b6b49d0ca71fb182cf47b5d6e4b49f3e55932b1de4aaac2052f8f1884"),
+    "features": (["--features"], "69b24c2a0036c38d5d4fc2044d67c4e129120b543fcc487f4d445d8e63df59ab"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "4a8ebcac42f82004e1a661ed84c9f1a510b8795d88b5f7bd9498d6e2ba211244"),
+    "features": (["--features"], "ffe2e20cf0d6d9718aeedf2d115f7601bd5530f6d488a680f5eb76c623219f64"),
 }
 
 

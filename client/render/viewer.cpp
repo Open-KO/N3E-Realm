@@ -2444,6 +2444,18 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
               }
             }
           }
+          // RQ-108 (KO-FINDINGS 9.4): KO hides the login bar from a login
+          // press until the login's answer, its copyright line shown instead
+          // (1264's SetVisibleLogInUIs, 005c2820); a success leaves it so
+          // into the realm list. The realm's login is under way from the press
+          // (held through the connection) or a stored session's login, through
+          // the browser step and its code, to the answer; a failure (back to
+          // idle) or a reset connection ends it. A package without a
+          // login_closed node keeps its bar up meanwhile (front_login.h).
+          using Phase = n3e::login::Flow::Phase;
+          const auto phase = discord_flow->phase();
+          front->login_waiting(front_login || phase == Phase::session || phase == Phase::browser ||
+                               phase == Phase::code || phase == Phase::done);
         }
         // PQ-406 (D-209): a new chat, whisper, rest or admin refusal takes the
         // HUD's message line, as the client's own notices do; PQ-407 (D-210):

@@ -8,14 +8,18 @@
     "login": {
       "ui": "installer-1264:UI_US/co_login_us.uif",
       "place": "bottom",
-      "moves": [{"node": "Group_ServerList", "x": 0, "y": 0}],
+      "moves": [
+        {"node": "Group_ServerList", "x": 0, "y": 0},
+        {"node": "Text_Rights", "x": "centre", "bottom": 20}
+      ],
       "bindings": {
         "Group_LogIn": "login_group",
         "Group_ServerList": "realm_group",
         "List_Server": "realm_list",
         "Btn_Connect": "realm_connect",
         "Btn_Login": "login",
-        "Btn_Cancel": "exit"
+        "Btn_Cancel": "exit",
+        "Text_Rights": "login_closed"
       },
       "hidden": ["Img_Daum", "Img_MGame", "premium", "Group_Notice_1", "Group_Notice_2", "Group_Notice_3"]
     },

@@ -840,10 +840,13 @@ struct Hud {
 Hud load_hud(const Release &release);
 // Spec 11's KO front end (content/front-end.md, tools/assetc/ko_front_end.py).
 inline constexpr size_t kFrontEndFile = 64 * 1024 * 1024;
+// title is version 10's (RQ-102); login_closed version 12's (RQ-108): a login
+// screen node drawn only while the login group is not (a login waiting for its
+// answer, and the realm list; render/front_end.h View::visible).
 enum class FrontAction : uint32_t {
   none, login, exit, login_group, realm_group, realm_list, realm_connect, notice, select_prev,
   select_next, back, char_info, create_confirm, name_field, char_view, class_desc, progress,
-  version, info, message, ok, title, count
+  version, info, message, ok, title, login_closed, count
 };
 enum class FrontScreen : uint32_t { login, select, create, loading, message, count };
 enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };

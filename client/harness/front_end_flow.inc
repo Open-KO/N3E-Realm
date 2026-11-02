@@ -20,6 +20,11 @@
 //   mixer streams, gain the music's gain, cursor whether the system cursor
 //   shows)
 //   FRONT_FLOW enter connected=0|1
+//   FRONT_FLOW bar screen=login|realms group=0|1 line=0|1
+//   (RQ-108: on the login and the realm list, each time one changes,
+//   whether the login group and the login_closed node, KO's copyright line,
+//   draw: the line instead of the bar while a login is under way and on the
+//   realm list)
 //   FRONT_FLOW message='...' title='...'
 //   (RQ-102: the box's text and its title, empty for an untitled message)
 //   FRONT_FLOW scene entry=K t=T since=S process=P (RQ-104: half a second
@@ -94,6 +99,14 @@
       if (last_stream) ++streams;
       std::cout << "FRONT_FLOW music=" << (last_stream ? "stream" + std::to_string(streams) : std::string("none"))
                 << std::endl;
+    }
+    if (screen == 0 || screen == 1) {
+      static std::string last_bar;
+      const std::string bar = std::string("screen=") + labels[screen] +
+                              " group=" + std::to_string(front->action_shown(n3e::FrontAction::login_group)) +
+                              " line=" + std::to_string(front->action_shown(n3e::FrontAction::login_closed));
+      if (bar != last_bar) std::cout << "FRONT_FLOW bar " << bar << std::endl;
+      last_bar = bar;
     }
     was_in_world = was_in_world || screen == 6;
     const uint64_t now_ms = SDL_GetTicks();

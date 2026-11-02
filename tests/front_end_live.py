@@ -23,6 +23,13 @@ from the player's own KO data.
      rect holds its art (not one flat colour);
    - realms: the list shows the realm's name: against the same frame with an
      unnamed realm, pixels differ inside the list's rect and nowhere else;
+   - the login's copyright line (RQ-108, Q85, KO-FINDINGS 9.4: 1264's
+     SetVisibleLogInUIs): the login group draws at rest, the line (bound to
+     login_closed) instead while a login is under way and on the realm list
+     (the client's own report of each state); with a login under way the line
+     is where 1264 puts it, ((W - w) / 2, H - h - 20), its white glyphs drawn
+     there, and the frame differs from the login at rest only within the bar
+     and the line, and from the realm list only within the server group;
    - select: 1, 2 and 3 characters drawn, each box non-empty and inside the view;
    - create: the create model stands (KO's InitChr model breathing, not the hall's
      seated clip): its box is clearly taller than wide; and the stone background
@@ -211,6 +218,32 @@ def find(tree, ident):
     return next((hit for c in tree["children"] if (hit := find(c, ident))), None)
 
 
+def extent(tree):
+    """The rect around a node's descendants (not its own rect: a group's
+    region is KO's hit area, not what it draws)."""
+    rects = []
+
+    def walk(n):
+        for c in n["children"]:
+            rects.append(c["rect"])
+            walk(c)
+    walk(tree)
+    return [min(r[0] for r in rects), min(r[1] for r in rects), max(r[2] for r in rects), max(r[3] for r in rects)]
+
+
+def differing(a_path, b_path, inside):
+    """Pixels that differ between two frames, (inside any of the rects,
+    outside them all)."""
+    width, _, a = pixels(a_path)
+    _, _, b = pixels(b_path)
+    counts = [0, 0]
+    for i in range(0, len(a), 3):
+        if a[i:i + 3] != b[i:i + 3]:
+            x, y = (i // 3) % width, (i // 3) // width
+            counts[0 if any(r[0] <= x < r[2] and r[1] <= y < r[3] for r in inside) else 1] += 1
+    return tuple(counts)
+
+
 def ko_placed(width, height):
     """{name: (x0, y0, x1, y1)} of the nodes the captures print, as 1264
     places them on a width x height viewport: the login's root at ((W - w) >>
@@ -231,6 +264,9 @@ def ko_placed(width, height):
     w, h = login["rect"][2] - login["rect"][0], login["rect"][3] - login["rect"][1]
     out["login"] = under(login, "Btn_Login", (width - w) >> 1, height - h)
     out["realm_list"] = under(find(login, "Group_ServerList"), "List_Server", 0, 0)
+    rights = find(login, "Text_Rights")
+    rw, rh = rights["rect"][2] - rights["rect"][0], rights["rect"][3] - rights["rect"][1]
+    out["login_closed"] = at(rights, int((width - rw) / 2), height - rh - 20)
     select = LAYOUTS["select"]
     r = struct.unpack("<f", struct.pack("<f", width / (select["rect"][2] - select["rect"][0])))[0]
     size = lambda n: (find(select, n)["rect"][2] - find(select, n)["rect"][0],
@@ -277,11 +313,11 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     want = ko_placed(width, height)
     placed = dict(re.findall(r"(\w+)=(\S+)", re.search(r"^FRONT_PLACED (.*)$", run.stdout, re.M).group(1)))
     got = {k: tuple(map(int, v.split(","))) for k, v in placed.items()}
-    for name, shot_name in (("login", "login"), ("realm_list", "realms"), ("create", "create"),
-                            ("loading", "loading-start"), ("message", "message")):
+    for name, shot_name in (("login", "login"), ("realm_list", "realms"), ("login_closed", "login-waiting"),
+                            ("create", "create"), ("loading", "loading-start"), ("message", "message")):
         got[name] = shots[shot_name][1]
     assert got == want, (size, {k: (got.get(k), v) for k, v in want.items() if got.get(k) != v})
-    assert set(shots) == {"login", "realms", "realms-unnamed", "select-1", "select-2", "select-3", "create",
+    assert set(shots) == {"login", "login-waiting", "realms", "realms-unnamed", "select-1", "select-2", "select-3", "create",
                           "loading-start", "loading-world", "message", "message-titled", "logo-0", "logo-1", "logo-2",
                           "logo-fade"}, shots.keys()
 
@@ -306,6 +342,29 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
                 outside += 1
     assert inside > 50 and outside == 0, (size, rect, inside, outside)
     realm_name = inside
+
+    # RQ-108: the copyright line instead of the bar while a login is under way
+    # and on the realm list, where 1264 puts it.
+    states = re.search(r"^FRONT_LOGIN (.*)$", run.stdout, re.M)
+    assert states and states.group(1) == "idle=1,0,0 waiting=0,0,1 realms=0,1,1", (size, states and states.group(1))
+    waiting, line, _ = shots["login-waiting"]
+    login = LAYOUTS["login"]
+    root_x, root_y = (width - (login["rect"][2] - login["rect"][0])) >> 1, height - (login["rect"][3] - login["rect"][1])
+    bx0, by0, bx1, by1 = extent(find(login, "Group_LogIn"))
+    bar = (root_x + bx0 - login["rect"][0], root_y + by0 - login["rect"][1],
+           root_x + bx1 - login["rect"][0], root_y + by1 - login["rect"][1])
+    # KO's strings are not clipped to their rect: a glyph may stand a few
+    # pixels past it (as the message title's).
+    margin = 8
+    glyphs = (line[0] - margin, line[1] - margin, line[2] + margin, line[3] + margin)
+    inside, outside = differing(shots["login"][0], waiting, [bar, glyphs])
+    assert inside > 1000 and outside == 0, (size, bar, line, inside, outside)
+    group = extent({"children": [find(login, "Group_ServerList")]})
+    inside, outside = differing(shots["realms"][0], waiting, [(0, 0, group[2] - group[0] + 1, group[3] - group[1] + 1)])
+    assert inside > 1000 and outside == 0, (size, group, inside, outside)
+    white = sum(1 for p in region(waiting, line) if p == b"\xff\xff\xff")
+    white_at_rest = sum(1 for p in region(shots["login"][0], line) if p == b"\xff\xff\xff")
+    assert white > 300 and white > 2 * white_at_rest, (size, line, white, white_at_rest)
 
     for n in (1, 2, 3):
         _, _, boxes = shots[f"select-{n}"]
@@ -404,7 +463,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     frames = "%s, %s and %s" % (streams[0].group(5), streams[1].group(5), streams[2].group(5))
     print(f"PASS front-end captures {size}: every screen unscaled where 1264 places it, "
           f"intro box {shots['login'][2][0][1]}, "
-          f"realm name {realm_name} px in the list, 1-3 characters in the hall, create stands "
+          f"realm name {realm_name} px in the list, the copyright line at {line[:2]} ({white} white px) "
+          f"instead of the bar while a login waits and on the realm list, 1-3 characters in the hall, create stands "
           f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}, the logo's three "
           f"groups (faded {ratio:.2f}), music {frames} PCM frames, restarted, looped and played once")
 print("PASS KO front end graphical")

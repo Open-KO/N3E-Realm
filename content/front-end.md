@@ -10,8 +10,9 @@ with 1298's recorded camera paths (version 7, RQ-087), a KO zone drawn as
 the select hall with the select camera's fog (version 8, RQ-095), a logo
 screen before the login (version 9, RQ-101: 1264's "K2 Network presents Knight
 Online"), each message box message's title and wording (version 10,
-RQ-102, Q81), and where each layout's nodes go on a window of its own size
-(version 11, RQ-106, Q82).
+RQ-102, Q81), where each layout's nodes go on a window of its own size
+(version 11, RQ-106, Q82), and the action `login_closed`, a login node drawn
+only while the login group is not (version 12, RQ-108, Q85).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -25,7 +26,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 11, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 12, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -297,7 +298,8 @@ or from a slot to itself, an entry path not to slot 0, a from and to pair twice,
 the path mode without its entry path or a way between neighbours, a hall with
 a zone, a zone mesh's flags other than above, fog values outside their bounds
 (or not all 0 when off), a message outside the set or named twice, a replace
-flag other than 0 or 1 or a text that does not replace, placement flags
+flag other than 0 or 1 or a text that does not replace, a node bound to
+`login_closed` on a screen other than the login (version 12), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
 file does not have, a rule of another kind or outside its bounds, a keep rule
 with a or c not 0, moves that do not leave the canvas rects where the file puts
@@ -308,11 +310,29 @@ them, and every reference, count and bound above, truncation or trailing bytes.
 The closed set, by index: none, `login`, `exit`, `login_group`, `realm_group`,
 `realm_list`, `realm_connect`, `notice`, `select_prev`, `select_next`, `back`,
 `char_info`, `create_confirm`, `name_field`, `char_view`, `class_desc`,
-`progress`, `version`, `info`, `message`, `ok`, `title` (version 10). A group bound to `login_group` or
+`progress`, `version`, `info`, `message`, `ok`, `title` (version 10), `login_closed`
+(version 12). A group bound to `login_group` or
 `realm_group` is shown in its state only; `realm_list` lists the realm from
 `realm.json`; `notice`, `char_info`, `class_desc`, `version`, `info`,
 `message` and `title` (the message's title, item 11) are texts the client fills; `name_field` is the name entry; `char_view`
 is where create draws the character.
+
+On the login screen of a layout with a node bound to `login_closed` (RQ-108,
+Q85, `client/render/front_login.h`) a login under way closes the login group:
+from a login press (held while the realm
+connection comes up) or a stored session's login, through the Discord
+browser step and its code, to the realm's answer, the node bound to
+`login_group` and everything under it is hidden (no hit tests) and a node bound
+to `login_closed` (login screen only) is drawn; on the realm list the
+`login_closed` node is drawn too, beside the realm group. At rest, after a
+failed login, and after a reset or dropped connection, the login group draws and
+the `login_closed` node does not. That is KO's SetVisibleLogInUIs
+(`specs/KO-FINDINGS.md` §9.4): 1264 hides its login bar from the press until the
+answer and shows its copyright line meanwhile; a failure shows the bar again,
+a success keeps the line into the server list. ESC still cancels the browser
+step while the bar is hidden. A layout with no `login_closed` node keeps its
+login group drawn through a login, as before version 12, so a package without
+KO's line never shows an empty login.
 
 ## Choosing the client (RQ-078)
 
@@ -479,7 +499,11 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   intro), and the layouts (1298's `UI_US`, as today). The hall lights
   `ka_light_0/1` are the files both clients name.
 - Placement (RQ-106, `specs/KO-FINDINGS.md` §9.3, binary): the 1097 recipe's
-  `place` and `moves` (1264's code). The select layout it cooks, the pinned
+  `place` and `moves` (1264's code), but for the login's copyright line, which
+  the 1298 recipe neither moves nor binds to `login_closed` (RQ-108): it stays
+  where its layout puts it, always drawn, as before (1298's binary was not
+  read for it); with no `login_closed` node its login bar stays up while a
+  login is under way, as before RQ-108. The select layout it cooks, the pinned
   tree's `ka_characterselect_us.uif`, is byte for byte 1264's, and 1298's binary
   never places it: 1298's own select is the `co_CharacterSelect_us.uif` bar,
   which its Load (`00606c10`) puts at ((W − w) >> 1, H − 10 − h). Drawing that
@@ -539,11 +563,31 @@ box and loading are 1264's.
 - Login (`UI_US/co_login_us.uif`, centred on the bottom edge): as KO draws it, with
   KO's labels and copyright line (Q61). Login starts spec 02's flow; Cancel exits.
   ID, Password, Option and Registration are unbound: they take no input (Q60, Q61).
-  Hidden: the MGAME and Daum logos (the UIF names `ui_us\service_logos.dxt`, which
+  Hidden: the MGAME and Daum logos (1264 hides them at Load and never shows them,
+  its login classification being 0, `specs/KO-FINDINGS.md` §9.4; the UIF names
+  `ui_us\service_logos.dxt`, which
   neither the pinned tree nor the 1264 install has), `premium` and the three notice groups (KO's news panels,
   empty without KO's server). No `notice` line: the flow's failures show in the
   message box. The server group rests at the window's top-left, (0, 0), where
   1264's login tick slides it (`005c25b0`).
+- The copyright line (RQ-108, Q85, `specs/KO-FINDINGS.md` §9.4, binary):
+  `Text_Rights` is bound to `login_closed` and moved to 1264's place, centred
+  20 px above the bottom edge (`x` `centre`, `bottom` 20: `((W − w) / 2,
+  H − h − 20)`, SetVisibleLogInUIs `005c2820`), so it is drawn, as 1264 draws
+  it, only while the login bar is not. Each realm state, by the 1264 state it
+  stands for:
+
+  | Realm state | 1264's | Bar | Line |
+  |---|---|---|---|
+  | The login at rest: after the logo, a return from select, a dropped or kicked connection | the login loaded | shown | hidden |
+  | A login press held while the realm connection comes up | the press | hidden | shown |
+  | A stored session's login, with no press | Init's auto-login (never in 1264) | hidden | shown |
+  | Waiting for Discord (the browser step) and its code sent | the press until the answer (Q85) | hidden | shown |
+  | A message box during that wait (the address to open) | none: the wait goes on | hidden | shown |
+  | Logged in, a message box still over the login | result 1, before the server list | hidden | shown |
+  | The realm list | the server list | hidden | shown |
+  | A failed login (Discord's or the realm's), its box over the login | a failed answer | shown | hidden |
+  | The realm unreachable after a press, its box over the login | the login server unreachable, whose OK quits; the realm's returns to the login, so it takes a failed answer's look | shown | hidden |
 - Select (`UI_US/ka_characterselect_us.uif`, its root at the window's top-left):
   1264's CUICharacterSelect::Load (`004448f0`, Q84): left's right edge at
   (W >> 1) − 100 − 26·W/1024 and right at (W >> 1) + 100 + 26·W/1024, each

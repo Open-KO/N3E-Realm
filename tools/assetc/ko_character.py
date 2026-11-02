@@ -560,12 +560,22 @@ def joint_bounds(bones):
 
 
 class Assets:
-    def __init__(self, root):
-        self.root = root.resolve()
+    def __init__(self, root, manifest=None):
+        self.root = pathlib.Path(root).resolve()
         self.sources = {}
+        # A reference install's manifest (ko_installs.manifest, RQ-084): each
+        # file read must be the one its installer installed.
+        self.manifest = manifest
 
-    def get(self, name):
-        self.last = name  # named in a refusal (PQ-254)
+    def has(self, name):
+        """Whether the tree holds `name` (one file, any case)."""
+        try:
+            return self.locate(name).is_file()
+        except ValueError:
+            return False
+
+    def locate(self, name):
+        """The file `name` names in the tree, matched case-insensitively."""
         path = self.root
         parts = [p for p in name.replace("\\", "/").split("/") if p]
         if (
@@ -584,10 +594,22 @@ class Assets:
         path = path.resolve()
         if not path.is_relative_to(self.root):
             raise ValueError("KO dependency containment")
+        return path
+
+    def get(self, name):
+        self.last = name  # named in a refusal (PQ-254)
+        path = self.locate(name)
         data = read(path)
-        self.sources[str(path.relative_to(self.root))] = hashlib.sha256(
-            data
-        ).hexdigest()
+        relative = str(path.relative_to(self.root))
+        digest = hashlib.sha256(data).hexdigest()
+        if self.manifest is not None and self.manifest["hashes"].get(
+            relative.replace("\\", "/").lower()
+        ) != digest:
+            raise ValueError(
+                "%s differs from its installer's (manifest %s)"
+                % (path, self.manifest["manifest"])
+            )
+        self.sources[relative] = digest
         return data
 
 

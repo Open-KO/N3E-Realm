@@ -73,8 +73,10 @@ import pathlib
 import re
 import sys
 
+import ko_installs
+
 INSTALL = pathlib.Path('build/ko-reference/installer-2145')
-INSTALLER_SHA256 = '7da88158e1ddb9c689c22d8e3cb1e8b2655d973ac21596d798104c81c30a1edf'
+INSTALLER_SHA256 = ko_installs.PINNED['installer-2145']['sha256']
 ORG, EXT = 'Data/Item_Org_us.tbl', 'Data/Item_Ext_{}_us.tbl'
 TABLES = 45          # s_pTbl_Items_Exts[45] (00e61758); column 2 must be below it
 BANDS = 4            # num / 10^9 below 4 has an extension (0052f660)

@@ -50,7 +50,6 @@ if os.environ.get("N3E_GRAPHICAL") != "1":
     sys.exit(0)
 
 # --- 5: the cook ---------------------------------------------------------------
-import ko_character  # noqa: E402
 import ko_front_end  # noqa: E402
 
 import front_end_choice  # noqa: E402
@@ -64,7 +63,7 @@ for client in sorted(front_end_choice.catalogue("games/moradon")):
     cooked = []
     for i in range(2):
         out = Path(tempfile.mkdtemp(prefix="front-end-%s-" % client, dir=B))
-        ko_front_end.cook(ko_character.Assets(front["inputs"][0]), out, front["recipe"], out / "work")
+        ko_front_end.cook(ko_front_end.inputs(front), out, front["recipe"], out / "work")
         cooked.append((out / "front-end.bin").read_bytes())
     assert cooked[0] == cooked[1], "the %s front-end cook is not deterministic" % client
     # The checker exits 1 unless it also saw a refusal (tests/front_end.py

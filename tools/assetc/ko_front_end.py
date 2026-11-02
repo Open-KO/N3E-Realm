@@ -10,6 +10,12 @@ WAVs and a track's restart period. games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
+
+The recipe's KO paths read from the choice's input trees (`Inputs`, RQ-084):
+`<name>:<path>` from the input front-ends.json names so, any other path from
+the first input. A file a KO file names (a character's parts and plugs, a
+layout's or a hall's textures, a looks row's files) is read from the tree its
+referrer came from.
 """
 import csv
 import hashlib
@@ -21,6 +27,7 @@ import struct
 import wave
 
 from common import count, f, load, string, u, vector
+import front_end_choice
 import gltf
 import ko
 import ko_appearance
@@ -88,6 +95,161 @@ MUSIC_SCREENS = ("login", "select", "create", "loading")
 MPEG1_KBPS = (0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320)
 MPEG2_KBPS = (0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160)
 MPEG1_HZ = (44100, 48000, 32000)
+
+
+class Inputs:
+    """The front end's input trees in front-ends.json's order, each a
+    `ko_character.Assets` (or a stand-in with `get`), and the names a recipe
+    path's prefix gives them (`front_end_choice.split`). `get` reads a recipe
+    path from its tree; `split` gives the tree and the path within it, for a
+    read whose further files come from the same tree."""
+
+    def __init__(self, trees, names=None):
+        self.trees = list(trees)
+        if not self.trees:
+            raise ValueError("front-end inputs: none")
+        names = list(names) if names is not None else [None] * len(self.trees)
+        if len(names) != len(self.trees) or None in names[1:]:
+            raise ValueError("front-end inputs: a name for each tree after the first")
+        self.names = names
+        self.by_name = {n: t for n, t in zip(names, self.trees) if n is not None}
+
+    def split(self, path):
+        if type(path) is not str:
+            raise ValueError("front-end path %r: a string" % (path,))
+        name, rest = front_end_choice.split(path)
+        if name is None:
+            return self.trees[0], path
+        if name not in self.by_name:
+            raise ValueError("front-end path %r: no input named %r (%s)"
+                             % (path, name, ", ".join(sorted(self.by_name)) or "the inputs have no names"))
+        return self.by_name[name], rest
+
+    def get(self, path):
+        tree, rest = self.split(path)
+        return tree.get(rest)
+
+    def unique(self):
+        """The trees, each once, with the label its sources carry: none for
+        the first, `<name>:` for any other."""
+        seen, out = set(), []
+        for at, (tree, name) in enumerate(zip(self.trees, self.names)):
+            if id(tree) not in seen:
+                seen.add(id(tree))
+                out.append((tree, "" if at == 0 else name + front_end_choice.PREFIX))
+        return out
+
+    @property
+    def sources(self):
+        merged = {}
+        for tree, label in self.unique():
+            merged.update({label + k: v for k, v in tree.sources.items()})
+        return merged
+
+
+def split(assets, path):
+    """(tree, path within it) of a recipe path: through `Inputs`, or as it is
+    for a single tree."""
+    return assets.split(path) if isinstance(assets, Inputs) else (assets, path)
+
+
+def inputs(front, reuse=None):
+    """The `Inputs` of `front_end_choice.resolve`'s result: an Assets for each
+    tree, a reference install's checked against its installer's manifest
+    (`ko_installs`). `reuse` maps a resolved root to an Assets already reading
+    it (the player's, so the provenance is shared), for a tree that is no
+    reference install."""
+    reuse = reuse or {}
+    trees = []
+    for tree, pin in zip(front["inputs"], front["pins"]):
+        root = pathlib.Path(tree).resolve()
+        trees.append(reuse[root] if pin is None and root in reuse else character.Assets(root, manifest=pin))
+    return Inputs(trees, front["names"])
+
+
+def recipe_paths(config):
+    """(where, path) of every KO path a recipe names, for a check of their
+    tree prefixes before the cook (front_end_choice.resolve). Reads what is
+    there; the cook refuses what is missing or malformed."""
+    out = []
+
+    def add(where, value):
+        if type(value) is str:
+            out.append((where, value))
+
+    def each(where, values):
+        for at, value in enumerate(values if type(values) is list else []):
+            add("%s[%d]" % (where, at), value)
+
+    section = lambda value: value if type(value) is dict else {}
+    for name, spec in section(config.get("screens")).items():
+        add("screens.%s.ui" % name, section(spec).get("ui"))
+    intro = section(config.get("intro"))
+    add("intro.character", intro.get("character"))
+    each("intro.lights", intro.get("lights"))
+    add("intro.backdrop.texture", section(intro.get("backdrop")).get("texture"))
+    select = section(config.get("select"))
+    each("select.lights", select.get("lights"))
+    add("select.hall", select.get("hall"))
+    add("select.turn_sound", select.get("turn_sound"))
+    look = section(select.get("character"))
+    add("select.character.joint", look.get("joint"))
+    add("select.character.animation", look.get("animation"))
+    each("select.character.plugs", look.get("plugs"))
+    tracks = section(config.get("music")).get("tracks")
+    for at, track in enumerate(tracks if type(tracks) is list else []):
+        add("music.tracks[%d].path" % at, section(track).get("path"))
+    return out
+
+
+# sound.tbl's columns as the front end reads them: id, file, max at once
+# (the pinned tree's CSV; a client's encrypted table, ko_tbl, has the types
+# u32, string, i32, i32, as 1097's and 1298's do).
+SOUND_TYPES = [6, 7, 5, 5]
+
+
+def sound_row(tree, ident):
+    """(file, max at once) of one sound.tbl row of a tree: the pinned tree's
+    `Data/sound.tbl.csv`, or the client's own encrypted `Data/sound.tbl`."""
+    if tree.has("Data/sound.tbl.csv"):
+        rows = [r for r in csv.reader(io.StringIO(tree.get("Data/sound.tbl.csv").decode("utf-8-sig")))
+                if r and r[0].isdigit()]
+        rows = [(int(r[0]), r[1], int(r[3])) for r in rows]
+    else:
+        import ko_tbl
+        types, table = ko_tbl.parse(ko_tbl.decrypt(tree.get("Data/sound.tbl")))
+        if types[:4] != SOUND_TYPES:
+            raise ValueError("front-end sound.tbl columns %s" % types[:4])
+        rows = [(r[0], r[1], r[3]) for r in table]
+    found = [r for r in rows if r[0] == ident]
+    if len(found) != 1:
+        raise ValueError("front-end sound %d: %d sound.tbl rows" % (ident, len(found)))
+    return found[0][1], found[0][2]
+
+
+def sounds(config, assets, audio):
+    """The audio.bin sounds the recipe names, by key, for `ko_audio.cook`'s
+    `extra`: `select.turn_sound` (RQ-077), a sound.tbl id, `<name>:<id>` for
+    another input's table. A sound of the tree `audio` reads is its id, as
+    before; another tree's is that tree's row: dict(assets, path, maximum,
+    input)."""
+    out = {}
+    value = config["select"].get("turn_sound")
+    if value is None:
+        return out
+    first = assets.trees[0] if isinstance(assets, Inputs) else assets
+    tree, ident = split(assets, value) if type(value) is str else (first, value)
+    if type(ident) is str:
+        ident = int(ident) if ident.isascii() and ident.isdigit() else None
+    if type(ident) is not int or ident <= 0:
+        raise ValueError("front-end select.turn_sound: a sound.tbl id, or <input>:<id>")
+    if tree is audio:
+        out["front:select-turn"] = ident
+    else:
+        path, maximum = sound_row(tree, ident)
+        name = front_end_choice.split(value)[0] if type(value) is str else None
+        out["front:select-turn"] = dict(assets=tree, path=path, maximum=min(16, max(1, maximum)), input=name)
+    return out
 
 
 def texture(data):
@@ -208,10 +370,14 @@ class Textures:
     def __init__(self, assets):
         self.assets, self.list, self.index = assets, [], {}
 
-    def add(self, name):
-        key = name.replace("\\", "/").casefold()
+    def add(self, name, tree=None):
+        """The texture `name` names in `tree`, or, for a recipe path, in its
+        input's tree (`split`); each file once."""
+        if tree is None:
+            tree, name = split(self.assets, name)
+        key = (id(tree), name.replace("\\", "/").casefold())
         if key not in self.index:
-            self.index[key] = self.raw(*texture(self.assets.get(name)))
+            self.index[key] = self.raw(*texture(tree.get(name)))
         return self.index[key]
 
     def raw(self, w, h, rgba):
@@ -243,7 +409,8 @@ def mesh_file(assets, name):
 def plug_record(assets, textures, name):
     """A plug in its joint's space (CN3CPlugBase::ReCalcMatrix: scale,
     rotation, position x scale; Render: plug x joint x character), engine
-    space, after its joint index."""
+    space, after its joint index. Its mesh and texture are its tree's."""
+    assets, name = split(assets, name)
     plug = ko_appearance.read_plug(assets, name)
     if min(plug["scale"]) <= 0 or plug["material"][20] != 0:
         raise ValueError("front-end plug scale/render state")
@@ -251,7 +418,7 @@ def plug_record(assets, textures, name):
     identity = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
     move, _ = ko_appearance.plug_transform(plug, identity, 1.8)
     vertices = [move(v[:3], True) + move(v[3:6], False) + list(v[6:8]) for v in mesh["vertices"]]
-    tex = textures.add(plug["texture"])
+    tex = textures.add(plug["texture"], assets)
     material = plug["material"]
     return u(count(plug["stored_joint"], 63, 0)) + mesh_record(
         vertices, mesh["indices"], tex, ALPHA_TEST if textures.masked(tex) else 0, material[:3], material[4:7])
@@ -368,7 +535,8 @@ def screen(name, spec, assets, textures, fonts):
     the one state image its state names (the image's reserved field), then
     its other children; an image without a texture draws nothing
     (CN3UIImage::Render)."""
-    root = ko_hud.parse(assets.get(spec["ui"]))
+    tree, ui = split(assets, spec["ui"])
+    root = ko_hud.parse(tree.get(ui))
     # Every address resolves on KO's tree as read, before anything moves or is added.
     table = lambda key: {id(resolve(root, a)): v for a, v in spec.get(key, {}).items()}
     bindings, texts, states = table("bindings"), table("text"), table("states")
@@ -418,7 +586,7 @@ def screen(name, spec, assets, textures, fonts):
         if kind == "image" and not n["texture"]:
             return
         if kind == "image":
-            record += u(textures.add(n["texture"])) + f(n["uv"])
+            record += u(textures.add(n["texture"], tree)) + f(n["uv"])
         elif kind == "text":
             if not n.get("font"):
                 raise ValueError("front-end string without a font")
@@ -466,7 +634,9 @@ def hall(assets, textures, name):
     """The select hall (CN3Shape::Load): transform, two collision names, the
     parts, five trailing ints. A part is a pivot, a mesh, a 92-byte material
     (CN3Material: 17 floats, then colour op/args, render flags and blend) and
-    its textures; a vertex is ((v + pivot) x scale) x rotation + position."""
+    its textures; a vertex is ((v + pivot) x scale) x rotation + position.
+    Its meshes and textures are its tree's."""
+    assets, name = split(assets, name)
     r = character.Reader(assets.get(name))
     t = character.transform(r)
     if any(t["keys"]) or any([r.string(), r.string()]):
@@ -481,7 +651,7 @@ def hall(assets, textures, name):
         material = r.floats(17) + r.unpack("6I")
         names = count(r.integer(), 1)
         r.floats(1)
-        tex = textures.add([r.string() for _ in range(names)][0])
+        tex = textures.add([r.string() for _ in range(names)][0], assets)
         flags = material[20]
         if flags & ~0x4:
             raise ValueError("front-end hall part render flags %#x" % flags)
@@ -516,11 +686,13 @@ def default_parts(assets, race):
 
 def intro_scene(assets, textures, config, work):
     """CGameProcLogIn_1098: the camera, lights 0-2, the looping character and
-    its plugs, and the moon, a screen quad in 1024 x 768 units."""
-    chr_ = chr_file(assets.get(config["character"]))
+    its plugs, and the moon, a screen quad in 1024 x 768 units. The
+    character's parts and plugs are its tree's."""
+    tree, name = split(assets, config["character"])
+    chr_ = chr_file(tree.get(name))
     out = camera_record(config["camera"]) + lights(assets, config["lights"]) + f(vector(config["ambient"], 3))
-    out += model(assets, config["character"], chr_, [config["clip"]], work / "intro")
-    out += u(len(chr_["plugs"])) + b"".join(plug_record(assets, textures, p) for p in chr_["plugs"])
+    out += model(tree, name, chr_, [config["clip"]], work / "intro")
+    out += u(len(chr_["plugs"])) + b"".join(plug_record(tree, textures, p) for p in chr_["plugs"])
     moon = config["backdrop"]
     tex = textures.add(moon["texture"])
     w, h, _ = textures.list[tex]
@@ -597,13 +769,24 @@ def select_scene(assets, textures, config, work):
     # sets clip 1 with 0.6 s, `push 0x3f19999a` at 0043ea77), not the
     # record's; the hover and rest clips keep their records' (0043f280 names
     # FLT_MIN).
-    definition = dict(joint=look["joint"], animation=look["animation"], parts=default_parts(assets, look["race"]))
+    tree, joint = character_tree(assets, look)
+    _, animation = split(assets, look["animation"])
+    definition = dict(joint=joint, animation=animation, parts=default_parts(tree, look["race"]))
     out = camera_record(camera) + lights(assets, config["lights"]) + f(vector(config["ambient"], 3))
     out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND])
     out += hall(assets, textures, config["hall"])
-    out += model(assets, look["joint"], definition, look["clips"], work / "select",
+    out += model(tree, joint, definition, look["clips"], work / "select",
                  own_blends={START_CLIP: config["start_blend"]})
     return out + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
+
+
+def character_tree(assets, look):
+    """(tree, joint) of the select character: its joint, animation and race's
+    looks row (and so the create model) are one tree's."""
+    tree, joint = split(assets, look["joint"])
+    if split(assets, look["animation"])[0] is not tree:
+        raise ValueError("front-end select character: the joint and animation are in different inputs")
+    return tree, joint
 
 
 def create_scene(assets, race, work):
@@ -759,18 +942,25 @@ def music(assets, config):
 
 
 def cook(assets, out, config_path, work):
-    """Writes front-end.bin into the directory `out`; returns its provenance."""
+    """Writes front-end.bin into the directory `out`; returns its provenance.
+    `assets` is the choice's `Inputs`, or one tree."""
     config = load(pathlib.Path(config_path))
+    assets = assets if isinstance(assets, Inputs) else Inputs([assets])
     # The client files this cook reads, with their hashes (ko_character.Assets).
-    shared, assets.sources = assets.sources, {}
+    shared = []
+    for tree, _ in assets.unique():
+        shared.append((tree, tree.sources))
+        tree.sources = {}
     try:
         return write(assets, out, config, work)
     finally:
-        cooked, assets.sources = assets.sources, shared
-        shared.update(cooked)
+        for tree, earlier in shared:
+            cooked, tree.sources = tree.sources, earlier
+            earlier.update(cooked)
 
 
 def write(assets, out, config, work):
+    assets = assets if isinstance(assets, Inputs) else Inputs([assets])
     if set(config["screens"]) != set(SCREENS):
         raise ValueError("front-end screens")
     textures, fonts = Textures(assets), {}
@@ -786,7 +976,8 @@ def write(assets, out, config, work):
         table += u(len(data)) + data
     scenes = intro_scene(assets, textures, config["intro"], pathlib.Path(work))
     scenes += select_scene(assets, textures, config["select"], pathlib.Path(work))
-    scenes += create_scene(assets, config["select"]["character"]["race"], pathlib.Path(work))
+    scenes += create_scene(character_tree(assets, config["select"]["character"])[0],
+                           config["select"]["character"]["race"], pathlib.Path(work))
     atlases = b""
     sources = {False: pathlib.Path(config["fonts"]["regular"]), True: pathlib.Path(config["fonts"]["bold"])}
     for (size, bold), _ in sorted(fonts.items(), key=lambda kv: kv[1]):

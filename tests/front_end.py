@@ -299,6 +299,29 @@ except ValueError as error:
     assert str(error) == "front-end screens", error
 print("PASS front-end cook: five synthetic screens, %d refusals and a missing screen" % len(problems))
 
+
+# RQ-084: a layout from another input (`<name>:<path>`) reads its textures from
+# that input's tree; an unprefixed one from the first.
+class Other(Fixture):
+    def get(self, path):
+        if path == "synthetic.dxt":
+            return string("") + b"NTF\x03" + struct.pack("<4i", 8, 8, 26, 0) + struct.pack("<64H", *([0x8F4C] * 64))
+        return self.trees[path]
+
+
+both = fe.Inputs([Fixture(trees), Other({"login.uif": trees["login.uif"]})], [None, "other"])
+textures, fonts = fe.Textures(both), {}
+data = [fe.screen(n, spec(n, ui=("other:" if n == "login" else "") + n + ".uif"), both, textures, fonts)
+        for n in fe.SCREENS]
+assert [(w, h) for w, h, _ in textures.list] == [(8, 8), (4, 4)], [(w, h) for w, h, _ in textures.list]
+assert data[0] == screens[0] and [struct.unpack_from("<I", d)[0] for d in data] == counts
+try:
+    fe.screen("login", spec("login", ui="third:login.uif"), both, fe.Textures(both), {})
+    raise AssertionError("cook read a layout from an input the choice lacks")
+except ValueError as error:
+    assert "no input named 'third'" in str(error), error
+print("PASS front-end cook: a layout and its textures from a second input tree")
+
 # --- the loader ----------------------------------------------------------------
 
 # RQ-067: the select camera's turn ends where 1097's check ends it

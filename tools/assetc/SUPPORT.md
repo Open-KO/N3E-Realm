@@ -123,7 +123,9 @@ lights, the select hall's n3shape, slots, spots and the Tuarek priest with three
 clips (hover, start, rest), all from the paths and choices in the chosen front end's recipe
 (RQ-078: `front_end_choice.py` reads `games/moradon/realm-config.json` and
 `front-ends.json`, refuses an unoffered client or missing inputs, and gives the
-recipe, `front-end.json` for 1097, and its input trees); the
+recipe, `front-end.json` for 1097, and its input trees; RQ-084: a recipe path
+`<name>:<path>` reads a named later input, and a reference install, pinned in
+`ko_installs.py`, is read only against its installer's manifest); the
 provenance report records the client and every source path and hash. Text is drawn with the
 Liberation Sans substitutes of N3H9. Untextured images draw nothing, as KO's.
 N3FE version 3 (RQ-018) adds the screens' music: each track's MPEG-1/2 Layer III

@@ -147,7 +147,27 @@ and plays whatever the file says. Two files in the package source hold it:
   `ko_front_end` input beside it (the files, bindings and placements of that
   client's screens, as `front-end.json` below), and its `inputs`, 1 to 4
   repository-relative trees (`tree`, never absolute or with `..`) with how to get
-  each (`get`). The recipe's paths name the first tree.
+  each (`get`) and, required for every input after the first, a `name` (as a
+  client id, unique in the entry).
+
+A recipe path names the first input's tree unless it starts with an input's
+name and a colon (RQ-084): `"installer-1097:Intro/Intro.N3Chr"` reads
+`Intro/Intro.N3Chr` from the input named `installer-1097`. No KO path holds a
+colon, so the first one ends the prefix. The prefixed paths are the KO paths the
+recipe names: each screen's `ui`, `intro.character`, `intro.lights`,
+`intro.backdrop.texture`, `select.lights`, `select.hall`,
+`select.character.joint`, `select.character.animation` (the joint's input: the
+two, and the race's `Data/UPC_DefaultLooks.tbl.csv` row that create's model
+follows, are one tree's), `select.character.plugs` and `music.tracks[].path`. A
+file a KO file names (a character's parts and plugs, a layout's or a hall's
+textures and meshes) is read from the tree of the file that names it.
+`select.turn_sound` is a sound-table id of the first input, or `"<name>:<id>"`
+for another input's: its row (the file and how many play at once, at most 16)
+is that tree's `Data/sound.tbl.csv`, or the client's own encrypted
+`Data/sound.tbl` (`tools/assetc/ko_tbl.py`; columns u32, string, i32, i32, as
+1097's and 1298's), and `audio.bin` carries that tree's file. A first-input id
+binds through the player's sound table, as before, when the first input is the
+player's own tree.
 
 `make realm-assets` (`tools/assetc/ko_bake.py 210 --features`, and every other
 `--features` cook) reads both through `tools/assetc/front_end_choice.py` before
@@ -157,7 +177,15 @@ the survey and refuses, with a message naming what to change:
 - a choice the package does not offer ("front end '1298' is not one this
   package cooks; it cooks 1097");
 - a choice whose input tree is missing on the cooking machine ("front end
-  '…' needs <tree>, which is missing on this machine: <get>").
+  '…' needs <tree>, which is missing on this machine: <get>");
+- an input that is a reference install other than a pinned one's `client/`
+  tree, or whose `manifest.json` is missing, malformed or not its pinned
+  installer's (below);
+- a recipe path whose prefix names no input of the choice, or an input after
+  the first without a name.
+
+`ko_bake.package` makes the same check before it removes or writes anything,
+so a caller that skips the command line's check is refused with nothing changed.
 
 It then cooks the chosen recipe and records the client, recipe and trees in the
 package's `provenance.json` (`front_end`). The realm's server never sees KO
@@ -166,10 +194,17 @@ is the cook's (Q73). Changing the choice changes `front-end.bin` and so the
 package hash: a new package, so a new realm (Q63).
 
 Inputs are pinned before they are cooked from: the pinned tree by `UPSTREAM.md`
-(`make ko-assets`); a reference install by its installer's manifest (as
-`ko_bake --client=1097` checks the 1097 one; the change that first offers a
-choice reading one adds that check to the cook); the Steam install, which Steam updates in place, by a hash
-manifest written before any cook reads it. CI's cook (spec 10) has only the
+(`make ko-assets`); a reference install by its installer's manifest (RQ-084,
+`tools/assetc/ko_installs.py`): an input under `build/ko-reference/` must be
+`build/ko-reference/<name>/client` of a pinned install, `installer-1097` or
+`installer-2145`, whose `manifest.json` (the unpacker's, beside `client/`)
+names that installer's SHA-256, as `ko_bake --client=1097` checks the 1097 one
+and `ko_glow_2233` the 2145 one; the cook then reads each of its files only when
+the file's SHA-256 is the one the manifest lists ("… differs from its
+installer's"), and the provenance's `front_end` records each input's name and
+manifest (`names`, `installs`) when a choice reads more than one tree or an
+install. The Steam install, which Steam updates in place, is refused until a
+hash manifest written before any cook reads it pins it (RQ-090). CI's cook (spec 10) has only the
 pinned tree, so it can cook only choices whose inputs are that tree; a realm
 choosing another cooks on a machine that has the install, as the hosted realm's
 packages already are (`deploy/HOST.md`, "Releases").

@@ -141,11 +141,16 @@ The realm owner chooses which KO client the front end looks and behaves like, in
 the package source: `games/<game>/realm-config.json` (`{"front_end": "<client>"}`)
 names one of the clients `games/<game>/front-ends.json` offers, each with its
 recipe (the `ko_front_end` input: for 1097, `front-end.json`) and the input trees
-it reads. Both files are normative; their fields and rules are in
-`content/front-end.md`, "Choosing the client". The cook (`make realm-assets`,
-every `ko_bake.py --features`) refuses, before the survey, a choice the package
-does not offer, a choice whose inputs are missing on the cooking machine, and a
-malformed file, each naming what to change. The engine knows no client id: what
+it reads. A recipe path reads the first tree, or the input it names by prefix
+(`<name>:<path>`, RQ-084); a reference install is read only as a pinned
+installer's unpack, each file checked against its manifest. Both files are
+normative; their fields and rules are in `content/front-end.md`, "Choosing the
+client". The cook (`make realm-assets`, every `ko_bake.py --features`, and
+`ko_bake.package` itself) refuses, before the survey and before writing
+anything, a choice the package does not offer, a choice whose inputs are
+missing on the cooking machine or not their pinned installers' unpacks, a
+recipe prefix naming no input, and a malformed file, each naming what to
+change. The engine knows no client id: what
 differs between clients is recipe data and N3FE fields, and the client and server
 read `front-end.bin` as before. Moradon offers `1097`, the default (Q71); what
 each other client needs is `specs/KO-FINDINGS.md` §9 (Q73).
@@ -219,6 +224,8 @@ stays private.
 |---|---|
 | Package without `front_end` | Today's panels, unchanged. |
 | `realm-config.json` names a client `front-ends.json` does not offer, or one whose input tree is missing, or either file is malformed | The cook stops before the survey with the reason and the file or input to fix (`content/front-end.md`, "Choosing the client"); nothing is written. |
+| A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
+| A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
 | A package cooked before N3FE version 5 (no music section, no clip blend times and spot rate, or no track kinds and restart periods) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
@@ -272,7 +279,15 @@ CPU (`make test`):
    exists. On synthetic packages the cook refuses a client the package does not
    offer (naming the ones it does), a choice whose input tree is missing (naming
    the tree and how to get it), a missing or malformed `realm-config.json`, an
-   unknown key, and a malformed catalogue.
+   unknown key, and a malformed catalogue. RQ-084: a synthetic pinned install
+   as a named second input resolves with its manifest; the cook refuses an
+   unnamed or doubly named later input, a prefix naming no input, an unpinned
+   or misplaced reference tree, and a missing, malformed or other installer's
+   manifest; an install's file reads only when the manifest lists it as it
+   is; a layout and its textures, and the turn sound with its sound-table row
+   (CSV or encrypted), come from the input the recipe names
+   (`tests/front_end.py` too); `ko_bake.package` refuses with nothing removed
+   or written.
 
 KO (`make live-ko`, needs `assets/ko`):
 

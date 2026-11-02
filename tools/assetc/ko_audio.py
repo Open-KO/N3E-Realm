@@ -30,17 +30,23 @@ def pcm(data):
 
 def cook(assets,effects,hud,out,item_icons=None,extra=None):
     # `item_icons`: the package's item icon map when it is not ui.json's (PQ-321).
-    # `extra`: further keys bound to sound.tbl ids (PQ-417: the glow bow's release).
+    # `extra`: further keys bound to sound.tbl ids (PQ-417: the glow bow's release),
+    # or to another tree's row, dict(assets, path, maximum, input) (RQ-084: a
+    # front-end sound from the input its recipe names, ko_front_end.sounds).
     rows={int(r[0]):r for r in csv.reader(io.StringIO(assets.get('Data/sound.tbl.csv').decode('utf-8-sig'))) if r[0].isdigit()}
     clips=[];ids={};bindings={};report=[]
-    def sound(path,maximum):
-        key=path.replace('\\','/').lower()
+    def sound(path,maximum,tree=None,label=None):
+        key=path.replace('\\','/').lower() if tree is None else (id(tree),path.replace('\\','/').lower())
         if key not in ids:
-            samples=pcm(assets.get(path));ids[key]=len(clips)
+            source=(assets if tree is None else tree).get(path)
+            samples=pcm(source);ids[key]=len(clips)
             clips.append(u(maximum)+u(len(samples)//2)+samples)
-            report.append(dict(path=path,maximum=maximum,frames=len(samples)//2))
+            report.append(dict(path=path,maximum=maximum,frames=len(samples)//2,
+                               **({} if tree is None else {'input':label,'sha256':hashlib.sha256(source).hexdigest()})))
         return ids[key]
     def bind(key,ident):
+        if type(ident) is dict:
+            bindings[key]=sound(ident['path'],ident['maximum'],ident['assets'],ident['input']);return
         row=rows[ident];bindings[key]=sound(row[1],min(16,max(1,int(row[3]))))
     for clip in effects['clips']:
         if clip['sound']>0:bind('effect:'+clip['key'],clip['sound'])

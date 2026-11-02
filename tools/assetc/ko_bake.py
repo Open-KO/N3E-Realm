@@ -6,6 +6,7 @@ The collision bake (KX-03) is `ko_collision` and the map's world presentation
 """
 
 from common import *
+import ko_installs
 import ko_shapes
 import ko_terrain
 from ko_collision import bake  # noqa: F401  (re-exported)
@@ -150,6 +151,15 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
     if separate and features and layout != "1097":
         # PQ-224 (D-172): only the 1097 Moradon takes its features from another install.
         raise ValueError("--features needs the map's own client data for the player")
+    front = None
+    if features:
+        # RQ-078, RQ-084: the front end the realm chose (games/moradon/realm-config.json
+        # `front_end`, one of front-ends.json's), refused, before anything is
+        # written, when the package does not offer it, its inputs are missing
+        # here, a reference install is not its pinned installer's unpack, or the
+        # recipe's paths name an input the choice lacks.
+        import front_end_choice
+        front = front_end_choice.choose(FRONT_END_GAME)
     headerless = zone.get("headerless", False)
     references = None
     if zone.get("layout") == "1097" or zone.get("stem") is not None:
@@ -452,28 +462,29 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
             report['skeletal_plugs_2233']['items']={k:v[1] for k,v in skeletal_items.items()}
             manifest.update(engine_version=max(manifest['engine_version'],attachments.engine(manifest['attachments'],root)),
                             protocol_version=30)
-        # RQ-078: the front end the realm chose (games/moradon/realm-config.json
-        # `front_end`, one of front-ends.json's), refused before any cook when
-        # the package does not offer it or its inputs are missing here.
-        import front_end_choice
-        front=front_end_choice.choose(FRONT_END_GAME)
+        # The chosen front end's input trees (RQ-084): the first, when it is the
+        # player's own, shares its Assets (and so its provenance); a reference
+        # install reads each file against its installer's manifest.
+        import ko_front_end
+        front_inputs=ko_front_end.inputs(front,{characters.resolve():source_assets})
         # RQ-077 (Q70): the select arrows' turn sound, the sound.tbl id the
         # front end names (`select.turn_sound`; 1097's select Init 0043a950
-        # creates sound 2501 and DoJobLeft/DojobRight play it).
-        turn_sound=json.loads(front['recipe'].read_text())['select'].get('turn_sound')
-        if turn_sound is not None:
-            if type(turn_sound) is not int or turn_sound<=0:raise ValueError('front-end select.turn_sound: a sound.tbl id')
-            extra_sounds['front:select-turn']=turn_sound
+        # creates sound 2501 and DoJobLeft/DojobRight play it), from the
+        # input the recipe names (RQ-084: unprefixed, the first).
+        for key,sound in ko_front_end.sounds(json.loads(front['recipe'].read_text()),front_inputs,source_assets).items():
+            if key in extra_sounds:raise ValueError('audio key %r is taken'%key)
+            extra_sounds[key]=sound
         report['audio']=ko_audio.cook(source_assets,report['effects'],hud,root/'audio.bin',item_icons,extra_sounds)
         manifest['presentation']['audio.bin']='audio.bin'
         # Spec 11: KO's login scene, select hall, create, loading and message
-        # box from the chosen front end's input tree (today the player's own,
-        # whose provenance it then shares); engine 42.
-        import ko_front_end
-        tree=front['inputs'][0]
-        front_assets=source_assets if tree.resolve()==characters.resolve() else ko_character.Assets(tree)
-        report['front_end']=ko_front_end.cook(front_assets,root,front['recipe'],root.parent/(root.name+'-front-end'))
+        # box from the chosen front end's input trees; engine 42.
+        report['front_end']=ko_front_end.cook(front_inputs,root,front['recipe'],root.parent/(root.name+'-front-end'))
         report['front_end'].update(client=front['client'],recipe=str(front['recipe']),inputs=[str(t) for t in front['inputs']])
+        if any(front['names'][1:]) or any(front['pins']):
+            # RQ-084: recorded only for a choice of several trees or a reference
+            # install, so a one-tree choice keeps its provenance.
+            report['front_end'].update(names=front['names'],installs=[
+                None if pin is None else {k:v for k,v in pin.items() if k!='hashes'} for pin in front['pins']])
         manifest['presentation']['front-end.bin']='front-end.bin'
         manifest.update(engine_version=max(manifest['engine_version'],42),protocol_version=30)
         if des:
@@ -508,7 +519,7 @@ GLOW_ARROWS = 100
 # PQ-274 (D-170): the 1097 client's zones, from the pinned PQ-221 unpack of the
 # player's KnightOnline_1097.exe (tools/ko-reference/unpack_installer.py PINNED).
 INSTALL_1097 = pathlib.Path("build/ko-reference/installer-1097")
-INSTALLER_1097_SHA256 = "d7571e183663be3d063af491d68d7db3dc52219f58471c9595d0b745c0b8a93b"
+INSTALLER_1097_SHA256 = ko_installs.PINNED["installer-1097"]["sha256"]
 
 # PQ-290 (D-180): 1097 install files that KO itself replaced by the 1264 install,
 # read from the 2004 client (CLIENT, the 1097 bake's player and HUD source) in
@@ -663,8 +674,9 @@ if __name__ == "__main__":
     gtd, opd = zone["gtd"], zone["opd"]
     features, des, preview = "--features" in sys.argv, "--des" in sys.argv, "--preview" in sys.argv
     if features:
-        # RQ-078: refuse a front-end choice the package does not offer, or whose
-        # inputs this machine lacks, before the survey and the cook.
+        # RQ-078, RQ-084: refuse a front-end choice the package does not offer,
+        # whose inputs this machine lacks or are not their pinned installers',
+        # or whose recipe names an input it lacks, before the survey and the cook.
         import front_end_choice
         try:
             front_end_choice.choose(FRONT_END_GAME)

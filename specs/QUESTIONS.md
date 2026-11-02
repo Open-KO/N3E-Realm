@@ -730,3 +730,21 @@ per-process timer for the track, as 1097 does.
 track's start; a phase carried across screens would be a second, KO-specific timer
 for a silence that reads as a fault. The first login of a process is the same either
 way (the timer starts at 0, so 1097 plays at once).
+
+### Q76 — How a front-end recipe names its input trees, and when an install's files are checked
+
+RQ-084 lets a front-end choice read more than one tree (the pinned tree, a reference
+install). A recipe path could name its tree by the input's position, by its tree
+path, or by a name; and a reference install could be checked file by file before the
+cook (every file the recipe reaches, including those its KO files name, known only by
+reading them) or at each read.
+**Default taken (RQ-084):** by a `name` front-ends.json gives every input after the
+first (`<name>:<path>`; unprefixed is the first input), since positions shift when an
+input is added and tree paths are long and machine-shaped. The pinned installs are
+`tools/assetc/ko_installs.py`'s (1097 and 2145, the ones the cook already checked;
+any other tree under `build/ko-reference/`, the Steam install included, is refused
+until it is pinned). The install's manifest is checked before anything is written;
+each file is checked when the cook reads it, so a file that differs stops the cook
+part way, with the source package directory partly written and nothing published
+(`main.cook` never runs). Hashing the whole install up front (about 9,000 files for
+1097) on every cook was judged too slow for what it adds.

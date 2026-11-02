@@ -30,6 +30,13 @@
 //   `back`: the slot the camera is at, its turn there (View::front_turn,
 //   radians, positive to the left) and the lowest and highest turn any frame
 //   showed since the press)
+//   ... sounds=K clip=0|1 on each turn line, and
+//   FRONT_FLOW edge slot=S focus=F sounds=K clip=0|1
+//   (RQ-077: K counts the turn sound's plays since the press, the viewer's
+//   front voice starting again; clip is 1 while every play is the clip
+//   audio.bin binds to front:select-turn. At slot 1, the left end of the
+//   row, LEFT again: 0.4 s later the `edge` line, no turn and no sound;
+//   then RIGHT)
 {
   static const char *flow_names = std::getenv("N3E_TEST_FRONT_FLOW");
   static std::vector<std::string> names;
@@ -97,6 +104,20 @@
       const auto pose = front->front_pose();
       const auto turn = front->front_turn();
       low = std::min(low, turn.angle), high = std::max(high, turn.angle);
+      // RQ-077: viewer.cpp plays front-end sounds on the request id ~0.
+      static double voice_start = -1;
+      static int sounds = 0;
+      static bool sound_clip = true;
+      for (const auto &v : audio.mixer.voices)
+        if (v.request == ~uint64_t(0) && v.start != voice_start) {
+          voice_start = v.start, ++sounds;
+          bool bound = false;
+          if (release.audio) {
+            const auto b = release.audio->bindings.find(n3e::front::kSelectTurnSound);
+            bound = b != release.audio->bindings.end() && v.clip == &release.audio->clips[b->second];
+          }
+          sound_clip = sound_clip && bound;
+        }
       auto pointer = [&](float y) {
         int lw = 0, lh = 0;
         SDL_GetWindowSize(w, &lw, &lh);
@@ -116,8 +137,10 @@
       auto turned = [&](const char *name, int slot, SDL_Keycode then) {
         if (turn.slot != slot || turn.focus != slot) return;
         std::cout << "FRONT_FLOW turn phase=" << name << " slot=" << turn.slot << " angle=" << turn.angle
-                  << " low=" << low << " high=" << high << std::endl;
+                  << " low=" << low << " high=" << high << " sounds=" << sounds << " clip=" << sound_clip
+                  << std::endl;
         low = high = turn.angle;
+        sounds = 0;
         next();
         if (then == SDLK_RETURN) last_push = now_ms;
         key(then);
@@ -146,22 +169,29 @@
         report("rest");
         next();
         low = high = turn.angle;
+        sounds = 0;
         key(SDLK_LEFT);
       } else if (phase == 7) {
-        turned("left", 1, SDLK_RIGHT);
-      } else if (phase == 8) {
-        turned("centre", 0, SDLK_RIGHT);
+        turned("left", 1, SDLK_LEFT);
+      } else if (phase == 8 && now_ms - phase_at > 400) {
+        std::cout << "FRONT_FLOW edge slot=" << turn.slot << " focus=" << turn.focus << " sounds=" << sounds
+                  << " clip=" << sound_clip << std::endl;
+        sounds = 0;
+        next();
+        key(SDLK_RIGHT);
       } else if (phase == 9) {
-        turned("right", 2, SDLK_LEFT);
+        turned("centre", 0, SDLK_RIGHT);
       } else if (phase == 10) {
+        turned("right", 2, SDLK_LEFT);
+      } else if (phase == 11) {
         turned("back", 0, SDLK_RETURN);
-      } else if (phase == 11 && pose.clip == 1) {
+      } else if (phase == 12 && pose.clip == 1) {
         report("start");
         next();
-      } else if (phase == 12 && now_ms - phase_at > 300) {
+      } else if (phase == 13 && now_ms - phase_at > 300) {
         report("blend");
         next();
-      } else if (phase == 13 && now_ms - phase_at > 700) {
+      } else if (phase == 14 && now_ms - phase_at > 700) {
         report("started");
         next();
       }

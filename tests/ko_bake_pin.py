@@ -276,9 +276,16 @@ CLIENT = Path("assets/ko")
 # (the eyes' x and z), recipe.json and the release index change. Default
 # features f89bdc01... -> 00f29831...; classic 128d73ba... -> 48a59128...; 1097
 # 07000937... -> 0f736afd.... The plain cooks and the homelands keep their pins.
+# RQ-077 (Q70, KO-FINDINGS 8.2: 1097's select Init 0043a950 creates sound 2501,
+# DoJobLeft/DojobRight play it) changed the three --features pins: audio.bin
+# binds `front:select-turn` to Snd/char_select_turn.wav (front-end.json
+# `select.turn_sound`). Against the earlier cooks only audio.bin, recipe.json
+# and the release index change. Default features 00f29831... -> 750169d0...;
+# classic 48a59128... -> d36ef55d...; 1097 0f736afd... -> 38e9e56a.... The plain
+# cooks and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "00f29831edb45e6edda0a3e7171144d6c589f1a64a6b6e4106ce4f1a8f529f91"),
+    "features": (["--features"], "750169d00e3bdba6c8e78464e58a40a1c29de36dd175ec74ac5ff9c91ebac998"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -299,13 +306,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "48a591286c1cf85dafbe149deff70268dacd3eb4f79153025dc9d1c4c65eac0d"),
+    "features": (["--features"], "d36ef55d3b23c323a6b43ce638388aa5d5c295fd4ab34017724535c171afc42c"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "0f736afd264ee3684ba0fa9079181fc2f569769acac8bb56d40d14190cac117b"),
+    "features": (["--features"], "38e9e56adafaf444608edb12c6d159dbe884050f33568846d2da80d487c10f2c"),
 }
 
 
@@ -413,6 +420,18 @@ def heads_1298(package, report, features):
         120110048, "Item_Ext_1 row 48", 5, "Short Blade(+8)", [6812, 2529]), record
 
 
+def turn_sound(report, features):
+    """RQ-077 (Q70, KO-FINDINGS 8.2): a feature cook binds the select arrows'
+    turn sound, front-end.json's `select.turn_sound` (sound.tbl 2501,
+    Snd/char_select_turn.wav, 9 at once: 1097's select Init 0043a950 creates it,
+    DoJobLeft/DojobRight 0043e310/0043e380 play it), to `front:select-turn`."""
+    if not features:
+        assert "audio" not in report, report.keys()
+        return
+    clip = report["audio"]["clips"][report["audio"]["bindings"]["front:select-turn"]]
+    assert (clip["path"].replace("\\", "/").lower(), clip["maximum"]) == ("snd/char_select_turn.wav", 9), clip
+
+
 if not (CLIENT / "Data" / "Zones.tbl.csv").is_file():
     print("SKIP Moradon release pins: local KO client data absent")
     print("SKIP OPDEXT zones: local KO client data absent")
@@ -461,6 +480,7 @@ for name, (flags, pinned) in PINS.items():
     provenance = json.loads((OUT / name / "ko-moradon" / "provenance.json").read_text())
     event_shapes("moradon", provenance)
     heads_1298(OUT / name / "packages" / "moradon", provenance, bool(flags))
+    turn_sound(provenance, bool(flags))
     # PQ-387: Moradon_xmas.tlt's 530 light maps (key 210's column 5).
     check = subprocess.run(["build/client/n3e-asset-check", str(OUT / name / "packages" / "moradon")],
                            capture_output=True, text=True)
@@ -622,6 +642,7 @@ for name, (flags, pinned) in CLASSIC_PINS.items():
         features = report["features"]
         worm_drawn(package, report)  # PQ-288
         heads_1298(package, report, True)  # PQ-361
+        turn_sound(report, True)  # RQ-077
         x0, z0, x1, z1 = moradon_features.start_area()
         assert features["layout"] == "classic" and x0 <= spawn[0] <= x1 and z0 <= spawn[2] <= z1, (spawn, features)
         assert features["spawn"][0::2] == spawn[0::2] and abs(features["spawn"][1] - spawn[1]) < 0.006, features
@@ -716,6 +737,7 @@ if (INSTALL_1097 / "manifest.json").is_file():
             features = report["features"]
             worm_drawn(package, report)  # PQ-288
             heads_1298(package, report, True)  # PQ-361
+            turn_sound(report, True)  # RQ-077
             x0, z0, x1, z1 = moradon_features.start_area()
             assert features["layout"] == "1097" and x0 <= spawn[0] <= x1 and z0 <= spawn[2] <= z1, (spawn, features)
             assert features["spawn"][0::2] == spawn[0::2] and abs(features["spawn"][1] - spawn[1]) < 0.006, features

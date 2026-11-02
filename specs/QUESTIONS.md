@@ -540,6 +540,31 @@ maintainer ever wants the later source's rotate sound or a music-only switch, ea
 is a small addition (a sound-table id bound in `audio.bin`; an Option.ini key) that
 departs from 1298 and is recorded as such.
 
+*RQ-077 (maintainer, 2026-11-01: add a sound on the select arrows or the buttons
+only where KO itself plays one).* The select hall follows 1097 (Q71), so the
+1097 image was read (KO-FINDINGS §8.2, binary and local-asset):
+
+- **The rotate sound is 1097's.** Its select Init (`0043a950`) creates sound 2501
+  (`0x9c5`) as the proc's sound object `+0x18`. 1097's `Data/sound.tbl` maps 2501
+  to `Snd\char_select_turn.wav` (the pinned tree's file, byte for byte).
+  DoJobLeft and DojobRight (`0043e310`, `0043e380`) play it through `004327d0`
+  for each turn they start: not during a turn, not at the end of the row.
+- **No button sounds.** 1097's button loader (`00403ac0`) creates a sound only for
+  a non-empty name. Its Karus front-end layouts (`Data/UIs.tbl`: `co_login`,
+  `Ka_CharacterSelect`, `Ka_CharacterCreate`, `Ka_MessageBox`, `Co_Loading`,
+  `ka_loading`) name none. El Morad's `el_characterselect.uif` does name button
+  sounds, but the realm draws the Karus hall.
+- 1097's sound switch is `[Sound] Enable` (default 1): at 0 no device is opened.
+  1298's `[Sound] Effect` does the same, so the realm keeps reading 1298's key.
+
+**Default taken (RQ-077):** bind and play the rotate sound. `front-end.json`
+`select.turn_sound` (2501) is cooked into `audio.bin` as `front:select-turn`
+(`content/front-end.md`, "Moradon"). The client plays it unpositioned, as one
+voice that a new turn restarts, for each turn an arrow starts. KO creates it as a
+3D sound with no position; that gain and pan were not read. The screens gain no
+UI sounds, as in 1097 and 1298. This departs from 1298, which plays no rotate
+sound, as the 1097 hall does elsewhere (Q71).
+
 ### Q71 — The select hall's character in front: the later source's hover, or 1298's loop
 
 The 2026-11-01 playtest (RQ-066) found the character in front cycling its clip while the
@@ -623,3 +648,9 @@ second ENTER with no clip played, which reads as a fault rather than a feature.
 The visible start (blend, clip, spot, loading after the clip) is 1097's either way.
 
 **Decided (maintainer, 2026-11-01):** (a), the start on the press, at rest only.
+
+*Part of that decision (RQ-077, KO-FINDINGS §8.2, binary):* 1097's arrows also
+start a turn from state 3, while the start clip plays. DoJobLeft and DojobRight
+(`0043e310`, `0043e380`) return early only in state 1. Elsewhere they set state 1,
+turn the camera and play the rotate sound. The realm ignores the arrows from the
+start until loading, as it ignores a second start.

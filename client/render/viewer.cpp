@@ -1773,6 +1773,15 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           SDL_GetWindowSize(w, &lw, &lh);
           if (lw > 0 && lh > 0) x = x * pw / lw, y = y * ph / lh;
           const auto out = front->event(e, x, y, pw, ph);
+          // RQ-077: a front-end sound (the select arrows' turn sound), as one
+          // voice: KO's play (1097 004327d0, called to start at once) stops
+          // the object's sound and starts it again. The request id is one no
+          // melee sequence reaches.
+          if (out.sound && release.audio) {
+            constexpr uint64_t front_voice = ~uint64_t(0);
+            audio.mixer.cancel(front_voice);
+            audio.mixer.play(*release.audio, out.sound, SDL_GetTicks() / 1000., {}, false, front_voice);
+          }
           n3e::Envelope message;
           switch (out.command) {
           case n3e::front::Command::login:

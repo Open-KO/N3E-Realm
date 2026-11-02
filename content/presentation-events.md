@@ -154,7 +154,10 @@ chunks through SDL3. Missing audio hardware leaves gameplay available. Weapon
 swing audio follows authored sound markers; successful impact audio follows the
 strike marker. UI sounds are used only when the original UIF names a sound.
 Original local buttons currently have empty paths. Item/loot bindings remain
-package-owned. No synthesized replacement click is added.
+package-owned. No synthesized replacement click is added. `front:select-turn`
+(RQ-077) is the front end's select-arrow turn sound, which the package names as
+a sound-table id (`front-end.json` `select.turn_sound`); the client plays it
+unpositioned as one voice, a new play stopping the last (`content/front-end.md`).
 
 `N3A2` (PQ-013, D-144) is `N3AU` followed by a positional policy: `u32 listener`
 (0 camera, 1 controlled character, camera while there is none), `f32

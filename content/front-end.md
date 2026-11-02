@@ -204,19 +204,31 @@ is where create draws the character.
   `005fe280`). The create proc does not touch it (source:
   `GameProcCharacterCreate.cpp`). The 1098 scene's own login sound (sound
   table 35, `GameProcLogIn_1098.cpp`) is not 1298's and is not used.
-- Other sounds (RQ-071, Q70): none, as KO 1298 plays none on these screens.
-  Its UIF buttons play only the hover and click sounds their file names
-  (binary: the button loader `00403fc0` creates them with `0044d240`, which
-  creates nothing for an empty name), and every button, static, edit and
-  window of the five layouts above names none (local-asset: each sound string
-  in `co_login_us.uif`, `ka_characterselect_us.uif`,
+- The select arrows' turn sound (RQ-077, Q70): `select.turn_sound`, sound
+  table 2501 (`Snd/char_select_turn.wav`, up to 9 at once), cooked into
+  `audio.bin` as `front:select-turn` by `tools/assetc/ko_bake.py`. The client
+  plays it once for each turn an arrow starts: not at the end of the row, not
+  while the camera turns and not while the start clip plays. It is one voice, so a new
+  turn stops the last play and starts again at the first sample. It is
+  unpositioned, at the voices' gain. KO 1097 (binary,
+  `specs/KO-FINDINGS.md` §8.2): the select Init `0043a950` creates sound
+  2501 as the proc's sound object, and DoJobLeft and DojobRight
+  (`0043e310`, `0043e380`) play it through `004327d0` for each turn they
+  start. KO creates it as a 3D sound and passes no position; that gain and pan
+  were not read. 1298 plays no rotate sound (`005fe3c0`, `005fe450`; no 1298
+  function names 2501), so this is the 1097 hall's (Q71), not 1298's.
+- Other sounds (RQ-071, RQ-077, Q70): none. KO's UIF buttons play only the hover
+  and click sounds their file names (binary: 1298's button loader `00403fc0`
+  creates them with `0044d240`, which creates nothing for an empty name;
+  1097's `00403ac0` creates one only for a name longer than 0). Every button,
+  static, edit and window of the five layouts above names none (local-asset:
+  each sound string in `co_login_us.uif`, `ka_characterselect_us.uif`,
   `Ka_CharacterCreate_us.uif`, `ka_loading_us.uif` and `co_MsgBoxOk_us.uif`
-  is empty), so `front-end.bin` carries no UI sounds. The select's left and
-  right (`005fe3c0`, `005fe450`) play no sound, and neither the select proc,
-  its UI class (`00606a90`) nor any sound-table creator names sound 2501
-  (`char_select_turn.wav`): `ID_SOUND_CHR_SELECT_ROTATE` is the later
-  source's (`GameProcCharacterSelect.cpp`), not 1298's.
+  is empty). So do 1097's Karus layouts (`co_login.uif`,
+  `Ka_CharacterSelect.uif`, `Ka_CharacterCreate.uif`, `Ka_MessageBox.uif`,
+  `Co_Loading.uif`, `ka_loading.uif`). So `front-end.bin` carries no UI sounds.
 - Option.ini (`client/render/options.h`): `[Sound] Effect=0` silences the
-  music, as it does every KO 1298 sound object (`0044d240`, `006453b0`);
-  `[Sound] Bgm` is 1298's zone-music switch only (`00640b10`) and does not
-  touch it.
+  music and the turn sound, as it does every KO 1298 sound object (`0044d240`,
+  `006453b0`); `[Sound] Bgm` is 1298's zone-music switch only (`00640b10`) and
+  does not touch it. 1097's switch is `[Sound] Enable` (`0054ec5e`), which
+  does the same; the realm reads 1298's key (Q70).

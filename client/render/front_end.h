@@ -29,7 +29,12 @@ struct Output {
   Command command = Command::none;
   uint64_t character = 0;  // select
   std::string name;        // create
+  // An audio.bin key the viewer plays once, unpositioned, stopping the
+  // previous play of the same key (RQ-077: the select arrows' turn sound).
+  const char *sound = nullptr;
 };
+// RQ-077 (Q70): the key the package binds the select arrows' turn sound to.
+inline constexpr const char *kSelectTurnSound = "front:select-turn";
 // What the viewer knows this frame.
 struct Context {
   std::string realm;         // realm.json's name
@@ -626,6 +631,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       at = std::clamp(at + (action == FrontAction::select_next ? 1 : -1), 0, int(order.size()) - 1);
       // The turn keeps the spot's theta (1097: only the proc's init, the
       // select 0043ea30 and 0043f280 write +0x2d0).
+      // RQ-077: a turn that starts plays the turn sound (1097: the proc's
+      // sound object +0x18, which Init 0043a950 creates as sound 2501, played
+      // at once by 004327d0); none at the end of the row.
+      if (order[at] != focus) out.sound = kSelectTurnSound;
       focus = order[at];
       break;
     }

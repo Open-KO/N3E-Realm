@@ -15,7 +15,8 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   back, the spot widens and narrows to off and the info text shows only while
   the pointer is on it; RQ-066, RQ-075; the arrows turn the camera one slot
   left, back, one right and back, each ending where 1097's check ends it,
-  RQ-067) -> start (the start clip blends in over
+  RQ-067, each playing the turn sound once and the left end of the row none,
+  RQ-077) -> start (the start clip blends in over
   1097's 0.6 s on its first frame under the full spot, then plays; RQ-076) ->
   loading -> the world.
 - An operator kick (admin API) returns the client to the login screen with the
@@ -276,12 +277,18 @@ try:
     assert right["high"] == 0 and right["low"] == right["angle"], turns
     assert back_["slot"] == 0 and back_["angle"] == 0, turns
     assert back_["low"] == right["angle"] and 0 <= back_["high"] <= step, turns
+    # RQ-077 (Q70, KO-FINDINGS 8.2): 1097's DoJobLeft/DojobRight play the select
+    # proc's sound 2501 (char_select_turn.wav, audio.bin's front:select-turn)
+    # once for each turn they start, and nothing at the end of the row.
+    assert all(t["sounds"] == 1 and t["clip"] == 1 for t in turns.values()), turns
+    edges = [{k: float(x) for k, x in (kv.split("=") for kv in f.split()[1:])} for f in flow if f.startswith("edge ")]
+    assert edges == [{"slot": 1, "focus": 1, "sounds": 0, "clip": 1}], edges
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
     print(f"PASS front-end flow: one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box, "
           "Fresh created) -> select (the front character's hover clip blends in on its first frame, plays once and holds, the rest clip blends back; "
           "the spot widens and the info text shows only while the pointer is on it; the arrows turn the camera one slot each way, "
-          "ending where 1097's check ends it) -> start (blends in over 0.6 s, then plays) -> loading -> world; "
+          "ending where 1097's check ends it, each with the turn sound) -> start (blends in over 0.6 s, then plays) -> loading -> world; "
           "a kick returns to login with the operator's wording; "
           "one music stream from login to loading")
     assert server.poll() is None, "server exited"

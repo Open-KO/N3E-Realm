@@ -114,7 +114,13 @@ replace the panels when the client has a Discord realm config.
   (one frame decoded at a time, `client/assets/music.h`); a screen naming the track
   already playing keeps it, so it runs on across the screens; entering the world
   stops it. Option.ini `[Sound] Effect=0` silences it with every other sound, as in
-  KO 1298 (Q70). The screens have no other sounds: 1298 plays none there (Q70).
+  KO 1298 (Q70).
+- **The select arrows' turn sound** (RQ-077, Q70). 1097's hall plays sound 2501,
+  `char_select_turn.wav`, for each turn its arrows start. The package names the
+  sound-table id (`front-end.json` `select.turn_sound`), and the cook binds it in
+  `audio.bin` as `front:select-turn`. The client plays it once, unpositioned, for
+  each turn an arrow starts; a new turn restarts it. The screens have no other
+  sounds: neither 1298's nor 1097's layouts name a button sound (Q70).
 - **`text` overrides.** The format allows them; the Moradon package uses none: the
   login screen keeps KO's labels and copyright line (Q61, superseding Q56).
 - **`hidden`.** The Moradon package keeps the login bar as KO draws it: `Edit_ID`,
@@ -258,7 +264,9 @@ KO (`make live-ko`, needs `assets/ko`):
      back; the spot widens only while the pointer is on it and is off at 0; the info
      text shows only then (RQ-066, RQ-075); LEFT and RIGHT turn the camera one slot
      each way and back, the short way, each turn ending on the first frame past where
-     1097's check ends it or back on the camera's own eye (RQ-067); ENTER then blends
+     1097's check ends it or back on the camera's own eye (RQ-067), each turn playing
+     the turn sound (`front:select-turn`) once and LEFT at the end of the row none
+     (RQ-077); ENTER then blends
      clip 1 in over 0.6 s on its first frame, under the full spot, before it plays
      (RQ-076);
    - a kick returns to login with the operator's wording;

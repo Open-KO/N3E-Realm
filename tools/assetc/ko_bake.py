@@ -452,6 +452,13 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
             report['skeletal_plugs_2233']['items']={k:v[1] for k,v in skeletal_items.items()}
             manifest.update(engine_version=max(manifest['engine_version'],attachments.engine(manifest['attachments'],root)),
                             protocol_version=30)
+        # RQ-077 (Q70): the select arrows' turn sound, the sound.tbl id the
+        # front end names (`select.turn_sound`; 1097's select Init 0043a950
+        # creates sound 2501 and DoJobLeft/DojobRight play it).
+        turn_sound=json.loads(pathlib.Path('games/moradon/front-end.json').read_text())['select'].get('turn_sound')
+        if turn_sound is not None:
+            if type(turn_sound) is not int or turn_sound<=0:raise ValueError('front-end select.turn_sound: a sound.tbl id')
+            extra_sounds['front:select-turn']=turn_sound
         report['audio']=ko_audio.cook(source_assets,report['effects'],hud,root/'audio.bin',item_icons,extra_sounds)
         manifest['presentation']['audio.bin']='audio.bin'
         # Spec 11: KO's login scene, select hall, create, loading and message

@@ -255,9 +255,39 @@ where 1097's check first ends the turn (`turn_end` 0.75 and 0.77 in
 `games/moradon/front-end.json`). The client (`select_turn_tick`) turns
 1.2 rad a second by the frame's time (at most 0.25 s), checks before each step,
 puts the eye back on the camera's own when it reaches the centre, and ignores
-the arrows while it turns. It plays no rotate sound. 1097 plays its sound object
-`+0x18` there. Whether one is loaded, and which, was not read (1298 plays none;
-`content/front-end.md`).
+the arrows while it turns.
+
+The arrows from state 3: away from their own edge, DoJobLeft and DojobRight
+return early only in state 1. In state 3, while the start clip plays
+(`0043ed20`), they set state 1 and start a turn (binary, `0043e310`,
+`0043e380`). The realm ignores the arrows from the press of ENTER or the click
+until loading, as it ignores a second start (Q72, decided: the start on the
+press, at rest only).
+
+RQ-077 read the turn's sound and the front-end buttons' sounds (binary, the same
+image and project, output under `build/ghidra/rq077/`, not committed; the
+disassembly of code Ghidra left undefined with `objdump`):
+
+| Observation | Where | Label |
+|---|---|---|
+| **1097 has the rotate sound.** The select Init releases the proc's sound object `+0x18` (`0042e9c0`) and creates it again as sound 2501, `0042e430(0x9c5, 1)` (`push 0x9c5` at `0043a9ea`, the store at `0043a9f9`), on the sound manager `005adce0` (`mov ecx, 0x5adce0`). That is the later source's `m_pSnd_Rotate = s_SndMgr.CreateObj(ID_SOUND_CHR_SELECT_ROTATE)` (`GameDef.h`: 2501) | `0043a950` | binary |
+| `0042e430` creates nothing unless the manager's `+0x28` and `+0x29` are set. It looks the id up in the table that `0042e180` reads from `Data\sound.tbl` (string `005a1aa8`) and creates the object from the row's file (`0042e4c0`, which tests the same two flags). `+0x28` is the device's (`0042e180` stores `00431b70`'s result at `0042e1c0`). `+0x29` is set to 1 by the constructor (`0042dea9`); no other write to it was found (a byte scan for stores to `+0x29` and to `005add09`). The second argument, 1, is the source's `SNDTYPE_3D` (`N3SndDef.h`, source) | `0042e430`, `0042e180`, `0042e4c0`, `0042dea9` | binary |
+| 1097's Option.ini switch is `[Sound] Enable` (default 1), stored at `005ade68` by the reader at `0054ec5e`–`0054ec84`. Only when it is set does `00544600` call `0042e180` (the test at `00544a50`, the call at `00544a5f`), which opens the device. `[Sound] Duplicate` (`005ade69`) goes to `005add0a`; `[Sound] Distance` defaults to 48, clamped 20–48. 1097 has no `[Sound] Effect` key: `Effect` is a section there, `[Effect] Count`, default 2000, clamped 1000–2000 | `0054eb97`–`0054ecab`, `00544600` | binary |
+| 1097's `Data/sound.tbl` (decrypted with `tools/assetc/ko_tbl.py`, 188 rows) has row 2501 `Snd\char_select_turn.wav`, 0, 9, as the pinned tree's has. The two `char_select_turn.wav` files are byte-identical (sha256 `5f693df7…`; 8-bit mono, 22,050 Hz, 13,961 frames, 0.63 s) | `Data/sound.tbl`, `Snd/char_select_turn.wav` | local-asset |
+| DoJobLeft and DojobRight play the sound after they set the destination. The play runs when `+0x18` is not null and the camera is not at their own edge (`+0x2c4` not 2, or not 3). The call is `004327d0(none, 0, 0, 1)` at `0043e373` and in `0043e380`; in state 1 they have returned before it. With its last argument 1, `004327d0` stops the buffer `+0x4` if it is playing (`IDirectSoundBuffer::Stop`, vtable `+0x48`). It then plays the buffer once (`Play`, vtable `+0x30`, flags 0: the looping flag `+0xc` is clear), when the object has a 3D buffer `+0x8`. No position is passed, so `SetPosition` (the 3D buffer's `+0x4c`) is not called. So each turn the arrows start plays the sound once, and an arrow at the end of the row plays nothing. Whether a play that stops one still sounding starts again at the first sample was not read: `004327d0` does not call `SetCurrentPosition` | `0043e310`, `0043e380`, `004327d0` | binary |
+| `0042e430`'s other callers are not the select's. They pass ids from tables (`0044d0c0`, `0044d480`, `00452b60`) or the constants 100, 200, 201, 1000, 2000–2003 and 3000 (`0044d0c0`, `004e8c10`, `004fab60`, `00493a80`). The play-once creator `0042e7e0` (the other user of the table lookup `0042fd00`) is called with 20003, 606 and a caller's id, from `00525b70`, `0052ccf0` and `0052a870`. Neither group was read further | the callers of `0042e430`, `0042e7e0` | binary |
+| The front-end buttons play nothing. 1097's button loader reads two sound names and creates each (`0042e4c0`, into `+0xc8` and `+0xdc`) only when its length is above 0 (`00403b65`, `00403c8d`) | `00403ac0` | binary |
+| 1097's `Data/UIs.tbl` (decrypted, two rows by nation) names the Karus screens `UI\co_login.uif`, `UI\Ka_CharacterSelect.uif`, `UI\Ka_CharacterCreate.uif`, `UI\Ka_MessageBox.uif`, `UI\Co_Loading.uif` and `ui\\ka_loading.uif`. In those files, in their `_tw` copies and in `Co_nationselect.uif`, every length-prefixed string that names a file is a `.dxt`; none names a sound. El Morad's `el_characterselect.uif` does name sounds: `snd\ui_button.wav` on `bt_delete` and `bt_exit`, `snd\ui_button4.wav` on `bt_left9` and `bt_right`. Which of a button's two names (hover, click) each fills was not read: 1097's UIF layout is older than the one `ko_hud.parse` reads | the 1097 install's `UI/`, `Data/UIs.tbl` | local-asset |
+
+**Decides (RQ-077, Q70):** the select arrows play 1097's turn sound. The Moradon package
+binds sound 2501 (`front-end.json` `select.turn_sound`) to `front:select-turn` in
+`audio.bin`. The client plays it once for each turn an arrow starts, as one voice:
+a new turn stops the last play and starts again at the first sample. It plays nothing at the end of the row, nothing while the
+camera turns and nothing while the start clip plays. It is unpositioned, at the
+voices' gain. KO creates it as a 3D sound and passes no position; the gain and pan
+that gives were not read. The realm draws the Karus hall, and 1097's Karus
+front-end layouts name no button sounds, so the screens gain none. The realm keeps
+reading 1298's `[Sound] Effect`, not 1097's `[Sound] Enable` (Q70).
 
 ## Not re-derived here
 
@@ -275,4 +305,5 @@ notes.
 | Q10 | Wording fixed (above). |
 | Q21 | Unchanged (KO's `+monsummon` is untimed; ours gets a bounded duration). |
 | Q71 | §8.1: 1097, the client whose files the package cooks, plays the hall as (a) does, so (a) is KO's behaviour; its three remaining details aligned (RQ-075). |
-| Q72 | §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. |
+| Q70 | §8.2 (RQ-077): 1097's select arrows play sound 2501 (`char_select_turn.wav`) for each turn they start; the realm plays it. 1097's Karus front-end layouts name no button sounds; its sound switch is `[Sound] Enable`. |
+| Q72 | §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077): 1097's arrows also start a turn from state 3, during the start clip; the realm ignores them then. |

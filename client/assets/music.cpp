@@ -78,7 +78,7 @@ MusicStream::MusicStream(std::shared_ptr<const MusicTrack> track, uint64_t phase
   // the new stream yet (it plays only when its timer is 0): silent until the
   // period, then mix() rewinds to the first sample.
   if (restart_frames && phase > 0) {
-    played = std::min(phase, restart_frames);
+    played = start = std::min(phase, restart_frames);
     done = true;
   }
 }
@@ -194,6 +194,7 @@ unsigned MusicStream::mix(float *out, unsigned frames, float gain) {
       return i;
     }
     ++played;
+    ++mixed;
   }
   return frames;
 }

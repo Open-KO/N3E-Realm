@@ -22,6 +22,12 @@
 //   FRONT_FLOW enter connected=0|1
 //   FRONT_FLOW message='...' title='...'
 //   (RQ-102: the box's text and its title, empty for an untitled message)
+//   FRONT_FLOW scene entry=K t=T since=S process=P (RQ-104: half a second
+//   into each entry of the login scene, the login or the realm list after
+//   another screen: K counts the entries, T is the scene's time as the last
+//   frame drew it, S that frame's seconds since the entry's first frame and
+//   P the process's seconds. After the world, the message box waits for
+//   the return's line)
 //   FRONT_FLOW music=none|streamK (RQ-018: K counts the streams started; a
 //   line each time the mixer's stream changes, a frame after the screen)
 //   FRONT_FLOW hover phase=P clip=C t=T end=E blend=B theta=H spot=0|1 info=0|1
@@ -91,7 +97,14 @@
     }
     was_in_world = was_in_world || screen == 6;
     const uint64_t now_ms = SDL_GetTicks();
-    if (front->showing_message() && front_active() && now_ms - last_push > 500) {
+    static uint64_t scene_reported = 0;
+    if (const auto &scene = front->scene(); scene.shown && scene.entries > scene_reported && scene.last - scene.entered >= .5) {
+      scene_reported = scene.entries;
+      std::cout << "FRONT_FLOW scene entry=" << scene.entries << " t=" << scene.seconds
+                << " since=" << scene.last - scene.entered << " process=" << now_ms / 1000. << std::endl;
+    }
+    if (front->showing_message() && front_active() && now_ms - last_push > 500 &&
+        (!was_in_world || scene_reported >= 2)) {
       std::cout << "FRONT_FLOW message='" << front->message_text() << "' title='" << front->message_title() << "'"
                 << std::endl;
       last_push = now_ms;

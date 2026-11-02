@@ -98,7 +98,18 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    process, counting only while a screen naming the track shows; the first
    entry starts the track at once and a later one only when the clock next
    reaches the period, silent until then. No byte of this section changes
-   with it.
+   with it. The login scene (item 6) keeps time by its screen's restarting
+   track (RQ-104, Q83; `client/render/scene_clock.h`): its clock starts at 0
+   on each entry to the login (the login or the realm list after any other
+   screen, a return from the world included), as KO's login Init starts its
+   character's clip at its first frame (`specs/KO-FINDINGS.md` §9.1), and
+   while a device plays that track it is held to the listener's position in
+   the track's period: within the block the device has taken and is playing
+   (the frames mixed less those still queued for the device are its end),
+   running on the frame time inside it, so its steps stay even and none goes
+   back. The clip and the track restart together, and a stall the device runs
+   dry over leaves them in step. Otherwise, and from where it was when the
+   track stops being heard (the device closed), it runs on the frame time.
 10. The logo screen (version 9, RQ-101; `client/render/front_logo.h`): 0 for
    none, or 1 and then its nodes (a node count, 1–1024, and the nodes as a
    screen's, item 4: groups, images and strings only, none bound to an action),
@@ -534,7 +545,10 @@ box and loading are 1264's.
   title is its `_DEBUG` build's (`GameProcLogIn_1098.cpp` `Init`); the 1264
   binary has no such string and its release path posts the failure untitled.
 - Intro: `Intro/Intro.N3Chr` clip 0 with its axe plug, `Intro/0-2.N3Light` (2 is
-  off), `Intro/Moon.dxt` at (100, 50) × 1.3, KO's fixed camera.
+  off), `Intro/Moon.dxt` at (100, 50) × 1.3, KO's fixed camera. The clip (frames
+  0–650 at 30 a second, 21.667 s) starts at its first frame on each entry to the
+  login and keeps `bgm_login.wav`'s time (section 9, RQ-104): the orc's roars
+  are in the track.
 - Select: `ChrSelect/ka_chairs.n3shape`, `ka_light_0/1`, the Karus slots, spots
   and camera from `CGameProcCharacterSelect::Init`, and the Tuarek priest
   (`upc_ka_tu_pri.n3joint`, default looks, the mace plug) with the clips of

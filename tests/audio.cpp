@@ -2,6 +2,8 @@
 #include "render/melee_presentation.h"
 #include "render/presentation_events.h"
 #include "render/local_release.h"
+#include "render/scene_clock.h"
+#include <deque>
 #include <iostream>
 #include <stdexcept>
 #include <source_location>
@@ -187,6 +189,136 @@ void music_checks(){
   m.play_music(nullptr);need(!m.music&&energy(m.mix(9,4800,{}))==0);
   std::cout<<"PASS music: frame checks, a track once and looping, 32 kHz resampling, undecodable frames end, mixer keeps and replaces streams\n";
   pcm_checks(once);
+}
+// RQ-104: the front end's tracks play at their own rate, and the login
+// scene (client/render/scene_clock.h) keeps the login track's time, on the
+// first entry and on each return.
+void scene_music_checks(){
+  // The rate: bgm_login.wav's form (22,050 Hz stereo 16-bit, 477,749 frames,
+  // here without its restart: one pass) plays 477749 x 48000 / 22050 =
+  // 1,039,998.6 frames of the mixer's 48 kHz, the source's 21.667 s, every
+  // source frame once; output frame 320 m is source frame 147 m. bless.wav's
+  // (mono, 305,280 frames) plays 664,555.1, 13.845 s.
+  auto play=[](const std::shared_ptr<n3e::MusicTrack>&t,uint64_t probe,float&at){
+    n3e::MusicStream s(t);std::vector<float> out(4800*2);uint64_t written=0;
+    for(;;){std::fill(out.begin(),out.end(),0.f);auto n=s.mix(out.data(),4800,1);
+      if(written<=probe&&probe<written+n)at=out[2*(probe-written)];
+      written+=n;if(n<4800)break;}
+    need(s.decoded_frames()==t->frames);return written;};
+  {auto t=pcm_track(477749,22050,2,false);n3e::check_music_track(*t);float at=-1;
+   const auto written=play(t,320ull*3001,at);
+   need(std::abs(double(written)-477749.*48000/22050)<1.5&&std::abs(at-47*200/32768.f)<1e-4f);}
+  {auto t=pcm_track(305280,22050,1,false);float at=-1;const auto written=play(t,320ull*11,at);
+   need(std::abs(double(written)-305280.*48000/22050)<1.5&&std::abs(at-(1617%100)*200/32768.f)<1e-4f);}
+  // Its restart period (21.66 s) is 1,039,680 frames: the frame there is the
+  // first sample again.
+  {auto t=pcm_track(477749,22050,2,false,21.66f);n3e::check_music_track(*t);n3e::MusicStream s(t);
+   std::vector<float> out(4800*2);uint64_t written=0;
+   while(written<1039680){std::fill(out.begin(),out.end(),0.f);written+=s.mix(out.data(),unsigned(std::min<uint64_t>(4800,1039680-written)),1);}
+   need(s.restarts()==0&&s.period_frames()==1039680&&s.mixed_frames()==1039680);
+   std::fill(out.begin(),out.end(),0.f);s.mix(out.data(),400,1);
+   need(s.restarts()==1&&near(out[0],0)&&std::abs(out[2*320]-47*200/32768.f)<1e-4f);}
+  // What the listener hears (AudioMixer::heard): the position in the period,
+  // `queued` frames behind those mixed; at the start while the queue still
+  // holds an earlier stream's frames; none for a track without a period.
+  {n3e::AudioMixer m;auto login=pcm_track(1000,48000,1,false,0.1f),other=pcm_track(4800,48000,1,true);
+   need(!m.heard(0).track);
+   m.play_music(other);m.mix(0,2400,{});need(!m.heard(0).track);
+   m.play_music(login);auto h=m.heard(2400);need(h.track==login.get()&&h.seconds==0);
+   m.mix(0,2400,{});h=m.heard(3000);need(h.track==login.get()&&h.seconds==0);
+   h=m.heard(1200);need(near(float(h.seconds),1200/48000.f));
+   m.mix(0,2500,{});need(m.music->restarts()==1);
+   h=m.heard(0);need(near(float(h.seconds),100/48000.f));
+   h=m.heard(300);need(near(float(h.seconds),4600/48000.f));}
+  // With the carried clock (carry_music_clock), a return is heard at the
+  // carried phase.
+  {n3e::AudioMixer m;m.carry_music_clock=true;auto login=pcm_track(1000,48000,1,false,0.1f);
+   m.play_music(login);m.mix(0,1200,{});m.play_music(nullptr);m.play_music(login);
+   auto h=m.heard(0);need(near(float(h.seconds),1200/48000.f));
+   m.mix(0,600,{});h=m.heard(0);need(near(float(h.seconds),1800/48000.f));}
+  // The scene clock alone: it starts at 0 on the first frame that shows the
+  // scene and runs on the frame time; a heard track of the screen's holds it
+  // within the block the device plays (from the block's start to its end);
+  // another track's does not; when the track is no longer heard it runs on
+  // from where it was.
+  {n3e::front::SceneClock c;auto login=pcm_track(100,48000,1,false,1),other=pcm_track(100,48000,1,true);
+   need(c.tick(false,3,other.get(),{})==0&&c.entries==0);
+   need(c.tick(true,12,login.get(),{other.get(),5,10,.02})==0&&c.entries==1);
+   need(c.tick(true,12.5,login.get(),{})==.5);
+   need(c.tick(true,12.6,login.get(),{login.get(),.25,1,0})==.25);         // held to the heard time
+   need(near(float(c.tick(true,12.61,login.get(),{login.get(),.27,1,.02})),.26f)); // runs on inside the block
+   need(near(float(c.tick(true,12.65,login.get(),{login.get(),.27,1,.02})),.27f)); // not past its end
+   need(near(float(c.tick(true,12.66,login.get(),{login.get(),.5,1,.02})),.48f));  // nor behind its start
+   need(near(float(c.tick(true,12.67,login.get(),{login.get(),.01,.6,.02})),.0f)); // the period started again
+   need(near(float(c.tick(true,13.67,login.get(),{})),1));                        // the device closed: on from there
+   need(c.entries==1);
+   need(c.tick(false,41,other.get(),{other.get(),.5})==0);
+   need(c.tick(true,90,login.get(),{})==0&&c.entries==2);
+   need(c.tick(true,91,nullptr,{login.get(),.5})==1);}
+  // The scene against the music a device plays, frame by frame at 60 Hz:
+  // the viewer's order (the heard music, then the frame, then the screen's
+  // track and AudioDevice::tick's queue of up to seven 1,024-frame chunks),
+  // the device taking 1,024-frame blocks at 48 kHz. The logo's track, then
+  // the login (the first entry; a 0.6 s stall the device runs dry over; the
+  // realm list), select's track, the login again (a return), loading, the
+  // world (no front-end frames, no music), the login again, and the device
+  // closing. Wherever the login's track is heard the scene is within the
+  // block the device plays, so the character's clip (21.667 s, restarting
+  // with the period) and the track keep time; until it is heard the scene
+  // holds its first frame. In steady frames its steps are the frame's, and
+  // none goes back.
+  {auto login=pcm_track(477749,22050,2,false,21.66f),logo=pcm_track(30000,22050,1,false),battle=pcm_track(22050,22050,2,true);
+   n3e::AudioMixer m;n3e::front::SceneClock c;constexpr uint64_t block=1024;
+   struct Segment {const n3e::MusicTrack*track;uint64_t at,frames;};
+   std::deque<Segment> queue;uint64_t queued=0,owed=0;double now=5;bool device=true;
+   auto next_at=[&]{return m.music&&m.music->restarting()?(m.music->start_phase()+m.music->mixed_frames())%m.music->period_frames():0;};
+   uint64_t checked=0,waiting=0,steady=0,uneven=0;double last_t=-1;int settle=0;
+   auto take=[&](uint64_t frames){
+     while(frames&&!queue.empty()){auto&s=queue.front();const auto n=std::min(frames,s.frames);
+       s.frames-=n;s.at+=n;frames-=n;queued-=n;if(!s.frames)queue.pop_front();}};
+   auto consume=[&](uint64_t frames){owed+=frames;while(owed>=block){take(block);owed-=block;}};
+   auto frame=[&](bool scene,const n3e::MusicTrack*track,bool draw=true){
+     if(draw){
+       const auto heard=device?m.heard(queued,block):n3e::HeardMusic{};
+       const double t=c.tick(scene,now,scene?track:nullptr,heard);
+       if(scene){
+         // The queue's front is the frame after the block the device plays.
+         const n3e::MusicTrack*playing=queue.empty()?(m.music?m.music->track().get():nullptr):queue.front().track;
+         const uint64_t at=queue.empty()?next_at():queue.front().at;
+         if(device&&playing==track){
+           need(std::abs(heard.seconds-double(at%1039680)/48000)<1e-9);
+           need(t<=heard.seconds+1e-9&&t>=heard.seconds-block/48000.-1e-9&&t<21.66);++checked;
+         }else if(device){need(t==0);++waiting;}
+         if(last_t>=0){double step=t-last_t;if(step<-10)step+=1039680/48000.;
+           need(step>=-1e-9);
+           if(settle>120){++steady;if(std::abs(step-1/60.)>1e-6)++uneven;}}
+         last_t=t;++settle;
+       }else{last_t=-1;settle=0;}
+     }
+     std::shared_ptr<const n3e::MusicTrack> want;
+     for(const auto&p:{login,logo,battle})if(p.get()==track)want=p;
+     m.play_music(want);
+     const uint64_t ahead=m.music_playing()?6:1;
+     for(uint64_t round=0;round<ahead&&queued<=ahead*1024;++round){
+       queue.push_back({m.music?m.music->track().get():nullptr,next_at(),1024});m.mix(0,1024,{});queued+=1024;}
+     consume(800);now+=1/60.;};
+   auto run=[&](double seconds,bool scene,const n3e::MusicTrack*track,bool draw=true){
+     for(int i=0,n=int(std::lround(seconds*60));i<n;++i)frame(scene,track,draw);};
+   run(2,false,logo.get());
+   run(10,true,login.get());need(c.entries==1&&waiting>0&&waiting<12);
+   consume(28800);now+=.6;settle=0;  // the stall: the device plays out its queue
+   run(20,true,login.get());run(5,true,login.get());
+   run(3,false,battle.get());waiting=0;
+   run(25,true,login.get());need(c.entries==2&&waiting>0&&waiting<12);
+   run(.5,false,nullptr);run(2,false,nullptr,false);
+   run(200,true,login.get());need(c.entries==3&&checked>15000);
+   // In steady frames every step is the frame's (the heard position alone
+   // moves in 1,024-frame blocks, 21.3 ms, against 16.7 ms frames).
+   need(steady>14000&&uneven*100<steady);
+   // The device closes: the scene runs on from where it was, by the frame.
+   const double before=c.seconds;device=false;frame(true,login.get());need(near(float(c.seconds-before),1/60.f));
+   run(1,true,login.get());need(near(float(c.seconds-before),61/60.f)&&c.entries==3);}
+  std::cout<<"PASS front-end music rate (22,050 Hz tracks at their source length, the 21.66 s period) and the login scene on the heard music: first entry, a stall, returns, even steps, the device closing\n";
 }
 // PQ-013: KO effect start test, listener frame, curves and fixed source positions.
 void spatial_checks(){
@@ -424,6 +556,7 @@ int main(int argc,char**argv){try{
   need(m.play(a,"tone",1));need(!m.play(a,"tone",1));m.retire(1.2);need(m.voices.empty());
   spatial_checks();
   music_checks();
+  scene_music_checks();
   local_release_checks();
   n3e::WorldState w;w.connected=true;w.world.set_self(7);w.world.set_session(1);w.world.set_tick(100);w.world.set_event_cursor(10);
   auto*e=w.world.add_events();e->set_sequence(10);e->set_tick(100);

@@ -956,3 +956,31 @@ realm's platform differs from DirectInput's:
 - **Messages.** A message box raised during the logo (a reset connection, a Discord
   alert) waits and shows on the login, the latest one, since 1264 has nothing to
   report before its login runs.
+
+### Q83 — The login scene's clock on a return (KO's own drift)
+
+The maintainer's playtest (2026-11-02): the login's orc and its music (the roars in
+`bgm_login.wav`) were out of step, worst after a ban returned the client to the
+login. Cause (RQ-104): the client posed the orc on the process's clock, never reset,
+so it was out of step on the first entry (by the time the logo screen and the start
+took) and on every return, whatever the music did; RQ-105's music start did not
+change it. KO 1097 and 1264 make the orc again in each login Init and start its
+21.667 s clip at its first frame, ticked by the frame time, and their login track
+starts on the same tick on a process's first login (KO-FINDINGS §9.1, binary), so
+those two keep time; on a return KO's track waits for its carried timer while the
+orc starts again, so KO itself is out of step there. Options: (a) restart the scene
+at each entry and keep it on the music's clock; (b) KO's: restart the scene at each
+entry on the frame clock, the track on its own timer.
+**Default taken (RQ-104):** (a), the robust behaviour that keeps them in step. The
+scene's clock (`client/render/scene_clock.h`) starts at 0 on each entry to the login
+(the login or the realm list after any other screen) and, while a device plays the
+screen's restarting track, is held to the listener's position in that track's period
+(within the block the device has taken and plays, whose end is the frames mixed less
+those still queued for the device, running on the frame time inside it), so the orc
+and the track restart together and keep time through a stall the device runs dry
+over; otherwise it runs on the frame time, from where it was if the device closes. With RQ-105's default (the track starts at once)
+the orc starts at its first frame on every entry, as KO's. With
+`AudioMixer::carry_music_clock` on (RQ-103's option, KO's carried timer) the orc
+follows the carried period instead of restarting at its first frame, so it is in step
+when the track starts; KO would restart the orc and leave the track behind. No format
+change.

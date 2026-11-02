@@ -2976,6 +2976,8 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           // World is the last stage.
           front_progress = std::max(front_progress, 2 / 3.f);
         }
+        // RQ-104: the login scene keeps time by the music the device plays.
+        front->heard_music(audio.heard_music());
         front->draw(width, height, now,
                     {realm_config ? realm_config->name : endpoint, world.status, release.version,
                      &world.characters, front_progress});

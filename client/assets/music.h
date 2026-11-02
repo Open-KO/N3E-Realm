@@ -14,7 +14,8 @@
 // period, and reports its phase for the next one. That applies only when
 // AudioMixer::carry_music_clock is on (off by default since RQ-105, Q75 (a):
 // otherwise every stream starts at phase 0). No file access, threads or
-// device calls.
+// device calls. RQ-104: HeardMusic, what the listener hears of a restarting
+// track, which the login scene keeps its time by.
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -52,6 +53,16 @@ std::optional<MpegFrame> mpeg_frame(const unsigned char *p, size_t available);
 // exactly `frames` 16-bit sample frames of `channels` at a rate within bounds.
 void check_music_track(const MusicTrack &track);
 
+// RQ-104: the track a device plays and the listener's position in its
+// restart period (seconds), the frames still queued for the device not yet
+// heard: the end of the block the device last took, which it is playing.
+// The period's and that block's seconds. No track when no device plays one
+// with a period (AudioMixer::heard).
+struct HeardMusic {
+  const MusicTrack *track = nullptr;
+  double seconds = 0, period = 0, block = 0;
+};
+
 class MusicStream {
  public:
   static constexpr unsigned kRate = 48000;
@@ -77,6 +88,12 @@ class MusicStream {
   // A restarting track's frames into its period (0 for any other track).
   bool restarting() const { return restart_frames != 0; }
   uint64_t period_phase() const { return restart_frames ? played : 0; }
+  // RQ-104: the 48 kHz frames this stream has mixed since it was made (a
+  // restarting track's silent ones included), the phase it was made at, and
+  // its restart period in frames (0: none).
+  uint64_t mixed_frames() const { return mixed; }
+  uint64_t start_phase() const { return start; }
+  uint64_t period_frames() const { return restart_frames; }
 
  private:
   struct Decoder;
@@ -93,6 +110,7 @@ class MusicStream {
   float a[2]{}, b[2]{};
   uint64_t decoded = 0, pass_samples = 0, restarted = 0;
   uint64_t restart_frames = 0, played = 0;  // 48 kHz frames; 0: no restart
+  uint64_t mixed = 0, start = 0;            // 48 kHz frames mixed; the start phase
   bool done = false, primed = false, ending = false;
 };
 }  // namespace n3e

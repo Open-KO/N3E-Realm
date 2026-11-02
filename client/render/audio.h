@@ -77,6 +77,18 @@ struct AudioMixer {
     music=std::make_unique<MusicStream>(track,carry_music_clock?music_phase(track):0);
   }
   bool music_playing()const{return music&&!music->ended();}
+  // RQ-104: what the listener hears of a restarting track, `queued` frames
+  // (mixed, still waiting for the device) behind the stream: its position in
+  // the period, from the phase it started at. Before its first frame is
+  // heard (the queue still holds an earlier stream's) it is at that phase.
+  // No track for a stream without a period. `block`: the frames the device
+  // takes at once.
+  HeardMusic heard(uint64_t queued,uint64_t block=0)const{
+    if(!music||!music->restarting())return {};
+    const uint64_t mixed=music->mixed_frames(),frames=mixed>queued?mixed-queued:0,period=music->period_frames();
+    constexpr double rate=MusicStream::kRate;
+    return {music->track().get(),double((music->start_phase()+frames)%period)/rate,period/rate,block/rate};
+  }
   bool play(const Audio&data,const std::string&key,double start,V position={},bool positional=false,uint64_t request=0,bool effect=false){
     auto binding=data.bindings.find(key);if(binding==data.bindings.end()||!std::isfinite(start))return false;
     const auto&clip=data.clips[binding->second];

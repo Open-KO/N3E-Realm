@@ -104,6 +104,14 @@ assert fe.pcm_track(WAV) == (22050, 2, 100, PCM, 2)
 assert fe.pcm_track(wav(100, width=1)) == (22050, 2, 100, PCM, 1)
 assert fe.pcm_track(wav(100, width=3)) == (22050, 2, 100, PCM, 3)
 assert fe.pcm_track(wav(10, rate=8000, channels=1))[:3] == (8000, 1, 10)
+# RQ-104: a sound (the select turn's, ko_audio.pcm) plays at its own rate: the
+# 22,050 Hz 8-bit mono of Snd/char_select_turn.wav (13,961 frames, 0.633 s)
+# becomes ceil(13961 x 48000 / 22050) = 30,392 frames of the mixer's 48 kHz,
+# the source's length; the music keeps its rate and resamples as it plays
+# (tests/audio.cpp pins that length).
+import ko_audio  # noqa: E402
+assert len(ko_audio.pcm(wav(13961, channels=1, width=1))) // 2 == 30392 == math.ceil(13961 * 48000 / 22050)
+assert len(ko_audio.pcm(wav(4410, channels=2))) // 2 == 9600
 pcm_problems = {
     "not a WAV": b"RIFF\0\0\0\0WAVEjunk",
     "a float format": wav(10, comptype="float"),

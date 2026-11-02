@@ -10,6 +10,7 @@
 #include "platform/gl_load.h"
 #include "render/animation.h"
 #include "render/front_logo.h"
+#include "render/scene_clock.h"
 #include "render/select_hall.h"
 #include "render/select_path.h"
 #include "render/select_turn.h"
@@ -279,6 +280,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   LogoFrame logo_shown() const { return logo_drawn; }
   double logo_seconds() const { return logo_time; }
   bool has_music() const { return !fe.music.empty(); }
+  // RQ-104: what the device plays of the music (AudioDevice::heard_music),
+  // before each draw; the login scene keeps time by its own track's.
+  void heard_music(const HeardMusic &h) { heard = h; }
+  // The login scene's clock as the last frame left it (a test hook).
+  const SceneClock &scene() const { return scene_clock; }
   // The Discord login finished: KO's OpenServerList.
   void logged_in() {
     // A message box (a kick, a drop) stays over the login screen until OK.
@@ -492,7 +498,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       logo_drawn = logo_frame(*fe.logo, logo_time);
       if (logo_drawn.done) leave_logo();
     }
-    if (state == Screen::login || state == Screen::realms) intro(width, height, now);
+    // RQ-104: the login scene's clock starts at its entry and keeps its
+    // track's time (scene_clock.h).
+    const bool scene = state == Screen::login || state == Screen::realms;
+    const double scene_time = scene_clock.tick(scene, now, scene ? music().get() : nullptr, heard);
+    if (scene) intro(width, height, scene_time);
     if (state == Screen::select) hall(width, height, dt);
     // IsAnimEnd: the start clip has played once, after its blend (1097:
     // 0043ed20 reads the loop count, which 00445bb0 counts only past the
@@ -567,6 +577,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   }
   FrontTurn turn_shown;
   double last_frame = -1;
+  SceneClock scene_clock;
+  HeardMusic heard;
   // The select camera this frame drew the hall with, for the zone's BLEND
   // meshes after the UI (version 8); none on a frame without the hall.
   std::optional<std::pair<detail::Mat, V>> hall_camera;
@@ -998,8 +1010,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
                        detail::look_at(eye, c.at, c.up));
   }
   // CGameProcLogIn_1098::Render: the moon as a screen quad (lighting off),
-  // then the looping character under lights 0-2.
-  void intro(int width, int height, double now) {
+  // then the looping character under lights 0-2, `t` seconds into the
+  // scene (RQ-104: SceneClock).
+  void intro(int width, int height, double t) {
     const auto &r = fe.backdrop_rect;
     begin_ui(width, height);
     ui_scale = 1, ui_x = 0, ui_y = 0;
@@ -1013,7 +1026,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     lights(fe.intro, {});
     fog(nullptr, fe.intro.camera.eye);
     const auto vp = view_projection(fe.intro.camera, fe.intro.camera.eye, width, height);
-    draw_character(0, pose(0, 0, now, true), vp, detail::identity());
+    draw_character(0, pose(0, 0, t, true), vp, detail::identity());
   }
   // CGameProcCharacterSelect: the hall, then each slot's character, the
   // camera turning about `at` to the slot in focus (select_turn_tick; the

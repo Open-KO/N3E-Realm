@@ -40,6 +40,8 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   does) and plays on through create and select again, stops on loading, before
   the world, and (when the client runs a frame more after the kick) a new one
   starts on the login screen.
+- The login scene (RQ-104): its clock starts at the login's first entry and
+  again at the return after the kick, and keeps the login track's time.
 """
 import hashlib
 import json
@@ -328,6 +330,19 @@ try:
         assert g["group"] == "0" and abs(float(g["alpha"]) - math.floor(float(g["t"]) / 1.5 * 255) / 255) < 1e-4, logos
         assert g["music"] == "1" and float(g["gain"]) == 1 and g["cursor"] == "0", logos
     assert flow.index("screen=login characters=0") > flow.index(next(f for f in flow if f.startswith("logo phase=skip")))
+    # RQ-104 (KO-FINDINGS 9.1: 1264's login Init sets the character's clip
+    # from its first frame, 0044fa20 at 005bdb3c, and its track starts on the
+    # same tick): the login scene's clock starts at each entry, the first
+    # (after the logo) and the return after the kick, and keeps the login
+    # track's time: half a second in it is near that half second (behind by
+    # at most the earlier stream's frames still queued for the device when the
+    # track started, seven 1,024-frame chunks, 0.15 s, and a frame; ahead by at
+    # most the block the device takes at once), never the process's clock.
+    scenes = [{k: float(x) for k, x in (kv.split("=") for kv in f.split()[1:])} for f in flow if f.startswith("scene ")]
+    assert [int(c["entry"]) for c in scenes] == [1, 2], flow
+    for c in scenes:
+        assert 0.5 <= c["since"] < 1 and c["since"] - 0.3 <= c["t"] <= c["since"] + 0.1, scenes
+    assert scenes[1]["process"] > scenes[0]["process"] + 5, scenes
     # RQ-066, RQ-075 (KO-FINDINGS 8.1, the 1097 hall): with the pointer on the
     # character in front, the hover clip (pre_select) blends in over its own
     # 0.3 s on its first frame, plays once and holds its last frame; off it,
@@ -410,6 +425,7 @@ try:
           "the spot widens and the info text shows only while the pointer is on it; the arrows turn the camera one slot each way, "
           "ending where 1097's check ends it, each with the turn sound) -> start (blends in over 0.6 s, then plays) -> loading -> world; "
           "a kick returns to login with the operator's wording; "
+          "the login scene's clock starts at each entry and keeps its track's time; "
           "the logo's music, then one stream on login and the realm list, another from select to loading")
     assert server.poll() is None, "server exited"
     print("PASS KO front-end flow (%s)" % ("the realm connection held %.2f s before ENTER" % held if held is not None

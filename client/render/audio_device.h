@@ -9,12 +9,27 @@ struct AudioDevice {
   double next=0;
   bool enabled=false;
   uint64_t audible_frames=0;float peak=0;
+  uint64_t block=1024;
   void open(){
     if(!SDL_InitSubSystem(SDL_INIT_AUDIO)){std::cerr<<"Audio unavailable: "<<SDL_GetError()<<'\n';return;}
     SDL_AudioSpec spec{SDL_AUDIO_F32,2,48000};
     stream=SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&spec,nullptr,nullptr);
     if(!stream||!SDL_ResumeAudioStreamDevice(stream)){std::cerr<<"Audio unavailable: "<<SDL_GetError()<<'\n';if(stream)SDL_DestroyAudioStream(stream);stream=nullptr;return;}
     enabled=true;
+    // RQ-104: the block the device takes at once, in the stream's 48 kHz
+    // frames (SDL's default 1,024 when it does not say), at most 0.25 s.
+    SDL_AudioSpec device{};int frames=0;
+    if(SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(stream),&device,&frames)&&frames>0&&device.freq>0)
+      block=std::clamp<uint64_t>(uint64_t(frames)*48000/uint64_t(device.freq),1,12000);
+  }
+  // RQ-104: the music as the listener hears it (AudioMixer::heard): the
+  // stream's queued bytes are frames mixed and not yet played. Nothing
+  // without a device.
+  n3e::HeardMusic heard_music()const{
+    if(!stream)return {};
+    const int queued=SDL_GetAudioStreamQueued(stream);
+    if(queued<0)return {};
+    return mixer.heard(uint64_t(queued)/(2*sizeof(float)),block);
   }
   void clear(){mixer.voices.clear();if(stream)SDL_ClearAudioStream(stream);next=0;}
   void tick(double now,const n3e::AudioListener&listener){

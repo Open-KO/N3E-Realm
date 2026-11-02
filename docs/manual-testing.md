@@ -36,6 +36,12 @@ cargo build --release --locked -p realm-launcher
 tools/local-realm 192.168.1.20           # stack on the LAN; the certificate names the address
 ```
 
+`make realm-assets` also needs the KO 1264 install unpacked once (RQ-085: the
+front end's screens are 1264's): `python3 -I tools/ko-reference/unpack_installer.py
+<knightonlinesetup_1264.exe>` writes `build/ko-reference/installer-1264`. Without it
+the cook refuses before writing anything, naming the missing
+`build/ko-reference/installer-1264/client` and the command that unpacks it.
+
 `tools/local-realm` prints `realm test-local-<package hash> on port 7777 (LAN, …)`. For the bot, the
 first time: mint its admin token, add it to `.env`, and run `tools/local-realm` again:
 

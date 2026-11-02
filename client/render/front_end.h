@@ -1132,12 +1132,18 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const auto &nodes = fe.screens[size_t(screen)];
     const auto shown = visible(screen);
     std::vector<int> state(nodes.size(), 0);
+    // CN3UIBase::Render draws a node's children only when it draws the node: a
+    // button draws the one state image its state names, and that image its own
+    // children (1264's El_MessageBox_us labels each state image, RQ-085).
+    std::vector<char> drew(nodes.size(), 0);
     for (size_t i = 0; i < nodes.size(); ++i) {
       if (!shown[i]) continue;
       const auto &n = nodes[i];
+      if (i > 0 && !drew[n.parent]) continue;
       const auto r = rect(screen, i);
       if (n.kind == FrontNode::BUTTON) state[i] = button_state(screen, i);
       if (i > 0 && nodes[n.parent].kind == FrontNode::BUTTON && !(n.mask & (1u << state[n.parent]))) continue;
+      drew[i] = 1;
       switch (n.kind) {
       case FrontNode::IMAGE:
         if (n.flags & FrontNode::FOREGROUND) {

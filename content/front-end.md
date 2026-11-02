@@ -8,7 +8,7 @@ PCM music tracks with a restart period (version 5, RQ-083), the select
 hall's front-clip mode (version 6, RQ-086), the select camera's turn mode
 with 1298's recorded camera paths (version 7, RQ-087), and a KO zone drawn as
 the select hall with the select camera's fog (version 8, RQ-095).
-`tools/assetc/ko_front_end.py` cooks it from the pinned client tree with the
+`tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
@@ -279,8 +279,8 @@ package hash: a new package, so a new realm (Q63).
 Inputs are pinned before they are cooked from: the pinned tree by `UPSTREAM.md`
 (`make ko-assets`); a reference install by its installer's manifest (RQ-084,
 `tools/assetc/ko_installs.py`): an input under `build/ko-reference/` must be
-`build/ko-reference/<name>/client` of a pinned install, `installer-1097` or
-`installer-2145`, whose `manifest.json` (the unpacker's, beside `client/`)
+`build/ko-reference/<name>/client` of a pinned install, `installer-1097`,
+`installer-1264` or `installer-2145`, whose `manifest.json` (the unpacker's, beside `client/`)
 names that installer's SHA-256, as `ko_bake --client=1097` checks the 1097 one
 and `ko_glow_2233` the 2145 one; the cook then reads each of its files only when
 the file's SHA-256 is the one the manifest lists ("… differs from its
@@ -297,7 +297,7 @@ The clients, per screen, and what the format expresses for each, are in
 
 | Client | Recipe | Inputs | Status |
 |---|---|---|---|
-| `1097` | `front-end.json` | `assets/ko` | Default. 1097's login scene, select hall (`front_clip` `hover`), turn sound and music (RQ-083: `bgm_login.wav` restarting every 21.66 s, `bgm_el_battle.wav` looping). Still 1298's: the layouts (`UI_US`, since `ko_hud` does not read 1097's UIF version) |
+| `1097` | `front-end.json` | `assets/ko`, `installer-1264` (`build/ko-reference/installer-1264/client`) | Default. 1097's login scene, select hall (`front_clip` `hover`), turn sound and music (RQ-083: `bgm_login.wav` restarting every 21.66 s, `bgm_el_battle.wav` looping); the 1264 client's English screens (RQ-085, the maintainer's choice over 1097's Korean art): its layouts and their textures from the 1264 install, its message box and its no-victor loading screen (`specs/KO-FINDINGS.md` §9.2) |
 
 Not offered yet: `1298`, `2145` (its UIF versions, its Ogg sounds, its clip
 format) and `steam` (its packs, its protected exe, the pin). Each is its own
@@ -399,11 +399,16 @@ recipe's, as "Moradon" below says, or missing, and marked here:
 
 ## Moradon (`games/moradon/front-end.json`)
 
+The five layouts, and the textures they name, are the 1264 install's
+(`installer-1264:UI_US/...`, RQ-085, `specs/KO-FINDINGS.md` §9.2): the login,
+select and create layouts and textures are the pinned tree's bytes too; the message
+box and loading are 1264's.
+
 - Login (`UI_US/co_login_us.uif`, centred on the bottom edge): as KO draws it, with
   KO's labels and copyright line (Q61). Login starts spec 02's flow; Cancel exits.
   ID, Password, Option and Registration are unbound: they take no input (Q60, Q61).
   Hidden: the MGAME and Daum logos (the UIF names `ui_us\service_logos.dxt`, which
-  the pinned tree lacks), `premium` and the three notice groups (KO's news panels,
+  neither the pinned tree nor the 1264 install has), `premium` and the three notice groups (KO's news panels,
   empty without KO's server). No `notice` line: the flow's failures show in the
   message box. The server group sits at the top of the canvas (`OpenServerList`).
 - Select (`UI_US/ka_characterselect_us.uif`): left, right and exit 10 px above
@@ -411,8 +416,16 @@ recipe's, as "Moradon" below says, or missing, and marked here:
 - Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest fixed
   on, every other race, class, face, hair and stat arrow fixed disabled, the
   bonus points and stat highlights hidden (Q52).
-- Loading (`UI_US/ka_loading_us.uif`, centred; `Text_Version` at (10, 10)) and
-  the message box (`UI_US/co_MsgBoxOk_us.uif`, centred).
+- Loading (`UI_US/co_loading_us.uif`, centred; `Text_Version` at (10, 10)):
+  1264's layout when no nation has won the last war (`005f9a30`); the realm has
+  no war, so no victor (Q80).
+- Message box (`UI_US/el_messagebox_us.uif`, centred): 1264's, for both nations
+  (`0050c730`), with 1264's `ui_message_us.dxt` (its frame black, where the
+  pinned tree's is grey). An OK box, as KO's `SetBoxStyle(MB_OK)` shows one:
+  `Text_Message` holds the message, `btn_ok` is OK; Yes, No, Cancel and the edit
+  hidden; the title (`Text_title`) empty (Q81). Each button state image holds
+  its own label, and the client draws a node's children only when it draws the
+  node (`CN3UIBase::Render`), so one label shows per state.
 - Intro: `Intro/Intro.N3Chr` clip 0 with its axe plug, `Intro/0-2.N3Light` (2 is
   off), `Intro/Moon.dxt` at (100, 50) × 1.3, KO's fixed camera.
 - Select: `ChrSelect/ka_chairs.n3shape`, `ka_light_0/1`, the Karus slots, spots
@@ -522,7 +535,8 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   static, edit and window of the five layouts above names none (local-asset:
   each sound string in `co_login_us.uif`, `ka_characterselect_us.uif`,
   `Ka_CharacterCreate_us.uif`, `ka_loading_us.uif` and `co_MsgBoxOk_us.uif`
-  is empty). So do 1097's Karus layouts (`co_login.uif`,
+  is empty; RQ-085: `co_loading_us.uif` and `el_messagebox_us.uif` name no
+  sound file either). So do 1097's Karus layouts (`co_login.uif`,
   `Ka_CharacterSelect.uif`, `Ka_CharacterCreate.uif`, `Ka_MessageBox.uif`,
   `Co_Loading.uif`, `ka_loading.uif`). So `front-end.bin` carries no UI sounds.
 - Option.ini (`client/render/options.h`): `[Sound] Effect=0` silences the

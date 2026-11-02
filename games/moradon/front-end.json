@@ -6,7 +6,7 @@
   },
   "screens": {
     "login": {
-      "ui": "UI_US/co_login_us.uif",
+      "ui": "installer-1264:UI_US/co_login_us.uif",
       "place": "bottom",
       "moves": [{"node": "Group_ServerList", "x": 0, "y": 0}],
       "bindings": {
@@ -20,7 +20,7 @@
       "hidden": ["Img_Daum", "Img_MGame", "premium", "Group_Notice_1", "Group_Notice_2", "Group_Notice_3"]
     },
     "select": {
-      "ui": "UI_US/ka_characterselect_us.uif",
+      "ui": "installer-1264:UI_US/ka_characterselect_us.uif",
       "place": "origin",
       "moves": [
         {"node": "bt_left", "bottom": 10},
@@ -38,7 +38,7 @@
       "hidden": ["bt_delete"]
     },
     "create": {
-      "ui": "UI_US/Ka_CharacterCreate_us.uif",
+      "ui": "installer-1264:UI_US/Ka_CharacterCreate_us.uif",
       "place": "centre",
       "bindings": {
         "btn_create": "create_confirm",
@@ -77,7 +77,7 @@
       ]
     },
     "loading": {
-      "ui": "UI_US/ka_loading_us.uif",
+      "ui": "installer-1264:UI_US/co_loading_us.uif",
       "place": "centre",
       "moves": [{"node": "Text_Version", "x": 10, "y": 10}],
       "bindings": {
@@ -87,9 +87,11 @@
       }
     },
     "message": {
-      "ui": "UI_US/co_MsgBoxOk_us.uif",
+      "ui": "installer-1264:UI_US/el_messagebox_us.uif",
       "place": "centre",
-      "bindings": {"text_msg": "message", "btn_ok": "ok"}
+      "bindings": {"Text_Message": "message", "btn_ok": "ok"},
+      "text": {"Text_title": ""},
+      "hidden": ["Edit_Common", "btn_yes", "btn_no", "btn_cancel"]
     }
   },
   "strings": {

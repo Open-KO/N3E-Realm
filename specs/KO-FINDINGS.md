@@ -440,7 +440,7 @@ per screen. A choice can be offered only when every row it needs is data:
 | | Data today | Not yet |
 |---|---|---|
 | Login scene | the 1098 scene (1097's): camera, lights, the model's one clip and plugs, the moon quad | 1298's UIF intro (`ka_login_intro_us.uif`, wrapped UVs; spec 11 left it out), 2145's `re_login_intro`, Steam's intro procs |
-| Layouts | UIF trees `ko_hud.parse` reads (1298's; 2145's `co_login`, `ka_characterselect`), bindings, moves, hidden, states | 1097's UIF version; the 2145 versions it refuses; Steam's pack |
+| Layouts | UIF trees `ko_hud.parse` reads (1298's and 1264's, the same files; 2145's `co_login`, `ka_characterselect`), bindings, moves, hidden, states, a string's text; a state image's own children (1264's message box labels, §9.2; client behaviour, no format change) | 1097's UIF version; the 2145 versions it refuses; Steam's pack; a loading layout chosen at run time by the last war's victor (Q80) |
 | Select hall | meshes, lights, slots, the turn about `at` with per-slot ends, the spot's rate, front/start/rest clips with blend times, plugs; since version 6 (RQ-086) the front-clip mode, 1097's hover or 1298's loop, and as recipe data 1298's per-race joint and clips with the default looks (§8.3); since version 7 (RQ-087) the path turn mode with 1298's recorded `.n3camera` paths, its select UI hidden while they play, and as recipe data its slots and spots (§8.4); since version 8 (RQ-095) a zone as the hall, 1298's `karus_intro` (its terrain, static shapes and alpha parts), and the camera's fog | the zone's sky, light maps, grass, birds and animated shapes (Q79); each slot's own looks (RQ-005); 2145's `.n3anim` format (convertible: `anim_2145.to_1298`) |
 | Music | MPEG-1/2 Layer III tracks per screen, looping or once (1298's `Intro_Sound.mp3`); since version 5 (RQ-083) 16-bit PCM tracks and a restart period (1097's `bgm_login.wav` every 21.66 s, `bgm_el_battle.wav` looping); since RQ-096 the period's clock is the process's, 1097's and 1264's login timer (Q75, §9.1; client behaviour, no format change) | Ogg Vorbis (2145, Steam) |
 | Sounds | a sound-table id bound in `audio.bin` (1097's turn sound 2501) | 2145's Ogg `char_select_turn.ogg` |
@@ -464,7 +464,7 @@ decision. Steam is not cookable yet: the packs are not readable, the exe is prot
 and the install changes with every Steam update. The follow-up items are filed under
 RQ-078.
 
-**RQ-085 (open, maintainer's question):** 1097's layouts are readable (one
+**RQ-085 (closed by the maintainer's answer, §9.2):** 1097's layouts are readable (one
 32-bit child count, no string line spacing), but as 1097 draws them on an English or
 Korean Windows, the login, create and message box carry Korean labels in their art,
 and 1097 has no English layouts to draw instead. Its select and loading carry none,
@@ -472,7 +472,8 @@ but its select has no back button, which the realm's select requires (`back`). T
 "1097" choice therefore keeps 1298's English `UI_US` layouts until the maintainer
 decides whether to ship 1097's art as it is. *Maintainer (2026-11-02):* the 1097
 choice draws 1264's English `UI_US` layouts. §9.1 (RQ-096) finds them the pinned
-tree's own files, which `ko_hud` reads.
+tree's own files, which `ko_hud` reads. §9.2 (RQ-085) compares what 1264 draws with
+what the choice drew, and the choice now reads its screens from the 1264 install.
 
 ### 9.1 The 1264 client: login music and layouts (RQ-096, 2026-11-02)
 
@@ -540,6 +541,46 @@ RQ-085's to take:
   `co_MsgBoxOk_us.uif`;
 - loading is chosen by the last war's victor.
 
+### 9.2 The 1097 choice draws 1264's screens (RQ-085, 2026-11-02)
+
+The maintainer's answer to RQ-085 (2026-11-02): the 1097 front end draws the 1264
+client's screens, "the orc login, select and the rest in English". §9.1 found
+1264's layouts to be the files the choice already drew, so this compares, file by
+file (sha256), the 1264 install (`build/ko-reference/installer-1264`, its
+`manifest.json` naming the installer `eb4e1a35…`) with the pinned tree the choice
+read, decodes the textures that differ (`ko_hud.texture`) and looks at them, and
+reads §9.1's 1264 image further in the same Ghidra project (output under
+`build/ghidra/rq085b/`, not committed), with `objdump` for code Ghidra left
+undefined. Nothing from the install is committed.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The login scene is the one the choice draws.** 1264's `Intro/` (61 files) is the pinned tree's byte for byte, and its login Init loads that 1098 scene (§9.1, `005bd9b0`): the orc with the axe under the moon. The login layout is the same file over it | `Intro/` (sha256); `005bd9b0` | local-asset; binary |
+| **So is the select hall.** 266 of 1264's 267 `ChrSelect/` files are the pinned tree's; the one that differs, `upc_el_ba.n3joint`, is an El Morad race's, which the Karus hall does not read. 1264 names `ka_chairs.n3shape` (§9.1), the choice's hall | `ChrSelect/` (sha256) | local-asset |
+| **Two textures differ.** Of 1264's 246 `UI_US/` files, 220 are the pinned tree's; of the textures the five screens' layouts name, two are not: `ui_login_01_us.dxt`, which only `co_login_us.uif`'s `Group_Notice_1–3` draw (hidden by the realm, Q61; in 1264 a grey notice frame and English "Back" buttons, in 1298 a gold login and server frame), and `ui_message_us.dxt`. `ui_login_us`, `ui_el_charcreate01_us`, `ui_ka_charcreate02_us`, `ui_loding_us`, `ui_ka_loding_01/02_us`, `ui_el_loding_01/02_us` and `ui_warfare_us` are the same bytes. Every label the five screens draw is English: UIF strings in Arial over unlabelled button art. Neither tree's `UI_US/` has the `service_logos.dxt` the login's `Img_Daum` and `Img_MGame` name (1264's `UI/Service_Logos.DXT` is another path) | both trees' `UI_US/` (sha256, decoded and viewed) | local-asset |
+| **1264's message box is `el_messagebox_us.uif` with 1264's `ui_message_us.dxt`.** The box (327 × 156) draws its frame from the texture's block at u 330–459, v 2–131, black in 1264's file and dark grey in the pinned tree's; its buttons are blue bars (u 332–429, v 134–309), each state image holding its own label (`O  K`, `Cancel`, Arial strings) as a child. Its nodes: `Text_title` (text "111"), `Text_Message`, `Edit_Common`, `btn_yes`, `btn_no`, `btn_cancel`, `btn_ok` (OK and Cancel share one rect). The package drew `co_MsgBoxOk_us.uif` (212 × 111, `ui_warfare_us.dxt`) | `UI_US/el_messagebox_us.uif`, `ui_Message_us.DXT` of both trees | local-asset |
+| What an OK box shows: `MessageBoxPost` loads the El Morad row's message box (1264: row 2, column 26, `0050c730`, §9.1) and centres it; `SetBoxStyle(MB_OK)` hides Yes, No and Cancel and shows OK; the edit shows only for a character delete; the text and title come from the call, the title empty for the connection-closed and character-select failures. 1264's button handling was not read further | `UIMessageBoxManager.cpp` `MessageBoxPost`, `UIMessageBox.cpp` `SetBoxStyle`, `GameProcedure.cpp` `ReportServerConnectionClosed`; `0050c730` | source; binary |
+| **The loading layout follows a byte the game server sends.** `005f9a30` (the source's `LoadingUIChange`) returns when its argument equals the value kept at `+0x7a8` of `007acf84`; otherwise it keeps it, releases the loading UI `007ad0a0` (which only it creates) and loads row 2's column 54 `ka_loading_us.uif` for 1, column 53 `el_loading_us.uif` for 2 and column 27 `Co_Loading_us.uif` for anything else. Its three callers pass a byte read from a packet: `005f85c0` (opcode `0x46`, the server change: address, port, two zones, then the byte), `005f9440` and `005a4dd0`. In the source the character-select answer and the server change read it (`iVictoryNation`: 0 no victor, 1 Karus, 2 El Morad) and the kept value starts at -1, so the first answer always loads a layout. `Co_Loading_us.uif` draws `ui_loding_us.dxt`'s half-orc, half-human knight and the Knight Online logo; the package drew `ka_loading_us.uif`, Karus's picture | `005f9a30`, `005f85c0`, `005f9440`, `005a4dd0`; `GameProcedure.cpp` `LoadingUIChange`, `MsgRecv_CharacterSelect`, `MsgRecv_ServerChange`; `GameDef.h` | binary; source |
+| 1264's login Load names `Btn_Option`, `Img_MGame`, `Text_Rights` and `Group_Notice_` (strings `0066e048`–`0066e08c`, read at `005c101f`–`005c12a2`), not `Img_Daum` or `premium`; what it does with them was not read. The realm's hidden login nodes stay as Q61 decided | strings of the 1264 image; `objdump` of `005c0fd0`–`005c1320` | binary |
+| 1264 has a logo procedure (§9.1, `005fa500`) whose layout, `co_usa_logo_us.uif` with `ui_usa_logo_us.dxt` (both the pinned tree's files too), draws "K2 Network presents Knight Online" in three groups. When it runs was not read; the realm shows no logo screen | `UI_US/co_usa_logo_us.uif`, `ui_usa_logo_us.DXT` (decoded and viewed) | local-asset |
+
+**Decides (RQ-085):** what a player sees of 1264 that the choice did not draw is
+the message box and the loading picture; the login scene, the select hall and the
+login, select and create layouts are the same. The 1097 choice
+(`games/moradon/front-end.json`) now reads all five screens' layouts, and the
+textures they name, from the 1264 install (`installer-1264`, pinned in
+`tools/assetc/ko_installs.py`, each file checked against its manifest):
+
+- message: `el_messagebox_us.uif` as an OK box: `Text_Message` bound to the
+  message, `btn_ok` to OK, `btn_yes`, `btn_no`, `btn_cancel` and `Edit_Common`
+  hidden, `Text_title` empty (Q81). The client draws a state image's children
+  only with it, as `CN3UIBase::Render` does, so each button shows one label;
+- loading: `co_loading_us.uif`, 1264's layout for no war victor (Q80), with the
+  moves and bindings the choice had for `ka_loading_us.uif` (the source's
+  `CUILoading::Load`: centred, `Text_Version` at 10, 10).
+
+1097's behaviour (the hover, the turn and its sound, the music) is unchanged.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -558,6 +599,7 @@ notes.
 | Q71 | §8.1: 1097, the client whose files the package cooks, plays the hall as (a) does, so (a) is KO's behaviour; its three remaining details aligned (RQ-075). §8.3 (RQ-086): 1298's (b) read further (its default looks, every character ticked, the spot and info without the pointer) and carried as data, the loop front-clip mode. |
 | Q70 | §8.2 (RQ-077): 1097's select arrows play sound 2501 (`char_select_turn.wav`) for each turn they start; the realm plays it. 1097's Karus front-end layouts name no button sounds; its sound switch is `[Sound] Enable`. |
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |
-| Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. |
+| Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. §9.2 (RQ-085): the 1097 choice's layouts are the 1264 install's, its message box and loading 1264's. |
+| Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. |
 | Q75 | §9.1 (RQ-096): 1264's login tick keeps 1097's timer (`007ac9d0`, written only by the tick), so in both a return to the login is silent until it passes 21.66 s; the realm now does the same (the restart period's clock is the process's). |
 | Q72 | §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077): 1097's arrows also start a turn from state 3, during the start clip; the realm ignores them then. |

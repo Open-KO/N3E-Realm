@@ -701,8 +701,14 @@ then depend on the cooking shell, and CD's cook would not reproduce it), and no
 check in `n3e-server` (it would compare the package with itself). The cooked
 `front-end.bin` carries no client id; the client is in the package's
 `provenance.json`. Moradon offers only `1097` (KO-FINDINGS §9 lists what each
-other client needs); its layouts are still 1298's until the format
-carries 1097's; its music is 1097's since RQ-083 (Q57).
+other client needs); its music is 1097's since RQ-083 (Q57).
+RQ-085's question (draw 1097's own layouts, whose login, create and message-box art
+is Korean, or keep 1298's English ones) is **decided by the maintainer
+(2026-11-02):** neither; the 1097 choice draws the 1264 client's English screens.
+They are the pinned tree's layouts byte for byte; the choice now reads them, and
+1264's message box and loading screen, from the pinned 1264 install
+(`installer-1264`, KO-FINDINGS §9.2), so a cook of the realm's package needs that
+install as well as the pinned tree.
 
 
 ### Q74 — Where the player logs out, and what a logout ends
@@ -828,3 +834,33 @@ for longer. The fog fades the far shapes toward white against that black until
 then. The approximations recorded in `content/front-end.md` ("1298") stand: the
 near tiles everywhere, the shapes' full-detail meshes, the client's mip chains,
 the fog per pixel.
+
+### Q80 — Which loading screen the 1097 choice draws, with no war victor
+
+1264, whose screens the 1097 choice draws (RQ-085), loads `ka_loading_us.uif` when
+the game server's war-victor byte is 1 (Karus), `el_loading_us.uif` when it is 2
+(El Morad) and `Co_Loading_us.uif` otherwise (KO-FINDINGS §9.2, binary `005f9a30`;
+the byte comes in the character-select answer and the server change). The realm
+has no national war, so no victor, and the server sends no such byte. Options: (a)
+draw `Co_Loading_us.uif`, what 1264 draws when no nation has won; (b) keep
+`ka_loading_us.uif`, the Karus picture the choice drew before (every realm
+character is a Karus Tuarek); (c) carry all three layouts in `front-end.bin` and a
+victor on the wire now.
+**Default taken (RQ-085):** (a). It is KO's own choice for the realm's state (no war
+won); (b) would show a victory the realm never had, and (c) is a format and wire
+change for a war the realm does not have. When the realm gets a war and a victor,
+the loading screen by victor becomes its own item.
+
+### Q81 — The title in 1264's message box
+
+1264's message box (`el_messagebox_us.uif`, RQ-085) has a title string
+(`Text_title`, "111" in the layout) that `MessageBoxPost` sets from its caller: empty
+for the connection-closed and character-select failures, "Failed to connect to
+login server" and the like for others (KO-FINDINGS §9.2, source). The realm's
+messages (Discord flow failures, refusals, kicks) are its own text in KO's box (Q61)
+and come without a title. Options: (a) an empty title, as KO's untitled messages;
+(b) a title per message, which needs a new front-end binding and a title from every
+caller.
+**Default taken (RQ-085):** (a): `front-end.json` sets `Text_title` to the empty
+string. A title per message would be wording the realm adds to a KO screen; revisit
+if a message needs one.

@@ -26,6 +26,11 @@ PINNED = {
     "installer-1097": dict(
         sha256="d7571e183663be3d063af491d68d7db3dc52219f58471c9595d0b745c0b8a93b",
         unpack="python3 -I tools/ko-reference/unpack_installer.py ref/ko-bin/installer/KnightOnline_1097.exe"),
+    # knightonlinesetup_1264.exe, 297,557,888 bytes (PQ-214; RQ-085: the 1097
+    # front end draws 1264's English screens, specs/KO-FINDINGS.md 9.1).
+    "installer-1264": dict(
+        sha256="eb4e1a3508c33f381fbeeedccf95f09a746a7d6ead3ccc97616ab6b2f3ccafb5",
+        unpack="python3 -I tools/ko-reference/unpack_installer.py ref/ko-bin/installer/knightonlinesetup_1264.exe"),
     # KnightOnlineSetup_v2145.exe, 774,488,528 bytes (PQ-214, PQ-227).
     "installer-2145": dict(
         sha256="7da88158e1ddb9c689c22d8e3cb1e8b2655d973ac21596d798104c81c30a1edf",

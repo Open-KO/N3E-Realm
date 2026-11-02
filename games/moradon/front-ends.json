@@ -2,7 +2,9 @@
   "1097": {
     "recipe": "front-end.json",
     "inputs": [
-      {"tree": "assets/ko", "get": "the pinned client tree; run make ko-assets"}
+      {"tree": "assets/ko", "get": "the pinned client tree; run make ko-assets"},
+      {"tree": "build/ko-reference/installer-1264/client", "name": "installer-1264",
+       "get": "the 1264 client's screens; run python3 -I tools/ko-reference/unpack_installer.py <knightonlinesetup_1264.exe>"}
     ]
   }
 }

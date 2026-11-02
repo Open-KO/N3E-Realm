@@ -100,7 +100,10 @@
   parts (`NPC_SHOWN_SHAPES`); the six Moradon pins changed for it, the homeland
   pins did not.
 
-Without `assets/ko` it prints SKIP lines: no KO data is committed.
+Without `assets/ko` it prints SKIP lines: no KO data is committed. RQ-085: every
+`--features` cook draws the realm's front end, whose screens are read from the
+player's 1264 install (games/moradon/front-ends.json, build/ko-reference/installer-1264);
+without it the `--features` pins print SKIP lines and the plain pins still run.
 `make test` runs it as a slow test (Makefile SLOW_TESTS: `make test-slow`, RQ-064),
 after `make test-fast`; it also runs alone.
 """
@@ -315,9 +318,17 @@ CLIENT = Path("assets/ko")
 # change. Default features e2f32506... -> 22515118...; classic c7fa81fe... ->
 # be019c44...; 1097 da634646... -> 14c83869.... The plain cooks and the homelands
 # keep their pins.
+# RQ-085 (KO-FINDINGS 9.2) changed the three --features pins: the 1097 front end
+# reads its layouts from the 1264 install, its message box 1264's
+# el_messagebox_us.uif (with 1264's ui_message_us.dxt) and its loading screen
+# co_loading_us.uif (no war victor, Q80). Against the earlier cooks only
+# front-end.bin (53,189,652 -> 52,141,560 bytes, the format unchanged),
+# recipe.json and the release index change. Default features 22515118... ->
+# f5ef260a...; classic be019c44... -> 653c9bb6...; 1097 14c83869... ->
+# eb5afd0c.... The plain cooks and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "2251511827652232ea67e9793754d826bdf62334cb8eb3fa7b47a2b1fbd03cac"),
+    "features": (["--features"], "f5ef260ac42113876c1c4ed44180321db7912213bd968294b0d395f73a3e96fc"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -338,13 +349,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "be019c447e380b9c047371ef022192c86c5aea9902d14418fdb2017e2a771fc0"),
+    "features": (["--features"], "653c9bb66c57afe23b6d91db6338611e20e1786f21d02fdb75579eac5d59887a"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "14c838698aa3e9aea1b038016e565894a54b232cb9c84b23f3c77a8b3f491dc9"),
+    "features": (["--features"], "eb5afd0c523e210864460f7e908c3a4ceed9ed387fe6d53a10eaeca29702cd16"),
 }
 
 
@@ -471,6 +482,24 @@ if not (CLIENT / "Data" / "Zones.tbl.csv").is_file():
     sys.exit(0)
 
 import ko_zone
+import front_end_choice
+
+# RQ-085: the realm's front-end choice and its inputs; a --features cook refuses
+# without them (ko_bake.py), so its pins SKIP here.
+try:
+    front_end_choice.choose("games/moradon")
+    FRONT_END_MISSING = None
+except front_end_choice.Refused as error:
+    FRONT_END_MISSING = str(error)
+
+
+def runnable(pins, what):
+    """`pins` less its --features entries when the front end's inputs are missing."""
+    if FRONT_END_MISSING is None:
+        return pins
+    print("SKIP %s --features pin: %s" % (what, FRONT_END_MISSING))
+    return {name: pin for name, pin in pins.items() if "--features" not in pin[0]}
+
 
 _, rows = ko_zone.table(CLIENT)
 keys = [int(r[0]) for r in rows[1:] if len(r) > ko_zone.OPDEXT and r[ko_zone.OPDEXT] != ko_zone.RESERVED
@@ -503,7 +532,8 @@ def overlay_checks(maps, root, package, report, manifest, lines):
         assert not (package / "world-overlay.bin").exists() and shown == [], shown
 
 
-for name, (flags, pinned) in PINS.items():
+drawn = None
+for name, (flags, pinned) in runnable(PINS, "Moradon (key 210)").items():
     run = subprocess.run([sys.executable, "tools/assetc/ko_bake.py", "210", *flags,
                           "--into=%s" % (OUT / name)], capture_output=True, text=True)
     assert run.returncode == 0, run.stderr[-2000:]
@@ -521,10 +551,14 @@ for name, (flags, pinned) in PINS.items():
                    json.loads((OUT / name / "ko-moradon" / "package.json").read_text()), check.stdout.splitlines())
     if flags:
         drawn = worm_drawn(OUT / name / "packages" / "moradon", provenance)
-print("PASS Moradon (key 210, Reserved) cooks to the pinned release hashes: plain/--preview "
-      "%s..., --features %s... (the worm drawn at %g: clip scenes, NPC name height and target marker; "
-      "the blade's 1298 tooltip head, PQ-361)"
-      % (PINS["plain"][1][:8], PINS["features"][1][:8], drawn))
+if drawn is None:
+    print("PASS Moradon (key 210, Reserved) cooks to the pinned release hash: plain/--preview %s..."
+          % PINS["plain"][1][:8])
+else:
+    print("PASS Moradon (key 210, Reserved) cooks to the pinned release hashes: plain/--preview "
+          "%s..., --features %s... (the worm drawn at %g: clip scenes, NPC name height and target marker; "
+          "the blade's 1298 tooltip head, PQ-361)"
+          % (PINS["plain"][1][:8], PINS["features"][1][:8], drawn))
 
 # PQ-217 (with PQ-234's N3W2 branch): each homeland through the bake command,
 # which surveys both nations' START_POSITION areas on the 513-sample map.
@@ -632,7 +666,7 @@ def world_checks(key, root, package, report, manifest):
 
 # PQ-223 (D-171): the classic Moradon beside the default.
 import ko_bake as ko_bake_classic, moradon_features
-for name, (flags, pinned) in CLASSIC_PINS.items():
+for name, (flags, pinned) in runnable(CLASSIC_PINS, "classic Moradon").items():
     started = time.monotonic()
     out = OUT / ("classic-" + name)
     run = subprocess.run([sys.executable, "tools/assetc/ko_bake.py", "210", "--layout=classic", *flags,
@@ -717,7 +751,7 @@ if (INSTALL_1097 / "manifest.json").is_file():
                               "--into=%s" % (OUT / "refused-1097")], capture_output=True, text=True)
         assert run.returncode != 0 and phrase in run.stderr, (flags, run.stdout[-500:], run.stderr[-1000:])
         assert not (OUT / "refused-1097" / "packages").exists(), flags
-    for name, (flags, pinned) in MORADON_1097_PINS.items():
+    for name, (flags, pinned) in runnable(MORADON_1097_PINS, "1097 Moradon").items():
         started = time.monotonic()
         out = OUT / ("moradon-1097-" + name)
         run = subprocess.run([sys.executable, "tools/assetc/ko_bake.py", "21", "--client=1097", *flags,

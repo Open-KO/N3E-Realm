@@ -51,16 +51,31 @@ for client, entry in offered.items():
     assert set(recipe["screens"]) == set(ko_front_end.SCREENS), (client, sorted(recipe["screens"]))
 configured = json.loads((MORADON / choice.CONFIG).read_text())["front_end"]
 assert configured == "1097", "the realm's default front end is 1097's (Q71)"
+
+
+def stand_in_tree(root, tree):
+    """An empty stand-in for an input tree; a reference install gets a manifest
+    naming its pinned installer (and no files)."""
+    (root / tree).mkdir(parents=True, exist_ok=True)
+    name = ko_installs.install_of(tree)
+    if name is not None:
+        (root / tree).parent.joinpath(ko_installs.MANIFEST).write_text(
+            json.dumps({"sha256": ko_installs.PINNED[name]["sha256"], "manifest": []}))
+
+
 with tempfile.TemporaryDirectory(prefix="n3e-front-end-choice-") as td:
     stand_in = pathlib.Path(td)
     for item in offered[configured]["inputs"]:
-        (stand_in / item["tree"]).mkdir(parents=True, exist_ok=True)
+        stand_in_tree(stand_in, item["tree"])
     chosen = choice.choose(MORADON, stand_in)
     assert chosen["client"] == "1097" and chosen["recipe"] == MORADON / "front-end.json", chosen
-    assert chosen["inputs"] == [stand_in / "assets/ko"] and chosen["pins"] == [None], chosen
+    # RQ-085: the 1097 choice reads the pinned tree and the 1264 install's screens.
+    assert chosen["inputs"] == [stand_in / "assets/ko", stand_in / "build/ko-reference/installer-1264/client"], chosen
+    assert chosen["names"] == [None, "installer-1264"] and chosen["pins"][0] is None, chosen
+    assert chosen["pins"][1]["installer_sha256"] == ko_installs.PINNED["installer-1264"]["sha256"], chosen
     for client in offered:
         for item in offered[client]["inputs"]:
-            (stand_in / item["tree"]).mkdir(parents=True, exist_ok=True)
+            stand_in_tree(stand_in, item["tree"])
         assert choice.resolve(MORADON, client, stand_in)["client"] == client
 print("PASS front-end choice: Moradon offers %s and chooses %s" % (", ".join(sorted(offered)), configured))
 
@@ -215,9 +230,9 @@ inputs_refusals = [
     refused_inputs("build/ko-reference/installer-1097 is not a pinned reference install",
                    catalogue={"1097": {"recipe": "front-end.json", "inputs": [
                        {"tree": "build/ko-reference/installer-1097", "get": "x"}]}}, sha256=None),
-    refused_inputs("installer-1264/client is not a pinned reference install",
+    refused_inputs("installer-1453/client is not a pinned reference install",
                    catalogue={"1097": {"recipe": "front-end.json", "inputs": [
-                       {"tree": "build/ko-reference/installer-1264/client", "get": "x"}]}}, sha256=None),
+                       {"tree": "build/ko-reference/installer-1453/client", "get": "x"}]}}, sha256=None),
     # The manifest must exist, be an unpacker's and name the pinned installer.
     refused_inputs("is not the pinned installer-1097 installer's unpack", sha256="0" * 64),
     refused_inputs("is not an unpacker's manifest", text="[]"),

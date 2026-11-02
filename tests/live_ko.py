@@ -45,7 +45,10 @@ ko-moradon-glow2233, kx/survey-glow2233), which also needs the player's 2145
 install unpacked by tools/ko-reference/unpack_inno.py
 (build/ko-reference/installer-2145; this script does not unpack it) and, since
 PQ-422, the operator's own MAGIC_TYPE2 export (MAGIC_TYPE2:
-tools/ko-reference/inspect_db.py --table MAGIC_TYPE2).
+tools/ko-reference/inspect_db.py --table MAGIC_TYPE2). Every `--features` cook
+also needs the player's 1264 install unpacked by
+tools/ko-reference/unpack_installer.py (build/ko-reference/installer-1264; this
+script does not unpack it): the realm's front-end screens are 1264's (RQ-085).
 build/packages/moradon, build/packages/moradon-classic, build/packages/moradon-1097, build/packages/moradon-glow2233,
 build/packages/ko-field and build/packages/ko-zone-*, which the persistent tools/play-moradon,
 tools/play-ko-field and tools/play-ko-zone stacks mount, are never written. A step whose
@@ -135,6 +138,11 @@ MAGIC_TYPE2 = "build/ko-completion/database-parity/MAGIC_TYPE2.json"
 INSTALL_1097 = "build/ko-reference/installer-1097"
 # The player's 2145 install, unpacked by tools/ko-reference/unpack_inno.py (PQ-227).
 INSTALL_2145 = "build/ko-reference/installer-2145"
+# RQ-085: the player's 1264 install, unpacked by tools/ko-reference/unpack_installer.py:
+# every --features cook draws the realm's front end, whose screens are 1264's
+# (games/moradon/front-ends.json).
+INSTALL_1264 = "build/ko-reference/installer-1264"
+FRONT_END_INPUTS = [f"{INSTALL_1264}/manifest.json"]
 # PQ-129: the GPU probe's package, the synthetic legacy demo cooked into this run's
 # work tree (make live-ko does not build `make assets`' build/packages/legacy-demo).
 PROBE_PACKAGE = f"{WORK}/packages/legacy-demo"
@@ -149,7 +157,8 @@ PREPARE = {
               [f"{PROBE_PACKAGE}/release.sha256"]),
     # Zone key 210 (Moradon): its Zones.tbl row names the map files (PQ-216).
     "moradon": ([PY, "tools/assetc/ko_bake.py", "210", "--features", f"--into={WORK}"],
-                [f"{CLIENT}/Data/Zones.tbl.csv", f"{CLIENT}/Zones/moradon_xmas.gtd", f"{CLIENT}/Zones/moradon_xmas.opd"],
+                [f"{CLIENT}/Data/Zones.tbl.csv", f"{CLIENT}/Zones/moradon_xmas.gtd", f"{CLIENT}/Zones/moradon_xmas.opd",
+                 *FRONT_END_INPUTS],
                 [f"{WORK}/packages/moradon/release.sha256", f"{WORK}/ko-moradon/provenance.json"]),
     "ko-field": ([PY, "tools/assetc/test_field.py", f"--into={WORK}"], [f"{CLIENT}/Chr/mob_worm.n3chr"],
                  [f"{WORK}/packages/ko-field/release.sha256", f"{WORK}/ko-source/field/package.json"]),
@@ -170,21 +179,22 @@ PREPARE = {
     # PQ-223: the classic Moradon (the install's own unnamed Zones/moradon.*), as
     # tools/play-moradon --layout classic cooks it.
     "moradon-classic": ([PY, "tools/assetc/ko_bake.py", "210", "--layout=classic", "--features", f"--into={WORK}"],
-                        [f"{CLIENT}/Data/Zones.tbl.csv", f"{CLIENT}/Zones/moradon.gtd", f"{CLIENT}/Zones/moradon.opd"],
+                        [f"{CLIENT}/Data/Zones.tbl.csv", f"{CLIENT}/Zones/moradon.gtd", f"{CLIENT}/Zones/moradon.opd",
+                         *FRONT_END_INPUTS],
                         [f"{WORK}/packages/moradon-classic/release.sha256",
                          f"{WORK}/ko-moradon-classic/provenance.json"]),
     # PQ-224: the 1097 Moradon (the 1097 install's key 21), as
     # tools/play-moradon --layout 1097 cooks it.
     "moradon-1097": ([PY, "tools/assetc/ko_bake.py", "21", "--client=1097", "--features", f"--into={WORK}"],
                      [f"{INSTALL_1097}/manifest.json", f"{INSTALL_1097}/client/Zones/moradon.gtd",
-                      f"{INSTALL_1097}/client/Zones/moradon.opd", f"{CLIENT}/Data/Zones.tbl.csv"],
+                      f"{INSTALL_1097}/client/Zones/moradon.opd", f"{CLIENT}/Data/Zones.tbl.csv", *FRONT_END_INPUTS],
                      [f"{WORK}/packages/moradon-1097/release.sha256", f"{WORK}/ko-moradon-1097/provenance.json"]),
     # PQ-315: Moradon with the 2233 client's equipment glow from the player's 2145
     # tables, as tools/play-moradon --glow-2233 cooks it.
     "moradon-glow2233": ([PY, "tools/assetc/ko_bake.py", "210", "--features", "--glow-2233", f"--into={WORK}"],
                          [f"{CLIENT}/Data/Zones.tbl.csv", f"{CLIENT}/Zones/moradon_xmas.gtd",
                           f"{CLIENT}/Zones/moradon_xmas.opd", f"{INSTALL_2145}/manifest.json",
-                          f"{INSTALL_2145}/client/Data/Item_Org_us.tbl", MAGIC_TYPE2],
+                          f"{INSTALL_2145}/client/Data/Item_Org_us.tbl", MAGIC_TYPE2, *FRONT_END_INPUTS],
                          [f"{WORK}/packages/moradon-glow2233/release.sha256",
                           f"{WORK}/ko-moradon-glow2233/provenance.json"]),
 }

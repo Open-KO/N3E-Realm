@@ -7,7 +7,8 @@
 Players should start in Knight Online, not in a test panel. The client today opens on
 a text box ("N3E / ADVENTURE", ACCOUNT, SELECT CHARACTER), drawn in code in
 `client/render/play.h`. This spec replaces that, for the realm, with KO's own front
-end, cooked from the pinned client tree (`assets/ko/`, spec 10, option C):
+end, cooked from the pinned client tree (`assets/ko/`, spec 10, option C) and,
+for the 1097 choice's screens, the pinned 1264 install (RQ-085, "The client choice"):
 
 1. **Intro and login.** KO's login scene, with the orc and the axe under the moon, and
    the login bar, as KO draws it (Q61). Its Login button starts spec 02's Discord login.
@@ -18,7 +19,8 @@ end, cooked from the pinned client tree (`assets/ko/`, spec 10, option C):
    front starts the game, and ENTER on an empty slot opens create; Delete is hidden
    (Q53).
 4. **Character create.** KO's create screen, reduced to what the realm supports (Q52).
-5. **Loading.** KO's Karus loading art, with a progress bar that tracks real work.
+5. **Loading.** KO's loading art (1264's for no war victor, Q80), with a progress bar
+   that tracks real work.
 
 At the same time the realm package becomes the **player-facing** package
 everywhere: the local release, the Windows kit and `tools/local-realm` serve Moradon
@@ -174,8 +176,10 @@ missing on the cooking machine or not their pinned installers' unpacks, a
 recipe prefix naming no input, and a malformed file, each naming what to
 change. The engine knows no client id: what
 differs between clients is recipe data and N3FE fields, and the client and server
-read `front-end.bin` as before. Moradon offers `1097`, the default (Q71); what
-each other client needs is `specs/KO-FINDINGS.md` §9 (Q73).
+read `front-end.bin` as before. Moradon offers `1097`, the default (Q71), whose
+screens are the 1264 client's English ones from the pinned 1264 install
+(`specs/KO-FINDINGS.md` §9.2, RQ-085); what each other client needs is
+`specs/KO-FINDINGS.md` §9 (Q73).
 
 ### Wire (`protocol/wire.proto`)
 

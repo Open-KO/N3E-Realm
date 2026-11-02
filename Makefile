@@ -16,7 +16,8 @@ assets:
 ko-assets:
 	tools/fetch-ko-assets.sh
 # The realm's package (specs/10-content.md): the Moradon bake, zone key 210, with the
-# games/moradon feature set, from the pinned client tree only. Prints the package hash.
+# games/moradon feature set, from the pinned client tree and the front-end choice's
+# inputs (games/moradon/front-ends.json: the pinned 1264 install, RQ-085). Prints the package hash.
 realm-assets: ko-assets
 	python tools/assetc/ko_bake.py 210 --features --into=build
 codegen:

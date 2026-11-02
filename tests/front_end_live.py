@@ -3,7 +3,7 @@ from the player's own KO data.
 
 5. Each front end games/moradon offers (front-ends.json, RQ-078) cooks twice
    with identical bytes and the client loader (build/client/n3e-front-end-check)
-   takes it; the one realm-config.json chooses is the bytes the package holds
+   takes it (the 1097 choice's screens from the 1264 install, RQ-085); the one realm-config.json chooses is the bytes the package holds
    (the `moradon` prepare step's cook). The 1298 recipe, not offered yet
    (RQ-086), cooks the same way from the pinned tree with 1298's select
    character and camera paths (RQ-087), no hall and its select zone and fog
@@ -23,7 +23,8 @@ from the player's own KO data.
      across its top is darker than 0.6 of the band's mean;
    - loading: the progress bar's lit share grows from the start stage (2/3: the
      package and its textures) to the first World (1);
-   - message: the box's text rect holds text;
+   - message: the box's text rect holds text (RQ-085: 1264's El_MessageBox_us,
+     its OK button only, as KO's MessageBoxPost shows an MB_OK box);
    - music (RQ-018, Q57; RQ-083, KO-FINDINGS 9): login and the realm list
      name one track, select and create another, loading none: 1097's
      Snd/bgm_login.wav (PCM, 477,749 frames at 22,050 Hz stereo), which
@@ -67,9 +68,18 @@ for client in sorted(front_end_choice.catalogue("games/moradon")):
     cooked = []
     for i in range(2):
         out = Path(tempfile.mkdtemp(prefix="front-end-%s-" % client, dir=B))
-        ko_front_end.cook(ko_front_end.inputs(front), out, front["recipe"], out / "work")
+        report = ko_front_end.cook(ko_front_end.inputs(front), out, front["recipe"], out / "work")
         cooked.append((out / "front-end.bin").read_bytes())
     assert cooked[0] == cooked[1], "the %s front-end cook is not deterministic" % client
+    if client == "1097":
+        # RQ-085 (KO-FINDINGS 9.2): the 1097 choice draws the 1264 client's
+        # screens: every layout and the textures they name come from the 1264
+        # install (each checked against its installer's manifest), 1264's
+        # message box and its loading screen with no war victor among them.
+        layouts = sorted(s for s in report["sources"] if "/" in s and s.split(":")[-1].lower().startswith("ui_us/"))
+        assert layouts and all(s.startswith("installer-1264:") for s in layouts), layouts
+        names = {s.split(":", 1)[1].lower() for s in layouts}
+        assert {"ui_us/el_messagebox_us.uif", "ui_us/ui_message_us.dxt", "ui_us/co_loading_us.uif"} <= names, names
     # The checker exits 1 unless it also saw a refusal (tests/front_end.py
     # passes both kinds); one `ok` package loaded is its own PASS line.
     loaded = subprocess.run(["build/client/n3e-front-end-check", "ok", str(out)], capture_output=True, text=True)
@@ -78,7 +88,8 @@ for client in sorted(front_end_choice.catalogue("games/moradon")):
     if client == chosen:
         assert cooked[0] == (package / "front-end.bin").read_bytes(), "the package's front-end.bin is not this cook's"
     print(f"PASS front-end cook {client}: twice identical, {len(cooked[0])} bytes, the client loads it"
-          + (", the package's own (realm-config.json)" if client == chosen else ""))
+          + (", the package's own (realm-config.json)" if client == chosen else "")
+          + (", its screens the 1264 install's (RQ-085)" if client == "1097" else ""))
 
 # RQ-086: games/moradon/front-end-1298.json, not offered yet (content/front-end.md,
 # "1298"), still cooks from the pinned tree to the same bytes twice, in the loop

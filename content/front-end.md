@@ -317,8 +317,8 @@ The closed set, by index: none, `login`, `exit`, `login_group`, `realm_group`,
 `message` and `title` (the message's title, item 11) are texts the client fills; `name_field` is the name entry; `char_view`
 is where create draws the character.
 
-On the login screen of a layout with a node bound to `login_closed` (RQ-108,
-Q85, `client/render/front_login.h`) a login under way closes the login group:
+On the login screen (RQ-108, Q85, RQ-110, `client/render/front_login.h`) a
+login under way closes the login group:
 from a login press (held while the realm
 connection comes up) or a stored session's login, through the Discord
 browser step and its code, to the realm's answer, the node bound to
@@ -330,9 +330,9 @@ the `login_closed` node does not. That is KO's SetVisibleLogInUIs
 (`specs/KO-FINDINGS.md` §9.4): 1264 hides its login bar from the press until the
 answer and shows its copyright line meanwhile; a failure shows the bar again,
 a success keeps the line into the server list. ESC still cancels the browser
-step while the bar is hidden. A layout with no `login_closed` node keeps its
-login group drawn through a login, as before version 12, so a package without
-KO's line never shows an empty login.
+step while the bar is hidden. 1298 hides its bar the same way and has no line
+(`specs/KO-FINDINGS.md` §9.5, RQ-110), so a layout with no `login_closed` node hides its login group
+through a login too and shows neither (RQ-108 kept such a layout's bar up; Q86).
 
 ## Choosing the client (RQ-078)
 
@@ -499,15 +499,20 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   intro), and the layouts (1298's `UI_US`, as today). The hall lights
   `ka_light_0/1` are the files both clients name.
 - Placement (RQ-106, `specs/KO-FINDINGS.md` §9.3, binary): the 1097 recipe's
-  `place` and `moves` (1264's code), but for the login's copyright line, which
-  the 1298 recipe neither moves nor binds to `login_closed` (RQ-108): it stays
-  where its layout puts it, always drawn, as before (1298's binary was not
-  read for it); with no `login_closed` node its login bar stays up while a
-  login is under way, as before RQ-108. The select layout it cooks, the pinned
+  `place` and `moves` (1264's code), but for the login's copyright line
+  (below). The select layout it cooks, the pinned
   tree's `ka_characterselect_us.uif`, is byte for byte 1264's, and 1298's binary
   never places it: 1298's own select is the `co_CharacterSelect_us.uif` bar,
   which its Load (`00606c10`) puts at ((W − w) >> 1, H − 10 − h). Drawing that
   bar is a layout change, not a placement one.
+- The copyright line (RQ-110, `specs/KO-FINDINGS.md` §9.5, binary): hidden.
+  1298's login draws none: its Init (`005f68e0`) loads only the nation's
+  intro layout (`ka_login_intro_us.uif` or `el_login_intro_us.uif`), which has
+  no `Text_Rights`, and the image names no `Text_Rights`. Its login bar hides
+  from a login press until a failed answer, and stays hidden into the server
+  list after a success (`005f74c0`, `005f7b50`), as 1264's does, so while a
+  login is under way the 1298 recipe shows neither the bar nor a line; its
+  realm list has no line.
 - Lights (`select.light_manager`; RQ-095, `specs/KO-FINDINGS.md` §8.4, binary):
   1298's select Init (`005f98c0`) resets its light manager (`CLightMgr`,
   Release `005ba7a0`) and every select tick (`005faf10`) applies the hall lights

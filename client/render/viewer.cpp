@@ -2450,8 +2450,8 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           // into the realm list. The realm's login is under way from the press
           // (held through the connection) or a stored session's login, through
           // the browser step and its code, to the answer; a failure (back to
-          // idle) or a reset connection ends it. A package without a
-          // login_closed node keeps its bar up meanwhile (front_login.h).
+          // idle) or a reset connection ends it. 1298 hides its bar the same
+          // way and has no line (RQ-110, 005f74c0; front_login.h).
           using Phase = n3e::login::Flow::Phase;
           const auto phase = discord_flow->phase();
           front->login_waiting(front_login || phase == Phase::session || phase == Phase::browser ||

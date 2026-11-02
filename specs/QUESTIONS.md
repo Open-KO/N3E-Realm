@@ -1053,3 +1053,26 @@ in `client/render/viewer.cpp`'s login_waiting, not package data.
 hidden for the whole Discord wait and the copyright line shown, ESC cancelling the
 browser step. Only a layout that binds `login_closed` does this; one without it
 (the 1298 recipe) keeps its bar, as before.
+*RQ-110 (KO-FINDINGS §9.5):* 1298 hides its bar the same way, so every layout now
+does; see Q86.
+
+### Q86 — The 1298 recipe's login while a login waits
+
+RQ-110 read 1298's binary (KO-FINDINGS §9.5): its login is the nation's intro
+layout, which has no copyright line, and it hides its login bar from a login press
+until a failed answer (`005f74c0`, `005f7b50`), as 1264 does. The 1298 recipe (not
+offered) still cooks 1264's `co_login_us.uif` as its login until 1298's intro is data
+(RQ-088). Taking 1298's look, the recipe hides `Text_Rights`, and the client hides
+the login group while a login is under way whether the layout binds `login_closed`
+or not, so the 1298 recipe shows neither the bar nor a line for the whole Discord
+wait (up to 5 minutes; ESC cancels, and the realm's message boxes still show), where
+1298's own wait is one round trip. Options: (a) as 1298: nothing in the bar's place;
+(b) keep RQ-108's rule for a layout without a line, its bar up through a login (not
+1298's); (c) bind 1264's line there as the 1097 choice does (1264's look, not
+1298's). **Default taken (RQ-110):** (a), "as close to the original as possible"
+(Q85's decision for the wait applied to 1298). (b) is the old `closes` argument of
+`client/render/front_login.h`; (c) is the recipe's binding and move, as
+`games/moradon/front-end.json` has them.
+**Decided (maintainer, 2026-11-02):** (a), "Hide the bar, as 1298": under the 1298
+recipe the bar is hidden for the whole login and nothing takes its place, ESC
+cancelling; one rule for every front end.

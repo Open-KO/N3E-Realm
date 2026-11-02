@@ -17,7 +17,7 @@
         "Btn_Login": "login",
         "Btn_Cancel": "exit"
       },
-      "hidden": ["Img_Daum", "Img_MGame", "premium", "Group_Notice_1", "Group_Notice_2", "Group_Notice_3"]
+      "hidden": ["Img_Daum", "Img_MGame", "Text_Rights", "premium", "Group_Notice_1", "Group_Notice_2", "Group_Notice_3"]
     },
     "select": {
       "ui": "UI_US/ka_characterselect_us.uif",

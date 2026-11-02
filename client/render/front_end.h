@@ -233,7 +233,6 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     for (const auto &node : fe.screens[size_t(FrontScreen::login)]) {
       if (node.action == FrontAction::realm_group) realm_height = node.rect[3] - node.rect[1];
-      if (node.action == FrontAction::login_closed) login_closes = true;
     }
     seats.mode = fe.front_clip;
     for (size_t i = 0; i < seats.length.size(); ++i) {
@@ -578,9 +577,6 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   FrontAction pressed = FrontAction::none;
   float realm_height = 0, slide = 0;
   bool waiting = false;  // RQ-108: a login under way (login_waiting)
-  // RQ-108: whether the login layout has a node bound to login_closed; only
-  // then does a login under way hide the login group (front_login.h).
-  bool login_closes = false;
   // The select camera: the slot it is at and the slot in focus, which is the
   // one it turns to from the press on (1097: CGameProcCharacterSelect's
   // positions +0x2c4 and +0x2c8, the selected index 006e04d0), and its turn
@@ -740,8 +736,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       bool on = i == 0 || shown[nodes[i].parent];
       // The login group, the realm group and (RQ-108) the node KO shows while
       // the login group is hidden, each in its states only.
-      on = on && login_state_shows(nodes[i].action, state == Screen::login, state == Screen::realms, waiting,
-                                   login_closes);
+      on = on && login_state_shows(nodes[i].action, state == Screen::login, state == Screen::realms, waiting);
       if (nodes[i].kind == FrontNode::BUTTON && on) {
         // Prev and next only where there is a neighbour to turn to.
         const auto order = slot_order();

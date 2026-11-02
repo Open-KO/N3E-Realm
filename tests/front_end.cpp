@@ -323,36 +323,34 @@ int main(int argc, char **argv) {
   }
   std::cout << "PASS select zone: the camera's linear range fog, the alpha parts far to near\n";
   {
-    // RQ-108 (KO-FINDINGS 9.4, 1264 005c2820): with a login_closed node, idle
-    // on the login, the bar and no line; a login under way (the press, the
-    // browser step, the code, a stored session's login), the line and no bar,
-    // with a message box over it or not; the realm list, the server group and
-    // the line (a success never shows the bar again); a failure or a reset
-    // back to idle. A layout without one (the 1298 recipe) keeps its bar
-    // while a login is under way, as before version 12.
+    // RQ-108 (KO-FINDINGS 9.4, 1264 005c2820): idle on the login, the bar
+    // and no line; a login under way (the press, the browser step, the code,
+    // a stored session's login), the line and no bar, with a message box over
+    // it or not; the realm list, the server group and the line (a success
+    // never shows the bar again); a failure or a reset back to idle. RQ-110
+    // (9.5, 1298 005f74c0): the bar hides while a login is under way whether
+    // the layout has a login_closed node or not; the 1298 recipe hides its
+    // line, so it then shows neither.
     using A = n3e::FrontAction;
-    struct Want { const char *state; bool login, realms, waiting, closes, bar, list, line; };
-    for (const auto &w : {Want{"idle", true, false, false, true, true, false, false},
-                          Want{"waiting", true, false, true, true, false, false, true},
-                          Want{"realm list", false, true, false, true, false, true, true},
-                          Want{"realm list, waiting", false, true, true, true, false, true, true},
-                          Want{"select", false, false, false, true, false, false, false},
-                          Want{"select, waiting", false, false, true, true, false, false, false},
-                          Want{"no login_closed: idle", true, false, false, false, true, false, false},
-                          Want{"no login_closed: waiting", true, false, true, false, true, false, true},
-                          Want{"no login_closed: realm list", false, true, false, false, false, true, true}}) {
-      const bool bar = n3e::front::login_state_shows(A::login_group, w.login, w.realms, w.waiting, w.closes),
-                 list = n3e::front::login_state_shows(A::realm_group, w.login, w.realms, w.waiting, w.closes),
-                 line = n3e::front::login_state_shows(A::login_closed, w.login, w.realms, w.waiting, w.closes),
-                 other = n3e::front::login_state_shows(A::login, w.login, w.realms, w.waiting, w.closes);
+    struct Want { const char *state; bool login, realms, waiting, bar, list, line; };
+    for (const auto &w : {Want{"idle", true, false, false, true, false, false},
+                          Want{"waiting", true, false, true, false, false, true},
+                          Want{"realm list", false, true, false, false, true, true},
+                          Want{"realm list, waiting", false, true, true, false, true, true},
+                          Want{"select", false, false, false, false, false, false},
+                          Want{"select, waiting", false, false, true, false, false, false}}) {
+      const bool bar = n3e::front::login_state_shows(A::login_group, w.login, w.realms, w.waiting),
+                 list = n3e::front::login_state_shows(A::realm_group, w.login, w.realms, w.waiting),
+                 line = n3e::front::login_state_shows(A::login_closed, w.login, w.realms, w.waiting),
+                 other = n3e::front::login_state_shows(A::login, w.login, w.realms, w.waiting);
       if (bar != w.bar || list != w.list || line != w.line || !other) {
         std::cerr << "FAIL login states: " << w.state << ": bar " << bar << " list " << list << " line " << line
                   << " other " << other << "\n";
         return 1;
       }
     }
-    std::cout << "PASS login states: the bar at rest, KO's line instead while a login is under way and on the "
-                 "realm list; a layout without that line keeps its bar\n";
+    std::cout << "PASS login states: the bar at rest and hidden while a login is under way, KO's line instead "
+                 "then and on the realm list\n";
   }
   int loaded = 0, refused = 0;
   for (int i = 1; i + 1 < argc; i += 2) {

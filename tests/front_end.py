@@ -1092,7 +1092,8 @@ for n, want in canvas_rects.items():
 # Both Moradon recipes place their layouts as PLACE_SPECS does, so the loader's
 # checks below (KO's placements at 1024x768, 1280x1024, 1600x1200 and
 # 1281x1025) hold for each, but for the copyright line, which only the 1097
-# choice places and shows as 1264 does (RQ-108): the 1298 recipe cooks the pinned tree's
+# choice places and shows as 1264 does (RQ-108); 1298's login has none
+# (RQ-110, KO-FINDINGS 9.5), so its recipe hides it. The 1298 recipe cooks the pinned tree's
 # ka_characterselect_us.uif, byte for byte 1264's, which 1298's binary never
 # places (its select is co_CharacterSelect_us.uif, KO-FINDINGS 9.3), so it takes
 # 1264's code too; a move without its x would keep the 1024-wide x on a wider
@@ -1107,6 +1108,9 @@ for recipe, want in (("front-end.json", PLACE_SPECS), ("front-end-1298.json", PL
 # The 1097 choice binds the line it places to login_closed (RQ-108).
 assert json.loads((ROOT / "games/moradon/front-end.json").read_text())["screens"]["login"]["bindings"][
     "Text_Rights"] == "login_closed"
+# The 1298 recipe hides it and binds nothing to login_closed (RQ-110).
+login_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text())["screens"]["login"]
+assert "Text_Rights" in login_1298["hidden"] and "login_closed" not in login_1298["bindings"].values(), login_1298
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
     "an unknown move key": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "z": 1}]}},

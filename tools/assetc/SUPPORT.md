@@ -174,6 +174,7 @@ earlier scaling to the window); the 1097 recipe gives 1264's placements
 (`specs/KO-FINDINGS.md` §9.3). N3FE version 12 (RQ-108) adds the action
 `login_closed`, a login node drawn only while the login group is not; the 1097
 recipe binds 1264's copyright line, `Text_Rights`, to it at 1264's place
-(`specs/KO-FINDINGS.md` §9.4).
+(`specs/KO-FINDINGS.md` §9.4); the 1298 recipe hides it, 1298's login having none
+(§9.5, RQ-110).
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

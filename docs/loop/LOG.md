@@ -40,3 +40,4 @@ found with `git log --grep RQ-NNN`.
 | 2026-11-01 21:12 | RQ-078 | inbox | - | Maintainer (in session): realm owners pick the front end (intro, login, select) per KO client, 1097, 1298 or 2xxx, in a server config file. RQ-078 filed after RQ-077: design as package data or a revision property, list per-client differences first, split if large. |
 | 2026-11-01 21:15 | RQ-078 | inbox | - | Maintainer (in session): the latest Steam KO client is unpacked for analysis on this machine. Linked as git-ignored build/ko-reference/steam-install (data) and steam-rea (analysis dump); RQ-078 lists it as an input, pinned by hash before cooking. |
 | 2026-11-01 21:18 | Q71 | inbox | - | Maintainer (in session): Q71 closed as (a), 1097 hover is the default; 1298 loop becomes an RQ-078 choice. |
+| 2026-11-01 21:20 | Q72 | inbox | - | Maintainer (in session): Q72 decided (a), the select start on the press, at rest only. |

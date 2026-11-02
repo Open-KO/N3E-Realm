@@ -621,3 +621,5 @@ ignoring them while `selected` plays; (b) start on the server's answer and take
 select result, and 1097's ENTER-during-turn path ends in a hall that waits for a
 second ENTER with no clip played, which reads as a fault rather than a feature.
 The visible start (blend, clip, spot, loading after the clip) is 1097's either way.
+
+**Decided (maintainer, 2026-11-01):** (a), the start on the press, at rest only.

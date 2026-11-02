@@ -597,6 +597,9 @@ theta and turns the spot off while it runs, as 1097 does. Still not 1097's: the
 clip blend, `start_blend`), and loading follows the blend and the clip. How the start
 is triggered is Q72.
 
+**Decided (maintainer, 2026-11-01):** closed as (a). 1097's hover is the default select hall;
+1298's loop (b) becomes one of the per-client front ends a realm owner can choose (RQ-078).
+
 ### Q72 — The select start: on the press, or on the server's answer as 1097
 
 1097 (KO-FINDINGS §8.1, binary) sends the select request on ENTER or the click and

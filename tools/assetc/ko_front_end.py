@@ -11,7 +11,9 @@ front-clip mode, (version 7) the select camera's turn mode with 1298's
 recorded camera paths, (version 8) a KO zone drawn as the select hall
 (1298's `karus_intro`) and the select camera's fog, and (version 9) a logo
 screen before the login (1264's "K2 Network presents Knight Online", RQ-101),
-present or absent as the recipe's `logo` says. games/moradon/front-end.json names every KO
+present or absent as the recipe's `logo` says, and (version 10) each message
+box message's title and wording (RQ-102, Q81), from the recipe's `messages`:
+a KO text-table row or the recipe's own string. games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
@@ -41,7 +43,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 9
+VERSION = 10
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -83,7 +85,7 @@ UIF_KINDS = {0: "group", 1: "button", 3: "progress", 4: "image", 6: "text", 8: "
 # The engine's closed action set (spec 11); the client gives each its behaviour.
 ACTIONS = ("", "login", "exit", "login_group", "realm_group", "realm_list", "realm_connect", "notice",
            "select_prev", "select_next", "back", "char_info", "create_confirm", "name_field", "char_view",
-           "class_desc", "progress", "version", "info", "message", "ok")
+           "class_desc", "progress", "version", "info", "message", "ok", "title")
 REQUIRED = {"login": {"login", "exit", "login_group", "realm_group", "realm_list", "realm_connect"},
             "select": {"select_prev", "select_next", "back", "exit", "char_info"},
             "create": {"create_confirm", "back", "name_field", "char_view"},
@@ -124,6 +126,16 @@ MAX_LOGO_GROUPS = 8
 MAX_LOGO_SECONDS = 60.0
 NO_GROUP = 0xFFFFFFFF
 LOGO_SKIP_KEY, LOGO_HIDE_CURSOR = 1, 2
+# The messages the client raises in its message box (version 10, RQ-102,
+# Q81), the engine's closed set (client/assets/assets.h FrontMessage) in index
+# order. The recipe's `messages` words any of them: a `title` (drawn by the
+# message screen's node bound to `title`) and a `text` replacing the client's
+# own wording, each a string or a KO text-table row ({"table", "row"}).
+MESSAGES = ("connect_failed", "disconnected", "login", "login_blocked", "login_unavailable", "create_name",
+            "create_refused", "select_refused")
+# A KO text table's columns (Data/Texts_us.tbl: the row id and its text; the
+# 1264 and 1298 clients' tables have these types).
+TEXT_TYPES = [6, 7]
 # Music (version 3, RQ-018): the client's bounds (client/assets/music.h).
 MAX_TRACKS = 4
 MAX_TRACK_BYTES = 16 * 1024 * 1024
@@ -247,6 +259,9 @@ def recipe_paths(config):
     for at, track in enumerate(tracks if type(tracks) is list else []):
         add("music.tracks[%d].path" % at, section(track).get("path"))
     add("logo.ui", section(config.get("logo")).get("ui"))
+    for kind, entry in section(config.get("messages")).items():
+        for key in ("title", "text"):
+            add("messages.%s.%s.table" % (kind, key), section(section(entry).get(key)).get("table"))
     return out
 
 
@@ -1417,6 +1432,64 @@ def logo(config, assets, textures, fonts, tracks):
     return data + u(track) + f([delay]) + u(fade_group) + f([fade]) + u(flags), report
 
 
+def text_row(assets, ref, what):
+    """A message's title or text: the recipe's string, or KO's own: one row
+    of a client's encrypted text table ({"table": path, "row": id}; the
+    1264 and 1298 clients load `Data\\Texts` plus `_us.tbl` and look a row up
+    by id, 005d2350 in 1264). ASCII, at most MAX_TEXT bytes; KO's trailing
+    spaces are kept."""
+    if type(ref) is str:
+        text = ref
+    elif type(ref) is dict and set(ref) == {"table", "row"} and type(ref["table"]) is str and \
+            type(ref["row"]) is int and ref["row"] > 0:
+        import ko_tbl
+        types, rows = ko_tbl.parse(ko_tbl.decrypt(assets.get(ref["table"])))
+        if types[:2] != TEXT_TYPES:
+            raise ValueError("front-end %s: %s columns %s" % (what, ref["table"], types[:2]))
+        found = [r[1] for r in rows if r[0] == ref["row"]]
+        if len(found) != 1:
+            raise ValueError("front-end %s: %d rows %d in %s" % (what, len(found), ref["row"], ref["table"]))
+        text = found[0]
+    else:
+        raise ValueError("front-end %s: a string or {\"table\", \"row\"}" % what)
+    if not text.isascii() or len(text) > MAX_TEXT or any(c != "\n" and not " " <= c <= "~" for c in text):
+        raise ValueError("front-end %s: not printable ASCII of at most %d bytes" % (what, MAX_TEXT))
+    return text
+
+
+def message_texts(config, assets):
+    """{kind: (title, text or None)} of the recipe's `messages` (version 10,
+    RQ-102), None where the client's own wording stays."""
+    messages = config.get("messages") or {}
+    if type(messages) is not dict or set(messages) - set(MESSAGES):
+        raise ValueError("front-end messages: kinds of %s" % ", ".join(MESSAGES))
+    out = {}
+    for kind, entry in messages.items():
+        if type(entry) is not dict or not entry or set(entry) - {"title", "text"}:
+            raise ValueError("front-end message %s: a title, a text or both" % kind)
+        title = text_row(assets, entry["title"], "message %s title" % kind) if "title" in entry else ""
+        text = text_row(assets, entry["text"], "message %s text" % kind) if "text" in entry else None
+        out[kind] = (title, text)
+    return out
+
+
+def messages_section(config, assets):
+    """Section 11 (version 10, RQ-102, Q81): a count and, for each worded
+    message, its index in MESSAGES, its title, whether its text replaces the
+    client's (0 or 1) and that text (empty when not). A title needs the
+    message screen's `title` binding to be drawn, so one without it is refused."""
+    worded = message_texts(config, assets)
+    bound = set(((config.get("screens") or {}).get("message") or {}).get("bindings", {}).values())
+    if any(title for title, _ in worded.values()) and "title" not in bound:
+        raise ValueError("front-end messages: a title, and no message screen node bound to `title`")
+    data = u(len(worded))
+    for kind in MESSAGES:
+        if kind in worded:
+            title, text = worded[kind]
+            data += u(MESSAGES.index(kind)) + string(title) + u(0 if text is None else 1) + string(text or "")
+    return data, {k: dict(title=t, text=x) for k, (t, x) in worded.items()}
+
+
 def data_kind(data, index):
     """The kind of node `index` in a cooked screen (`screen`'s bytes)."""
     at = 4
@@ -1493,10 +1566,12 @@ def write(assets, out, config, work):
     data = b"N3FE" + u(VERSION) + u(count(config["character_slots"], 3)) + u(CANVAS[0]) + u(CANVAS[1])
     data += u(len(textures.list)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in textures.list)
     tracks, played = music(assets, config.get("music"))
-    data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section
+    # Version 10 (RQ-102): each message's title and wording.
+    message_section, message_report = messages_section(config, assets)
+    data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section + message_section
     if len(data) > MAX_FILE:
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)
     return dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), textures=len(textures.list),
-                fonts=len(fonts), music=played, logo=logo_report, font_substitutes=sorted(str(p) for p in sources.values()),
+                fonts=len(fonts), music=played, logo=logo_report, messages=message_report, font_substitutes=sorted(str(p) for p in sources.values()),
                 sources=dict(sorted(assets.sources.items())), **zone_report)

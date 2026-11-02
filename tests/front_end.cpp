@@ -10,7 +10,8 @@
 // paths (client/render/select_path.h) on synthetic keys. RQ-095: the select
 // zone's fog and its BLEND meshes' far-to-near order (client/render/select_zone.h).
 // RQ-101: the logo screen's timeline, alpha and music (client/render/front_logo.h)
-// on 1264's groups and fade.
+// on 1264's groups and fade. RQ-102: a loaded package's worded messages are
+// printed for tests/front_end.py.
 #include "assets/assets.h"
 #include "render/front_logo.h"
 #include "render/select_hall.h"
@@ -325,6 +326,11 @@ int main(int argc, char **argv) {
       if (fe.screens.size() != 5 || fe.slots.size() != fe.character_slots) error = "loaded inconsistently";
       if (fe.logo) std::cout << "logo " << release.root.filename().string() << ": " << fe.logo->nodes.size()
                              << " nodes, " << fe.logo->groups.size() << " groups, flags " << fe.logo->flags << "\n";
+      // RQ-102: each worded message, by its FrontMessage index.
+      for (size_t k = 0; k < fe.messages.size(); ++k)
+        if (const auto &m = fe.messages[k]; !m.title.empty() || m.replaces)
+          std::cout << "message " << release.root.filename().string() << ": " << k << " title='" << m.title
+                    << "' replaces=" << m.replaces << " text='" << m.text << "'\n";
       // RQ-018: every loaded track streams (tests/audio.cpp checks the samples).
       for (const auto &track : fe.music) {
         n3e::MusicStream stream(track);

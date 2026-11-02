@@ -16,7 +16,9 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   browser step is denied: KO's message box shows the flow's failure, and ENTER
   again logs in (the browser step played here on the address it prints) -> realms -> select (no
   characters) -> create "Taken", which another account holds: the server's
-  refusal in KO's message box -> create a fresh name -> select with it (the
+  refusal in KO's message box, titled as the package words a refused create
+  (RQ-102, Q81: 1264's create failure title) where the Discord failure and the
+  kick are untitled -> create a fresh name -> select with it (the
   pointer off, on and off the character in front: its hover clip blends in on
   its first frame, plays once and holds its last frame, the rest clip blends
   back, the spot widens and narrows to off and the info text shows only while
@@ -43,6 +45,7 @@ import hashlib
 import json
 import math
 import os
+import re
 from pathlib import Path
 import secrets
 import socket
@@ -79,6 +82,27 @@ CLIENT_ID = "223456789012345678"
 SECRET = "s3cret-" + secrets.token_hex(8)
 REDIRECT = "http://127.0.0.1:49152/callback"
 REFUSED = "character name invalid/taken or limit reached"
+# RQ-102 (Q81): the package's message titles and wordings, as the cook reads
+# them from the chosen front end's recipe and its KO trees (no KO text here).
+sys.path.insert(0, str(ROOT / "tools/assetc"))
+import front_end_choice  # noqa: E402
+import ko_front_end  # noqa: E402
+FRONT = front_end_choice.choose("games/moradon")
+WORDED = ko_front_end.message_texts(json.loads(FRONT["recipe"].read_text()), ko_front_end.inputs(FRONT))
+# The box shows each kind's title (empty when the recipe names none) and its
+# text where the recipe replaces the client's. The 1097 recipe titles a
+# refused create over the server's wording and leaves the Discord flow's
+# failures and a kick untitled; another recipe's wording is checked as it is.
+
+
+def shown(kind, text):
+    title, replaced = WORDED.get(kind, ("", None))
+    return (text if replaced is None else replaced, title)
+
+
+if FRONT["client"] == "1097":
+    assert WORDED["create_refused"][0] and WORDED["create_refused"][1] is None, WORDED
+    assert "login" not in WORDED and "disconnected" not in WORDED, WORDED
 
 
 def run(*cmd, env=None):
@@ -275,12 +299,13 @@ try:
     (out / "client.log").write_text(text)
     assert code == 0 and "ENTERED map" in text, (code, text[-3000:])
     screens = [f.split()[0][len("screen="):] for f in flow if f.startswith("screen=")]
-    messages = [f[len("message='"):-1] for f in flow if f.startswith("message=")]
+    messages = [re.fullmatch(r"message='(.*)' title='(.*)'", f).groups() for f in flow if f.startswith("message=")]
     enters = [f for f in flow if f.startswith("enter ")]
     assert enters == ["enter connected=0"], flow
     assert screens == ["logo", "login", "realms", "select", "create", "select", "loading", "world", "login"], flow
-    assert messages == ["Discord login was cancelled. ENTER to try again.", REFUSED,
-                        "You were disconnected by an operator: flow test."], flow
+    assert messages == [shown("login", "Discord login was cancelled. ENTER to try again."),
+                        shown("create_refused", REFUSED),
+                        shown("disconnected", "You were disconnected by an operator: flow test.")], flow
     order = [f.split()[0] for f in flow if f.startswith(("screen=", "music="))]
     want = ["screen=logo", "music=stream1", "screen=login", "music=stream2", "screen=realms", "screen=select",
             "music=stream3", "screen=create", "screen=select", "screen=loading", "music=none", "screen=world",
@@ -350,9 +375,7 @@ try:
     # the camera's own eye. No frame leaves the two slots' angles by more than
     # a frame's step (the client's frames are at most 0.25 s).
     # The recipe of the front end the package was cooked with (RQ-078).
-    sys.path.insert(0, str(ROOT / "tools/assetc"))
-    import front_end_choice
-    select = json.loads(front_end_choice.choose("games/moradon")["recipe"].read_text())["select"]
+    select = json.loads(FRONT["recipe"].read_text())["select"]
     eye, at = select["camera"]["eye"], select["camera"]["at"]
     o = [eye[i] - at[i] for i in range(3)]
     flat = o[0] ** 2 + o[2] ** 2
@@ -382,7 +405,7 @@ try:
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
     print(f"PASS front-end flow: the logo (its music 1 s in, the cursor hidden, a click ignored, SPACE skips it) -> "
-          f"one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box, "
+          f"one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box under KO's title, "
           "Fresh created) -> select (the front character's hover clip blends in on its first frame, plays once and holds, the rest clip blends back; "
           "the spot widens and the info text shows only while the pointer is on it; the arrows turn the camera one slot each way, "
           "ending where 1097's check ends it, each with the turn sound) -> start (blends in over 0.6 s, then plays) -> loading -> world; "

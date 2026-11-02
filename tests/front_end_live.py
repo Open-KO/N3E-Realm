@@ -24,7 +24,11 @@ from the player's own KO data.
    - loading: the progress bar's lit share grows from the start stage (2/3: the
      package and its textures) to the first World (1);
    - message: the box's text rect holds text (RQ-085: 1264's El_MessageBox_us,
-     its OK button only, as KO's MessageBoxPost shows an MB_OK box);
+     its OK button only, as KO's MessageBoxPost shows an MB_OK box); the same
+     text as a refused create, which the package titles (RQ-102, Q81: 1264's
+     create failure title), differs from it inside the title's rect (and
+     the few pixels its glyphs stand past it) and nowhere else, so an
+     untitled message draws no title;
    - logo (RQ-101, KO-FINDINGS 9.2: 1264's logo procedure, first in the
      process): each of co_usa_logo_us.uif's three groups in its hold draws its
      art (K2 Network, presents, Knight Online) in the layout's rect and black
@@ -80,6 +84,10 @@ for client in sorted(front_end_choice.catalogue("games/moradon")):
         report = ko_front_end.cook(ko_front_end.inputs(front), out, front["recipe"], out / "work")
         cooked.append((out / "front-end.bin").read_bytes())
     assert cooked[0] == cooked[1], "the %s front-end cook is not deterministic" % client
+    if client == chosen:
+        # RQ-102: whether the chosen recipe titles a refused create (the
+        # message-titled capture below checks the title only then).
+        titled_create = bool((report["messages"].get("create_refused") or {}).get("title"))
     if client == "1097":
         # RQ-085 (KO-FINDINGS 9.2): the 1097 choice draws the 1264 client's
         # screens: every layout and the textures they name come from the 1264
@@ -202,7 +210,7 @@ for size in ("1280x1024", "1024x768"):
                  (d.split(":") for d in drawn.split(";") if d)]
         shots[name] = (Path(path), tuple(map(int, rect.split(","))) if rect else None, boxes)
     assert set(shots) == {"login", "realms", "realms-unnamed", "select-1", "select-2", "select-3", "create",
-                          "loading-start", "loading-world", "message", "logo-0", "logo-1", "logo-2",
+                          "loading-start", "loading-world", "message", "message-titled", "logo-0", "logo-1", "logo-2",
                           "logo-fade"}, shots.keys()
 
     path, rect, boxes = shots["login"]
@@ -246,6 +254,24 @@ for size in ("1280x1024", "1024x768"):
 
     path, rect, _ = shots["message"]
     assert len(set(region(path, rect))) > 10, (size, rect)
+    titled, title, _ = shots["message-titled"]
+    _, _, a = pixels(path)
+    _, _, b = pixels(titled)
+    inside = outside = 0
+    if not titled_create:
+        # A recipe that leaves a refused create untitled draws the two alike.
+        assert a == b, (size, "an untitled message drew a title")
+    # The glyphs may stand a few pixels past the 1264 layout's short title
+    # rect (17 px at 1280x1024; KO's strings are not clipped to it).
+    margin = 8
+    for i in range(0, len(a), 3):
+        if a[i:i + 3] != b[i:i + 3]:
+            x, y = (i // 3) % width, (i // 3) // width
+            if title[0] - margin <= x < title[2] + margin and title[1] - margin <= y < title[3] + margin:
+                inside += 1
+            else:
+                outside += 1
+    assert (inside > 20 if titled_create else inside == 0) and outside == 0, (size, title, inside, outside)
 
     # RQ-101: the logo screen. Each group's art is its layout's image that is
     # not the full-canvas black backdrop; the frame is black outside it.

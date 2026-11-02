@@ -296,9 +296,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // KO's message box. During the logo screen it waits for the login (Q82):
   // 1264 connects and logs in only from its login procedure, so nothing it
   // reports can show over the logo; the latest waiting message shows then.
-  void show_message(std::string text) {
-    if (state == Screen::logo) deferred = std::move(text);
-    else message = std::move(text);
+  // RQ-102 (Q81): the package words each kind of message: its title (the
+  // node bound to `title`), and a text that replaces the client's own; a kind
+  // it does not word shows untitled in the client's words.
+  void show_message(FrontMessage kind, std::string text) {
+    const auto &worded = fe.messages[size_t(kind)];
+    Message m{worded.replaces ? worded.text : std::move(text), worded.title};
+    if (state == Screen::logo) deferred = std::move(m);
+    else message = std::move(m);
   }
   bool showing_message() const { return message.has_value(); }
   bool creating() const { return pending_create; }
@@ -306,7 +311,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // client checks the hover, its blends, the spot and the info text.
   FrontPose front_pose() const { return front_shown; }
   FrontTurn front_turn() const { return turn_shown; }
-  const std::string &message_text() const { static const std::string none; return message ? *message : none; }
+  const std::string &message_text() const { static const std::string none; return message ? message->text : none; }
+  const std::string &message_title() const { static const std::string none; return message ? message->title : none; }
   // The server answered CreateCharacter: a longer list is a success (the
   // new character takes its slot), a refusal is shown in a message box.
   void characters(const Characters &list) {
@@ -323,7 +329,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   void refused(const std::string &detail) {
     if (pending_create) {
       pending_create = false;
-      show_message(detail);
+      show_message(FrontMessage::create_refused, detail);
     } else if (state == Screen::loading || choosing >= 0) {
       state = Screen::select;
       choosing = -1;
@@ -332,7 +338,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       // start right after the refusal plays the start clip again rather than
       // finding it ended.
       if (focus < characters_shown()) seats.front_at_rest(seats.players.at(size_t(focus)), in_front());
-      show_message(detail);
+      show_message(FrontMessage::select_refused, detail);
     }
   }
   // Loading: the selection animation has played and the screen shows.
@@ -366,7 +372,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) const {
-    const auto screen = action == FrontAction::message || action == FrontAction::ok ? FrontScreen::message : layout();
+    const auto screen = action == FrontAction::message || action == FrontAction::ok || action == FrontAction::title
+                            ? FrontScreen::message
+                            : layout();
     const auto &nodes = fe.screens[size_t(screen)];
     for (size_t i = 0; i < nodes.size(); ++i)
       if (nodes[i].action == action) {
@@ -521,7 +529,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::vector<Buffer> statics, zone_meshes, intro_plugs, select_plugs, create_plugs;
   std::vector<std::vector<Scene>> clips;  // per scene: each clip's poses
   Screen state = Screen::login;
-  std::optional<std::string> message;
+  struct Message { std::string text, title; };
+  std::optional<Message> message;
   std::array<float, 2> pointer{-1, -1};
   FrontAction pressed = FrontAction::none;
   float realm_height = 0, slide = 0;
@@ -541,7 +550,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   double logo_time = 0;
   LogoFrame logo_drawn;
   uint64_t logo_start_ns = 0, focus_ns = 0;
-  std::optional<std::string> deferred;
+  std::optional<Message> deferred;
   void leave_logo() {
     state = Screen::login;
     if (deferred) message = std::move(deferred), deferred.reset();
@@ -790,7 +799,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     case FrontAction::create_confirm:
       if (state == Screen::create && !pending_create) {
         if (name.empty()) {
-          show_message("Enter a name: 1 to 24 letters, digits, _ or -.");
+          show_message(FrontMessage::create_name, "Enter a name: 1 to 24 letters, digits, _ or -.");
           break;
         }
         pending_create = true;
@@ -1277,7 +1286,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         case FrontAction::class_desc: value = filled(FrontString::class_desc, context, nullptr); break;
         case FrontAction::version: value = filled(FrontString::version, context, nullptr); break;
         case FrontAction::info: value = filled(FrontString::loading_info, context, nullptr); break;
-        case FrontAction::message: value = message.value_or(""); break;
+        case FrontAction::message: value = message ? message->text : std::string(); break;
+        case FrontAction::title: value = message ? message->title : std::string(); break;
         default: break;
         }
         text(value, n.font, n.color, n.style, r);

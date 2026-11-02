@@ -2675,7 +2675,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 9, "front end version");
+  need(r.u() == 10, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -3034,6 +3034,23 @@ FrontEnd load_front_end(const Release &release) {
     logo.flags = r.u();
     need(logo.flags <= (FrontLogo::SKIP_KEY | FrontLogo::HIDE_CURSOR), "front end logo flags");
     fe.logo = std::move(logo);
+  }
+  // 11. Version 10 (RQ-102, Q81): the messages the package words, a count
+  // (at most one per FrontMessage) and each: its FrontMessage (once), its
+  // title, whether its text replaces the client's wording (0 or 1), and that
+  // text (empty unless it replaces), each at most 1024 ASCII bytes.
+  const auto messages = r.count(uint32_t(FrontMessage::count), 0);
+  std::set<uint32_t> worded;
+  for (uint32_t i = 0; i < messages; ++i) {
+    const auto kind = r.u();
+    need(kind < uint32_t(FrontMessage::count) && worded.insert(kind).second, "front end message");
+    auto &m = fe.messages[kind];
+    m.title = ascii(text(1024));
+    const auto replaces = r.u();
+    need(replaces <= 1, "front end message text");
+    m.replaces = replaces == 1;
+    m.text = ascii(text(1024));
+    need(m.replaces || m.text.empty(), "front end message text");
   }
   r.end();
   return fe;

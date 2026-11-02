@@ -86,8 +86,11 @@ public:
   std::optional<Envelope> update(const WorldState &, bool start, bool cancel, int64_t now);
   const std::string &status() const { return text; }
   // Counts the texts the player must read (failures, the address to open);
-  // the KO screens show each in their message box.
+  // the KO screens show each in their message box. `alert` is the latest's
+  // kind, which the KO front end's package may title and word (RQ-102).
+  enum class Alert { other, blocked, unavailable };
   uint64_t alerts() const { return alerts_; }
+  Alert alert() const { return alert_; }
   Phase phase() const { return phase_; }
   void reset();
   // Spec 02 logout (--logout): forgets this machine's session now; once connected,
@@ -102,6 +105,8 @@ private:
   Phase phase_ = Phase::start;
   std::string text = "Connecting";
   uint64_t refusals = 0, results = 0, logouts = 0, alerts_ = 0;
+  Alert alert_ = Alert::other;
+  void note_alert(Alert kind = Alert::other) { alert_ = kind; ++alerts_; }
   std::string revoke; // the forgotten token, until the realm answers its SessionLogout
   bool consent = false;
   Pkce pkce;

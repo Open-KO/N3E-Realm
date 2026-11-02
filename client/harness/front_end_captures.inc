@@ -20,7 +20,8 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   n3e::Characters list;
   using Screen = n3e::front::Screen;
   auto shot = [&](const std::string &name, Screen screen, int characters, const std::string &realm, float progress,
-                  n3e::FrontAction bound, const std::string &message, double logo = -1) {
+                  n3e::FrontAction bound, const std::string &message, double logo = -1,
+                  n3e::FrontMessage kind = n3e::FrontMessage::disconnected) {
     SDL_PumpEvents();
     list.Clear();
     for (int i = 0; i < characters; ++i) {
@@ -31,7 +32,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     }
     front->jump(screen);
     if (logo >= 0) front->logo_at(logo);
-    if (!message.empty()) front->show_message(message);
+    if (!message.empty()) front->show_message(kind, message);
     const n3e::front::Context context{realm, "ENTER - Log in with Discord", release.version, &list, progress};
     front->draw(width, height, 1.0, context);
     front->draw(width, height, 1.0, context);
@@ -67,6 +68,10 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   shot("loading-start", Screen::loading, 1, "Local Realm", 2 / 3.f, A::progress, "");
   shot("loading-world", Screen::loading, 1, "Local Realm", 1, A::progress, "");
   shot("message", Screen::login, 0, "Local Realm", 0, A::message, "Disconnected from server");
+  // RQ-102 (Q81): the same text as a refused create, which the package titles;
+  // the rect is the title's.
+  shot("message-titled", Screen::login, 0, "Local Realm", 0, A::title, "Disconnected from server", -1,
+       n3e::FrontMessage::create_refused);
   if (const auto &logo = front->logo()) {
     // RQ-101: each group in its hold, and the first half way into its fade-in.
     std::string alphas;

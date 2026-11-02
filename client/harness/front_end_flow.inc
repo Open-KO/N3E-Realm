@@ -20,7 +20,8 @@
 //   mixer streams, gain the music's gain, cursor whether the system cursor
 //   shows)
 //   FRONT_FLOW enter connected=0|1
-//   FRONT_FLOW message='...'
+//   FRONT_FLOW message='...' title='...'
+//   (RQ-102: the box's text and its title, empty for an untitled message)
 //   FRONT_FLOW music=none|streamK (RQ-018: K counts the streams started; a
 //   line each time the mixer's stream changes, a frame after the screen)
 //   FRONT_FLOW hover phase=P clip=C t=T end=E blend=B theta=H spot=0|1 info=0|1
@@ -91,7 +92,8 @@
     was_in_world = was_in_world || screen == 6;
     const uint64_t now_ms = SDL_GetTicks();
     if (front->showing_message() && front_active() && now_ms - last_push > 500) {
-      std::cout << "FRONT_FLOW message='" << front->message_text() << "'" << std::endl;
+      std::cout << "FRONT_FLOW message='" << front->message_text() << "' title='" << front->message_title() << "'"
+                << std::endl;
       last_push = now_ms;
       retry = screen == 0;
       if (was_in_world) {

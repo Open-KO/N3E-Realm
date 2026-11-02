@@ -7,9 +7,10 @@ clip's blend time and the select spot's growth rate (version 4, RQ-075),
 PCM music tracks with a restart period (version 5, RQ-083), the select
 hall's front-clip mode (version 6, RQ-086), the select camera's turn mode
 with 1298's recorded camera paths (version 7, RQ-087), a KO zone drawn as
-the select hall with the select camera's fog (version 8, RQ-095), and a logo
+the select hall with the select camera's fog (version 8, RQ-095), a logo
 screen before the login (version 9, RQ-101: 1264's "K2 Network presents Knight
-Online").
+Online"), and each message box message's title and wording (version 10,
+RQ-102, Q81).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -23,7 +24,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 9, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 10, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -121,6 +122,28 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    when the screen ends, as 1264 connects from its login; a message raised
    while it shows (the latest) waits for the login. A reset connection leaves
    the screen playing.
+11. The messages (version 10, RQ-102, Q81): a count (0–8, at most one per
+   message) and each: the message (an index of the closed set below, each
+   once), its title (≤1024 ASCII bytes, may be empty), whether its text
+   replaces the client's own wording (0 or 1) and that text (≤1024 ASCII
+   bytes; empty unless it replaces). The set, by index, is the engine's
+   (`FrontMessage`, `client/assets/assets.h`): 0 `connect_failed` (the realm
+   cannot be reached after a login press), 1 `disconnected` (the connection
+   closed: a drop or a kick), 2 `login` (the Discord flow's other failures and
+   the address to open), 3 `login_blocked` (the realm refused the login: a
+   banned account), 4 `login_unavailable` (the realm refused the login: a
+   dependency is down), 5 `create_name` (create with an empty name),
+   6 `create_refused` (the realm refused a create), 7 `select_refused` (the
+   realm refused a select). The client shows a message in the message box
+   with the package's title in the node bound to `title` (empty for a message
+   the package does not name) and the package's text where it replaces, its
+   own wording otherwise. The cook writes the recipe's `messages` (below): a
+   title or text is the recipe's string or one row of a KO client's text
+   table (`{"table": "<input>:Data/Texts_us.tbl", "row": N}`, decrypted as
+   `tools/assetc/ko_tbl.py` reads it; 1264 and 1298 look a row up by its id,
+   1264's `005d2350`); it refuses a title without a `title` binding on the
+   message screen, a row the table lacks or holds twice, and text that is not
+   printable ASCII.
 
 The client samples as KO sets its devices: UIF images with point sampling on whole
 screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
@@ -232,7 +255,9 @@ screen, an unknown turn mode, paths in the rotate mode, a path outside the slots
 or from a slot to itself, an entry path not to slot 0, a from and to pair twice,
 the path mode without its entry path or a way between neighbours, a hall with
 a zone, a zone mesh's flags other than above, fog values outside their bounds
-(or not all 0 when off), and every reference, count and bound above,
+(or not all 0 when off), a message outside the set or named twice, a replace
+flag other than 0 or 1 or a text that does not replace, and every reference,
+count and bound above,
 truncation or trailing bytes.
 
 ## Actions
@@ -240,10 +265,10 @@ truncation or trailing bytes.
 The closed set, by index: none, `login`, `exit`, `login_group`, `realm_group`,
 `realm_list`, `realm_connect`, `notice`, `select_prev`, `select_next`, `back`,
 `char_info`, `create_confirm`, `name_field`, `char_view`, `class_desc`,
-`progress`, `version`, `info`, `message`, `ok`. A group bound to `login_group` or
+`progress`, `version`, `info`, `message`, `ok`, `title` (version 10). A group bound to `login_group` or
 `realm_group` is shown in its state only; `realm_list` lists the realm from
-`realm.json`; `notice`, `char_info`, `class_desc`, `version`, `info` and
-`message` are texts the client fills; `name_field` is the name entry; `char_view`
+`realm.json`; `notice`, `char_info`, `class_desc`, `version`, `info`,
+`message` and `title` (the message's title, item 11) are texts the client fills; `name_field` is the name entry; `char_view`
 is where create draws the character.
 
 ## Choosing the client (RQ-078)
@@ -471,9 +496,38 @@ box and loading are 1264's.
   (`0050c730`), with 1264's `ui_message_us.dxt` (its frame black, where the
   pinned tree's is grey). An OK box, as KO's `SetBoxStyle(MB_OK)` shows one:
   `Text_Message` holds the message, `btn_ok` is OK; Yes, No, Cancel and the edit
-  hidden; the title (`Text_title`) empty (Q81). Each button state image holds
+  hidden; `Text_title` holds the message's title, bound to `title` (RQ-102,
+  Q81: as `MessageBoxPost` sets it from its caller, empty where the caller
+  passes none). Each button state image holds
   its own label, and the client draws a node's children only when it draws the
   node (`CN3UIBase::Render`), so one label shows per state.
+- Messages (RQ-102, Q81, `specs/KO-FINDINGS.md` §9.2, binary): `messages`
+  words the realm's messages that stand for one 1264 shows with a title, with
+  that title and wording; every other message shows untitled in the realm's
+  words. Each realm message beside the 1264 box it stands for (the 1264
+  binary `ko1264-unpacked.exe`; its texts by row of a KO `Data/Texts_us.tbl`):
+
+  | Realm message (its words) | 1264's box (caller; text row; title row) | `messages` |
+  |---|---|---|
+  | `connect_failed`: the client's connection status | the login server unreachable (`005bdf00` → `005f8ab0`, ReportServerConnectionFailed: row 2905 with "LogIn Server" and the error; title empty, `00674f68`) | none: untitled, the realm's words |
+  | `disconnected`: "Disconnected from server", or a kick's "You were disconnected by an operator: …" (spec 02) | the connection closed (`005f8cd0`, ReportServerConnectionClosed: row 1601; title empty). KO has no kick box of its own | none: untitled, the realm's words |
+  | `login_blocked`: spec 02's "Your account is blocked until …: …" | the login answer's result 4 (`005bf010`, MsgRecv_AccountLogIn: row 2907, title row 2909) | title and text: the pinned tree's rows 2909 ("Connection failed.") and 2907 ("Your account is currently blocked. Please contact customer support.") |
+  | `login_unavailable`: "The realm cannot log you in right now. ENTER to try again." | the login answer's other results (`005bf010`'s last branch: row 2908, title row 2909) | title and text: the pinned tree's rows 2909 and 2908 ("There is an error in the selected server. ") |
+  | `login`: the Discord flow's own failures (denied, timed out, its callback, the redirect ports, a refused code, a logout the realm could not end) and the address to open | none: KO has no Discord step | none: untitled, the realm's words |
+  | `create_name`: "Enter a name: 1 to 24 letters, digits, _ or -." | an empty name (`0043a340`: code 6 → `0043a820`, ReportErrorCharacterCreate: row 1905, title row 1901) | title and text: the 1264 install's rows 1901 ("Failed creating character") and 1905 ("Please enter your character ID. ") |
+  | `create_refused`: the server's "character name invalid/taken or limit reached" | the server's create answer (`0043a820` by its code: 1911 no more characters, 1912 a name in use, 1906 a forbidden letter, and others; title row 1901) | title only: the 1264 install's row 1901; the realm's refusal does not say which of KO's reasons it is, so its words stay |
+  | `select_refused`: the server's "character not owned or already online" | the select refused (`004436a0`, CharacterSelectFailed: row 6066; title empty) | none: untitled, the realm's words |
+
+  The login rows come from the pinned tree's `Data/Texts_us.tbl` (1298's),
+  not the 1264 install's: 1264 asks for rows 2907–2909 there (pushes at
+  `005bf30c`, `005bf31b`, `005bf7a2`), and the 1264 install's table holds other
+  texts at those rows (a stat's description at 2909, "Karus" at 2907), while
+  1298's binary asks for the same rows (`5f7e6f`, `5f7e82`) and its table
+  holds the login wording, the source's (`text_resources.h`). The create rows
+  are the 1264 install's (1298's are the same text). KO's text keeps its
+  trailing spaces. The OpenKO source's "Failed to connect to login server"
+  title is its `_DEBUG` build's (`GameProcLogIn_1098.cpp` `Init`); the 1264
+  binary has no such string and its release path posts the failure untitled.
 - Intro: `Intro/Intro.N3Chr` clip 0 with its axe plug, `Intro/0-2.N3Light` (2 is
   off), `Intro/Moon.dxt` at (100, 50) × 1.3, KO's fixed camera.
 - Select: `ChrSelect/ka_chairs.n3shape`, `ka_light_0/1`, the Karus slots, spots

@@ -333,9 +333,18 @@ CLIENT = Path("assets/ko")
 # 53,801,366 bytes), recipe.json and the release index change. Default features
 # f5ef260a... -> 70be445d...; classic 653c9bb6... -> 4f581db8...; 1097
 # eb5afd0c... -> c8d993ec.... The plain cooks and the homelands keep their pins.
+# RQ-102 (Q81, KO-FINDINGS 9.2) changed the three --features pins: front-end.bin
+# is N3FE version 10 with the message section after the logo (the 1097
+# recipe's four worded messages, their KO rows read from the pinned tree's and
+# the 1264 install's Data/Texts_us.tbl) and the message box's Text_title bound
+# to `title` (its layout text kept, no longer emptied). Against the earlier
+# cooks only front-end.bin (53,801,366 -> 53,801,664 bytes), recipe.json and the
+# release index change. Default features 70be445d... -> 32d07415...; classic
+# 4f581db8... -> 9079db74...; 1097 c8d993ec... -> 9417c9fd.... The plain cooks
+# and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "70be445da00c4477e1e508ac3c08c08c2dfcaac469b695b08771e922e2ae0901"),
+    "features": (["--features"], "32d074152990298b9634cd27607201e2b25ed0713a033a1ad38bfda50dfc89ce"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -356,13 +365,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "4f581db832e0215f0009f18098ad76c435289878d90e0133ae689ee361957079"),
+    "features": (["--features"], "9079db74662d77f95d376f31604a165df36866b16726606dd0b1ea9def6ac871"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "c8d993ece68231d293fefdd3f710fc2f4ebe87d0d7f27d1acda6ce2dd9047c9b"),
+    "features": (["--features"], "9417c9fd7a2e000645aefa2598d29df29700375871762344c9a8ac19fbf18cfc"),
 }
 
 

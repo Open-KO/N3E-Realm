@@ -82,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 9, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 10, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -95,7 +95,7 @@ replace the panels when the client has a Discord realm config.
 - **Actions** form a closed engine set, by index: `none`, `login`, `exit`,
   `login_group`, `realm_group`, `realm_list`, `realm_connect`, `notice`,
   `select_prev`, `select_next`, `back`, `char_info`, `create_confirm`, `name_field`,
-  `char_view`, `class_desc`, `progress`, `version`, `info`, `message`, `ok`. The cook
+  `char_view`, `class_desc`, `progress`, `version`, `info`, `message`, `ok`, `title`. The cook
   and the loader refuse an unknown action, an action bound twice in a screen and a
   screen whose required actions are unbound. Required per screen:
   - login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
@@ -159,6 +159,15 @@ replace the panels when the client has a Discord realm config.
   meanwhile shows on the login. Whether a package has one is the recipe's `logo` key alone
   (`content/front-end.md`, section 10 and "Moradon"); the 1097 recipe has 1264's
   (`specs/KO-FINDINGS.md` §9.2).
+- **The messages** (N3FE version 10, RQ-102, Q81). The front end's messages are a
+  closed engine set (a failed connection, a closed one, the Discord flow's
+  failures, a banned or unavailable login, an empty name, a refused create or
+  select; `content/front-end.md` section 11). The package may give any of them
+  a title, drawn in the message box's node bound to `title`, and a text that
+  replaces the client's wording; the recipe's `messages` names each as a
+  string or a row of a KO client's text table. The 1097 recipe titles and
+  words the ones that stand for a box 1264 shows with a title and leaves the
+  rest untitled in the realm's words (`content/front-end.md`, "Moradon").
 - **The select arrows' turn sound** (RQ-077, Q70). 1097's hall plays sound 2501,
   `char_select_turn.wav`, for each turn its arrows start. The package names the
   sound-table id (`front-end.json` `select.turn_sound`), and the cook binds it in
@@ -232,15 +241,21 @@ prev/next).
 | login | intro scene looping; login bar | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. Started with `--logout` (spec 02, RQ-068), the client first ends the stored session; a press meanwhile is held until the realm answers. The KO screens have no logout of their own (Q61, Q74). |
 | realms | intro; the server group with the realm's name from `realm.json` | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
 | select | hall; up to 3 characters with the realm's player model and default looks, each standing on clip 0's first frame; the one in front, at rest, plays clip 0 (`pre_select`) once while the pointer is in `DoProcPreselect`'s centre rect and holds its last frame, and clip 2 (`dummy`, clip 0's first frame) otherwise, each change blending over the clip's own blend time from the frame reached, the new clip held on its first frame meanwhile; the front slot's spot widens at the package's rate while the pointer is there, narrows when it leaves and is off at 0; the info text (char_info) shows only while the pointer is there. This is the 1097 client's hall for this asset set (KO-FINDINGS §8.1, Q71), not 1298's | At rest only (not while the camera turns or the start clip plays): ENTER or a click on the character in front (`PtInRect` on the centre rect) → `SelectCharacter`, the spot at its full theta, its clip 1 blended in over the package's start blend (Moradon: 1097's 0.6 s) on its first frame and played to the end (`IsAnimEnd`, after the blend), → loading; a refusal returns it to the hover or rest clip; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next (the arrow buttons, LEFT, RIGHT) turns the camera one slot, the short way about `at` at 1.2 rad/s, to where 1097's check ends the turn (left to right: 1, 0, 2; nothing at the end of the row or while it turns; KO-FINDINGS §8.2); while it turns nothing is ticked and the spot is off. |
-| create | KO's create screen; the create model breathing in `char_view` (standing, no weapon); name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording; `back` → select. |
+| create | KO's create screen; the create model breathing in `char_view` (standing, no weapon); name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording, under the package's title for it (RQ-102); `back` → select. |
 | loading | the loading art; `progress` by real stages: the package and its textures (loaded at start, 2/3), the first `World` (1); `version` shows the client version | the first `World` → in game after the bar shows full. |
 
-Failures keep their spec 02/03 wording and show in KO's message box
-(`co_MsgBoxOk_us.uif`): the Discord flow's failures (and the address to open when no
+Failures show in KO's message box (the package's; Moradon's is 1264's
+`el_messagebox_us.uif`): the Discord flow's failures (and the address to open when no
 browser starts), a logout the realm refused, a server that cannot be reached after a login press,
-"You were disconnected by an operator…", "Your account is blocked until…". A dropped
+a kick, a ban. Each shows in its spec 02/03 wording ("You were disconnected by an
+operator…", "Your account is blocked until…") unless the package words that kind
+of message (N3FE version 10, above), whose title and text then apply. A dropped
 connection anywhere before the world returns to login with KO's text 1601,
-"Disconnected from server" (KO-FINDINGS §1).
+"Disconnected from server" (KO-FINDINGS §1). Moradon's 1097 choice gives a banned
+or unavailable login and an empty name KO's title and wording, so its ban shows
+KO's blocked-account text with neither the ban's end nor its reason (the
+maintainer approved it, 2026-11-02), and a refused create KO's title over the
+server's wording (RQ-102, Q81); the panels keep the spec 02 wording.
 
 Without `front-end.bin`, or without a Discord realm config, the client draws
 today's panels; the play scripts and the suites use them.
@@ -268,7 +283,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 9 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, or no logo section) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 10 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, or no message section) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -351,7 +366,15 @@ CPU (`make test`):
    helpers (`client/render/front_logo.h`, `tests/front_end.cpp`) give 1264's
    12 s, each group's alpha in 255ths and the music from 1 s, faded over 4 s,
    and skip on a key stamped during the screen but not on one stamped before it
-   or a modifier right after a focus gain (Q82).
+   or a modifier right after a focus gain (Q82). RQ-102: the cook writes a
+   recipe's `messages` in the set's order, each title and text the recipe's
+   string or a synthetic encrypted text table's row, and refuses an unknown
+   message or key, an empty entry, a title without a `title` binding, a row the
+   table lacks, a table of other columns, a row id that is not a positive
+   integer, text outside printable ASCII or past 1024 bytes; the loader
+   refuses more than 8 messages, one outside the set or named twice, a replace
+   flag other than 0 or 1, a text that does not replace, a title or text out of
+   bounds and truncation.
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.
@@ -388,7 +411,9 @@ KO (`make live-ko`, needs `assets/ko`):
    `bgm_login.wav`, which restarts at 21.66 s, and `bgm_el_battle.wav`, which loops,
    RQ-083), and each streams audibly past its end; the logo names a third,
    `bless.wav`, from 1 s with its 4 s fade from group 2, which plays once
-   (RQ-101).
+   (RQ-101). The message box with a message the package titles differs from
+   the same message untitled only at the title (its rect and the few pixels its
+   glyphs stand past it; RQ-102).
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:
@@ -409,6 +434,8 @@ KO (`make live-ko`, needs `assets/ko`):
      clip 1 in over 0.6 s on its first frame, under the full spot, before it plays
      (RQ-076);
    - a kick returns to login with the operator's wording;
+   - the Discord failure and the kick show untitled, the name refusal under the
+     package's create failure title in the server's wording (RQ-102, Q81);
    - `character_slots` refuses a fourth character.
 
 Manual (`docs/manual-testing.md`, Linux and Windows):
@@ -418,4 +445,4 @@ Manual (`docs/manual-testing.md`, Linux and Windows):
 
 ## Open questions
 
-Q50–Q57, Q69, Q71, Q73, Q74 and Q82 in `QUESTIONS.md`.
+Q50–Q57, Q69, Q71, Q73, Q74, Q81 and Q82 in `QUESTIONS.md`.

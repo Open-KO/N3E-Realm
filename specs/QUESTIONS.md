@@ -872,6 +872,36 @@ caller.
 **Default taken (RQ-085):** (a): `front-end.json` sets `Text_title` to the empty
 string. A title per message would be wording the realm adds to a KO screen; revisit
 if a message needs one.
+**Revised (RQ-102):** the maintainer (2026-11-02): "as close to the original as
+possible". So (b), from KO's own callers: N3FE version 10 binds `Text_title` to a
+`title` action and carries, per kind of message (a closed engine set), a title and
+a text that replaces the realm's; `front-end.json`'s `messages` names each as a row
+of a KO text table, so a realm-config option (RQ-103) only swaps that data. Read in
+the 1264 binary (`specs/KO-FINDINGS.md` §9.2, RQ-102): 1264 titles its login
+answer's failures ("Connection failed.", row 2909) and its create failures
+("Failed creating character", row 1901), and posts a connection failure, a closed
+connection and a refused select untitled. The 1097 choice gives a banned login
+(row 2907), a login the realm cannot serve (row 2908, KO's catch-all) and an empty
+name (row 1905) KO's title and text, and a refused create KO's title over the
+server's wording, which does not say which of KO's reasons (rows 1911, 1912,
+1906) it is; every other message (the Discord flow's own, a failed or closed
+connection, a kick, a refused select) shows untitled in the realm's words
+(`content/front-end.md`, "Moradon", lists each beside its KO box). Three details:
+- the item's example, "Failed to connect to login server", is the OpenKO source's
+  `_DEBUG` build's title; the 1264 binary has no such string and posts a login
+  server it cannot reach untitled (`005bdf00` → `005f8ab0`, title `00674f68`, an
+  empty string), so the realm's `connect_failed` stays untitled;
+- the 1264 install's `Data/Texts_us.tbl` holds other texts at rows 2907–2909 (a
+  stat's description at 2909) than the rows 1264's login answer asks for; the
+  login titles and texts are the pinned tree's (1298's) rows, whose binary asks for
+  the same rows and whose table holds the login wording;
+- a ban in KO's box loses spec 02's end and reason ("Your account is blocked until
+  …: …"), KO's text naming neither; taken as KO's (the maintainer's guidance:
+  KO's look and feel, a question raised), so the KO screens no longer tell a
+  banned player when the ban ends or why. The panels keep spec 02's wording.
+  The maintainer, having seen it in a playtest (2026-11-02): "what you have now
+  for the ban message is fine", so KO's wording stands (spec 02 and spec 11 say
+  a KO front end's package wording may replace spec 02's).
 
 ### Q82 — 1264's logo screen before the login
 

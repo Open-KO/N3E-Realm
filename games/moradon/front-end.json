@@ -89,10 +89,18 @@
     "message": {
       "ui": "installer-1264:UI_US/el_messagebox_us.uif",
       "place": "centre",
-      "bindings": {"Text_Message": "message", "btn_ok": "ok"},
-      "text": {"Text_title": ""},
+      "bindings": {"Text_Message": "message", "Text_title": "title", "btn_ok": "ok"},
       "hidden": ["Edit_Common", "btn_yes", "btn_no", "btn_cancel"]
     }
+  },
+  "messages": {
+    "login_blocked": {"title": {"table": "Data/Texts_us.tbl", "row": 2909},
+                      "text": {"table": "Data/Texts_us.tbl", "row": 2907}},
+    "login_unavailable": {"title": {"table": "Data/Texts_us.tbl", "row": 2909},
+                          "text": {"table": "Data/Texts_us.tbl", "row": 2908}},
+    "create_name": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1901},
+                    "text": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1905}},
+    "create_refused": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1901}}
   },
   "strings": {
     "select_info": "Level: {level}\nSpecialty: {class}\nID: {name}",

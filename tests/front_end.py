@@ -722,10 +722,10 @@ MAX_VERTEX_MESH = fe.mesh_record([[i % 256, 0, i // 256, 0, 1, 0, 0, 0] for i in
 FOG_OFF = u(0) + f([0] * 5)
 
 
-def blob(version=9, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=10, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
-         logo=u(0)):
+         logo=u(0), messages=u(0)):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -743,7 +743,7 @@ def blob(version=9, slots=1, screen_data=None, font_index=None, light=None, plug
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
     out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
     out += character(select_clips, plug=plug) + character(plug=plug)
-    return out + music + logo + extra
+    return out + music + logo + messages + extra
 
 
 # --- the logo screen (version 9, RQ-101) ---------------------------------------
@@ -824,6 +824,86 @@ def logo_node_patched(index, offset, value):
     struct.pack_into("<I", data, at + offset, value)
     return bytes(data)
 
+
+# --- the message titles (version 10, RQ-102, Q81) ------------------------------
+
+import ko_tbl  # noqa: E402
+
+# A synthetic client text table (row id, text) as KO's Data/Texts_us.tbl is
+# laid out and encrypted; row 3 holds a byte outside ASCII.
+texts_plain = bytearray(ko_tbl.build(fe.TEXT_TYPES, [[1, "Failed"], [2, "Enter a name. "], [3, "caf?"]]))
+texts_plain[-1] = 0xE9
+TEXTS = Fixture({"Data/Texts.tbl": ko_tbl.encrypt(bytes(texts_plain)),
+                 "Data/Wide.tbl": ko_tbl.encrypt(ko_tbl.build([5, 7], [[1, "Failed"]]))})
+TITLED = {"bindings": {"text_msg": "message", "text_title": "title", "btn_ok": "ok"}}
+
+
+def messages(worded, bindings=TITLED, assets=TEXTS):
+    return fe.messages_section({"screens": {"message": bindings}, "messages": worded}, assets)
+
+
+row = lambda n, table="Data/Texts.tbl": {"table": table, "row": n}  # noqa: E731
+MESSAGES_OK, message_report = messages({"create_name": {"title": row(1), "text": row(2)},
+                                "create_refused": {"title": row(1)},
+                                "login": {"text": "Realm words."}})
+assert message_report == {"create_name": {"title": "Failed", "text": "Enter a name. "},
+                  "create_refused": {"title": "Failed", "text": None},
+                  "login": {"title": "", "text": "Realm words."}}, report
+# In MESSAGES order, whatever the recipe's: login (2), create_name (5), create_refused (6).
+assert MESSAGES_OK == (u(3) + u(2) + string("") + u(1) + string("Realm words.") +
+                       u(5) + string("Failed") + u(1) + string("Enter a name. ") +
+                       u(6) + string("Failed") + u(0) + string("")), MESSAGES_OK
+assert messages({}) == (u(0), {}) and fe.messages_section({"screens": {}}, None) == (u(0), {})
+# No title needs no `title` binding.
+assert messages({"login": {"text": "x"}}, bindings={"bindings": {}})[0] == u(1) + u(2) + string("") + u(1) + string("x")
+message_problems = {
+    "an unknown kind": dict(worded={"logo": {"title": "x"}}),
+    "an empty entry": dict(worded={"login": {}}),
+    "an unknown key": dict(worded={"login": {"title": "x", "colour": 1}}),
+    "a title without a title binding": dict(worded={"login": {"title": "x"}}, bindings={"bindings": {}}),
+    "a row the table lacks": dict(worded={"login": {"title": row(9)}}),
+    "a row outside ASCII": dict(worded={"login": {"title": row(3)}}),
+    "a table of other columns": dict(worded={"login": {"title": row(1, "Data/Wide.tbl")}}),
+    "a row id of 0": dict(worded={"login": {"title": row(0)}}),
+    "a row id as a string": dict(worded={"login": {"title": {"table": "Data/Texts.tbl", "row": "1"}}}),
+    "a missing table": dict(worded={"login": {"title": row(1, "Data/None.tbl")}}),
+    "a text of a control byte": dict(worded={"login": {"text": "a\tb"}}),
+    "a text past 1024 bytes": dict(worded={"login": {"text": "x" * 1025}}),
+    "a number": dict(worded={"login": {"title": 1901}}),
+}
+for reason, kw in message_problems.items():
+    try:
+        messages(**kw)
+    except (ValueError, KeyError):
+        continue
+    raise AssertionError("message cook accepted " + reason)
+# The recipe's tables are paths the choice's prefix check sees (RQ-084).
+assert ("messages.login.title.table", "installer-1264:Data/Texts_us.tbl") in fe.recipe_paths(
+    {"messages": {"login": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1}}}})
+print("PASS front-end message cook: titles and texts from a KO text table's rows or the recipe; %d refusals"
+      % len(message_problems))
+
+
+def message_raw(*entries, count=None):
+    """A version 10 message section: (kind, title, replaces, text) entries."""
+    out = u(len(entries) if count is None else count)
+    return out + b"".join(u(k) + string(t) + u(r) + string(x) for k, t, r, x in entries)
+
+
+MESSAGE_CASES = {
+    "ok-messages": blob(messages=MESSAGES_OK),
+    "ok-messages-every": blob(messages=message_raw(*((k, "t", 0, "") for k in range(len(fe.MESSAGES))))),
+    "bad-messages-nine": blob(messages=message_raw(*((k % len(fe.MESSAGES), "t", 0, "") for k in range(9)))),
+    "bad-message-kind": blob(messages=message_raw((len(fe.MESSAGES), "t", 0, ""))),
+    "bad-message-twice": blob(messages=message_raw((1, "t", 0, ""), (1, "u", 0, ""))),
+    "bad-message-replaces": blob(messages=message_raw((1, "t", 2, ""))),
+    "bad-message-text-unused": blob(messages=message_raw((1, "t", 0, "x"))),
+    "bad-message-title-byte": blob(messages=u(1) + u(1) + u(1) + b"\x01" + u(0) + string("")),
+    "bad-message-title-long": blob(messages=message_raw((1, "x" * 1025, 0, ""))),
+    "bad-message-text-long": blob(messages=message_raw((1, "", 1, "x" * 1025))),
+    "bad-message-truncated": blob(messages=MESSAGES_OK[:-4]),
+    "bad-messages-missing": blob(messages=b""),
+}
 
 ONE_TRACK = u(1) + track() + u(0) * 3 + u(fe.NO_MUSIC)
 LOGO_CASES = {
@@ -927,6 +1007,9 @@ cases = {
     # music and flags.
     "bad-version-8": blob(version=8),
     **LOGO_CASES,
+    # RQ-102 (version 10): each message's title and wording.
+    "bad-version-9": blob(version=9),
+    **MESSAGE_CASES,
     "ok-textures-256": blob(more_textures=256 - len(textures.list) - 1),
     "bad-textures-257": blob(more_textures=257 - len(textures.list) - 1),
     "ok-zone": blob(hall=0, zone=u(3) + zone_mesh() + zone_mesh(fe.CUT_ZERO | fe.UNLIT) +
@@ -1015,5 +1098,15 @@ try:
         assert reason in line, (name, line)
     line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-zone-truncated:"))
     assert "fog" not in line, line
+    # RQ-102: the loaded messages, by FrontMessage index; the message refusals
+    # are the section's own.
+    worded = [l for l in run.stdout.splitlines() if l.startswith("message ok-messages: ")]
+    assert worded == ["message ok-messages: 2 title='' replaces=1 text='Realm words.'",
+                      "message ok-messages: 5 title='Failed' replaces=1 text='Enter a name. '",
+                      "message ok-messages: 6 title='Failed' replaces=0 text=''"], worded
+    for name in MESSAGE_CASES:
+        if name.startswith("bad-message-") and name != "bad-message-truncated":
+            line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+            assert "front end message" in line or "front end text" in line or "count" in line, line
 finally:
     shutil.rmtree(work)

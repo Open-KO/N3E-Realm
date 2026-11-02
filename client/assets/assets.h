@@ -843,7 +843,7 @@ inline constexpr size_t kFrontEndFile = 64 * 1024 * 1024;
 enum class FrontAction : uint32_t {
   none, login, exit, login_group, realm_group, realm_list, realm_connect, notice, select_prev,
   select_next, back, char_info, create_confirm, name_field, char_view, class_desc, progress,
-  version, info, message, ok, count
+  version, info, message, ok, title, count
 };
 enum class FrontScreen : uint32_t { login, select, create, loading, message, count };
 enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };
@@ -933,6 +933,25 @@ struct FrontLogo {
   uint32_t music = kNone, fade_group = kNone, flags = 0;
   float music_delay = 0, fade = 0;
 };
+// Version 10 (RQ-102, Q81): the messages the front end raises in its message
+// box, a closed engine set the package words. Each may carry a title (the
+// node bound to `title`) and a text that replaces the client's own wording;
+// a message the package does not name shows untitled in the client's words.
+enum class FrontMessage : uint32_t {
+  connect_failed,     // the realm cannot be reached after a login press
+  disconnected,       // the connection closed (a drop, a kick)
+  login,              // the Discord flow's other failures and notes
+  login_blocked,      // the realm refused the login: the account is banned
+  login_unavailable,  // the realm refused the login: a dependency is down
+  create_name,        // create with an empty name
+  create_refused,     // the realm refused a create
+  select_refused,     // the realm refused a select
+  count
+};
+struct FrontMessageText {
+  std::string title, text;
+  bool replaces = false;  // `text` replaces the client's wording
+};
 struct FrontEnd {
   uint32_t character_slots = 0, canvas_width = 0, canvas_height = 0;
   std::vector<HudTexture> textures;
@@ -962,6 +981,8 @@ struct FrontEnd {
   std::array<uint32_t, 4> screen_music{kNoMusic, kNoMusic, kNoMusic, kNoMusic};
   // Version 9 (RQ-101): the logo screen, when the package has one.
   std::optional<FrontLogo> logo;
+  // Version 10 (RQ-102): each message's title and wording, by FrontMessage.
+  std::array<FrontMessageText, size_t(FrontMessage::count)> messages;
 };
 FrontEnd load_front_end(const Release &release);
 } // namespace n3e

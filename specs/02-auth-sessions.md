@@ -172,7 +172,8 @@ application. Implemented in `client/network/discord_login.{h,cpp}`.
 
 1. If `session.json` exists for this realm host and is not expired: send `SessionLogin`.
    On `expired`/`revoked`: delete the file, fall through. On `banned`: show the reason
-   and until-time; stop.
+   and until-time; stop. (On a KO front end the package's wording may replace this
+   text: the 1097 choice's, KO's blocked-account box, has neither; Q81.)
 2. Generate PKCE `code_verifier` (43–128 chars) and `S256` challenge; random `state`.
 3. Bind `127.0.0.1` on the first free port of a fixed list (`49152–49155`; each
    `http://127.0.0.1:<port>/callback` is registered in the Discord application).
@@ -213,7 +214,10 @@ without it; Windows `%APPDATA%` in M4b), mode `0600`, written through a temporar
 and `rename`, `{"token": "<base64url>", "expires_at": "<rfc3339>", "discord_name": "…"}`.
 A file whose `expires_at` has passed is not sent. A kick shows "You were disconnected
 by an operator: <reason>." when the connection closes; a ban ends the flow with "Your
-account is blocked until <when|further notice>: <reason>." and deletes the file.
+account is blocked until <when|further notice>: <reason>." and deletes the file. On a
+KO front end the package's wording may replace that text; the 1097 choice's (KO's
+own, RQ-102) has neither the end nor the reason (Q81; the maintainer approved KO's
+wording, 2026-11-02).
 
 `client_label` = hostname, truncated to 64 bytes, control characters stripped.
 
@@ -227,7 +231,11 @@ account is blocked until <when|further notice>: <reason>." and deletes the file.
   "Disconnected from server."; kick → "You were disconnected by an operator: <reason>.";
   ban → "Your account is blocked until <when|further notice>: <reason>."; version/content
   mismatch → "Your client is version X; the realm requires Y. Close this window and run
-  the launcher to update."
+  the launcher to update." On the KO screens (spec 11) the package may title and
+  reword each kind of message (RQ-102, Q81): Moradon's 1097 choice shows a ban in
+  KO's own box, "Connection failed." over KO's blocked-account text, without the
+  end or the reason (the maintainer approved it, 2026-11-02). The panels keep the
+  wording above.
 - `prompt=none` means a player already logged into Discord in their browser sees no
   consent screen on re-login; Discord still shows it the first time. After a logout the client asks
   with `prompt=consent`, so Discord shows that screen and its account, which the

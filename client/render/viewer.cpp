@@ -2415,19 +2415,24 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           // KO's message box.
           if (discord_flow->alerts() != front_alerts) {
             front_alerts = discord_flow->alerts();
-            if (front_active()) front->show_message(discord_flow->status());
+            using Alert = n3e::login::Flow::Alert;
+            const auto alert = discord_flow->alert();
+            const auto kind = alert == Alert::blocked       ? n3e::FrontMessage::login_blocked
+                              : alert == Alert::unavailable ? n3e::FrontMessage::login_unavailable
+                                                            : n3e::FrontMessage::login;
+            if (front_active()) front->show_message(kind, discord_flow->status());
           }
           if (front_login && !world.connected && world.status != "Connecting") {
             std::string why = world.status;
             if (const auto bar = why.find(" | F12"); bar != std::string::npos) why.resize(bar);
             front_login = false;
-            front->show_message(why);
+            front->show_message(n3e::FrontMessage::connect_failed, why);
           }
           if (front_connected && !world.connected) {
             const std::string why = world.disconnect.empty() ? "Disconnected from server" : world.disconnect;
             reset_connection();
             front->reset();
-            front->show_message(why);
+            front->show_message(n3e::FrontMessage::disconnected, why);
           } else {
             front_connected = world.connected;
             if (discord_flow->phase() == n3e::login::Flow::Phase::done) front->logged_in();

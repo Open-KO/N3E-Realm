@@ -615,6 +615,32 @@ key pressed during the screen skips it (not one queued before its first frame or
 a modifier SDL reports held on a focus gain), the realm connection starts with
 the login, and a message raised during the logo shows on the login (Q82).
 
+**The message titles (RQ-102, 2026-11-02).** The maintainer: "as close to the
+original as possible"; Q81 had left every realm message untitled. Read in §9.1's
+1264 image (`ko1264-unpacked.exe`) in the same Ghidra project (`build/ghidra/rq096`,
+`-readOnly`, `AuditReference.java` `strings`, `refs` and `decompile`; output under
+`build/ghidra/rq102/`, not committed), with `objdump` for the text-id pushes and
+the argument order at each call, the same pushes in 1298's `KnightOnLine.exe`
+(`objdump`), and the 1264 install's and the pinned tree's `Data/Texts_us.tbl`
+through `ko_tbl` (nothing committed from either):
+
+| Observation | Where | Label |
+|---|---|---|
+| **1264 reads every text from `Data\Texts`.** Its text lookup (`005d2350`) starts the result as the empty string (`00674f68`, zero bytes) and finds the row by id in the table `007aced8` holds; the image has no string-table resource. `005f7f80` is CGameProcedure::MessageBoxPost: it passes (result, message, title, style, behaviour) to the manager's (`0050c730`) | `005d2350`, `005f7f80`, `00674f68`; the image's resources | binary |
+| **A login server it cannot reach is posted untitled.** The login Init (`005bdf00`) posts row 6609 ("Connecting.  Please wait.") untitled, tries each `Server.ini` address in a random order on port 15100 (`0x3afc`) and, when none answers, calls ReportServerConnectionFailed (`005f8ab0`) with "LogIn Server": row 2905 formatted with the name and the error, the title `00674f68` (empty). With no address it posts "No server list" under "LogIn Server fail". The OpenKO source's "Failed to connect to login server" title is its `_DEBUG` build's only (`GameProcLogIn_1098.cpp` `Init`); 1264 has no such string | `005bdf00`, `005f8ab0`; strings `0066df7c`–`0066df9c` | binary; source |
+| **A closed connection and a refused select are untitled.** ReportServerConnectionClosed (`005f8cd0`: row 1601) and CharacterSelectFailed (`004436a0`: row 6066) copy `00674f68` as the title | `005f8cd0`, `004436a0` | binary |
+| **The login answer's failures are titled row 2909.** MsgRecv_AccountLogIn (`005bf010`) posts, by the answer's result byte, row 2903 or 2904 (2), 6120 (3), 2907 (4, `005bf30c`), 2902 (5), 2910 (11), 2911 (12) and 2908 for any other (`005bf7a2`), each under row 2909 (`005bf31b` and the like); the message is the call's second argument and the title its third. 1298's binary asks for the same rows (`5f7e6f` row 2907, `5f7e82` title 2909, `5f81f1` row 2908) | `005bf010`; 1298 `KnightOnLine.exe` | binary |
+| **The 1264 install's table does not hold those rows' login wording.** Its `Data/Texts_us.tbl` (1,160 rows) has a stat's description at 2909, "Karus" at 2907, "Unconfirmed nation" at 2908 and no "Connection failed." anywhere; the pinned tree's (1298's, 1,557 rows) has "Connection failed." at 2909, "Your account is currently blocked. Please contact customer support." at 2907 and "There is an error in the selected server. " at 2908, as the source's `text_resources.h` names them | both `Data/Texts_us.tbl` (decrypted, `ko_tbl`) | local-asset |
+| **The create failures are titled row 1901.** ReportErrorCharacterCreate (`0043a820`) maps the code to row 1911 (1), 1907 (2), 1912 (3), 1902 (4), 1906 (5), 1905 (6), 1908 (7), 1910 (8), 1904 (9), 1913 (10) and 1915 otherwise, under row 1901; its caller MsgSendCharacterCreate (`0043a340`) passes 6 for an empty name and 5 for a forbidden letter, and the server's create answer passes its code (`0043aa9c`). The 1264 install's rows 1901, 1905, 1906, 1911 and 1912 are the source's English ("Failed creating character", "Please enter your character ID. ") | `0043a820`, `0043a340`; the 1264 install's `Data/Texts_us.tbl` | binary; local-asset |
+
+**Decides (RQ-102):** the 1097 choice titles and words, from KO's own rows, the
+realm messages that stand for a box 1264 titles: a banned login (2909 over 2907)
+and one the realm cannot serve (2909 over 2908, KO's catch-all), from the pinned
+tree's table; an empty name (1901 over 1905) and a refused create (1901 over the
+server's wording, which names none of KO's reasons), from the 1264 install's. The
+rest stay untitled in the realm's words (`content/front-end.md`, "Moradon";
+QUESTIONS Q81). `front-end.bin` version 10's message section carries them.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -635,6 +661,6 @@ notes.
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |
 | Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. §9.2 (RQ-085): the 1097 choice's layouts are the 1264 install's, its message box and loading 1264's. |
 | Q82 | §9.2 (RQ-101): 1264's logo procedure runs first, once a process: three groups fading in, holding and fading out on black over 12 s, `Snd\bless.wav` from 1 s faded out over 4 s from the third, any key skipping to the login, the cursor hidden; the 1097 choice shows it (N3FE version 9). |
-| Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. |
+| Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. §9.2 (RQ-102): 1264 titles its login answer's and its create failures; the 1097 choice gives the realm's matching messages KO's title and wording (N3FE version 10) and leaves the rest untitled. |
 | Q75 | §9.1 (RQ-096): 1264's login tick keeps 1097's timer (`007ac9d0`, written only by the tick), so in both a return to the login is silent until it passes 21.66 s; the realm now does the same (the restart period's clock is the process's). |
 | Q72 | §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077): 1097's arrows also start a turn from state 3, during the start clip; the realm ignores them then. |

@@ -40,13 +40,19 @@ struct AudioMixer {
   // 1298 005f68e0: the login keeps a BGM of the same file, even one that
   // has ended), starts another from its first frame and stops on nullptr
   // (005fea70 releases the BGM).
-  // RQ-096 (Q75): a restarting track keeps its clock for the process. The
-  // clock runs only while the track is the screen's (it counts the frames
-  // mixed for it); a stream that leaves keeps its phase, and the next stream
-  // of that track starts at it, silent until the period, as KO 1097's and
-  // 1264's login Init creates the login track again but only the login
-  // tick's own timer (006e0344, 007ac9d0) plays it. At most kMusicTracks
-  // phases are kept, those of tracks no longer loaded dropped first.
+  // RQ-105 (Q75 (a), maintainer 2026-11-02): every stream of a new track
+  // starts at its first sample, and a restart period counts from that start,
+  // so a return to the login plays its track at once.
+  // carry_music_clock (off by default; RQ-103's realm-owner option, which
+  // sets it before the first play_music): RQ-096's process clock instead. A
+  // restarting track keeps its clock for the process; the clock runs only
+  // while the track is the screen's (it counts the frames mixed for it); a
+  // stream that leaves keeps its phase, and the next stream of that track
+  // starts at it, silent until the period, as KO 1097's and 1264's login Init
+  // creates the login track again but only the login tick's own timer
+  // (006e0344, 007ac9d0) plays it. At most kMusicTracks phases are kept,
+  // those of tracks no longer loaded dropped first.
+  bool carry_music_clock=false;
   std::unique_ptr<MusicStream> music;
   // RQ-101: the music's gain under the voices' (1, or a fade-out the screen
   // sets each frame: 1264's logo fades its track, 004371a0).
@@ -66,9 +72,9 @@ struct AudioMixer {
   }
   void play_music(const std::shared_ptr<const MusicTrack>&track){
     if(music&&music->track()==track)return;
-    keep_music_phase();
+    if(carry_music_clock)keep_music_phase();
     if(!track){music.reset();return;}
-    music=std::make_unique<MusicStream>(track,music_phase(track));
+    music=std::make_unique<MusicStream>(track,carry_music_clock?music_phase(track):0);
   }
   bool music_playing()const{return music&&!music->ended();}
   bool play(const Audio&data,const std::string&key,double start,V position={},bool positional=false,uint64_t request=0,bool effect=false){

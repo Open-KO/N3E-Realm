@@ -11,7 +11,9 @@
 // tick, 005248f5-00524957). RQ-096 (Q75): that clock is the track's for the
 // process, as KO 1097's and 1264's login timer is (006e0344, 007ac9d0, which
 // no Init resets): a stream can start at a saved phase, silent until the
-// period, and reports its phase for the next one. No file access, threads or
+// period, and reports its phase for the next one. That applies only when
+// AudioMixer::carry_music_clock is on (off by default since RQ-105, Q75 (a):
+// otherwise every stream starts at phase 0). No file access, threads or
 // device calls.
 #include <cstddef>
 #include <cstdint>

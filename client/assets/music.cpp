@@ -73,7 +73,8 @@ MusicStream::MusicStream(std::shared_ptr<const MusicTrack> track, uint64_t phase
   mp3dec_init(&decoder->dec);
   step = double(source->rate) / kRate;
   if (source->restart > 0) restart_frames = std::max<uint64_t>(1, uint64_t(std::llround(double(source->restart) * kRate)));
-  // RQ-096 (Q75): part way into the period, KO's login tick has not played
+  // RQ-096 (Q75, AudioMixer::carry_music_clock, off by default since
+  // RQ-105): part way into the period, KO's login tick has not played
   // the new stream yet (it plays only when its timer is 0): silent until the
   // period, then mix() rewinds to the first sample.
   if (restart_frames && phase > 0) {

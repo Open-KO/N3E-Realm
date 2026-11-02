@@ -100,12 +100,31 @@ void pcm_checks(const std::shared_ptr<n3e::MusicTrack>&mpeg){
   // The mixer keeps a restarting stream across its restarts.
   n3e::AudioMixer m;auto r=pcm_track(1000,48000,1,false,0.1f);m.play_music(r);auto*stream=m.music.get();
   for(int i=0;i<10;++i)m.mix(i*.1,4800,{});need(m.music.get()==stream&&m.music_playing()&&stream->restarts()==9);
-  // RQ-096 (Q75): the restart clock is the track's for the process, as KO
-  // 1097's and 1264's login timer (006e0344, 007ac9d0) that no Init resets.
-  // The first entry plays at once; the clock stops while another screen's
-  // track plays; back on the track's screen, the track is silent until the
-  // clock reaches the period, then starts at its first sample.
-  {n3e::AudioMixer m;auto login=pcm_track(1000,48000,1,false,0.1f),other=pcm_track(4800,48000,1,true);
+  // RQ-105 (Q75 (a), maintainer 2026-11-02), the default: every entry starts
+  // a restarting track at its first sample and its period counts from there.
+  // The first entry plays at once; a return after another screen's track
+  // plays at once too, and restarts a period after that return; nothing is
+  // kept for the track.
+  {n3e::AudioMixer m;need(!m.carry_music_clock);
+   auto login=pcm_track(1000,48000,1,false,0.1f),other=pcm_track(4800,48000,1,true);
+   m.play_music(login);auto out=m.mix(0,2400,{});need(m.music->restarts()==0&&near(out[2*7],.6f*7*200/32768.f));
+   need(m.music->period_phase()==2400);
+   m.play_music(other);for(int i=0;i<3;++i)m.mix(0,4800,{});need(m.music_phases.empty());
+   m.play_music(login);need(m.music->period_phase()==0&&m.music_playing());
+   out=m.mix(0,4800,{});
+   need(near(out[0],0)&&near(out[2*7],.6f*7*200/32768.f)&&near(out[2*999],.6f*99*200/32768.f)&&out[2*1000]==0);
+   need(m.music->restarts()==0&&m.music->period_phase()==4800);
+   out=m.mix(0,8,{});need(m.music->restarts()==1&&near(out[2*7],.6f*7*200/32768.f));
+   // The world (no track) between keeps nothing either.
+   m.play_music(nullptr);need(!m.music&&m.music_phases.empty());
+   m.play_music(login);out=m.mix(0,8,{});need(m.music->restarts()==0&&near(out[2*7],.6f*7*200/32768.f));}
+  // carry_music_clock (RQ-096, RQ-103's option): the restart clock is the
+  // track's for the process, as KO 1097's and 1264's login timer (006e0344,
+  // 007ac9d0) that no Init resets. The first entry plays at once; the clock
+  // stops while another screen's track plays; back on the track's screen,
+  // the track is silent until the clock reaches the period, then starts at
+  // its first sample.
+  {n3e::AudioMixer m;m.carry_music_clock=true;auto login=pcm_track(1000,48000,1,false,0.1f),other=pcm_track(4800,48000,1,true);
    m.play_music(login);auto out=m.mix(0,2400,{});need(m.music->restarts()==0&&near(out[2*7],.6f*7*200/32768.f));
    need(m.music->period_phase()==2400);
    m.play_music(other);for(int i=0;i<3;++i)m.mix(0,4800,{});need(m.music->period_phase()==0&&m.music_phases.size()==1);
@@ -119,12 +138,12 @@ void pcm_checks(const std::shared_ptr<n3e::MusicTrack>&mpeg){
    m.play_music(other);out=m.mix(0,100,{});need(m.music->period_phase()==0&&near(out[2*7],.6f*7*200/32768.f));
    m.play_music(login);m.mix(0,2399,{});need(m.music->restarts()==0);m.mix(0,2,{});need(m.music->restarts()==1);}
   // The phases kept are bounded by the track count; unloaded tracks go first.
-  {n3e::AudioMixer m;std::vector<std::shared_ptr<n3e::MusicTrack>> tracks;
+  {n3e::AudioMixer m;m.carry_music_clock=true;std::vector<std::shared_ptr<n3e::MusicTrack>> tracks;
    for(unsigned i=0;i<6;++i){tracks.push_back(pcm_track(100,48000,1,false,1));m.play_music(tracks.back());m.mix(0,10,{});}
    m.play_music(nullptr);need(m.music_phases.size()==n3e::kMusicTracks&&m.music_phase(tracks[5])==10&&m.music_phase(tracks[0])==0);
    tracks[3].reset();m.play_music(pcm_track(100,48000,1,false,1));m.mix(0,5,{});m.play_music(nullptr);
    need(m.music_phases.size()==n3e::kMusicTracks&&m.music_phase(tracks[2])==10&&m.music_phase(tracks[4])==10);}
-  std::cout<<"PASS music pcm: 16-bit samples once and looping, 22,050 Hz resampling, mono, restart periods and their process clock (Q75), loader checks\n";
+  std::cout<<"PASS music pcm: 16-bit samples once and looping, 22,050 Hz resampling, mono, restart periods from each entry and the optional process clock (Q75), loader checks\n";
 }
 void music_checks(){
   const auto tone=mp3_frame();need(tone.size()==96);

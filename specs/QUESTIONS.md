@@ -765,6 +765,15 @@ while a screen naming the track shows, the first entry plays at once, and a retu
 to the login is silent until the clock next reaches 21.66 s, then starts the track
 at its first sample. No format change: the restart period's bytes are as before,
 its clock is now the process's.
+**Decided (RQ-105, maintainer 2026-11-02 playtest, on the silent return: "we should
+fix that, seems like a bug to me"):** (a), superseding RQ-096's (b). Every entry to
+the login starts `bgm_login.wav` at once from its first sample, and its 21.66 s
+restart period counts from that start (`client/render/audio.h`, content/front-end.md
+section 9). 1097's and 1264's carried clock stays in the client behind one switch,
+`AudioMixer::carry_music_clock`, off by default and set by nothing yet: RQ-103 offers
+it as a realm-owner option. Turning it on needs no format change in the mixer;
+RQ-103 decides where the option is carried to the client (a `front-end.bin` field
+would be a format change of its own).
 
 ### Q76 — How a front-end recipe names its input trees, and when an install's files are checked
 

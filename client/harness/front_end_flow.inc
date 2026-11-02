@@ -23,6 +23,13 @@
 //   later. RQ-076, after ENTER: `start`, the first frame on the start clip;
 //   `blend`, 0.3 s later, still blending; `started`, a second after `start`,
 //   the clip playing)
+//   FRONT_FLOW turn phase=P slot=S angle=A low=L high=H
+//   (RQ-067: after `rest`, before ENTER, the arrows turn the camera LEFT to
+//   slot 1, RIGHT back to the centre, RIGHT to slot 2 and LEFT back; a line on
+//   the first frame each turn has ended, phases `left`, `centre`, `right`,
+//   `back`: the slot the camera is at, its turn there (View::front_turn,
+//   radians, positive to the left) and the lowest and highest turn any frame
+//   showed since the press)
 {
   static const char *flow_names = std::getenv("N3E_TEST_FRONT_FLOW");
   static std::vector<std::string> names;
@@ -86,7 +93,10 @@
       // 0.3 and 0.6 s.
       static int phase = 0;
       static uint64_t phase_at = 0;
+      static float low = 0, high = 0;
       const auto pose = front->front_pose();
+      const auto turn = front->front_turn();
+      low = std::min(low, turn.angle), high = std::max(high, turn.angle);
       auto pointer = [&](float y) {
         int lw = 0, lh = 0;
         SDL_GetWindowSize(w, &lw, &lh);
@@ -102,6 +112,16 @@
                   << " spot=" << pose.spot << " info=" << pose.info << std::endl;
       };
       auto next = [&] { ++phase, phase_at = now_ms; };
+      // RQ-067: an arrow once the camera has come to rest on `slot`.
+      auto turned = [&](const char *name, int slot, SDL_Keycode then) {
+        if (turn.slot != slot || turn.focus != slot) return;
+        std::cout << "FRONT_FLOW turn phase=" << name << " slot=" << turn.slot << " angle=" << turn.angle
+                  << " low=" << low << " high=" << high << std::endl;
+        low = high = turn.angle;
+        next();
+        if (then == SDLK_RETURN) last_push = now_ms;
+        key(then);
+      };
       if (phase == 0) {
         pointer(.2f);
         next();
@@ -125,15 +145,23 @@
       } else if (phase == 6 && now_ms - phase_at > 1500) {
         report("rest");
         next();
-        last_push = now_ms;
-        key(SDLK_RETURN);
-      } else if (phase == 7 && pose.clip == 1) {
+        low = high = turn.angle;
+        key(SDLK_LEFT);
+      } else if (phase == 7) {
+        turned("left", 1, SDLK_RIGHT);
+      } else if (phase == 8) {
+        turned("centre", 0, SDLK_RIGHT);
+      } else if (phase == 9) {
+        turned("right", 2, SDLK_LEFT);
+      } else if (phase == 10) {
+        turned("back", 0, SDLK_RETURN);
+      } else if (phase == 11 && pose.clip == 1) {
         report("start");
         next();
-      } else if (phase == 8 && now_ms - phase_at > 300) {
+      } else if (phase == 12 && now_ms - phase_at > 300) {
         report("blend");
         next();
-      } else if (phase == 9 && now_ms - phase_at > 700) {
+      } else if (phase == 13 && now_ms - phase_at > 700) {
         report("started");
         next();
       }

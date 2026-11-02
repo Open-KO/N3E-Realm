@@ -8,6 +8,7 @@
 #include "platform/gl.h"
 #include "platform/gl_load.h"
 #include "render/animation.h"
+#include "render/select_turn.h"
 #include "wire.pb.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -45,6 +46,13 @@ struct FrontPose {
   uint32_t clip = 0;
   float time = 0, length = 0, blend = 1, theta = 0;
   bool spot = false, info = false;
+};
+// The select camera as the last frame showed it (a test hook): the slot it is
+// at, the slot in focus (they differ while it turns) and its turn from the
+// scene camera's eye (radians, positive to the left; select_turn).
+struct FrontTurn {
+  int slot = 0, focus = 0;
+  float angle = 0;
 };
 
 namespace detail {
@@ -247,6 +255,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // The character in front as the last select frame showed it; the test
   // client checks the hover, its blends, the spot and the info text.
   FrontPose front_pose() const { return front_shown; }
+  FrontTurn front_turn() const { return turn_shown; }
   const std::string &message_text() const { static const std::string none; return message ? *message : none; }
   // The server answered CreateCharacter: a longer list is a success (the
   // new character takes its slot), a refusal is shown in a message box.
@@ -255,7 +264,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       pending_create = false;
       enter_select();
       focus = std::min<int>(list.characters_size() - 1, int(fe.slots.size()) - 1);
-      angle = target_angle();
+      face(focus);
     }
     known = list.characters_size();
   }
@@ -288,8 +297,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     pending_create = false;
     slide = realm_height;
     reset_hall();
-    focus = 0;
-    angle = target_angle();
+    face(0);
   }
   struct Drawn {
     size_t which;                  // 0 intro, 1 select, 2 create
@@ -420,8 +428,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::array<float, 2> pointer{-1, -1};
   FrontAction pressed = FrontAction::none;
   float realm_height = 0, slide = 0;
-  int focus = 0, choosing = -1, known = 0;
+  // The select camera: the slot it is at and the slot in focus, which is the
+  // one it turns to from the press on (1097: CGameProcCharacterSelect's
+  // positions +0x2c4 and +0x2c8, the selected index 006e04d0), and its turn
+  // from the scene camera's eye (select_turn).
+  int focus = 0, at_slot = 0, choosing = -1, known = 0;
   float angle = 0;
+  FrontTurn turn_shown;
   double last_frame = -1;
   // The select hall as CGameProcCharacterSelect keeps it (1097 binary,
   // specs/KO-FINDINGS.md 8.1): each slot's clip player, the spot's theta
@@ -486,9 +499,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (s < int(fe.slots.size())) order.push_back(s);
     return order;
   }
-  float target_angle() const {
-    const auto &at = fe.select.camera.at, &eye = fe.slots[focus].eye;
-    return std::atan2(eye[0] - at[0], eye[2] - at[2]);
+  float slot_angle(int slot) const {
+    const auto &c = fe.select.camera;
+    return select_turn(c.eye, c.at, fe.slots[size_t(slot)].eye);
+  }
+  // The camera at rest on the slot, which is in focus.
+  void face(int slot) {
+    focus = at_slot = slot;
+    angle = slot_angle(slot);
   }
   // Whether node i draws in this state: its group's state, its parent.
   std::vector<bool> visible(FrontScreen screen) const {
@@ -592,14 +610,17 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     case FrontAction::realm_connect:
       if (state == Screen::realms && slide >= realm_height) {
         enter_select();
-        focus = 0;
-        angle = target_angle();
+        face(0);
         out.command = Command::enter_realm;
       }
       break;
     case FrontAction::select_prev:
     case FrontAction::select_next: {
-      if (choosing >= 0) break;
+      // DoJobLeft/DojobRight (1097: 0043e310, 0043e380, reached from the
+      // arrow buttons and DIK_LEFT/DIK_RIGHT, 00440690): nothing while the
+      // camera turns or at the end of the row; otherwise the neighbour is in
+      // focus at once and the camera turns to it (state 1).
+      if (choosing >= 0 || turning()) break;
       const auto order = slot_order();
       int at = int(std::find(order.begin(), order.end(), focus) - order.begin());
       at = std::clamp(at + (action == FrontAction::select_next ? 1 : -1), 0, int(order.size()) - 1);
@@ -744,7 +765,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
            y >= std::trunc(h * kFrontRect[1]) && y < std::trunc(h * kFrontRect[3]);
   }
   // The camera still turning to the slot in focus (1097: state 1).
-  bool turning() const { return std::abs(target_angle() - angle) > 1e-4f; }
+  bool turning() const { return at_slot != focus; }
   const Scene &clip_scene(size_t scene, size_t clip) const {
     return clips[scene][std::min(clip, clips[scene].size() - 1)];
   }
@@ -821,7 +842,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     draw_character(0, pose(0, 0, now, true), vp, detail::identity());
   }
   // CGameProcCharacterSelect: the hall, then each slot's character, the
-  // camera turning about `at` to the slot in focus. At rest (1097: state 2,
+  // camera turning about `at` to the slot in focus (select_turn_tick; the
+  // tick the turn ends is still a turning tick, as 0043e4e0 runs no state-2
+  // proc on it). At rest (1097: state 2,
   // DoProcPreselect 0043f280, every tick) the character in front plays the
   // hover clip once while the pointer is in the centre rect and the rest clip
   // (dummy, the hover clip's first frame) otherwise, each with its own blend
@@ -834,13 +857,12 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // the clip's first frame, then the clip, whose end (IsAnimEnd) comes after
   // both.
   void hall(int width, int height, double dt) {
-    const float goal = target_angle();
-    float d = goal - angle;
-    angle += std::clamp(d, -float(dt) * 1.5f, float(dt) * 1.5f);
+    const bool rest = !turning();
+    if (!rest && select_turn_tick(angle, slot_angle(at_slot), slot_angle(focus), float(dt))) at_slot = focus;
     const float widest = fe.slots[focus].spot.theta;
     if (choosing >= 0)
       players.at(size_t(choosing)).elapsed += float(dt);
-    else if (!turning()) {
+    else if (rest) {
       const bool over = in_front();
       if (focus < characters_shown()) {
         set_clip(players.at(size_t(focus)), over ? kHover : kRest, -1);
@@ -852,9 +874,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     } else
       spot_on = false;
     const auto &c = fe.select.camera;
-    const float radius = std::hypot(c.eye[0] - c.at[0], c.eye[2] - c.at[2]);
-    const V eye{c.at[0] + radius * std::sin(angle), c.eye[1], c.at[2] + radius * std::cos(angle)};
-    const auto vp = view_projection(c, eye, width, height);
+    turn_shown = {at_slot, focus, angle};
+    const auto vp = view_projection(c, select_eye(c.eye, c.at, angle), width, height);
     glEnable(GL_DEPTH_TEST);
     glUseProgram(lit);
     glUniform1i(glGetUniformLocation(lit, "tex"), 0);

@@ -80,9 +80,13 @@ address mode); the font atlases and the moon linear.
   ambient, position, direction (3 reals each), range (0, 1e8], falloff,
   attenuation 0–2 (non-negative, sum above 0), theta, phi: D3DLIGHT9's fields.
   The client lights as Direct3D 9's fixed function does, without specular.
-- Slot: position, yaw (radians, engine space), the camera eye that faces the
-  slot (the scene camera's `at` and up apply), and the slot's spot light (one
-  light record). The spot's theta is the widest it opens; the client widens it
+- Slot: position, yaw (radians, engine space), the camera eye at which the
+  camera's turn to the slot ends (the scene camera's `at` and up apply; slot 0's
+  is the scene camera's own eye), and the slot's spot light (one light
+  record). The client turns the scene camera's eye about the vertical through
+  `at`, the short way, at KO's 1.2 rad a second; a turn to another slot ends on
+  the first frame past that slot's eye, and a turn back to slot 0 ends on its
+  eye (1097: `0043e4e0`, below). The spot's theta is the widest it opens; the client widens it
   from 0 at the select scene's rate while the pointer is on the character in
   front and narrows it at that rate otherwise, and the spot is off at 0
   (1097: `0043f280`, below).
@@ -162,7 +166,18 @@ is where create draws the character.
   info text (`text00`, `select_info` or, for an empty slot, `select_hint`:
   KO's 1201 and 1202) shows only while the pointer is there. While the camera
   turns nothing is ticked, the spot is off (`0043b550` turns every light off
-  each tick) and keeps its theta for the next slot. ENTER or a click starts
+  each tick) and keeps its theta for the next slot. The turn (RQ-067,
+  `specs/KO-FINDINGS.md` §8.2, binary): LEFT, RIGHT or the arrow buttons put
+  the neighbour in focus at once (left to right 1, 0, 2; nothing at the end of
+  the row or while the camera turns, `0043e310`, `0043e380`), and the eye turns
+  about `at` by 1.2 rad a second, a check before each step (`0043e4e0`). A
+  side slot's `turn_end` is the cosine 1097's check ends the turn below: the
+  eye turned a further 0.01 rad, against the camera's own eye, both from `at`
+  (`0043dc50` left 0.75, `0043dfb0` right 0.77, Karus); the cook puts the
+  slot's eye where that check first ends it, so the turn stops on the first
+  frame past it, where the last step left it. Back to the centre the turn ends
+  once the eye has reached or passed the camera's own and is put back on it.
+  The frame that ends a turn is still a turning frame. ENTER or a click starts
   only at rest, never while the camera turns or the start clip plays (the
   click: `0043b550` outside state 1, with `PtInRect` on the rect truncated to
   whole pixels; the hover wants the pointer strictly inside, `0043f280`; the

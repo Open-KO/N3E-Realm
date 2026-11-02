@@ -521,21 +521,56 @@ def intro_scene(assets, textures, config, work):
     return out + u(tex) + f([x, y, x + w * moon["scale"], y + h * moon["scale"]])
 
 
+# CheckRotateLeft/Right (1097 binary: 0043dc50, 0043dfb0) test the eye one
+# RotationY step further on, by this angle (the doubles at 0058cd78 and 0058cd88,
+# +-0.01), against the turn's end.
+TURN_CHECK_STEP = 0.01
+
+
+def turn_end_eye(camera, slot, index):
+    """The eye (KO space) at which the select camera's turn to the slot ends
+    (specs/KO-FINDINGS.md 8.2). Slot 0 is the camera's own eye. For the others,
+    1097's check (0043dc50, 0043dfb0) turns a copy of the eye a further 0.01 rad
+    about the vertical through `at` and ends the turn once the cosine between
+    it and the camera's own eye, both from `at`, falls below the slot's
+    `turn_end` (Karus: 0.75 left, 0.77 right). So the turn ends on the first
+    tick whose angle is past the one cooked here; the client turns until
+    then. The slot's side is the side its character stands on."""
+    eye, at = vector(camera["eye"], 3), vector(camera["at"], 3)
+    if index == 0:
+        if "turn_end" in slot:
+            raise ValueError("front-end slot 0 is the camera's own eye")
+        return eye
+    end = slot.get("turn_end")
+    ox, oy, oz = (eye[i] - at[i] for i in range(3))
+    flat = ox * ox + oz * oz
+    side = math.atan2(slot["position"][0] - at[0], slot["position"][2] - at[2])
+    if not isinstance(end, (int, float)) or flat <= 0 or abs(side) < 1e-6:
+        raise ValueError("front-end slot %d turn" % index)
+    # The cosine between the eye's offset o and o turned by b about y is
+    # (flat * cos b + oy^2) / |o|^2.
+    cos_b = (end * (flat + oy * oy) - oy * oy) / flat
+    if not -1 < cos_b < 1:
+        raise ValueError("front-end slot %d turn_end" % index)
+    angle = math.acos(cos_b) - TURN_CHECK_STEP
+    if not 0 < angle < math.pi / 2:
+        raise ValueError("front-end slot %d turn_end" % index)
+    angle = math.copysign(angle, side)
+    # RotationY(angle) on a row vector: x' = x cos + z sin, z' = -x sin + z cos.
+    c, s = math.cos(angle), math.sin(angle)
+    return [at[0] + ox * c + oz * s, eye[1], at[2] - ox * s + oz * c]
+
+
 def select_scene(assets, textures, config, work):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
-    slots (position, yaw, the camera that faces the slot and its spot light),
-    the spot's growth rate, the hall, the character with its clips and
-    plugs."""
+    slots (position, yaw, the eye where the camera's turn to the slot ends
+    and its spot light), the spot's growth rate, the hall, the character with
+    its clips and plugs."""
     camera = config["camera"]
-    eye, at = camera["eye"], camera["at"]
-    radius = math.hypot(eye[0] - at[0], eye[2] - at[2])
     slots = b""
-    for slot in config["slots"]:
+    for index, slot in enumerate(config["slots"]):
         x, y, z = vector(slot["position"], 3)
-        # CheckRotateLeft/Right turn the eye about `at` until it faces the
-        # slot's character.
-        angle = math.atan2(x - at[0], z - at[2])
-        slot_eye = [at[0] + radius * math.sin(angle), eye[1], at[2] + radius * math.cos(angle)]
+        slot_eye = turn_end_eye(camera, slot, index)
         spot, target = vector(slot["spot"], 3), vector(slot["spot_target"], 3)
         light = dict(kind=SPOT, diffuse=[1, 1, 1], ambient=[0, 0, 0], position=reflect(spot),
                      direction=reflect([target[i] - spot[i] for i in range(3)]),

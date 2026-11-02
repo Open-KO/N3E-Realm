@@ -6,6 +6,7 @@ here, and both scenes use the demo package's own N3S1 character. The music
 (RQ-018) is synthetic MPEG-1 Layer III frames written bit by bit here: a
 96-byte mono frame at 48 kHz whose two granules each carry one count1
 quadruple, so it decodes to a quiet low tone (tests/audio.cpp decodes it)."""
+import math
 import pathlib
 import shutil
 import struct
@@ -222,6 +223,42 @@ except ValueError as error:
 print("PASS front-end cook: five synthetic screens, %d refusals and a missing screen" % len(problems))
 
 # --- the loader ----------------------------------------------------------------
+
+# RQ-067: the select camera's turn ends where 1097's check ends it
+# (0043dc50, 0043dfb0: the eye turned a further 0.01 rad has a cosine below the
+# slot's `turn_end` with the camera's own eye, both from `at`). A synthetic
+# camera with a height offset, so the check's cosine is not the angle's.
+TURN_CAMERA = {"eye": [0.5, 1.0, 6.0], "at": [0.5, -0.5, 0.0]}
+
+
+def ko_turn_ends(camera, angle, end):
+    """KO's CheckRotateLeft/Right on an eye turned by `angle` (RotationY, KO
+    space) from the camera's own: True once the turn has ended."""
+    (ex, ey, ez), (ax, ay, az) = camera["eye"], camera["at"]
+    o = [ex - ax, ey - ay, ez - az]
+    b = angle + math.copysign(fe.TURN_CHECK_STEP, angle)
+    t = [o[0] * math.cos(b) + o[2] * math.sin(b), o[1], -o[0] * math.sin(b) + o[2] * math.cos(b)]
+    return sum(o[i] * t[i] for i in range(3)) / sum(v * v for v in o) < end
+
+
+assert fe.turn_end_eye(TURN_CAMERA, {"position": [0.5, 0, 3]}, 0) == TURN_CAMERA["eye"]
+for side, end in ((1, 0.75), (-1, 0.77)):
+    eye = fe.turn_end_eye(TURN_CAMERA, {"position": [0.5 + side * 2, 0, 2], "turn_end": end}, 1)
+    ax, az = TURN_CAMERA["at"][0], TURN_CAMERA["at"][2]
+    o = [TURN_CAMERA["eye"][0] - ax, TURN_CAMERA["eye"][2] - az]
+    angle = math.atan2(o[1] * (eye[0] - ax) - o[0] * (eye[2] - az), o[0] * (eye[0] - ax) + o[1] * (eye[2] - az))
+    assert eye[1] == TURN_CAMERA["eye"][1] and side * angle > 0, (eye, angle)
+    # Up to the cooked angle the turn goes on; any step past it ends it.
+    assert not ko_turn_ends(TURN_CAMERA, angle * (1 - 1e-6), end), (side, angle)
+    assert ko_turn_ends(TURN_CAMERA, angle * (1 + 1e-6), end), (side, angle)
+for slot, index in (({"position": [0.5, 0, 3], "turn_end": 0.75}, 0), ({"position": [2.5, 0, 2]}, 1),
+                    ({"position": [0.5, 0, 2], "turn_end": 0.75}, 1), ({"position": [2.5, 0, 2], "turn_end": 1.5}, 1),
+                    ({"position": [2.5, 0, 2], "turn_end": 0.99999}, 1)):
+    try:
+        fe.turn_end_eye(TURN_CAMERA, slot, index)
+    except ValueError:
+        continue
+    raise AssertionError(("cooked", slot, index))
 
 demo = ROOT / "build/packages/demo/scene.bin"
 model = demo.read_bytes()

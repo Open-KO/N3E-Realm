@@ -13,7 +13,9 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   pointer off, on and off the character in front: its hover clip blends in on
   its first frame, plays once and holds its last frame, the rest clip blends
   back, the spot widens and narrows to off and the info text shows only while
-  the pointer is on it; RQ-066, RQ-075) -> start (the start clip blends in over
+  the pointer is on it; RQ-066, RQ-075; the arrows turn the camera one slot
+  left, back, one right and back, each ending where 1097's check ends it,
+  RQ-067) -> start (the start clip blends in over
   1097's 0.6 s on its first frame under the full spot, then plays; RQ-076) ->
   loading -> the world.
 - An operator kick (admin API) returns the client to the login screen with the
@@ -27,6 +29,7 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
 """
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import secrets
@@ -244,11 +247,41 @@ try:
     assert started["clip"] == 1 and started["blend"] == 1 and 0.2 < started["t"] < 1.2 < started["end"], v
     for h in (start, blend, started):
         assert h["theta"] == widest and h["spot"] == 1 and h["info"] == 0, v
+    # RQ-067 (KO-FINDINGS 8.2, 1097's CheckJobState 0043e4e0): an arrow turns
+    # the camera one slot, about `at` at 1.2 rad/s, the short way: LEFT to slot 1
+    # (positive turns), RIGHT back to the centre, RIGHT to slot 2 (negative),
+    # LEFT back. A side turn ends on the first frame past the angle where 1097's
+    # check (the eye a further 0.01 rad on, its cosine with the camera's own
+    # eye from `at` below 0.75 left or 0.77 right) ends it; a turn back ends on
+    # the camera's own eye. No frame leaves the two slots' angles by more than
+    # a frame's step (the client's frames are at most 0.25 s).
+    select = json.loads(Path("games/moradon/front-end.json").read_text())["select"]
+    eye, at = select["camera"]["eye"], select["camera"]["at"]
+    o = [eye[i] - at[i] for i in range(3)]
+    flat = o[0] ** 2 + o[2] ** 2
+
+    def turn_end(cos):
+        return math.acos((cos * (flat + o[1] ** 2) - o[1] ** 2) / flat) - 0.01
+    left_end, right_end = turn_end(0.75), -turn_end(0.77)
+    step = 1.2 * 0.25
+    turns = {t["phase"]: {k: float(x) for k, x in t.items() if k != "phase"}
+             for t in ({k: x for k, x in (kv.split("=") for kv in f.split()[1:])} for f in flow if f.startswith("turn "))}
+    assert list(turns) == ["left", "centre", "right", "back"], flow
+    left, centre, right, back_ = (turns[p] for p in ("left", "centre", "right", "back"))
+    assert left["slot"] == 1 and left_end < left["angle"] <= left_end + step, (turns, left_end)
+    assert left["low"] == 0 and left["high"] == left["angle"], turns
+    assert centre["slot"] == 0 and centre["angle"] == 0, turns
+    assert centre["high"] == left["angle"] and -step <= centre["low"] <= 0, turns
+    assert right["slot"] == 2 and right_end - step <= right["angle"] < right_end, (turns, right_end)
+    assert right["high"] == 0 and right["low"] == right["angle"], turns
+    assert back_["slot"] == 0 and back_["angle"] == 0, turns
+    assert back_["low"] == right["angle"] and 0 <= back_["high"] <= step, turns
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
     print(f"PASS front-end flow: one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box, "
           "Fresh created) -> select (the front character's hover clip blends in on its first frame, plays once and holds, the rest clip blends back; "
-          "the spot widens and the info text shows only while the pointer is on it) -> start (blends in over 0.6 s, then plays) -> loading -> world; "
+          "the spot widens and the info text shows only while the pointer is on it; the arrows turn the camera one slot each way, "
+          "ending where 1097's check ends it) -> start (blends in over 0.6 s, then plays) -> loading -> world; "
           "a kick returns to login with the operator's wording; "
           "one music stream from login to loading")
     assert server.poll() is None, "server exited"

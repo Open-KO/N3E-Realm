@@ -226,6 +226,39 @@ so it takes ENTER and the click at rest only and ignores them while the clip pla
 1097's start on the answer, ENTER during the turn and the skipping ENTER are not
 taken (**Q72**).
 
+### 8.2 The select camera's turn (RQ-067, 2026-11-01)
+
+The maintainer's playtest found the arrows swinging the camera most of the way
+round the hall. The cause was the realm's, not KO's: the client turned towards each
+slot's absolute heading, `atan2` of its eye about `at`. In engine space (KO's z
+reflected) the eyes sit on the −z side of `at`, so the centre's heading was π and
+the right slot's −2.41. A turn between them went 5.55 rad the long way, about
+318°, at 1.5 rad/s; the left slot's (2.42) went the short way. The realm now turns the
+signed angle from the camera's own eye (`client/render/select_turn.h`), which
+never wraps, and matches 1097's turn. That was read in the 1097 image of §8.1
+(binary, Ghidra `-readOnly -noanalysis`, the same project; output under
+`build/ghidra/rq067/`, not committed). The later source's
+`GameProcCharacterSelect.cpp` (`CheckJobState`, `CheckRotate*`, `Rotate*`,
+`DoJobLeft`, `DojobRight`) agrees line for line. `KARUS_THETA_MAX` and
+`KARUS_INCRESE_OFFSET` are the spot's (§8.1), not the turn's.
+
+| Observation | Where | Label |
+|---|---|---|
+| The select UI's key handler passes `DIK_LEFT` (`0xcb`) and `DIK_RIGHT` (`0xcd`) on as clicks from its children `+0xa8` and `+0xac` (vtable `+0x44`, message 1). Its message handler sends a click from `+0xa8` to `0043e310` (DoJobLeft) and one from `+0xac` to `0043e380` (DojobRight), both on the select proc `006e0494` (`cmp eax, [ecx+0xa8]` at `0043ff69`, the calls at `0043ff77` and `0043ff8f`). Away from their own edge each returns at once in state 1 (turning) and otherwise sets state 1. From the centre (`+0x2c4` 1) the destination `+0x2c8` becomes left (2) or right (3), and the selected index `006e04d0` becomes 1 or 2. From the other side it becomes the centre, index 0. At their own edge they change nothing. Then they play the sound object at `+0x18` when there is one (`004327d0`) | `00440690`, `0043ff77`, `0043e310`, `0043e380` | binary |
+| In state 1, `0043e4e0` checks first and then turns. Centre to left: `0043dc50`, else RotationY(`s_fSecPerFrm` × 1.2) on the eye's offset from `at` (`0043f8d0` with `005a1594` × `0058cd90` 1.2). Centre to right: `0043dfb0`, else RotationY(`s_fSecPerFrm` × −1.2) (`0058cd94`). Left to centre: while the eye's x (`+0x158`) is above 0 (`0058c62c`), turn by −1.2 × `s_fSecPerFrm`; otherwise the eye is put back on its backup (`+0x164`–`+0x16c`), state 2. Right to centre: while x is below 0, `0043e880` turns by +1.2 × `s_fSecPerFrm`; otherwise the same. The arrival sets `+0x2c4` to the destination. That tick runs no state-2 proc | `0043e4e0`, `0043e880`, `0043f8d0` | binary |
+| `0043dc50` and `0043dfb0` turn a copy of the eye a further step about `at` (the doubles at `0058cd78`, 0.01, and `0058cd88`, −0.01). They normalise it and the backup eye, both from `at`, and dot them (`004282f0`). The turn has ended (state 2, returns 1) when the dot is below the nation's bound: left `0058cd70` 0.75 (nation 1) or `0058cd74` 0.74, right `0058cd80` 0.77 or `0058cd84` 0.73. So with Karus's eye (0, −0.2, 7.4) and `at` (0, −0.4, 0), left ends on the first tick past 0.7130 rad and right past 0.6822 rad. The eye stays where the last step left it | `0043dc50`, `0043dfb0` | binary |
+| `s_fSecPerFrm` is the last frame's time, set to 1/30 when it is at most 0.001 s or at least 1 s | `N3Base/N3Eng.cpp` `CN3Eng::Present` | source |
+| **1298 differs.** It turns through recorded camera paths, `ChrSelect\Data\ka_center_left_camera.n3camera`, `ka_center_right`, `ka_left_center`, `ka_right_center`, `ka_left_right`, `ka_right_left` and `ka_lording_camera` (and `el_*`), loaded by `005fa670`. Its turning states (`005fe5b0` cases 1, 2, 6) wait until the object at `+0x1a4` has reached its last frame (`+0x110` equals `+0x10c`). Not read further | `005fa670`, `005fe5b0`; strings `006d8420`–`006d85cc` | binary |
+
+The realm follows 1097 (Q71). The Moradon package cooks each side slot's eye
+where 1097's check first ends the turn (`turn_end` 0.75 and 0.77 in
+`games/moradon/front-end.json`). The client (`select_turn_tick`) turns
+1.2 rad a second by the frame's time (at most 0.25 s), checks before each step,
+puts the eye back on the camera's own when it reaches the centre, and ignores
+the arrows while it turns. It plays no rotate sound. 1097 plays its sound object
+`+0x18` there. Whether one is loaded, and which, was not read (1298 plays none;
+`content/front-end.md`).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

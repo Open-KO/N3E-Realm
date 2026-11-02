@@ -640,6 +640,18 @@ is triggered is Q72.
 **Decided (maintainer, 2026-11-01):** closed as (a). 1097's hover is the default select hall;
 1298's loop (b) becomes one of the per-client front ends a realm owner can choose (RQ-078).
 
+**RQ-086:** (b) is data. N3FE version 6 names the hall's front-clip mode
+(`select.front_clip`: `hover`, the 1097 recipe's, or `loop`), and
+`games/moradon/front-end-1298.json` cooks 1298's select character with the loop
+(KO-FINDINGS §8.3, binary): `upc_ka_tu` with the default looks and no plug, its
+clip 1 looping on the character in front, clip 0 once on the others and while
+the camera turns, every character ticked, start clip 2 with 0.6 s, the spot
+widening without the pointer and staying, the info text at rest (empty for an
+empty slot), no turn sound. Moradon does not offer it yet: 1298's camera paths,
+hall and slots, its UIF login intro and its select UI hidden during the turn
+are not data (`content/front-end.md`, "1298"). The 1097 front end is unchanged
+but for the mode field.
+
 ### Q72 — The select start: on the press, or on the server's answer as 1097
 
 1097 (KO-FINDINGS §8.1, binary) sends the select request on ENTER or the click and
@@ -748,3 +760,17 @@ each file is checked when the cook reads it, so a file that differs stops the co
 part way, with the source package directory partly written and nothing published
 (`main.cook` never runs). Hashing the whole install up front (about 9,000 files for
 1097) on every cook was judged too slow for what it adds.
+
+### Q77 — 1298's select hall while the camera turns: hide its UI, or only the info text
+
+1298 hides the whole select UI while the camera turns (KO-FINDINGS §8.3, binary:
+DoJobLeft and DojobRight `005fe3c0`, `005fe450` call the UI's `+0x3c` with 0, the
+arrival in `005fe5b0` with 1) and turns through recorded camera paths. The realm's
+loop front-clip mode (RQ-086) turns about `at` as 1097 does and keeps the select
+screen shown. Options: (a) hide only the info text while the camera turns, which
+the loop mode would otherwise show for the slot just left; (b) hide the select
+screen's UI while the camera turns in the loop mode, as 1298 does, now.
+**Default taken (RQ-086):** (a). The UI hidden during the turn is part of 1298's
+turn, with the camera paths that time it (their last frame is the arrival), and
+goes into front-end data with them, as their own item; the 1298 recipe is not
+offered until then.

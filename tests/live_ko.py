@@ -197,7 +197,8 @@ TURBO_ENV = {"N3E_TURBO_GRAPHICS": "1", "N3E_TEST_WINDOW_SIZE": "1280x1024"} if 
 
 # What the front-end suites exercise beyond their scripts (spec 11): the screens'
 # code, their cook and the Moradon package's front-end data.
-FRONT_END = ["client/render/front_end.h", "tools/assetc/ko_front_end.py", "games/moradon/front-end.json",
+FRONT_END = ["client/render/front_end.h", "client/render/select_hall.h", "tools/assetc/ko_front_end.py",
+             "games/moradon/front-end.json", "games/moradon/front-end-1298.json",
              "tools/assetc/front_end_choice.py", "games/moradon/front-ends.json", "games/moradon/realm-config.json"]
 # The Moradon feature cook (tools/assetc/ko_bake.py --features, --des).
 MORADON_FEATURES = ["tools/assetc/moradon_features.py", "tools/assetc/moradon_des.py"]

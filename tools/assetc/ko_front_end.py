@@ -6,7 +6,8 @@ its login and server-list layout, the Karus character select hall
 cooked from the pinned client tree, (version 3) the screens' music, KO's
 MP3 frames carried as they are, (version 4) each model clip's blend time
 and the select spot's growth rate, and (version 5) PCM music tracks from KO's
-WAVs and a track's restart period. games/moradon/front-end.json names every KO
+WAVs and a track's restart period, and (version 6) the select hall's
+front-clip mode. games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
@@ -36,7 +37,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 5
+VERSION = 6
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -44,11 +45,18 @@ VERSION = 5
 TICKS_PER_SECOND = 30
 # A clip's blend time (__AnimData::fTimeBlend, seconds), as the client bounds it.
 MAX_BLEND = 10.0
-# The select model's clips by role (version 4): the hover clip (pre_select),
-# the start clip (selected) and the rest clip (dummy), as DoProcPreselect and
-# the select (1097: 0043f280, 0043ea30) name them.
+# The select model's clips by role (version 4): the front clip, the start
+# clip and the rest clip. In the hover mode (1097: DoProcPreselect 0043f280,
+# the select 0043ea30) they are pre_select, selected and dummy; in the loop
+# mode (1298: 005fef90, 005fe7c0) 1298's clips 1, 2 and 0.
 SELECT_CLIPS = 3
 START_CLIP = 1
+# The select hall's front-clip mode (version 6, `select.front_clip`): what the
+# character in front plays at rest. `hover`, 1097's (0043f280): the front clip
+# once while the pointer is in the centre rect, the rest clip otherwise, the
+# others not ticked. `loop`, 1298's (005fef90): the front clip looping
+# whatever the pointer does, the rest clip once on the others.
+FRONT_CLIP = {"hover": 0, "loop": 1}
 # ANI_BREATH (GameDef.h): the idle InventoryChrAnimationInitialize plays.
 BREATH = 0
 CANVAS = (1024, 768)
@@ -743,8 +751,8 @@ def turn_end_eye(camera, slot, index):
 def select_scene(assets, textures, config, work):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
     slots (position, yaw, the eye where the camera's turn to the slot ends
-    and its spot light), the spot's growth rate, the hall, the character with
-    its clips and plugs."""
+    and its spot light), the spot's growth rate, the front-clip mode, the
+    hall, the character with its clips and plugs."""
     camera = config["camera"]
     slots = b""
     for index, slot in enumerate(config["slots"]):
@@ -762,18 +770,21 @@ def select_scene(assets, textures, config, work):
     step = config["spot_step"]
     if not (isinstance(step, (int, float)) and 0 < step <= config["spot_theta"] and step * TICKS_PER_SECOND <= 100):
         raise ValueError("front-end spot step")
+    mode = config.get("front_clip")
+    if type(mode) is not str or mode not in FRONT_CLIP:
+        raise ValueError("front-end select.front_clip: one of %s" % ", ".join(FRONT_CLIP))
     look = config["character"]
     if len(look["clips"]) != SELECT_CLIPS:
-        raise ValueError("front-end select clips: the hover, start and rest clips")
+        raise ValueError("front-end select clips: the front, start and rest clips")
     # The start clip's blend: the select's own time (1097 binary: 0043ea30
-    # sets clip 1 with 0.6 s, `push 0x3f19999a` at 0043ea77), not the
-    # record's; the hover and rest clips keep their records' (0043f280 names
-    # FLT_MIN).
+    # sets clip 1 with 0.6 s, `push 0x3f19999a` at 0043ea77; 1298: 005fe7c0
+    # sets clip 2 the same way), not the record's; the front and rest clips
+    # keep their records' (0043f280 and 005fef90 name FLT_MIN).
     tree, joint = character_tree(assets, look)
     _, animation = split(assets, look["animation"])
     definition = dict(joint=joint, animation=animation, parts=default_parts(tree, look["race"]))
     out = camera_record(camera) + lights(assets, config["lights"]) + f(vector(config["ambient"], 3))
-    out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND])
+    out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND]) + u(FRONT_CLIP[mode])
     out += hall(assets, textures, config["hall"])
     out += model(tree, joint, definition, look["clips"], work / "select",
                  own_blends={START_CLIP: config["start_blend"]})

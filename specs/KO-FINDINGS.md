@@ -289,6 +289,37 @@ that gives were not read. The realm draws the Karus hall, and 1097's Karus
 front-end layouts name no button sounds, so the screens gain none. The realm keeps
 reading 1298's `[Sound] Effect`, not 1097's `[Sound] Enable` (Q70).
 
+### 8.3 1298's select hall at rest (RQ-086, 2026-11-02)
+
+Ghidra 12.1.3 headless (`-readOnly -noanalysis`), `ko-audit`, `KnightOnLine.exe`
+(1298, sha256 `828ab0db…43a5e5`), output under `build/ghidra/rq086/` (not
+committed), with §8's decompiles of `005fef90`, `005fe5b0`, `005fe7c0`, `005fea70`,
+`005fb4f0` and `005faf10` (`build/ghidra/rq066/`). `0041be40` and `00418700` are
+§8's clip setter and frame tick; `00418700` is passed `FLT_MIN` (`006a93b0`), the
+character's own frame time.
+
+| Observation | Where | Label |
+|---|---|---|
+| AddChr sets each body part through `005fc6f0(chr, looks row, part, item, durability, record)` for parts 0, 1, 3 and 4 (the record's items at `+0x28`, `+0x30`, `+0x48`, `+0x50`). With no item (id 0) its item row is null; when the name `006157b0` builds from that row is empty (`006157b0` not read: taken as empty for a null row), the part is the race's looks row's own (`row + 0x34 + part × 0x10`, the table `00818758` keyed by race `+0x10`): `UPC_DefaultLooks`. The face (part 2) is the row's face file with the character's face number (`+0x1c`) inserted, `"%s%s%.2d%s"` (`006d4280`); the hair (part 5) is an item's (`+0x38`) or the row's hair file with the hair number (`+0x20`) | `005fb4f0`, `005fc6f0` | binary |
+| The hands' plugs go through `005fca40(chr, row, hand, item, …)` (items `+0x58`, `+0x60`), which returns before creating anything when the item's row is not found: a slot with no item holds no plug | `005fb4f0`, `005fca40` | binary |
+| AddChr ends by setting clip 1 **looping** with no blend on all three characters and ticking each (`0041be40(1, 0, 0, 0, 1)`, `00418700`), after placing them at 1298's own positions, not the 1097 hall's: Karus slot 0 at (128, 0, 91) turned π about y, slot 1 at (108.7, 0.2, 62.9) turned 1.92, slot 2 at (141.3, 0.3, 68.5) turned 4.28 (each character's vtable `+0x24` with three reals, taken as its position, and a rotation built by `0064d306`; neither read further) | `005fb4f0` (its last loop and the calls before it) | binary |
+| At rest (state 5), every tick, `005fef90` sets clip 1 looping on the character in front and clip 0 once on the others, each with `FLT_MIN` (its record's blend), and **ticks every character**. It then calls the select UI's info setter `006074c0` (`this` the UI at `+0x384`, `005fefd6`) with the front slot's record (`+0x38 + slot × 0x68`): for a record whose name is empty (`+0x8` 0) it sets the UI's three texts (`+0xcc`, `+0xd0`, `+0xd4`) to the empty string (`006dfe28`, a zero byte), otherwise to the name, the class (`00613ea0`) and the level (`"%d"`, `006d3a54`). The pointer plays no part | `005fef90`, `006074c0` | binary |
+| The spot: in state 5 the theta `+0x398` grows by 0.02 a tick (`006a93bc` Karus, `006a93c0` El Morad) up to 0.5 (`006a93b4`, `006a93b8`) and never shrinks there; the three slot lights' theta (`+0x258`, Theta of the D3DLIGHT9 at `+0x1f8`) are set to 0 and the front's to `+0x398`; light slot + 4 is enabled and set when the theta is not 0 (`006a37dc`, 0.0) and disabled otherwise. The start (`005fe7c0`) sets the theta to 0.5; the turns (`005fe3c0`, `005fe450`) do not write it | `005fef90`, `005fe7c0`, `005fe3c0`, `005fe450` | binary |
+| Every select tick turns lights 0–7 off (`LightEnable(i, 0)`, vtable `+0xb8`), applies the two hall lights at `+0x1a8` and `+0x1ac`, then runs the state switch `005fe5b0`: the spot is lit only in states 5 and 4 (`005fea70` lights it). While the camera turns (states 1, 2, 6) every character gets clip 0 once and is ticked | `005faf10`, `005fe5b0` | binary |
+| A turn hides the select UI: DoJobLeft and DojobRight (`005fe3c0`, `005fe450`) set state 2, call `+0x384`'s vtable `+0x3c` with 0 and start a camera path (`005fa670`); the arrival (`005fe5b0` cases 1 and 2) calls it with 1 and sets state 5. The click on an empty slot (`005faf10`) calls it with 0 and `+0x388`'s with 1 (create) | `005fe3c0`, `005fe450`, `005fe5b0`, `005faf10` | binary |
+| During the start (state 4) `005fea70` sets and ticks only the chosen character | `005fea70` | binary |
+| `ChrSelect/upc_ka_tu.n3joint` has 24 joints with 228 keys at 15 a second, so its keys cover frames below 458; `upc_ka_tu.n3anim`'s clip 2 runs to 466. 1298's sampler (`00427640`, PQ-266) takes the key index up to the count and past it leaves the joint unchanged: the last 8 frames hold the pose the last key set | the pinned tree; `00427640` | local-asset; binary |
+
+**Decides (RQ-086):** N3FE version 6 carries the hall's front-clip mode, and
+`games/moradon/front-end-1298.json` (not offered, `content/front-end.md`, "1298")
+cooks 1298's select character with it: `upc_ka_tu` with the default looks and no
+plug, clips 1, 2 and 0 as the front, start and rest clips, the loop mode (the
+front clip looping, the others' rest clip once, every character ticked, the spot
+widening and staying, the info text at rest, empty for an empty slot), no turn
+sound. The realm hides only the info text while the camera turns, not the whole
+select UI as 1298 does, and keeps 1097's hall, slots and turn: those come with
+1298's camera paths (proposed as their own item).
+
 ## 9. The front end per client (RQ-078, 2026-11-02)
 
 Which KO client a realm's front end looks and behaves like is the realm owner's
@@ -341,14 +372,14 @@ and looked at; nothing from them is committed.
 | The Steam dump names `CGameProcIntro`, `CGameProcIntroChrSelect`, `CUILoginIntro`, `CN3OggDecoder`, `CBGMManager`, `Snd\Intro_Sound.mp3`, `Snd\Intro_Old_Sound.ogg`, `ChrSelect\Data\camera1–13.n3camera` and `ChrSelect\ka_light_%d.n3light`; its login runs through `Launcher.exe` (WebView2) and Steam (`steam-rea/README.md`). Nothing of its behaviour was read | strings of `KnightOnLine.unpacked.exe` | binary (strings) |
 
 What the engine expresses as data today (N3FE version 4; version 5, RQ-083, adds the
-PCM tracks and the restart period) and what it lacks,
+PCM tracks and the restart period; version 6, RQ-086, the front-clip mode) and what it lacks,
 per screen. A choice can be offered only when every row it needs is data:
 
 | | Data today | Not yet |
 |---|---|---|
 | Login scene | the 1098 scene (1097's): camera, lights, the model's one clip and plugs, the moon quad | 1298's UIF intro (`ka_login_intro_us.uif`, wrapped UVs; spec 11 left it out), 2145's `re_login_intro`, Steam's intro procs |
 | Layouts | UIF trees `ko_hud.parse` reads (1298's; 2145's `co_login`, `ka_characterselect`), bindings, moves, hidden, states | 1097's UIF version; the 2145 versions it refuses; Steam's pack |
-| Select hall | meshes, lights, slots, the turn about `at` with per-slot ends, the spot's rate, hover/start/rest clips with blend times, plugs | 1298's loop on the character in front (a front-clip mode), recorded camera paths (`.n3camera`), per-race default looks (RQ-005); 2145's `.n3anim` format (convertible: `anim_2145.to_1298`) |
+| Select hall | meshes, lights, slots, the turn about `at` with per-slot ends, the spot's rate, front/start/rest clips with blend times, plugs; since version 6 (RQ-086) the front-clip mode, 1097's hover or 1298's loop, and as recipe data 1298's per-race joint and clips with the default looks (§8.3) | recorded camera paths (`.n3camera`), 1298's hall and slot positions, its select UI hidden while the camera turns; each slot's own looks (RQ-005); 2145's `.n3anim` format (convertible: `anim_2145.to_1298`) |
 | Music | MPEG-1/2 Layer III tracks per screen, looping or once (1298's `Intro_Sound.mp3`); since version 5 (RQ-083) 16-bit PCM tracks and a restart period (1097's `bgm_login.wav` every 21.66 s, `bgm_el_battle.wav` looping) | Ogg Vorbis (2145, Steam); 1097's process-lifetime login timer (Q75) |
 | Sounds | a sound-table id bound in `audio.bin` (1097's turn sound 2501) | 2145's Ogg `char_select_turn.ogg` |
 | Text | six strings, KO's UIF texts as they are | KO's text tables for them (RQ-013) |
@@ -360,7 +391,9 @@ because `ko_hud` cannot read 1097's UIF version. Its music is 1298's
 WAV. *RQ-083:* the music is now 1097's (N3FE version 5): `bgm_login.wav` on the
 login and the realm list, restarted every 21.66 s, and `bgm_el_battle.wav`, looping,
 on select and create, as the rows above read them. A "1298" choice needs the front-clip mode, the camera paths, 1298's UIF intro
-and 1298's looks. A "2145" choice needs a reader for its UIF versions and an Ogg
+and 1298's looks. *RQ-086:* the front-clip mode and 1298's select character with its
+default looks are data (§8.3, `games/moradon/front-end-1298.json`, not offered);
+the camera paths, 1298's hall and slots and its UIF intro are not. A "2145" choice needs a reader for its UIF versions and an Ogg
 decision. Steam is not cookable yet: the packs are not readable, the exe is protected,
 and the install changes with every Steam update. The follow-up items are filed under
 RQ-078.
@@ -388,7 +421,7 @@ notes.
 | Q14 | **Add `mute` (timed) in v1**; defer attack-disable. |
 | Q10 | Wording fixed (above). |
 | Q21 | Unchanged (KO's `+monsummon` is untimed; ours gets a bounded duration). |
-| Q71 | §8.1: 1097, the client whose files the package cooks, plays the hall as (a) does, so (a) is KO's behaviour; its three remaining details aligned (RQ-075). |
+| Q71 | §8.1: 1097, the client whose files the package cooks, plays the hall as (a) does, so (a) is KO's behaviour; its three remaining details aligned (RQ-075). §8.3 (RQ-086): 1298's (b) read further (its default looks, every character ticked, the spot and info without the pointer) and carried as data, the loop front-clip mode. |
 | Q70 | §8.2 (RQ-077): 1097's select arrows play sound 2501 (`char_select_turn.wav`) for each turn they start; the realm plays it. 1097's Karus front-end layouts name no button sounds; its sound switch is `[Sound] Enable`. |
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |
 | Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. |

@@ -2675,7 +2675,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 5, "front end version");
+  need(r.u() == 6, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2875,10 +2875,15 @@ FrontEnd load_front_end(const Release &release) {
   // Version 4: the spot's growth rate (theta per second).
   fe.spot_rate = std::bit_cast<float>(r.u());
   need(std::isfinite(fe.spot_rate) && fe.spot_rate > 0 && fe.spot_rate <= 100, "front end spot rate");
+  // Version 6 (RQ-086): the select hall's front-clip mode.
+  const auto mode = r.u();
+  need(mode <= uint32_t(FrontClipMode::loop), "front end front-clip mode");
+  fe.front_clip = FrontClipMode(mode);
   const auto parts = r.count(64);
   for (uint32_t i = 0; i < parts; ++i) fe.hall.push_back(mesh());
   model(fe.select);
-  // The hover, start and rest clips (pre_select, selected, dummy).
+  // The front, start and rest clips (1097: pre_select, selected, dummy;
+  // 1298: its clips 1, 2 and 0).
   need(fe.select.clips.size() == 3, "front end select clips");
   model(fe.create);
   // 9. Music (version 3, RQ-018): each track's frames checked whole here, so

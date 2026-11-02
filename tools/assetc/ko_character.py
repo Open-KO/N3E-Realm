@@ -85,17 +85,21 @@ def key(r, kind):
     return {"rate": rate, "values": values, "kind": kind}
 
 
-def sample(k, frame, default):
+def sample(k, frame, default, hold=False):
     """A track's value at `frame`, as KO's key sampler gives it: key index
     i = trunc(frame x rate / 30), the last key while i equals the count, and,
     below that, key i blended toward key i + 1 (the load copies the last key
     past the end, so key count - 1 blends toward itself). 1298 `00427640`
     (PQ-266) and 2233 `0044b450` / `0044b560` (load `0042c150`, PQ-317) both
     take i up to the count; past it KO leaves the joint unchanged, which this
-    reader refuses."""
+    reader refuses, or, with `hold` (a clip that plays on past its keys from
+    their start, RQ-086), gives the last key: the value the joint was left
+    at when the frame passed the count."""
     if k is None:
         return default[:]
     at = frame * k["rate"] / 30
+    if hold and at >= len(k["values"]) + 1:
+        at = len(k["values"])
     if not 0 <= at < len(k["values"]) + 1:
         raise ValueError("clip outside key range")
     i = min(int(at), len(k["values"]) - 1)
@@ -528,9 +532,9 @@ def matrix(p, q):
     ]
 
 
-def converted(node, frame, scale):
-    p = sample(node["keys"][0], frame, node["translation"])
-    q = sample(node["keys"][1], frame, node["rotation"])
+def converted(node, frame, scale, hold=False):
+    p = sample(node["keys"][0], frame, node["translation"], hold)
+    q = sample(node["keys"][1], frame, node["rotation"], hold)
     return [p[0] * scale, p[1] * scale, -p[2] * scale], [-q[0], -q[1], q[2], q[3]]
 
 
@@ -746,8 +750,11 @@ def convert(root, source, out, clip_index=1, meters=1.0, definition=None, player
     models: a clip's unused first word is accepted (animations), part textures
     may be 1024 texels a side in a 2048-texel atlas, and parts with the same
     texture and region share one atlas placement (the intro orc's nine head
-    parts share one 1024-texel texture). Every other caller keeps its output
-    byte for byte."""
+    parts share one 1024-texel texture), and a clip that runs past its
+    joint's keys holds their last key there (`sample`'s `hold`; 1298's
+    `ChrSelect/upc_ka_tu.n3anim` clip 2 ends on frame 466, its joint's 228
+    keys at 15 a second cover frames below 458). Every other caller keeps
+    its output byte for byte."""
     atlas_limit = 2048 if front_end else 1024
     if player is None:
         player = definition is not None
@@ -985,8 +992,8 @@ def convert(root, source, out, clip_index=1, meters=1.0, definition=None, player
     def top(i):
         return helper.get(i, i)
 
-    def scale_at(b, frame):
-        return sample(b["keys"][2], frame, b["scale"])
+    def scale_at(b, frame, hold=False):
+        return sample(b["keys"][2], frame, b["scale"], hold)
 
     world = []
     inverses = []
@@ -1051,7 +1058,7 @@ def convert(root, source, out, clip_index=1, meters=1.0, definition=None, player
     anim = {"name": clip["name"], "samplers": [], "channels": []}
     for i, b in enumerate(bones):
         frames = [clip["start"] + (0 if held else t * clip["fps"]) for t in times]
-        poses = [converted(b, frame, meters) + (scale_at(b, frame),) for frame in frames]
+        poses = [converted(b, frame, meters, front_end) + (scale_at(b, frame, front_end),) for frame in frames]
         # A scaled joint's translation and scale tracks drive its helper node,
         # its rotation track the joint's own node.
         for component, path, kind, node in [

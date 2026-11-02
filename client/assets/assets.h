@@ -888,6 +888,13 @@ struct FrontScene {
   std::vector<FrontPlug> plugs;
 };
 struct FrontSlot { V position{}; float yaw = 0; V eye{}; FrontLight spot; };
+// Version 6 (RQ-086): what the select hall's character in front plays at rest.
+// hover, 1097's (DoProcPreselect 0043f280): the front clip once while the
+// pointer is in the centre rect, the rest clip otherwise; only it is ticked;
+// the spot and the info text follow the pointer. loop, 1298's (005fef90): the
+// front clip looping and the rest clip once on the others, every character
+// ticked, the spot widening and the info text shown whatever the pointer does.
+enum class FrontClipMode : uint32_t { hover, loop };
 struct FrontEnd {
   uint32_t character_slots = 0, canvas_width = 0, canvas_height = 0;
   std::vector<HudTexture> textures;
@@ -899,8 +906,9 @@ struct FrontEnd {
   std::array<float, 4> backdrop_rect{};  // 1024 x 768 units
   std::vector<FrontSlot> slots;
   // Version 4: the select spot's theta growth (and shrink) per second; the
-  // select model's clips are the hover, start and rest clips.
+  // select model's clips are the front, start and rest clips.
   float spot_rate = 0;
+  FrontClipMode front_clip = FrontClipMode::hover;  // version 6
   std::vector<FrontMesh> hall;
   // Version 3 (RQ-018, Q57): the screens' music. A track is shared with the
   // stream that plays it; screen_music names one per screen (login, which

@@ -4,7 +4,11 @@
 // package's music tracks must stream. RQ-067: the select camera's turn
 // (client/render/select_turn.h) on a camera with the Karus eye's offset from
 // `at`, looking along +z from -z, where an absolute heading wraps at +-pi.
+// RQ-086: the select hall's characters, spot and info text
+// (client/render/select_hall.h) in both front-clip modes, 1097's hover and
+// 1298's loop, on synthetic clip lengths.
 #include "assets/assets.h"
+#include "render/select_hall.h"
 #include "render/select_turn.h"
 #include <algorithm>
 #include <cmath>
@@ -85,6 +89,81 @@ std::string turn_check() {
   }
   return "";
 }
+
+bool near(float a, float b) { return std::abs(a - b) < 1e-3f; }
+
+// Ticks `seconds` of the hall at rest on `focus` (or turning, focus < 0) at
+// 30 ticks a second.
+void run(n3e::front::SelectHall &hall, int focus, bool over, float seconds) {
+  for (int i = 0; i < int(seconds * 30 + .5f); ++i)
+    if (focus < 0) hall.turning(3, 1 / 30.f);
+    else hall.rest(focus, 3, over, .5f, .6f, 1 / 30.f);
+}
+
+std::string hall_check() {
+  using namespace n3e::front;
+  SelectHall hall;
+  hall.length = {2, 3, .5f};
+  hall.blends = {.3f, .6f, .25f};
+  // Hover (1097, 0043f280): only the character in front moves, by the pointer.
+  hall.mode = n3e::FrontClipMode::hover;
+  hall.reset();
+  for (const auto &p : hall.players)
+    if (p.loop || p.clip != kFrontClip) return "hover: AddChr's clip is not the front clip once";
+  run(hall, 0, false, 1);
+  if (hall.players[0].clip != kRestClip || hall.theta != 0 || hall.spot_on || hall.info_slot != -1)
+    return "hover: the pointer away does not rest the character in front";
+  if (hall.players[1].elapsed != 0 || hall.players[2].elapsed != 0) return "hover: a character not in front moved";
+  run(hall, 0, true, 3);
+  if (hall.players[0].clip != kFrontClip || !near(hall.played(hall.players[0]), 2) || !near(hall.theta, .5f) ||
+      !hall.spot_on || hall.info_slot != 0)
+    return "hover: the pointer over does not play the front clip once and hold it";
+  const float before = hall.players[0].elapsed;
+  run(hall, -1, false, 1);
+  if (hall.spot_on || !near(hall.theta, .5f) || hall.players[0].elapsed != before)
+    return "hover: the turn moved a character or kept the spot on";
+  run(hall, 0, false, 1);
+  if (hall.players[0].clip != kRestClip || !near(hall.theta, 0) || hall.spot_on)
+    return "hover: the spot does not narrow to off when the pointer leaves";
+  // Loop (1298, 005fef90): the character in front loops the front clip and
+  // the others play the rest clip once, whatever the pointer does.
+  hall.mode = n3e::FrontClipMode::loop;
+  hall.reset();
+  for (const auto &p : hall.players)
+    if (!p.loop || p.clip != kFrontClip || p.blend != 0) return "loop: AddChr's clip is not the front clip looping";
+  run(hall, 0, false, 5);
+  if (hall.players[0].clip != kFrontClip || !hall.players[0].loop || !near(hall.played(hall.players[0]), 1))
+    return "loop: the character in front does not loop the front clip";
+  for (int i : {1, 2})
+    if (hall.players[size_t(i)].clip != kRestClip || !near(hall.played(hall.players[size_t(i)]), .5f) ||
+        hall.ended(hall.players[size_t(i)]) != true)
+      return "loop: a character not in front does not play the rest clip once";
+  if (!near(hall.theta, .5f) || !hall.spot_on || hall.info_slot != 0)
+    return "loop: the spot and the info text do not show without the pointer";
+  run(hall, 0, true, .5f);
+  if (hall.players[0].clip != kFrontClip || !near(hall.played(hall.players[0]), 1.5f) || !near(hall.theta, .5f))
+    return "loop: the pointer changed the character in front or the spot";
+  if (hall.ended(hall.players[0])) return "loop: a looping clip ended";
+  run(hall, -1, false, 1);
+  for (const auto &p : hall.players)
+    if (p.clip != kRestClip || p.loop) return "loop: the turn does not play the rest clip on everyone";
+  if (!near(hall.players[0].elapsed, 1) || !near(hall.players[0].blend, .25f) || !near(hall.players[0].from_time, 1.5f))
+    return "loop: the turn does not blend the character in front from its looping clip";
+  if (hall.spot_on || !near(hall.theta, .5f) || hall.info_slot != -1)
+    return "loop: the turn kept the spot or the info text on, or reset the spot";
+  run(hall, 1, false, 1.f / 30);
+  if (hall.players[1].clip != kFrontClip || !hall.players[1].loop || !near(hall.players[1].blend, .3f) ||
+      hall.players[0].clip != kRestClip || hall.info_slot != 1)
+    return "loop: the new character in front does not blend into the looping front clip";
+  // The start (005fe7c0): the start clip once with its blend, then IsAnimEnd.
+  hall.start(1, .5f);
+  if (hall.players[1].clip != kStartClip || hall.players[1].loop || !hall.spot_on) return "loop: the start";
+  for (int i = 0; i < 107; ++i) hall.starting(1, 1 / 30.f);
+  if (hall.ended(hall.players[1])) return "loop: the start clip ended before its blend and length";
+  for (int i = 0; i < 3; ++i) hall.starting(1, 1 / 30.f);
+  if (!hall.ended(hall.players[1])) return "loop: the start clip did not end";
+  return "";
+}
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -93,6 +172,11 @@ int main(int argc, char **argv) {
     return 1;
   }
   std::cout << "PASS select turn: one slot's turn each way, ended where 1097's check ends it\n";
+  if (const auto e = hall_check(); !e.empty()) {
+    std::cerr << "FAIL select hall: " << e << "\n";
+    return 1;
+  }
+  std::cout << "PASS select hall: 1097's hover and 1298's loop front-clip modes\n";
   int loaded = 0, refused = 0;
   for (int i = 1; i + 1 < argc; i += 2) {
     const std::string want = argv[i];

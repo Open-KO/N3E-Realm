@@ -3,8 +3,9 @@
 `front-end.bin` is an optional presentation file (spec 11): KO's 1098 login scene,
 login and server list, the Karus character select hall, character create, loading
 and the OK message box, the screens' music (version 3, Q57), each model
-clip's blend time and the select spot's growth rate (version 4, RQ-075), and
-PCM music tracks with a restart period (version 5, RQ-083).
+clip's blend time and the select spot's growth rate (version 4, RQ-075),
+PCM music tracks with a restart period (version 5, RQ-083), and the select
+hall's front-clip mode (version 6, RQ-086).
 `tools/assetc/ko_front_end.py` cooks it from the pinned client tree with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -18,7 +19,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 5, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 6, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤64), each width and height (1–1024) then RGBA8 rows.
 3. Fonts: a count (≤8), each texture index, pixel size (6–48), cap height, atlas
@@ -48,9 +49,9 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    (`CGameProcLogIn_1098::Render`'s moon).
 7. The select scene: camera, lights, global ambient, the slots (count equal to
    the character slots), the spot's growth rate (version 4: theta per second,
-   above 0 and at most 100), the hall (part count ≤64, each a mesh), the model
-   (version 4: three clips, by role the hover, start and rest clips), its
-   plugs.
+   above 0 and at most 100), the front-clip mode (version 6: 0 hover, 1 loop;
+   below), the hall (part count ≤64, each a mesh), the model (version 4: three
+   clips, by role the front, start and rest clips), its plugs.
 8. The create model and its plugs (version 2): `CGameProcCharacterCreate`'s
    player (`InitChr`: the race's `UPC_DefaultLooks` joint, animation and default
    parts) with one clip, `ANI_BREATH` (0), and no plugs (a new character holds
@@ -97,10 +98,29 @@ address mode); the font atlases and the moon linear.
   record). The client turns the scene camera's eye about the vertical through
   `at`, the short way, at KO's 1.2 rad a second; a turn to another slot ends on
   the first frame past that slot's eye, and a turn back to slot 0 ends on its
-  eye (1097: `0043e4e0`, below). The spot's theta is the widest it opens; the client widens it
-  from 0 at the select scene's rate while the pointer is on the character in
-  front and narrows it at that rate otherwise, and the spot is off at 0
-  (1097: `0043f280`, below).
+  eye (1097: `0043e4e0`, below). The spot's theta is the widest it opens; the
+  client widens it from 0 at the select scene's rate, as the front-clip mode
+  says, and the spot is off at 0.
+- Front-clip mode (version 6, RQ-086; `client/render/select_hall.h`): what the
+  hall plays at rest, the camera on a slot. Both start the chosen character's
+  start clip once on the press, at rest only, with the spot at its widest, and
+  tick only it until the clip has played (below). Both give every character the
+  front clip, with no blend, on entering the hall (KO's AddChr).
+  - 0, hover (1097, `0043f280`; "Moradon", below): every tick, the character in
+    front plays the front clip once while the pointer is in the centre rect and
+    the rest clip once otherwise, each over its blend time, and is the only one
+    ticked; the spot widens while the pointer is there and narrows otherwise;
+    the info text shows only while the pointer is there. While the camera turns
+    nothing is ticked.
+  - 1, loop (1298, `005fef90`; `specs/KO-FINDINGS.md` §8.3): every tick, the
+    character in front loops the front clip and the others play the rest clip
+    once, each over its blend time, every character ticked, whatever the
+    pointer does; the spot widens to its widest and stays there; the info text
+    shows (`select_hint` for an empty slot). While the camera turns every
+    character plays the rest clip once and is ticked, and the info text is
+    hidden. The centre rect only takes the click.
+
+  While the camera turns the spot is off and keeps its theta, in both modes.
 - Model: a byte length and an N3S1 or N3SM scene (`tools/assetc/gltf.py`, atlas
   up to 2048 a side), then a count of further clips and each clip's byte length
   and track list (N3S1's track encoding, on the model's nodes), then (version 4)
@@ -214,12 +234,45 @@ The clients, per screen, and what the format expresses for each, are in
 
 | Client | Recipe | Inputs | Status |
 |---|---|---|---|
-| `1097` | `front-end.json` | `assets/ko` | Default. 1097's login scene, select hall, turn sound and music (RQ-083: `bgm_login.wav` restarting every 21.66 s, `bgm_el_battle.wav` looping). Still 1298's: the layouts (`UI_US`, since `ko_hud` does not read 1097's UIF version) |
+| `1097` | `front-end.json` | `assets/ko` | Default. 1097's login scene, select hall (`front_clip` `hover`), turn sound and music (RQ-083: `bgm_login.wav` restarting every 21.66 s, `bgm_el_battle.wav` looping). Still 1298's: the layouts (`UI_US`, since `ko_hud` does not read 1097's UIF version) |
 
-Not offered yet: `1298` (needs the select's front-clip mode, the recorded camera
-paths, 1298's UIF login intro and per-race looks), `2145` (its UIF versions, its
-Ogg sounds, its clip format) and `steam` (its packs, its protected exe, the pin).
-Each is its own queue item; until it lands the cook refuses it as above.
+Not offered yet: `1298`, `2145` (its UIF versions, its Ogg sounds, its clip
+format) and `steam` (its packs, its protected exe, the pin). Each is its own
+queue item; until it lands the cook refuses it as above. 1298's select
+character is data already (RQ-086): `games/moradon/front-end-1298.json`
+("1298", below) cooks from the pinned tree, but `front-ends.json` does not offer
+it until 1298's recorded camera paths, its select hall and slots, its UIF
+login intro and its select UI hidden while the camera turns are data too.
+
+## 1298 (`games/moradon/front-end-1298.json`, not offered)
+
+The parts of 1298's front end the format expresses (RQ-086,
+`specs/KO-FINDINGS.md` §8 and §8.3, binary); every other part is the 1097
+recipe's, as "Moradon" below says, and marked here:
+
+- Select character: 1298's per-race files, `ChrSelect/upc_ka_tu.n3joint` and
+  `upc_ka_tu.n3anim` (`005fb4f0`: race 2, a rogue or a priest), with the race's
+  `UPC_DefaultLooks` parts and face and hair 0, as `005fc6f0` takes them for a
+  slot with no item, and no plug, as `005fca40` adds none without an item (the
+  wire carries no equipment). Its clips by role: front 1 (20–300 at 30 frames a
+  second), start 2 (394–466 at 25) and rest 0 (180–220 at 25), each over its
+  record's 0.25 s but the start's, over 0.6 s (`005fe7c0`). Clip 2's last frames
+  (458–466) are past the joint's 228 keys at 15 a second; KO leaves the joints
+  there as the last key set them, and the cook holds the last key.
+- `front_clip` `loop` (`005fef90`): the front clip looping on the character in
+  front at rest, the rest clip once on the others and on everyone while the
+  camera turns; the spot widens to 0.5 by 0.02 a tick (`006a93b4`, `006a93bc`,
+  Karus) and stays; the info text shows at rest, empty for an empty slot
+  (`006074c0` writes the empty string, so `select_hint` is empty).
+- No turn sound: 1298 plays none (`select.turn_sound` absent).
+- Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
+  create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
+- Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF
+  intro), the select hall `ka_chairs.n3shape`, its lights, camera, slots and the
+  turn about `at` (1298 places its characters elsewhere, `005fb4f0`'s positions,
+  and turns through recorded `.n3camera` paths), the select UI shown while the
+  camera turns (1298 hides it, `005fe3c0`, `005fe450`; Q77), and the layouts (1298's
+  `UI_US`, as today).
 
 ## Moradon (`games/moradon/front-end.json`)
 
@@ -247,7 +300,7 @@ Each is its own queue item; until it lands the cook refuses it as above.
   hover and rest clips blend over their records' 0.3 s (`0043f280` names
   `FLT_MIN`); the start clip over `start_blend`, the select's own 0.6 s
   (`0043ea30`: `push 0x3f19999a` at `0043ea77`), not its record's 0.3 s. The hall plays as 1097's does
-  (`specs/KO-FINDINGS.md` §8.1, binary, Q71): at rest, every tick, the
+  (`front_clip` `hover`; `specs/KO-FINDINGS.md` §8.1, binary, Q71): at rest, every tick, the
   character in front plays `pre_select` once while the pointer is in the centre
   rect and `dummy` once otherwise; setting the clip already set changes
   nothing, so `pre_select` plays once and holds its last frame. Each change

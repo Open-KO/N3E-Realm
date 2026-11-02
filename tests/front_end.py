@@ -360,6 +360,33 @@ for slot, index in (({"position": [0.5, 0, 3], "turn_end": 0.75}, 0), ({"positio
         continue
     raise AssertionError(("cooked", slot, index))
 
+# RQ-086: select.front_clip names the hall's front-clip mode, `hover` (1097) or
+# `loop` (1298), and is refused missing or misspelt, before any KO file is read.
+SELECT = {"camera": dict(TURN_CAMERA, fov=0.96, near=0.1, far=100), "spot_theta": 0.5, "spot_phi": 0.6,
+          "spot_step": 0.02, "slots": [{"position": [0.5, 0, 3], "yaw": 0, "spot": [0, 2, 7],
+                                        "spot_target": [0, 0, 3]}]}
+for mode in (None, "Hover", "once", 1):
+    config = dict(SELECT) if mode is None else dict(SELECT, front_clip=mode)
+    try:
+        fe.select_scene(Fixture({}), fe.Textures(Fixture({})), config, pathlib.Path("/nonexistent"))
+    except ValueError as error:
+        assert str(error) == "front-end select.front_clip: one of hover, loop", error
+        continue
+    raise AssertionError(("cooked front_clip", mode))
+assert fe.FRONT_CLIP == {"hover": 0, "loop": 1}, fe.FRONT_CLIP
+# A front-end clip past its joint's keys holds the last key there (1298's
+# upc_ka_tu.n3anim clip 2); every other caller is refused, as before.
+import ko_character  # noqa: E402
+KEYS = {"rate": 15.0, "values": [[0, 0, 0], [1, 0, 0], [2, 0, 0]], "kind": 0}
+assert ko_character.sample(KEYS, 5.0, None) == [2, 0, 0]  # key 2.5: the last key, as KO's 00427640
+assert ko_character.sample(KEYS, 9.0, None, hold=True) == [2, 0, 0]
+try:
+    ko_character.sample(KEYS, 8.0, None)
+    raise AssertionError("sampled past the keys without hold")
+except ValueError as error:
+    assert str(error) == "clip outside key range", error
+print("PASS front-end cook: the front-clip mode's names, a clip held past its keys")
+
 demo = ROOT / "build/packages/demo/scene.bin"
 model = demo.read_bytes()
 assert model[:4] == b"N3S1", demo
@@ -408,9 +435,9 @@ def character(clips=1, blends=None, plug=None):
     return u(len(model)) + model + u(clips - 1) + further + f([0.3] * clips if blends is None else blends) + plugs
 
 
-def blob(version=5, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=6, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
-         spot_rate=0.6):
+         spot_rate=0.6, front_clip=0):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -423,7 +450,7 @@ def blob(version=5, slots=1, screen_data=None, font_index=None, light=None, plug
     spot = dict(LIGHT, kind=fe.SPOT, theta=0.5, phi=0.6, range=6.0)
     out += CAMERA + u(0) + f([0, 0, 0]) + u(slots if slot_count is None else slot_count)
     out += (f([0, -1, 2, 0, 0, 0, 7]) + fe.light_record(spot)) * (slots if slot_count is None else slot_count)
-    out += f([spot_rate]) + u(1) + MESH + character(select_clips, plug=plug) + character(plug=plug)
+    out += f([spot_rate]) + (b"" if front_clip is None else u(front_clip)) + u(1) + MESH + character(select_clips, plug=plug) + character(plug=plug)
     return out + music + extra
 
 
@@ -465,6 +492,11 @@ cases = {
     "bad-trailing": valid + b"\0",
     "bad-magic": blob(magic=b"N3FX"),
     "bad-version": blob(version=4),
+    # RQ-086 (version 6): the select hall's front-clip mode, 0 hover or 1 loop.
+    "bad-version-5": blob(version=5),
+    "ok-front-clip-loop": blob(front_clip=1),
+    "bad-front-clip": blob(front_clip=2),
+    "bad-front-clip-missing": blob(front_clip=None),
     "bad-clip-blend": blob(blends=[-0.1]),
     "bad-clip-blend-nan": blob(blends=[float("nan")]),
     "bad-spot-rate": blob(spot_rate=0),

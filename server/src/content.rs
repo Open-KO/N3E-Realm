@@ -920,10 +920,10 @@ impl Release {
 }
 
 /// front-end.bin's header (spec 11, content/front-end.md): the N3FE version
-/// this server's client reads (5 since RQ-083: the music's PCM tracks and
-/// restart period) and the character slot count, 1 to 3.
+/// this server's client reads (6 since RQ-086: the select hall's front-clip
+/// mode, after RQ-083's PCM music) and the character slot count, 1 to 3.
 fn front_end_slots(mut p: Reader) -> Result<u32> {
-    if p.take(4)? != b"N3FE" || p.u()? != 5 {
+    if p.take(4)? != b"N3FE" || p.u()? != 6 {
         return Err(bad("front end magic/version"));
     }
     let slots = p.u()?;
@@ -944,9 +944,9 @@ mod front_end_tests {
         Reader::from_bytes(b)
     }
     #[test]
-    fn reads_the_slot_count_of_version_5() {
+    fn reads_the_slot_count_of_version_6() {
         for slots in 1..=3 {
-            assert_eq!(front_end_slots(header(b"N3FE", 5, slots)).unwrap(), slots);
+            assert_eq!(front_end_slots(header(b"N3FE", 6, slots)).unwrap(), slots);
         }
     }
     #[test]
@@ -955,15 +955,19 @@ mod front_end_tests {
             front_end_slots(header(b"N3FE", 4, 3)).is_err(),
             "version 4 (no PCM music)"
         );
-        assert!(front_end_slots(header(b"N3FE", 6, 3)).is_err(), "version 6");
-        assert!(front_end_slots(header(b"N3FX", 5, 3)).is_err(), "magic");
-        assert!(front_end_slots(header(b"N3FE", 5, 0)).is_err(), "no slots");
         assert!(
-            front_end_slots(header(b"N3FE", 5, 4)).is_err(),
+            front_end_slots(header(b"N3FE", 5, 3)).is_err(),
+            "version 5 (no front-clip mode)"
+        );
+        assert!(front_end_slots(header(b"N3FE", 7, 3)).is_err(), "version 7");
+        assert!(front_end_slots(header(b"N3FX", 6, 3)).is_err(), "magic");
+        assert!(front_end_slots(header(b"N3FE", 6, 0)).is_err(), "no slots");
+        assert!(
+            front_end_slots(header(b"N3FE", 6, 4)).is_err(),
             "four slots"
         );
         assert!(
-            front_end_slots(Reader::from_bytes(b"N3FE\x05\0\0".to_vec())).is_err(),
+            front_end_slots(Reader::from_bytes(b"N3FE\x06\0\0".to_vec())).is_err(),
             "truncated"
         );
     }

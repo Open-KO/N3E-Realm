@@ -78,7 +78,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 5, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 6, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -105,8 +105,9 @@ replace the panels when the client has a Discord realm config.
   `{version}`.
 - **Scenes.** The intro (camera, lights, the model with its clip and plugs, the moon
   as a screen quad) and the select hall (camera, lights, `character_slots` slots with
-  their eye and spot light, the spot's growth rate, the hall meshes, the model with
-  clips 0, 1 and 2 (hover, start, rest), plugs), each model clip with the time the
+  their eye and spot light, the spot's growth rate, the front-clip mode (N3FE
+  version 6, RQ-086), the hall meshes, the model with clips 0, 1 and 2 (front,
+  start, rest), plugs), each model clip with the time the
   client blends into it over (N3FE version 4, RQ-075; the record's, or the package's
   own for the start clip, RQ-076),
   and the create model (the race's own looks joint and animation, `ANI_BREATH`, no
@@ -121,6 +122,14 @@ replace the panels when the client has a Discord realm config.
   screen naming the track already playing keeps it, so it runs on across the
   screens; entering the world stops it. Option.ini `[Sound] Effect=0` silences it with every other sound, as in
   KO 1298 (Q70).
+- **The select hall's front-clip mode** (RQ-086, Q71). What the character in front
+  plays at rest: `hover`, 1097's (the default: the front clip once while the
+  pointer is on the character, the rest clip otherwise, the spot and the info
+  text following the pointer), or `loop`, 1298's (the front clip looping and the
+  rest clip once on the others whatever the pointer does, the spot widening and
+  the info text shown at rest; the centre rect only takes the click). The recipe
+  names it (`select.front_clip`); `games/moradon/front-end-1298.json` uses `loop`
+  and is not offered yet (`content/front-end.md`, "Choosing the client").
 - **The select arrows' turn sound** (RQ-077, Q70). 1097's hall plays sound 2501,
   `char_select_turn.wav`, for each turn its arrows start. The package names the
   sound-table id (`front-end.json` `select.turn_sound`), and the cook binds it in
@@ -227,7 +236,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 5 (no music section, no clip blend times and spot rate, or no track kinds and restart periods) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 6 (no music section, no clip blend times and spot rate, no track kinds and restart periods, or no front-clip mode) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -261,7 +270,8 @@ CPU (`make test`):
    screens, and music that is not whole Layer III frames of one format, a WAV that
    is not integer PCM within the rate and byte bounds, a restart period out of
    bounds, or that names an unknown screen or track. It works on synthetic UIF
-   fixtures, synthetic MPEG frames and synthetic WAVs (original bytes). (The wrapped-UV
+   fixtures, synthetic MPEG frames and synthetic WAVs (original bytes). It refuses a
+   select hall without a known front-clip mode (`hover` or `loop`, RQ-086). (The wrapped-UV
    `ka_login_intro_us.uif` is not an input: the 1098 intro scene replaced it.)
 2. **Loader bounds** (`tests/front_end.py`, `tests/front_end.cpp`). The client loader
    refuses malformed blobs, each with its own message and no crash. The music stream
@@ -269,7 +279,11 @@ CPU (`make test`):
    48 kHz, ends a track that decodes to nothing, and the mixer keeps, replaces and
    stops it; a synthetic PCM track plays its samples once and looping, resampled from
    22,050 Hz, and a restart period starts a track again on time, ended or not
-   (RQ-083).
+   (RQ-083). The select hall (`client/render/select_hall.h`, `tests/front_end.cpp`)
+   plays both front-clip modes on synthetic clips: the hover mode's character in
+   front by the pointer, the others still; the loop mode's front clip looping, the
+   others' rest clip once, the spot and info without the pointer, the turn's rest
+   clip on everyone (RQ-086).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.

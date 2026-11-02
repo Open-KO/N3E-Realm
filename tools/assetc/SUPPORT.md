@@ -120,7 +120,7 @@ Spec 11: optional engine42 `presentation["front-end.bin"]` (N3FE) holds KO's
 front end. `ko_front_end.py` reads the local client's UIF trees (login, Karus
 select, create, loading, OK box), the 1098 intro character with its plug and
 lights, the select hall's n3shape, slots, spots and the Tuarek priest with three
-clips (hover, start, rest), all from the paths and choices in the chosen front end's recipe
+clips (front, start, rest), all from the paths and choices in the chosen front end's recipe
 (RQ-078: `front_end_choice.py` reads `games/moradon/realm-config.json` and
 `front-ends.json`, refuses an unoffered client or missing inputs, and gives the
 recipe, `front-end.json` for 1097, and its input trees; RQ-084: a recipe path
@@ -138,6 +138,10 @@ tick at 30 ticks a second). N3FE version 5 (RQ-083) adds each track's kind and
 restart period: a track file that is a RIFF WAVE is cooked as its 16-bit PCM
 samples (read as `ko_audio` reads a WAV, integer PCM only, other widths made
 16-bit, its own rate and channels kept, the whole file), so 1097's
-`bgm_login.wav` and `bgm_el_battle.wav` play as 1097 plays them.
+`bgm_login.wav` and `bgm_el_battle.wav` play as 1097 plays them. N3FE
+version 6 (RQ-086) adds the select hall's front-clip mode (`select.front_clip`:
+`hover`, 1097's, or `loop`, 1298's); `games/moradon/front-end-1298.json`, not
+offered yet, cooks 1298's per-race `ChrSelect/upc_ka_tu` joint and clips with it,
+holding a clip's frames past its joint's keys on the last key, as KO leaves them.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

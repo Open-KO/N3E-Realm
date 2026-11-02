@@ -27,18 +27,32 @@ Handle INBOX entries (Feedback, Answers, Accepted) per LOOP.md with
 then commit just those files: `git add docs/loop && git commit -s -m "loop: inbox"`
 plus the attribution lines below.
 
-## 2. Daily push
+## 2. Daily gate and push
 
 ```sh
 cat build/loop/pushed-at 2>/dev/null                    # epoch seconds of the last push
 git fetch -q origin && git rev-list --count origin/master..master
+python3 -c 'import json; print([i["id"] for i in map(json.loads, open("docs/loop/queue.jsonl")) if i["slug"].startswith("daily-") and i["status"] in ("ready", "blocked")])'
 ```
 
-Over 86400 s since the last push (or no file) and ahead: if
+Over 86400 s since the last push (or no file), ahead, and no open `daily-*` item: if
 `git merge-base --is-ancestor origin/master master` fails, stop the loop and report.
-Else `git push origin master` and `date +%s > build/loop/pushed-at`. Check the
-previous push's CI (`gh run list --branch master --limit 3`); a failed run on a
-loop-pushed head becomes a `fix` item via `queue.py add --top`.
+Else run `python3 tools/loop/gate.py daily` on the clean `master` (the whole of make
+test, make live and make live-ko: about an hour; run it in the background and wait for
+its notification). Its last line:
+
+- `DAILY_OK` or `DAILY_FLAKE <suites>`: `git push origin master` and
+  `date +%s > build/loop/pushed-at`; a `flake` item per suite at the end of the queue.
+- `DAILY_FAIL <steps>`: no push. One `fix` item per `DAILY_BLAME` line via
+  `queue.py add --top` (slug `daily-<step or suite>` with `-` for `_`, lane `engine`, the failure and
+  the blamed commits in the title, the daily log directory in `refs`), in the order
+  printed. Never a reset or a revert. The push waits for the next daily run, which
+  waits until those items are done.
+
+Either way add a LOG row (`daily`, the verdict, the `DAILY_TIMES` line) and commit the
+queue and LOG (`loop: daily gate`). Check the previous push's CI
+(`gh run list --branch master --limit 3`); a failed run on a loop-pushed head becomes a
+`fix` item via `queue.py add --top`.
 
 ## 3. Pick
 
@@ -56,17 +70,19 @@ Spawn `realm-worker` (Agent, `subagent_type: realm-worker`) with the item's JSON
   returns `VERDICT: pass` or `VERDICT: block` with numbered blocking findings.
   On `block`, send the findings to the same worker (SendMessage) and review again;
   a second `block` fails the attempt.
-- Run `python3 tools/loop/gate.py run` (long: make live is about 15 min; run it in the
-  background and wait for its notification). `GATE_FAIL`: send the step's log path to
-  the worker once, review its fix if it changed product code, gate again; a second
-  fail fails the attempt. `GATE_FLAKE <suites>`: pass; add one `flake` item per suite
-  (`lane: flake, kind: fix`) at the end of the queue.
+- Run `python3 tools/loop/gate.py run` (a few minutes for most items; a change to a
+  live runner runs it whole, about 15 min; run it in the background and wait for its
+  notification). `GATE_FAIL`: send the step's log path to the worker once, review its
+  fix if it changed product code, gate again; a second fail fails the attempt.
+  `GATE_FLAKE <suites>`: pass; add one `flake` item per suite (`lane: flake, kind: fix`)
+  at the end of the queue. The full make live and make live-ko are the daily gate's
+  (step 2), not the item's.
 
 ## 5a. Commit
 
 Update the item (`queue.py set RQ-NNN status=<done|deviation|split> testme=…`), add
-the worker's new items (`queue.py add --after RQ-NNN '<json>'`), append the LOG row,
-then:
+the worker's new items (`queue.py add --after RQ-NNN '<json>'`), append the LOG row
+(its gate column is the `GATE_TIMES` line: each step, exit code and seconds), then:
 
 ```sh
 git add -A -- . ':!docs/loop/INBOX.md'
@@ -96,6 +112,6 @@ LOG as `RQ-NNN: attempt N failed`. Never `git reset`, `checkout --`, or `clean`.
 Restart the realm with a player online and no drain notice, or deploy without a backup
 (ssh to the realm host and `tools/host-realm` are otherwise allowed, LOOP.md "Out of
 bounds"); run `tools/host-realm mint-bot` or `tools/host-tls`; change the host's TLS,
-tunnel or firewall; publish a release by hand; force-push; read `.env` or secrets (the
+tunnel or firewall; publish a release by hand (until RQ-030, the hosted release by deploy/HOST.md's steps is allowed, LOOP.md); force-push; read `.env` or secrets (the
 host's included); write private host details into tracked files; run `docker compose config` unfiltered, commit
 `assets/ko`, or file items about the loop itself unless INBOX asks.

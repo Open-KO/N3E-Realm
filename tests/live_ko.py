@@ -195,6 +195,13 @@ GRAPHICAL = live.GRAPHICAL
 TURBO_ENV = {"N3E_TURBO_GRAPHICS": "1", "N3E_TEST_WINDOW_SIZE": "1280x1024"} if GRAPHICAL else {}
 
 
+# What the front-end suites exercise beyond their scripts (spec 11): the screens'
+# code, their cook and the Moradon package's front-end data.
+FRONT_END = ["client/render/front_end.h", "tools/assetc/ko_front_end.py", "games/moradon/front-end.json"]
+# The Moradon feature cook (tools/assetc/ko_bake.py --features, --des).
+MORADON_FEATURES = ["tools/assetc/moradon_features.py", "tools/assetc/moradon_des.py"]
+
+
 def stacked(name, kind, script, graphical=None):
     return live.suite(name, "python", "tests/ko_stack.py", kind, script,
                       covers=[script, "tests/moradon_stack.py"] if kind.startswith("moradon") else [script],
@@ -255,15 +262,25 @@ KO_SUITES = [
     # Spec 11 acceptance 5 and 6: the front-end cook twice, and each KO screen
     # drawn offscreen at two sizes; no stack.
     (live.suite("front_end_live", "python", "tests/front_end_live.py",
+                covers=[*FRONT_END, "client/harness/front_end_captures.inc"],
                 graphical="PASS KO front end graphical"), ["moradon"], True),
     # Spec 11 acceptance 7: the screens against a native server with the Discord
     # stand-in: login, create (a refusal, then success), start, a kick.
     (live.suite("front_end_flow_live", "python", "tests/front_end_flow_live.py",
-                covers=["tests/discord_standin.py"], graphical="PASS KO front-end flow"), ["moradon"], True),
+                covers=["tests/discord_standin.py", *FRONT_END, "client/harness/front_end_flow.inc"],
+                graphical="PASS KO front-end flow"), ["moradon"], True),
 ]
+# A suite also covers the Moradon feature cook when it needs a package cooked with
+# --features: the loop's gate (tools/loop/gate.py) runs the suites whose covers a
+# change touches.
+for _suite, _needs, _ in KO_SUITES:
+    if any("--features" in PREPARE[n][0] for n in _needs):
+        _suite["covers"] = sorted({*_suite["covers"], *MORADON_FEATURES})
 SUITES = [s for s, _, _ in KO_SUITES]
+# Every Python script this run starts (shape() compiles them); covers also name
+# the client and content files a suite exercises.
 SCRIPTS = sorted({"tests/live_ko.py", "tests/ko_stack.py", "tests/moradon_stack.py",
-                  *(f for s in SUITES for f in s["covers"])})
+                  *(f for s in SUITES for f in s["covers"] if f.endswith(".py"))})
 
 
 def shape():

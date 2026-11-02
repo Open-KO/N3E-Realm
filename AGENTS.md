@@ -51,14 +51,19 @@ GPU, Docker or fixture is an unverified gate, not a pass.
 
 Standing authorization for the loop (`/loop /realm-loop`, `docs/loop/LOOP.md`): it may
 pick items from `docs/loop/queue.jsonl`, commit each gated item straight to `master`
-(no task branch), and push `master` at most once a day, never forced. It may ssh to the
+(no task branch), and push `master` at most once a day, never forced. Per item it runs
+only the checks and live suites the change covers (`tools/loop/gate.py run`); the full
+`make test`, `make live` and `make live-ko` run on master once a day before the push
+(`gate.py daily`), and a failure there holds the push. It may ssh to the
 realm host to read logs and status, and deploy and restart the realm there with
 `tools/host-realm`: only with no player online or after the drain notice, after a
 backup, and it stops the loop if the realm does not come back healthy. It may not run
 `tools/host-realm mint-bot` or `tools/host-tls`, change the host's TLS, tunnel or
-firewall, publish a release by hand, rewrite history, read or write secrets (the host's
+firewall, publish a release by hand (except the hosted release below), rewrite history, read or write secrets (the host's
 `.env` included), or work on its own machinery unless `docs/loop/INBOX.md` asks. While it runs, nobody
 else edits this checkout; `docs/loop/INBOX.md` is the maintainer's channel to it.
+Until CI publishes releases (RQ-030), the loop may build and copy the hosted release
+by `deploy/HOST.md`'s Releases steps (the maintainer allowed it, 2026-11-01), under the same deploy conditions.
 
 ## Verification evidence
 

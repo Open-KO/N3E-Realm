@@ -22,7 +22,17 @@ realm-assets: ko-assets
 codegen:
 	mkdir -p build/generated
 	protoc -I protocol --cpp_out=build/generated protocol/wire.proto
+# make test is test-fast, then test-slow: SLOW_TESTS are the scripts that take
+# minutes and catch little per change (the KO bake pins: about 7 of make test's 10
+# minutes on 2026-11-01). The loop's per-item gate runs test-fast and only the slow
+# scripts a change touches (make test-slow SLOW_TESTS=...); its daily gate runs all of
+# make test (docs/loop/LOOP.md "Gate").
+SLOW_TESTS := tests/ko_bake_pin.py
+.PHONY: test-fast test-slow
 test:
+	$(MAKE) test-fast
+	$(MAKE) test-slow
+test-fast:
 	$(MAKE) client
 	$(MAKE) server
 	$(MAKE) assets
@@ -107,6 +117,9 @@ test:
 	python tests/appearance.py
 	python tests/ko_terrain.py
 	python tests/moradon_bridges.py
+	python tests/loop_gate.py
+test-slow:
+	@set -e; for t in $(SLOW_TESTS); do echo "python $$t"; python $$t; done
 graphical:
 	python tools/assetc/main.py tests/fixtures/legacy-demo build/packages/legacy-demo
 	python tests/graphical.py

@@ -1821,8 +1821,6 @@ for zone, (gtd_sha, opd_sha, samples, faces, records) in LEGACY_1097.items():
 # ---------------------------------------------------------------------------
 # PQ-054: the operator-local import of the NPC tables (tests/ko_tables_import.py;
 # synthetic rows, plus the operator's export when present).
-# PQ-229: with the player's local KO data, the Moradon release pins and the
-# OPDEXT zones (tests/ko_bake_pin.py; SKIP lines without the data).
 # PQ-221: the research installer unpacker's pins (tests/ko_installer_unpack.py;
 # a synthetic installer, plus the player's 2145 installer when present).
 # PQ-227: the research Inno Setup 5.2.3 reader (tests/ko_inno_unpack.py; synthetic
@@ -1840,9 +1838,9 @@ sys.stdout.flush()  # keep this file's lines ahead of the child's in a captured 
 subprocess.run([sys.executable, "tests/ko_tables_import.py"], check=True)
 subprocess.run([sys.executable, "tests/ko_homeland_1097.py"], check=True)
 # PQ-223: a zone layout the table does not name (tests/ko_zone_layout.py, synthetic);
-# the player's classic Moradon cooks are pinned in tests/ko_bake_pin.py.
+# the player's classic Moradon cooks are pinned in tests/ko_bake_pin.py, which make
+# test runs itself, as a slow test (Makefile SLOW_TESTS, RQ-064).
 subprocess.run([sys.executable, "tests/ko_zone_layout.py"], check=True)
-subprocess.run([sys.executable, "tests/ko_bake_pin.py"], check=True)
 subprocess.run([sys.executable, "tests/ko_installer_unpack.py"], check=True)
 subprocess.run([sys.executable, "tests/ko_inno_unpack.py"], check=True)
 subprocess.run([sys.executable, "tests/ko_tbl_2145.py"], check=True)

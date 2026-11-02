@@ -20,17 +20,22 @@ page is the policy it follows; AGENTS.md "Agent loop" is the standing authorizat
 1. **Preflight.** Stop the loop on any of: `HALT` in INBOX; a dirty tree other than
    `docs/loop/INBOX.md` (someone is working here); under 20 GB free; not on `master`;
    the last three LOG rows are failures. Then apply INBOX (below).
-2. **Push, at most daily.** When the last push (`build/loop/pushed-at`) is over 24 h
-   old and `master` is ahead of `origin/master`: fetch; stop the loop if
-   `origin/master` is not an ancestor of `master`; else `git push origin master`
-   (never forced). A red CI run on the previously pushed head becomes a `fix` item at
-   the top of the queue.
+2. **Daily gate and push.** When the last push (`build/loop/pushed-at`) is over 24 h
+   old, `master` is ahead of `origin/master` and no `daily-*` fix item is open: fetch;
+   stop the loop if `origin/master` is not an ancestor of `master`; run the daily gate
+   (below) on `master`. On `DAILY_OK` or `DAILY_FLAKE` (a `flake` item per suite),
+   `git push origin master` (never forced). On `DAILY_FAIL` nothing is pushed: each
+   `DAILY_BLAME` line becomes a `fix` item (slug `daily-...`) at the top of the queue,
+   naming the failed step or suite and the commits it blames; the next daily run
+   waits until they are done. A red CI run on the previously pushed head becomes a
+   `fix` item at the top of the queue.
 3. **Pick** `tools/loop/queue.py next`. `LOOP_QUEUE_EMPTY` ends the loop.
 4. **Work.** The worker gets the item and, on a retry, the item's `note`.
 5. **Review.** Blocking findings go back to the worker; at most two review rounds.
 6. **Gate.** `tools/loop/gate.py run`. A `GATE_FAIL` goes back to the worker once with
    the failing log; the gate then runs again. `GATE_FLAKE` passes and files a `flake`
-   item per suite.
+   item per suite. The `GATE_TIMES` line (each step, its exit code and seconds) goes
+   into the LOG row.
 7. **Commit** the change and the queue/LOG update together: `RQ-NNN: <short title>`,
    signed off, with the session's attribution lines. INBOX is never staged with an
    item.
@@ -46,15 +51,53 @@ after it.
 
 ## Gate
 
-`gate.py` picks the steps from the changed files: the queue check always; nothing more
-for docs-only changes; `cargo fmt`, `clippy -D warnings` and `test` for each touched
-crate (n3e-server's fmt and clippy wait for RQ-021); `make test` for anything else;
-`make live` (graphical) when the change touches the server, client, protocol, deploy,
-build files, Rust crates, assetc, games or live suites; `make live-ko` (last line
-`LIVE_KO_OK`) when it touches Moradon, KO importers or the front end. A failed live
-suite whose script the change does not touch is rerun alone once; passing alone is a
-flake, not a pass of the original run, and is filed. A missing GPU, Docker or fixture
-fails the gate; it is never a pass.
+Two gates, both `tools/loop/gate.py`, so the loop waits minutes per item and runs the
+long suites once a day. Each logs every step to `build/loop/gate/<stamp>/` (daily:
+`build/loop/daily/<stamp>/`) with its exit code and seconds in `timings.tsv`, and prints
+them on a `GATE_TIMES` / `DAILY_TIMES` line for the LOG row. Each sources
+`tools/env.sh` (the pinned toolchain and ImGui) and removes `LIVE_SUITES`,
+`LIVE_KO_SUITES`, `LIVE_TICK_MS`, `LIVE_DISPLAY` and the other knobs in `CLEARED` from
+the environment it passes on. A missing GPU, Docker or fixture fails a gate; it is
+never a pass. A `SKIP` line in a make test log fails the step unless `SKIP_ALLOWED`
+names it: only inputs the maintainer alone holds (today the 1264 install and the 2145
+installer).
+
+**Per item** (`gate.py run`; `gate.py plan [FILE...]` shows the steps). Picked from the
+changed files:
+
+- the queue check, always; nothing more when only docs change (`docs/`, `specs/`,
+  `.claude/`, `README.md`, `AGENTS.md`, any `.md`). `content/` and `tools/loop/` are not
+  docs.
+- `cargo fmt --check`, `clippy -D warnings` and `test` for each crate whose inputs the
+  change touches: its directory, `Cargo.*` and `rust-toolchain.toml`, and for
+  n3e-server also `protocol/`, `deploy/*.sql`, `tests/fixtures/*.hex` and realm-bot's
+  library and admin routes. n3e-server's fmt and clippy wait for RQ-021.
+- `make test-fast` (`make test` without the Makefile's `SLOW_TESTS`) for any other
+  change, and `make test-slow` for each slow test whose script, or a helper it
+  imports, the change touches.
+- the `make live` and `make live-ko` suites whose covers the change touches: a
+  suite's `covers` in `tests/live.py` or `tests/live_ko.py`, with the `tests/` and
+  `tools/` scripts they import or name. A change to a runner's own files (the runner,
+  the modules it imports, `tests/live_reads/`) runs that runner whole, and so does a
+  new `*_live.py` or `*_db.py` that no runner owns. A server, client, engine or
+  content change outside every suite's covers runs no live suite per item; the daily
+  gate runs them.
+
+A failed live suite whose covers the change does not touch is rerun alone once;
+passing alone is a flake (`GATE_FLAKE`, filed), not a pass of the original run.
+
+**Daily** (`gate.py daily`, on a clean `master`, before the push): every crate's fmt,
+clippy and test, the whole of `make test` (the slow tests too), and the whole of
+`make live` and `make live-ko`. Every step runs even after one fails. A failed live
+suite is rerun alone once; passing alone is a flake (filed; it does not block the
+push). Any other failure is `DAILY_FAIL`: it blocks the push, and its `DAILY_BLAME`
+line names the commits since `origin/master` that touch it (the failed suite's covers
+or the failed test's script), or all of them when none does. It is fixed by a new
+commit from a `fix` item, never a reset or a revert.
+
+What is slow and catches little per item moves to the daily gate by the same rule: a
+make test script into `SLOW_TESTS`, a live suite by keeping its covers to what it
+exercises.
 
 ## Review
 
@@ -89,10 +132,15 @@ The loop may ssh to the realm host to read logs and status, and deploy and resta
 realm with `tools/host-realm`: only with no player online or after the drain notice,
 after a backup, and it stops the loop if the realm does not come back healthy. It never
 runs `tools/host-realm mint-bot` or `tools/host-tls`, changes the host's TLS, tunnel or
-firewall, publishes a release by hand, force-pushes, rewrites history, reads or writes `.env` or any
+firewall, publishes a release by hand (except the hosted release below), force-pushes, rewrites history, reads or writes `.env` or any
 secret, runs `docker compose config` unfiltered, commits `assets/ko`, or adds items
 about its own machinery unless INBOX asks. Reverse engineering uses n3e's Ghidra
 setup and `~/Projects/n3e/ref/` read-only.
+
+Until CI publishes releases (RQ-030), the loop may build and copy the hosted release
+by `deploy/HOST.md`'s Releases steps (the maintainer allowed it, 2026-11-01), under the same deploy conditions.
+A new package starts a new realm (Q63): say so in the LOG row, and deploy the server, the
+package and the release together so the hosted client always matches the package.
 
 ## LOG
 

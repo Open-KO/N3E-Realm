@@ -101,7 +101,8 @@
   pins did not.
 
 Without `assets/ko` it prints SKIP lines: no KO data is committed.
-`tests/ko_terrain.py` (so `make test`) runs it last; it also runs alone.
+`make test` runs it as a slow test (Makefile SLOW_TESTS: `make test-slow`, RQ-064),
+after `make test-fast`; it also runs alone.
 """
 import json, math, re, subprocess, sys
 from pathlib import Path

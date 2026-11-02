@@ -376,6 +376,10 @@ it (content/front-end.md, "Moradon"); the client streams it one frame at a time.
 Its form in the package is Q69.
 *RQ-071:* Option.ini `[Sound] Effect=0` silences it, as KO 1298 does; the front end
 has no other sounds in 1298 (Q70).
+*RQ-078 (KO-FINDINGS §9, binary):* 1097's login plays another track: sound 35,
+`Snd\bgm_login.wav` (21.67 s, in the pinned tree too), restarted every 21.66 s by
+its tick, and its select leaves it running. The 1097 front end (Q73) keeps 1298's
+track until `front-end.bin` carries a PCM track (filed under RQ-078).
 
 ### Q58 — Option and Registration in the login bar
 
@@ -654,3 +658,26 @@ start a turn from state 3, while the start clip plays. DoJobLeft and DojobRight
 (`0043e310`, `0043e380`) return early only in state 1. Elsewhere they set state 1,
 turn the camera and play the rotate sound. The realm ignores the arrows from the
 start until loading, as it ignores a second start.
+
+### Q73 — Where the realm owner chooses the front end's client, and who refuses
+
+The maintainer (2026-11-01, RQ-078) asked that realm owners choose, "in a
+server-side config file", which KO client the front end looks and behaves like
+(1097, 1298, a 2xxx one), that the choice be package data or a revision property,
+and that "the server" refuse a choice whose inputs are missing. The front end is
+cooked assets, not a tunable, so it cannot be a revision property; and the realm's
+server runs a cooked package and never has the KO inputs (spec 07,
+`deploy/HOST.md`: the package is cooked on the workstation).
+**Default taken (RQ-078):** the choice is tracked package data the realm owner
+edits: `games/<game>/realm-config.json` (`front_end`), one of the clients
+`games/<game>/front-ends.json` offers (`content/front-end.md`, "Choosing the
+client"). The cook (`make realm-assets`) is the server side that refuses: an
+unoffered client, missing inputs or a malformed file stop it before the survey,
+with a message naming what to change. No environment override (the package would
+then depend on the cooking shell, and CD's cook would not reproduce it), and no
+check in `n3e-server` (it would compare the package with itself). The cooked
+`front-end.bin` carries no client id; the client is in the package's
+`provenance.json`. Moradon offers only `1097` (KO-FINDINGS §9 lists what each
+other client needs); its layouts and music are still 1298's until the format
+carries 1097's (Q57).
+

@@ -46,6 +46,8 @@ a package-defined default and bounds.
 ```
 games/moradon/
   package.json, *.json          # references, tables, rules (existing)
+  realm-config.json             # the realm owner's choices: front_end, the KO client the front end follows (RQ-078)
+  front-ends.json               # the front ends the package cooks: per client, its recipe and input trees
   assets/<name>/                # contributed assets: .gltf, .bin, .png, ≤ 8 MB/file
   events.json                   # event presets (new, below)
   PROVENANCE.md                 # one row per contributed asset (mandatory)
@@ -136,7 +138,9 @@ Runs in the ordinary N3E-Realm workflow (`.github/workflows/ci.yml`, not CD):
    ↔ `assets/` consistency; DCO.
 2. Cook: `tools/fetch-ko-assets.sh` (cached) then `python tools/assetc/main.py
    games/moradon out/` must succeed. `assetc` is strict; unsupported glTF features fail
-   here.
+   here. CI has only the pinned tree, so it cooks only a front-end choice whose inputs
+   are that tree (`content/front-end.md`, "Choosing the client"); a realm choosing a
+   client that needs a reference install cooks on a machine that has it.
 3. Schema: `content/package.schema.json`, `events.json` schema, spawn names unique,
    preset keys exist in the registry with values inside bounds.
 4. Progression diff: if `package.json.progression` changed, label the PR `balance` and
@@ -167,7 +171,10 @@ something to argue against.
 
 ## Running your own realm (forks)
 
-Everything a realm needs is in the fork: engine, `games/<yours>/`, CD, deploy. A fork
+Everything a realm needs is in the fork: engine, `games/<yours>/`, CD, deploy. The
+fork's realm owner picks which KO client the front end follows in
+`games/<yours>/realm-config.json` (`front_end`, one of the package's
+`front-ends.json`; spec 11, "The client choice"). A fork
 publishes to its own Releases, hosts its own manifest (anywhere HTTPS), and its players
 add a **realm profile** to the Launcher (spec 04). The manifest carries the realm's host,
 port and Discord `client_id`; the fork registers its own Discord application. No

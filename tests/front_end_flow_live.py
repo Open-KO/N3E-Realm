@@ -256,7 +256,10 @@ try:
     # eye from `at` below 0.75 left or 0.77 right) ends it; a turn back ends on
     # the camera's own eye. No frame leaves the two slots' angles by more than
     # a frame's step (the client's frames are at most 0.25 s).
-    select = json.loads(Path("games/moradon/front-end.json").read_text())["select"]
+    # The recipe of the front end the package was cooked with (RQ-078).
+    sys.path.insert(0, str(ROOT / "tools/assetc"))
+    import front_end_choice
+    select = json.loads(front_end_choice.choose("games/moradon")["recipe"].read_text())["select"]
     eye, at = select["camera"]["eye"], select["camera"]["at"]
     o = [eye[i] - at[i] for i in range(3)]
     flat = o[0] ** 2 + o[2] ** 2

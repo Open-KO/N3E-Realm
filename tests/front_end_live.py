@@ -1,8 +1,10 @@
 """Opt-in (make live-ko): spec 11 acceptance 5 and 6 on the Moradon package cooked
 from the player's own KO data.
 
-5. The front-end cook of the pinned tree runs twice with identical bytes, the same
-   bytes the package holds (the `moradon` prepare step's cook).
+5. Each front end games/moradon offers (front-ends.json, RQ-078) cooks twice
+   with identical bytes and the client loader (build/client/n3e-front-end-check)
+   takes it; the one realm-config.json chooses is the bytes the package holds
+   (the `moradon` prepare step's cook).
 6. The test client draws each screen at rest at 1280x1024 and 1024x768 (KO's sizes)
    (N3E_TEST_FRONT_END, client/harness/front_end_captures.inc) and this script
    checks the frames:
@@ -48,14 +50,29 @@ if os.environ.get("N3E_GRAPHICAL") != "1":
 import ko_character  # noqa: E402
 import ko_front_end  # noqa: E402
 
-cooked = []
-for i in range(2):
-    out = Path(tempfile.mkdtemp(prefix="front-end-", dir=B))
-    ko_front_end.cook(ko_character.Assets(Path("assets/ko")), out, "games/moradon/front-end.json", out / "work")
-    cooked.append((out / "front-end.bin").read_bytes())
-assert cooked[0] == cooked[1], "the front-end cook is not deterministic"
-assert cooked[0] == (package / "front-end.bin").read_bytes(), "the package's front-end.bin is not this cook's"
-print(f"PASS front-end cook: twice identical, {len(cooked[0])} bytes, the package's own")
+import front_end_choice  # noqa: E402
+
+# RQ-078: every front end games/moradon offers (front-ends.json) cooks twice to
+# the same bytes and the client loader takes it; the one realm-config.json
+# chooses is the package's own.
+chosen = front_end_choice.choose("games/moradon")["client"]
+for client in sorted(front_end_choice.catalogue("games/moradon")):
+    front = front_end_choice.resolve("games/moradon", client)
+    cooked = []
+    for i in range(2):
+        out = Path(tempfile.mkdtemp(prefix="front-end-%s-" % client, dir=B))
+        ko_front_end.cook(ko_character.Assets(front["inputs"][0]), out, front["recipe"], out / "work")
+        cooked.append((out / "front-end.bin").read_bytes())
+    assert cooked[0] == cooked[1], "the %s front-end cook is not deterministic" % client
+    # The checker exits 1 unless it also saw a refusal (tests/front_end.py
+    # passes both kinds); one `ok` package loaded is its own PASS line.
+    loaded = subprocess.run(["build/client/n3e-front-end-check", "ok", str(out)], capture_output=True, text=True)
+    assert "PASS front-end loader: 1 loaded, 0 refused" in loaded.stdout, \
+        "the client loader refuses the %s front end: %s%s" % (client, loaded.stdout, loaded.stderr)
+    if client == chosen:
+        assert cooked[0] == (package / "front-end.bin").read_bytes(), "the package's front-end.bin is not this cook's"
+    print(f"PASS front-end cook {client}: twice identical, {len(cooked[0])} bytes, the client loads it"
+          + (", the package's own (realm-config.json)" if client == chosen else ""))
 
 # --- 6: the captures -----------------------------------------------------------
 

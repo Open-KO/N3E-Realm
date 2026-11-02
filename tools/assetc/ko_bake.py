@@ -452,19 +452,28 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
             report['skeletal_plugs_2233']['items']={k:v[1] for k,v in skeletal_items.items()}
             manifest.update(engine_version=max(manifest['engine_version'],attachments.engine(manifest['attachments'],root)),
                             protocol_version=30)
+        # RQ-078: the front end the realm chose (games/moradon/realm-config.json
+        # `front_end`, one of front-ends.json's), refused before any cook when
+        # the package does not offer it or its inputs are missing here.
+        import front_end_choice
+        front=front_end_choice.choose(FRONT_END_GAME)
         # RQ-077 (Q70): the select arrows' turn sound, the sound.tbl id the
         # front end names (`select.turn_sound`; 1097's select Init 0043a950
         # creates sound 2501 and DoJobLeft/DojobRight play it).
-        turn_sound=json.loads(pathlib.Path('games/moradon/front-end.json').read_text())['select'].get('turn_sound')
+        turn_sound=json.loads(front['recipe'].read_text())['select'].get('turn_sound')
         if turn_sound is not None:
             if type(turn_sound) is not int or turn_sound<=0:raise ValueError('front-end select.turn_sound: a sound.tbl id')
             extra_sounds['front:select-turn']=turn_sound
         report['audio']=ko_audio.cook(source_assets,report['effects'],hud,root/'audio.bin',item_icons,extra_sounds)
         manifest['presentation']['audio.bin']='audio.bin'
         # Spec 11: KO's login scene, select hall, create, loading and message
-        # box from the same client tree; engine 42.
+        # box from the chosen front end's input tree (today the player's own,
+        # whose provenance it then shares); engine 42.
         import ko_front_end
-        report['front_end']=ko_front_end.cook(source_assets,root,'games/moradon/front-end.json',root.parent/(root.name+'-front-end'))
+        tree=front['inputs'][0]
+        front_assets=source_assets if tree.resolve()==characters.resolve() else ko_character.Assets(tree)
+        report['front_end']=ko_front_end.cook(front_assets,root,front['recipe'],root.parent/(root.name+'-front-end'))
+        report['front_end'].update(client=front['client'],recipe=str(front['recipe']),inputs=[str(t) for t in front['inputs']])
         manifest['presentation']['front-end.bin']='front-end.bin'
         manifest.update(engine_version=max(manifest['engine_version'],42),protocol_version=30)
         if des:
@@ -489,6 +498,9 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
 
 
 CLIENT = pathlib.Path("assets/ko")
+# RQ-078: the package source whose realm-config.json and front-ends.json choose
+# the front end the --features cooks build.
+FRONT_END_GAME = pathlib.Path("games/moradon")
 # PQ-421 (D-218): the arrows the glow package grants a new character (an n3e
 # package choice, not KO data: KO characters buy them; the supplies shop sells
 # more at 1298's price).
@@ -650,6 +662,14 @@ if __name__ == "__main__":
     into = pathlib.Path(next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--into=")), "build"))
     gtd, opd = zone["gtd"], zone["opd"]
     features, des, preview = "--features" in sys.argv, "--des" in sys.argv, "--preview" in sys.argv
+    if features:
+        # RQ-078: refuse a front-end choice the package does not offer, or whose
+        # inputs this machine lacks, before the survey and the cook.
+        import front_end_choice
+        try:
+            front_end_choice.choose(FRONT_END_GAME)
+        except front_end_choice.Refused as error:
+            raise SystemExit(str(error))
     # --glow-2233 (PQ-315, D-184): the 2233 client's equipment glow from the
     # player's 2145 install, a 2233/2145 addition in a package of its own;
     # since PQ-316 (D-185) also the zone's HDR bloom and tone map (hdr.n3pp).

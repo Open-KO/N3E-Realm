@@ -5,7 +5,8 @@ login and server list, the Karus character select hall, character create, loadin
 and the OK message box, the screens' music (version 3, Q57), and each model
 clip's blend time and the select spot's growth rate (version 4, RQ-075).
 `tools/assetc/ko_front_end.py` cooks it from the pinned client tree with the
-choices in `games/moradon/front-end.json`; the client's
+recipe of the front end the realm chose ("Choosing the client", below; for
+Moradon's default, 1097, `games/moradon/front-end.json`); the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
 its header. A package with it is engine 42, so wire 30 (as engines 38–41). Its bound is
 64 MiB (`FRONT_END_FILE`, `MAX_FRONT_END_ASSET`, `kFrontEndFile`), since it holds
@@ -121,6 +122,59 @@ The closed set, by index: none, `login`, `exit`, `login_group`, `realm_group`,
 `realm.json`; `notice`, `char_info`, `class_desc`, `version`, `info` and
 `message` are texts the client fills; `name_field` is the name entry; `char_view`
 is where create draws the character.
+
+## Choosing the client (RQ-078)
+
+A realm owner chooses which KO client the front end looks and behaves like. The
+choice is package data, cooked into `front-end.bin`; the engine knows no client
+and plays whatever the file says. Two files in the package source hold it:
+
+- `games/<game>/realm-config.json`, the realm owner's choices:
+  `{"front_end": "<client>"}`. It takes no other key (a misspelt one is refused,
+  not ignored). Moradon's is `"1097"` (Q71).
+- `games/<game>/front-ends.json`, the clients the package can cook, by id
+  (lower-case letters, digits and `-`, up to 32): each a `recipe`, the
+  `ko_front_end` input beside it (the files, bindings and placements of that
+  client's screens, as `front-end.json` below), and its `inputs`, 1 to 4
+  repository-relative trees (`tree`, never absolute or with `..`) with how to get
+  each (`get`). The recipe's paths name the first tree.
+
+`make realm-assets` (`tools/assetc/ko_bake.py 210 --features`, and every other
+`--features` cook) reads both through `tools/assetc/front_end_choice.py` before
+the survey and refuses, with a message naming what to change:
+
+- a missing or malformed `realm-config.json` or `front-ends.json`;
+- a choice the package does not offer ("front end '1298' is not one this
+  package cooks; it cooks 1097");
+- a choice whose input tree is missing on the cooking machine ("front end
+  '…' needs <tree>, which is missing on this machine: <get>").
+
+It then cooks the chosen recipe and records the client, recipe and trees in the
+package's `provenance.json` (`front_end`). The realm's server never sees KO
+inputs: it runs the cooked package (spec 07, `deploy/HOST.md`), so the refusal
+is the cook's (Q73). Changing the choice changes `front-end.bin` and so the
+package hash: a new package, so a new realm (Q63).
+
+Inputs are pinned before they are cooked from: the pinned tree by `UPSTREAM.md`
+(`make ko-assets`); a reference install by its installer's manifest (as
+`ko_bake --client=1097` checks the 1097 one; the change that first offers a
+choice reading one adds that check to the cook); the Steam install, which Steam updates in place, by a hash
+manifest written before any cook reads it. CI's cook (spec 10) has only the
+pinned tree, so it can cook only choices whose inputs are that tree; a realm
+choosing another cooks on a machine that has the install, as the hosted realm's
+packages already are (`deploy/HOST.md`, "Releases").
+
+The clients, per screen, and what the format expresses for each, are in
+`specs/KO-FINDINGS.md` §9. Offered today:
+
+| Client | Recipe | Inputs | Status |
+|---|---|---|---|
+| `1097` | `front-end.json` | `assets/ko` | Default. 1097's login scene, select hall and turn sound. Still 1298's: the layouts (`UI_US`, since `ko_hud` does not read 1097's UIF version) and the music (`Intro_Sound.mp3`; 1097 plays sound 35, `bgm_login.wav`, and the format carries only MPEG frames) |
+
+Not offered yet: `1298` (needs the select's front-clip mode, the recorded camera
+paths, 1298's UIF login intro and per-race looks), `2145` (its UIF versions, its
+Ogg sounds, its clip format) and `steam` (its packs, its protected exe, the pin).
+Each is its own queue item; until it lands the cook refuses it as above.
 
 ## Moradon (`games/moradon/front-end.json`)
 

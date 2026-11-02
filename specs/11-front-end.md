@@ -48,7 +48,8 @@ Out of scope:
 ## Inputs (all under `assets/ko/`, never committed)
 
 Every path below was checked against the pinned tree. The paths and choices live in
-`games/moradon/front-end.json`; the engine knows none of them.
+the chosen front end's recipe (`games/moradon/front-end.json` for 1097, "The client
+choice" below); the engine knows none of them.
 
 | Screen | Scene | UI layout (`UI_US/`) |
 |---|---|---|
@@ -129,6 +130,21 @@ replace the panels when the client has a Discord realm config.
   not in the pinned tree), `premium` and the three notice groups (KO's news panels,
   empty without KO's server), and the select screen's `bt_delete` (Q53).
 
+### The client choice (RQ-078)
+
+The realm owner chooses which KO client the front end looks and behaves like, in
+the package source: `games/<game>/realm-config.json` (`{"front_end": "<client>"}`)
+names one of the clients `games/<game>/front-ends.json` offers, each with its
+recipe (the `ko_front_end` input: for 1097, `front-end.json`) and the input trees
+it reads. Both files are normative; their fields and rules are in
+`content/front-end.md`, "Choosing the client". The cook (`make realm-assets`,
+every `ko_bake.py --features`) refuses, before the survey, a choice the package
+does not offer, a choice whose inputs are missing on the cooking machine, and a
+malformed file, each naming what to change. The engine knows no client id: what
+differs between clients is recipe data and N3FE fields, and the client and server
+read `front-end.bin` as before. Moradon offers `1097`, the default (Q71); what
+each other client needs is `specs/KO-FINDINGS.md` §9 (Q73).
+
 ### Wire (`protocol/wire.proto`)
 
 ```proto
@@ -197,6 +213,7 @@ stays private.
 | Case | Behaviour |
 |---|---|
 | Package without `front_end` | Today's panels, unchanged. |
+| `realm-config.json` names a client `front-ends.json` does not offer, or one whose input tree is missing, or either file is malformed | The cook stops before the survey with the reason and the file or input to fix (`content/front-end.md`, "Choosing the client"); nothing is written. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
 | A package cooked before N3FE version 4 (no music section, or no clip blend times and spot rate) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
@@ -241,11 +258,19 @@ CPU (`make test`):
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.
+4a. **Client choice** (`tests/front_end_choice.py`, RQ-078). Moradon's
+   `front-ends.json` is well formed, each recipe names the five screens, and its
+   `realm-config.json` choice (1097) resolves to its recipe once its input tree
+   exists. On synthetic packages the cook refuses a client the package does not
+   offer (naming the ones it does), a choice whose input tree is missing (naming
+   the tree and how to get it), a missing or malformed `realm-config.json`, an
+   unknown key, and a malformed catalogue.
 
 KO (`make live-ko`, needs `assets/ko`):
 
-5. **Cook** (`tests/front_end_live.py`). The cook of the pinned tree succeeds twice with identical bytes; the
-   section names every screen in the table.
+5. **Cook** (`tests/front_end_live.py`). Each client `front-ends.json` offers
+   cooks twice with identical bytes and the client loader takes it; the chosen
+   one's bytes are the package's; the section names every screen in the table.
 6. **Captures** (`tests/front_end_live.py`). The test client renders each screen at 1280×800 and 1024×768, and
    the suite checks each capture: login shows the intro character in frame (its
    projected box is non-empty and covers the view's centre: KO's close-up runs past
@@ -279,4 +304,4 @@ Manual (`docs/manual-testing.md`, Linux and Windows):
 
 ## Open questions
 
-Q50–Q57, Q69 and Q71 in `QUESTIONS.md`.
+Q50–Q57, Q69, Q71 and Q73 in `QUESTIONS.md`.

@@ -120,8 +120,11 @@ Spec 11: optional engine42 `presentation["front-end.bin"]` (N3FE) holds KO's
 front end. `ko_front_end.py` reads the local client's UIF trees (login, Karus
 select, create, loading, OK box), the 1098 intro character with its plug and
 lights, the select hall's n3shape, slots, spots and the Tuarek priest with three
-clips (hover, start, rest), all from the paths and choices in `games/moradon/front-end.json`; the
-provenance report records every source path and hash. Text is drawn with the
+clips (hover, start, rest), all from the paths and choices in the chosen front end's recipe
+(RQ-078: `front_end_choice.py` reads `games/moradon/realm-config.json` and
+`front-ends.json`, refuses an unoffered client or missing inputs, and gives the
+recipe, `front-end.json` for 1097, and its input trees); the
+provenance report records the client and every source path and hash. Text is drawn with the
 Liberation Sans substitutes of N3H9. Untextured images draw nothing, as KO's.
 N3FE version 3 (RQ-018) adds the screens' music: each track's MPEG-1/2 Layer III
 frames as the KO file has them (ID3 tags and a cut-short last frame dropped, any

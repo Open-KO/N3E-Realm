@@ -275,7 +275,7 @@ disassembly of code Ghidra left undefined with `objdump`):
 | 1097's Option.ini switch is `[Sound] Enable` (default 1), stored at `005ade68` by the reader at `0054ec5e`–`0054ec84`. Only when it is set does `00544600` call `0042e180` (the test at `00544a50`, the call at `00544a5f`), which opens the device. `[Sound] Duplicate` (`005ade69`) goes to `005add0a`; `[Sound] Distance` defaults to 48, clamped 20–48. 1097 has no `[Sound] Effect` key: `Effect` is a section there, `[Effect] Count`, default 2000, clamped 1000–2000 | `0054eb97`–`0054ecab`, `00544600` | binary |
 | 1097's `Data/sound.tbl` (decrypted with `tools/assetc/ko_tbl.py`, 188 rows) has row 2501 `Snd\char_select_turn.wav`, 0, 9, as the pinned tree's has. The two `char_select_turn.wav` files are byte-identical (sha256 `5f693df7…`; 8-bit mono, 22,050 Hz, 13,961 frames, 0.63 s) | `Data/sound.tbl`, `Snd/char_select_turn.wav` | local-asset |
 | DoJobLeft and DojobRight play the sound after they set the destination. The play runs when `+0x18` is not null and the camera is not at their own edge (`+0x2c4` not 2, or not 3). The call is `004327d0(none, 0, 0, 1)` at `0043e373` and in `0043e380`; in state 1 they have returned before it. With its last argument 1, `004327d0` stops the buffer `+0x4` if it is playing (`IDirectSoundBuffer::Stop`, vtable `+0x48`). It then plays the buffer once (`Play`, vtable `+0x30`, flags 0: the looping flag `+0xc` is clear), when the object has a 3D buffer `+0x8`. No position is passed, so `SetPosition` (the 3D buffer's `+0x4c`) is not called. So each turn the arrows start plays the sound once, and an arrow at the end of the row plays nothing. Whether a play that stops one still sounding starts again at the first sample was not read: `004327d0` does not call `SetCurrentPosition` | `0043e310`, `0043e380`, `004327d0` | binary |
-| `0042e430`'s other callers are not the select's. They pass ids from tables (`0044d0c0`, `0044d480`, `00452b60`) or the constants 100, 200, 201, 1000, 2000–2003 and 3000 (`0044d0c0`, `004e8c10`, `004fab60`, `00493a80`). The play-once creator `0042e7e0` (the other user of the table lookup `0042fd00`) is called with 20003, 606 and a caller's id, from `00525b70`, `0052ccf0` and `0052a870`. Neither group was read further | the callers of `0042e430`, `0042e7e0` | binary |
+| `0042e430`'s other callers are not the select's. They pass ids from tables (`0044d0c0`, `0044d480`, `00452b60`) or the constants 100, 200, 201, 1000, 2000–2003 and 3000 (`0044d0c0`, `004e8c10`, `004fab60`, `00493a80`). `0042e7e0` (the other user of the table lookup `0042fd00`, first taken here for a play-once creator; §9 finds it creating the login's BGM stream) is called with 20003, 606 and a caller's id, from `00525b70`, `0052ccf0` and `0052a870`. Neither group was read further | the callers of `0042e430`, `0042e7e0` | binary |
 | The front-end buttons play nothing. 1097's button loader reads two sound names and creates each (`0042e4c0`, into `+0xc8` and `+0xdc`) only when its length is above 0 (`00403b65`, `00403c8d`) | `00403ac0` | binary |
 | 1097's `Data/UIs.tbl` (decrypted, two rows by nation) names the Karus screens `UI\co_login.uif`, `UI\Ka_CharacterSelect.uif`, `UI\Ka_CharacterCreate.uif`, `UI\Ka_MessageBox.uif`, `UI\Co_Loading.uif` and `ui\\ka_loading.uif`. In those files, in their `_tw` copies and in `Co_nationselect.uif`, every length-prefixed string that names a file is a `.dxt`; none names a sound. El Morad's `el_characterselect.uif` does name sounds: `snd\ui_button.wav` on `bt_delete` and `bt_exit`, `snd\ui_button4.wav` on `bt_left9` and `bt_right`. Which of a button's two names (hover, click) each fills was not read: 1097's UIF layout is older than the one `ko_hud.parse` reads | the 1097 install's `UI/`, `Data/UIs.tbl` | local-asset |
 
@@ -288,6 +288,63 @@ voices' gain. KO creates it as a 3D sound and passes no position; the gain and p
 that gives were not read. The realm draws the Karus hall, and 1097's Karus
 front-end layouts name no button sounds, so the screens gain none. The realm keeps
 reading 1298's `[Sound] Effect`, not 1097's `[Sound] Enable` (Q70).
+
+## 9. The front end per client (RQ-078, 2026-11-02)
+
+Which KO client a realm's front end looks and behaves like is the realm owner's
+choice (spec 11 "The client choice", `content/front-end.md` "Choosing the
+client"). This is what differs on the five screens between the four installs the
+realm has, and what the engine can already express as `front-end.bin` data. The
+installs: 1097 (`build/ko-reference/installer-1097`, §8.1's unpack of its exe),
+1298 (the pinned tree, `assets/ko`), 2145 (`build/ko-reference/installer-2145`,
+Inno installer `7da88158…`) and the Steam client (`build/ko-reference/steam-install`,
+client build 2026-10-22, protected exe `71ac1b63…`; its analysis dump
+`build/ko-reference/steam-rea/analysis/KnightOnLine.unpacked.exe`, `7c038847…`,
+whose OEP is unresolved and imports partial). Ghidra 12.1.3 headless
+(`-readOnly -noanalysis`) on §8.1's 1097 project, output under
+`build/ghidra/rq078/` (not committed); `objdump` for code Ghidra left undefined.
+The 2145 exe is packed (no readable strings) and was not unpacked; the Steam dump
+was read only for its strings. Nothing here is committed from those trees.
+
+| Observation | Where | Label |
+|---|---|---|
+| The four `Intro/` folders are byte-identical (61 files each: the orc `Intro.N3Chr` with its parts and axe, `0–2.N3Light`, `Moon.dxt`) | `Intro/` in each install (sha256 of every file) | local-asset |
+| **1097 draws the 1098 login scene.** The login Init (code from `00523c80`, not a defined function) loads `Intro\Moon.dxt`, `Intro\Intro.N3Chr` (clip 0 looping, `00447e30(0, 0, FLT_MIN, 0, 1)` at `00523e2e`) and `Intro\0–2.N3Light` (`00523cf6`–`0052405b`), the source's `CGameProcLogIn_1098::Init`. Its layout is `UI\co_login.uif` (`Data/UIs.tbl`, both nations) | `00523cf6`–`0052405b`; `Data/UIs.tbl` | binary; local-asset |
+| **1298 does not.** No `Intro\` string is in `KnightOnLine.exe`; its login is the source's `CGameProcLogIn_1298`: a UIF intro, `UIs_us.tbl`'s `ka_login_intro_us.uif` or `el_login_intro_us.uif` (a random nation), under `co_login_us.uif` | strings of `KnightOnLine.exe`; `GameProcLogIn_1298.cpp` `Init`; `Data/UIs_us.tbl` | binary (strings); source; local-asset |
+| **1097's login music is sound 35, `Snd\bgm_login.wav`.** The Init releases the BGM stream `006e045c` (`0042e860`, at `0052409d`) and creates it again from sound 35 (`push 0x23` at `005240a2`, `0042e7e0`, the store at `005240b3`); 1097's `Data/sound.tbl` row 35 is `Snd\bgm_login.wav` (the pinned tree's file, byte for byte: 22,050 Hz stereo 16-bit, 477,749 frames, 21.67 s). The tick plays it (`004327d0` at `0052491d`) when its timer `006e0344` is 0, adds the frame time, and past 21.66 s (`0058fc74`) puts the timer back to 0 and calls `004328e0` (the source's `Stop`): the track restarts about every 21.66 s, its own length. That is the source's 1098 login (`CreateStreamObj(35)`, the 21.66 s timer). 1298's row 35 is `bgm_login.mp3`; its login names no sound id but the file `Snd\Intro_Sound.mp3` (next row) | `0052409d`–`005240b3`, `005248f5`–`00524957`; `Data/sound.tbl`; `Snd/bgm_login.wav` | binary; local-asset |
+| 1097's select Init `0043a950` and Tick `0043b550` (the range `0043a950`–`0043b550`) call neither `0042e7e0` nor `0042e860` and do not name `006e045c`; the select releases the music only after the start clip (§8.1, `0043ed20`). Whether the stream loops by itself once the login's timer stops running was not read (the source sets no `Looping` for it) | `objdump` of `0043a950`–`0043b550` | binary |
+| 1298's login music is `Snd\Intro_Sound.mp3`, looped from login to the select's start (`content/front-end.md`, "Moradon", `005f68e0`) | `005f68e0`, `005f98c0`, `005fea70` | binary |
+| **1097's layouts are another UIF version.** `UI\co_login.uif`, `Ka_CharacterSelect.uif`, `Ka_CharacterCreate.uif`, `Ka_MessageBox.uif`, `Co_Loading.uif` and `ka_loading.uif` are not in the pinned tree, and `tools/assetc/ko_hud.parse` refuses them (`count out of bounds`, `UI version header`). They name no label text in ASCII: the login's labels are in its art, `ui\ui_login.dxt`, which is byte-identical to the pinned tree's `UI/ui_login.dxt` | the 1097 install's `UI/`; `ko_hud.parse` | local-asset |
+| 1298's layouts, the ones the package cooks today: `UIs_us.tbl` names `UI_us\co_login_us.uif`, `Ka_CharacterSelect_us.uif`, `Ka_CharacterCreate_us.uif`, `Ka_MessageBox_us.uif`, `Co_Loading_us.uif` and `ka_loading_us.uif` (the package draws `co_MsgBoxOk_us.uif` for the message box, also in the tree) | `Data/UIs_us.tbl` | local-asset |
+| 1298's select: per-race `upc_ka_<race>` joints and clips, clip 1 looping on the character in front without the pointer, start clip 2 once with 0.6 s, the turns through recorded `.n3camera` paths, no rotate sound (§8, §8.2). Its lights are `ChrSelect\ka_light_0–2.n3light` (strings); no `ka_chairs` or `ka_cave` name is in the binary, so which hall mesh it draws was not read (RQ-012) | §8, §8.2; strings of `KnightOnLine.exe` | binary |
+| 1097's select: `ka_chairs.n3shape`, `ka_light_0–2`, the `upc_ka_*_<class>` files and their hover, rest and start clips, the turn about `at`, sound 2501 on each turn (§8.1, §8.2). These are the files and behaviour the package cooks today | §8.1, §8.2 | binary |
+| `ChrSelect/`: 246 files are identical in all four installs. 1298 adds the per-race `upc_ka_<race>.n3joint`/`.n3anim` and the `Data/ka_*_camera.n3camera` paths. 2145 and Steam keep those, rewrite every `.n3anim` (other bytes: the 2145 clip format, `tools/ko-reference/anim_2145.py`) and add `Data/camera1–13.n3camera`, `ka_light_3.n3light` and `choice_upc_kurian` (the Kurian race); Steam adds further clips (`upc_ka_wt_ma_destan1`, `upc_ka_wt_ma_zion`, `upc_ban_zion`, `hotkey_zion_kyran`, …) and drops `char_select.uif` | `ChrSelect/` in each install (sha256 of every file) | local-asset |
+| 2145 keeps `UI/` in its pack (`UI/ui.hdr`, 5,788 entries; `tools/ko-reference/pack_2145.py`). Its `UIs_us.tbl` (row 1) names `ui\co_login.uif`, `UI\re_CharacterCreate.uif`, `ui\ka_CharacterSelect.uif`, `ui\co_Loading.uif`, `ui\ka_loading.uif`, `ui\co_MsgBoxOk.uif`, `ui\re_login_intro.uif`, `ui\co_login_intro_sub.uif`, `ui\re_characterselect.uif`, `ui\re_nation_Select.uif` and `ui\co_introduction.uif`. Its `co_login_us.uif` and `ka_characterselect_us.uif` are byte-identical to 1298's; `ka_charactercreate_us.uif`, `ka_loading_us.uif` and `co_msgboxok_us.uif` differ, and `ko_hud.parse` refuses `ka_loading.uif` and `co_msgboxok_us.uif` (`UI version header`) | the 2145 install's `UI/ui.*`, `Data/UIs_us.tbl` (`tools/ko-reference/tbl_2145.py`) | local-asset |
+| 2145's sounds are Ogg Vorbis: `Snd/bgm_login.ogg`, `intro_sound.ogg`, `Intro_Old_Sound.ogg` (and an `Intro_Old_Sound.mp3`), `char_select_turn.ogg`. Which its screens play was not read (the exe is packed) | the 2145 install's `Snd/` | local-asset |
+| Steam keeps `UI/` and `Snd/` in packs that are not 2145's: each `.hdr` starts with the word 200,000 (`40 0d 03 00`) and a second word before the first name, which the 2145 reader refuses | `UI/ui.hdr`, `Snd/snd.hdr` | local-asset |
+| The Steam dump names `CGameProcIntro`, `CGameProcIntroChrSelect`, `CUILoginIntro`, `CN3OggDecoder`, `CBGMManager`, `Snd\Intro_Sound.mp3`, `Snd\Intro_Old_Sound.ogg`, `ChrSelect\Data\camera1–13.n3camera` and `ChrSelect\ka_light_%d.n3light`; its login runs through `Launcher.exe` (WebView2) and Steam (`steam-rea/README.md`). Nothing of its behaviour was read | strings of `KnightOnLine.unpacked.exe` | binary (strings) |
+
+What the engine expresses as data today (N3FE version 4) and what it lacks,
+per screen. A choice can be offered only when every row it needs is data:
+
+| | Data today | Not yet |
+|---|---|---|
+| Login scene | the 1098 scene (1097's): camera, lights, the model's one clip and plugs, the moon quad | 1298's UIF intro (`ka_login_intro_us.uif`, wrapped UVs; spec 11 left it out), 2145's `re_login_intro`, Steam's intro procs |
+| Layouts | UIF trees `ko_hud.parse` reads (1298's; 2145's `co_login`, `ka_characterselect`), bindings, moves, hidden, states | 1097's UIF version; the 2145 versions it refuses; Steam's pack |
+| Select hall | meshes, lights, slots, the turn about `at` with per-slot ends, the spot's rate, hover/start/rest clips with blend times, plugs | 1298's loop on the character in front (a front-clip mode), recorded camera paths (`.n3camera`), per-race default looks (RQ-005); 2145's `.n3anim` format (convertible: `anim_2145.to_1298`) |
+| Music | MPEG-1/2 Layer III tracks per screen, looping or once (1298's `Intro_Sound.mp3`) | PCM tracks (1097's `bgm_login.wav`) and its restart period; Ogg Vorbis (2145, Steam) |
+| Sounds | a sound-table id bound in `audio.bin` (1097's turn sound 2501) | 2145's Ogg `char_select_turn.ogg` |
+| Text | six strings, KO's UIF texts as they are | KO's text tables for them (RQ-013) |
+
+**Decides (RQ-078):** today's package is the "1097" choice: 1097's login scene and
+select hall, with two parts still 1298's. Its layouts are 1298's `UI_US` files,
+because `ko_hud` cannot read 1097's UIF version. Its music is 1298's
+`Intro_Sound.mp3`, because the format carries only MPEG frames and 1097's track is a
+WAV. A "1298" choice needs the front-clip mode, the camera paths, 1298's UIF intro
+and 1298's looks. A "2145" choice needs a reader for its UIF versions and an Ogg
+decision. Steam is not cookable yet: the packs are not readable, the exe is protected,
+and the install changes with every Steam update. The follow-up items are filed under
+RQ-078.
 
 ## Not re-derived here
 
@@ -306,4 +363,6 @@ notes.
 | Q21 | Unchanged (KO's `+monsummon` is untimed; ours gets a bounded duration). |
 | Q71 | §8.1: 1097, the client whose files the package cooks, plays the hall as (a) does, so (a) is KO's behaviour; its three remaining details aligned (RQ-075). |
 | Q70 | §8.2 (RQ-077): 1097's select arrows play sound 2501 (`char_select_turn.wav`) for each turn they start; the realm plays it. 1097's Karus front-end layouts name no button sounds; its sound switch is `[Sound] Enable`. |
+| Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s, and its select leaves it running; 1298's plays `Intro_Sound.mp3`. The 1097 choice keeps 1298's track until the format carries PCM. |
+| Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. |
 | Q72 | §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077): 1097's arrows also start a turn from state 3, during the start clip; the realm ignores them then. |

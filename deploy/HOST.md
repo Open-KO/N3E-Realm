@@ -35,7 +35,10 @@ Spec 07 asks for this record. The host is the maintainer's machine, not a VPS (Q
 
 ## Releases
 
-Built on the workstation (the KO tree and the GPU are there) and copied. Where the host
+Built on the workstation (the KO tree and the GPU are there) and copied. Which KO
+client the front end follows is the package's `games/moradon/realm-config.json`
+(`front_end`, spec 11 "The client choice"); `make realm-assets` cooks that choice
+and refuses one whose inputs the workstation lacks. Where the host
 is comes from the environment or from the git-ignored `deploy/host.local`, a shell
 fragment the commands below source:
 

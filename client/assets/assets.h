@@ -895,6 +895,20 @@ struct FrontSlot { V position{}; float yaw = 0; V eye{}; FrontLight spot; };
 // front clip looping and the rest clip once on the others, every character
 // ticked, the spot widening and the info text shown whatever the pointer does.
 enum class FrontClipMode : uint32_t { hover, loop };
+// Version 7 (RQ-087): how the select camera goes from slot to slot. rotate,
+// 1097's (0043e4e0): the eye turns about `at` (render/select_turn.h). path,
+// 1298's (005fa670, 005fe5b0): it plays a recorded camera path, the select UI
+// hidden until its last frame (render/select_path.h); an entry path flies it
+// in to slot 0 as the hall opens.
+enum class FrontTurnMode : uint32_t { rotate, path };
+// One recorded path (an .n3camera's eye keys and at keys, engine space): from
+// one slot to another, or (from kEntry) the entry path to slot 0.
+struct FrontPath {
+  static constexpr uint32_t kEntry = 0xffffffffu;
+  uint32_t from = kEntry, to = 0;
+  float eye_rate = 30, at_rate = 30;  // keys a second
+  std::vector<V> eye, at;
+};
 struct FrontEnd {
   uint32_t character_slots = 0, canvas_width = 0, canvas_height = 0;
   std::vector<HudTexture> textures;
@@ -909,7 +923,9 @@ struct FrontEnd {
   // select model's clips are the front, start and rest clips.
   float spot_rate = 0;
   FrontClipMode front_clip = FrontClipMode::hover;  // version 6
-  std::vector<FrontMesh> hall;
+  FrontTurnMode turn = FrontTurnMode::rotate;       // version 7
+  std::vector<FrontPath> paths;                     // version 7: the path mode's
+  std::vector<FrontMesh> hall;                      // version 7: may be empty
   // Version 3 (RQ-018, Q57): the screens' music. A track is shared with the
   // stream that plays it; screen_music names one per screen (login, which
   // includes the realm list, select, create, loading), kNoMusic for silence.

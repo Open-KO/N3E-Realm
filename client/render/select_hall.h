@@ -111,7 +111,7 @@ struct SelectHall {
   // tick) and the spot keeps its theta. Hover: nobody is ticked. Loop
   // (005fe5b0): every character plays the rest clip once and is ticked, and
   // the info text is hidden (1298 hides the whole select UI while it turns,
-  // 005fe3c0/005fe450, which the realm does not).
+  // 005fe3c0/005fe450, as render/front_end.h does in the path turn mode).
   void turning(int shown, float dt) {
     spot_on = false;
     if (mode != FrontClipMode::loop) return;

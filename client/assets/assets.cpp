@@ -2675,7 +2675,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 6, "front end version");
+  need(r.u() == 7, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2879,7 +2879,44 @@ FrontEnd load_front_end(const Release &release) {
   const auto mode = r.u();
   need(mode <= uint32_t(FrontClipMode::loop), "front end front-clip mode");
   fe.front_clip = FrontClipMode(mode);
-  const auto parts = r.count(64);
+  // Version 7 (RQ-087): the turn mode, 0 rotate or 1 path, and the path
+  // mode's camera paths (none in the rotate mode): each from a slot (or
+  // kEntry) to another, then its eye keys and its at keys, each set a rate
+  // and 1-4096 keys. The path mode needs the entry path to slot 0 and both
+  // ways between the neighbours the arrows turn between (1, 0, 2); a pair at
+  // most once.
+  const auto turn = r.u();
+  need(turn <= uint32_t(FrontTurnMode::path), "front end turn mode");
+  fe.turn = FrontTurnMode(turn);
+  const bool paths = fe.turn == FrontTurnMode::path;
+  const auto path_count = r.count(paths ? 8 : 0, paths ? 1 : 0);
+  auto keys = [&](float &rate, std::vector<V> &out) {
+    rate = r.f();
+    need(rate > 0 && rate <= 1000, "front end path rate");
+    const auto n = r.count(4096);
+    for (uint32_t i = 0; i < n; ++i) out.push_back(r.floats<3>());
+  };
+  for (uint32_t i = 0; i < path_count; ++i) {
+    FrontPath p;
+    p.from = r.u();
+    p.to = r.u();
+    need(p.to < slots && (p.from == FrontPath::kEntry ? p.to == 0 : p.from < slots && p.from != p.to),
+         "front end path slots");
+    for (const auto &q : fe.paths) need(q.from != p.from || q.to != p.to, "front end path twice");
+    keys(p.eye_rate, p.eye);
+    keys(p.at_rate, p.at);
+    fe.paths.push_back(std::move(p));
+  }
+  if (paths) {
+    auto has = [&](uint32_t from, uint32_t to) {
+      return std::any_of(fe.paths.begin(), fe.paths.end(), [&](const FrontPath &p) { return p.from == from && p.to == to; });
+    };
+    need(has(FrontPath::kEntry, 0), "front end entry path");
+    for (uint32_t side : {1u, 2u})
+      if (side < slots) need(has(0, side) && has(side, 0), "front end path between neighbours");
+  }
+  // Version 7: the hall may have no parts (1298 draws a zone there, RQ-087).
+  const auto parts = r.count(64, 0);
   for (uint32_t i = 0; i < parts; ++i) fe.hall.push_back(mesh());
   model(fe.select);
   // The front, start and rest clips (1097: pre_select, selected, dummy;

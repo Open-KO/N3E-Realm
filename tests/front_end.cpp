@@ -6,9 +6,11 @@
 // `at`, looking along +z from -z, where an absolute heading wraps at +-pi.
 // RQ-086: the select hall's characters, spot and info text
 // (client/render/select_hall.h) in both front-clip modes, 1097's hover and
-// 1298's loop, on synthetic clip lengths.
+// 1298's loop, on synthetic clip lengths. RQ-087: 1298's recorded camera
+// paths (client/render/select_path.h) on synthetic keys.
 #include "assets/assets.h"
 #include "render/select_hall.h"
+#include "render/select_path.h"
 #include "render/select_turn.h"
 #include <algorithm>
 #include <cmath>
@@ -164,6 +166,51 @@ std::string hall_check() {
   if (!hall.ended(hall.players[1])) return "loop: the start clip did not end";
   return "";
 }
+
+bool near_v(const n3e::V &a, const n3e::V &b) {
+  return near(a[0], b[0]) && near(a[1], b[1]) && near(a[2], b[2]);
+}
+
+std::string path_check() {
+  using namespace n3e::front;
+  n3e::FrontPath p;
+  // Eye keys 0, 30 and 60 along x at 30 a second (three keys, 3 frames, a
+  // tenth of a second); at keys at 15 a second, one, so the last frame is the
+  // eye's (KO takes the longest key set).
+  p.eye_rate = 30;
+  p.eye = {{0, 1, 2}, {30, 1, 2}, {60, 1, 2}};
+  p.at_rate = 15;
+  p.at = {{5, 5, 5}};
+  if (!near(path_frames(p), 3)) return "the path's last frame is not the longest key set's count x rate / 30";
+  // DataGet: key 1 at frame 1, half-way to key 2 at 1.5, the last key blends
+  // toward itself, the count gives the last key, past it nothing.
+  if (!near_v(*path_key(p.eye, 30, 1), {30, 1, 2}) || !near_v(*path_key(p.eye, 30, 1.5f), {45, 1, 2}) ||
+      !near_v(*path_key(p.eye, 30, 2.5f), {60, 1, 2}) || !near_v(*path_key(p.eye, 30, 3), {60, 1, 2}) ||
+      path_key(p.eye, 30, 4).has_value())
+    return "a key set is not sampled as CN3AnimKey::DataGet samples it";
+  // 15 keys a second: key i covers frames 2i to 2i + 2.
+  const std::vector<n3e::V> slow{{0, 0, 0}, {10, 0, 0}};
+  if (!near_v(*path_key(slow, 15, 1), {5, 0, 0})) return "a 15-a-second key set is not blended over two frames";
+  PathCamera camera;
+  camera.start(p);
+  if (camera.ended() || !near_v(camera.eye, {0, 1, 2}) || !near_v(camera.at, {5, 5, 5}))
+    return "a started path is not on its first frame";
+  // The first tick takes its load's step too (005fa670 ticks the path once).
+  camera.tick(1 / 60.f);
+  if (!near(camera.frame, 1) || !near_v(camera.eye, {30, 1, 2})) return "the first tick does not take two steps";
+  camera.tick(1 / 60.f);
+  if (!near(camera.frame, 1.5f) || !near_v(camera.eye, {45, 1, 2}) || camera.ended())
+    return "a tick does not take 30 frames a second";
+  camera.tick(1);
+  if (!camera.ended() || camera.frame != camera.whole || !near_v(camera.eye, {60, 1, 2}))
+    return "the path does not stay on its last frame";
+  camera.tick(1);
+  if (!camera.ended() || !near_v(camera.eye, {60, 1, 2})) return "the path moved past its last frame";
+  camera.start(p);
+  camera.finish();
+  if (!camera.ended() || !near_v(camera.eye, {60, 1, 2})) return "a skip does not put the camera on the last frame";
+  return "";
+}
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -177,6 +224,11 @@ int main(int argc, char **argv) {
     return 1;
   }
   std::cout << "PASS select hall: 1097's hover and 1298's loop front-clip modes\n";
+  if (const auto e = path_check(); !e.empty()) {
+    std::cerr << "FAIL select path: " << e << "\n";
+    return 1;
+  }
+  std::cout << "PASS select path: 1298's camera paths, sampled and played as its CN3Camera does\n";
   int loaded = 0, refused = 0;
   for (int i = 1; i + 1 < argc; i += 2) {
     const std::string want = argv[i];

@@ -6,7 +6,7 @@ from the player's own KO data.
    takes it; the one realm-config.json chooses is the bytes the package holds
    (the `moradon` prepare step's cook). The 1298 recipe, not offered yet
    (RQ-086), cooks the same way from the pinned tree with 1298's select
-   character, and the loader takes it.
+   character and camera paths (RQ-087) and no hall, and the loader takes it.
 6. The test client draws each screen at rest at 1280x1024 and 1024x768 (KO's sizes)
    (N3E_TEST_FRONT_END, client/harness/front_end_captures.inc) and this script
    checks the frames:
@@ -32,6 +32,7 @@ from the player's own KO data.
 
 No server or stack.
 """
+import json
 import os
 import re
 import subprocess
@@ -81,6 +82,10 @@ for client in sorted(front_end_choice.catalogue("games/moradon")):
 # RQ-086: games/moradon/front-end-1298.json, not offered yet (content/front-end.md,
 # "1298"), still cooks from the pinned tree to the same bytes twice, in the loop
 # front-clip mode with 1298's per-race select character, and the client loads it.
+# RQ-087: in the path turn mode, with the recipe's .n3camera paths and no hall.
+recipe_1298 = json.loads(Path("games/moradon/front-end-1298.json").read_text())
+camera_paths = {p["path"] for p in recipe_1298["select"]["paths"]}
+assert recipe_1298["select"]["turn"] == "path" and "hall" not in recipe_1298["select"], recipe_1298["select"]
 pinned = ko_front_end.inputs(front_end_choice.resolve("games/moradon", "1097"))
 cooked = []
 for i in range(2):
@@ -92,11 +97,13 @@ assert cooked[0][4:8] == ko_front_end.VERSION.to_bytes(4, "little"), cooked[0][:
 sources = set(report["sources"])
 assert {"ChrSelect/upc_ka_tu.n3joint", "ChrSelect/upc_ka_tu.n3anim"} <= sources, sorted(sources)
 assert not any("upc_ka_tu_pri" in s or "wea_ka_mace" in s for s in sources), sorted(sources)
+assert camera_paths <= sources, sorted(camera_paths - sources)
+assert not any(s.lower().endswith(".n3shape") for s in sources), sorted(sources)
 loaded = subprocess.run(["build/client/n3e-front-end-check", "ok", str(out)], capture_output=True, text=True)
 assert "PASS front-end loader: 1 loaded, 0 refused" in loaded.stdout, \
     "the client loader refuses the 1298 recipe's front end: %s%s" % (loaded.stdout, loaded.stderr)
 print(f"PASS front-end cook 1298 recipe (not offered): twice identical, {len(cooked[0])} bytes, upc_ka_tu with "
-      "no plug, the client loads it")
+      f"no plug, {len(camera_paths)} camera paths and no hall, the client loads it")
 
 # --- 6: the captures -----------------------------------------------------------
 

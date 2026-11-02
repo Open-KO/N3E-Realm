@@ -143,5 +143,11 @@ version 6 (RQ-086) adds the select hall's front-clip mode (`select.front_clip`:
 `hover`, 1097's, or `loop`, 1298's); `games/moradon/front-end-1298.json`, not
 offered yet, cooks 1298's per-race `ChrSelect/upc_ka_tu` joint and clips with it,
 holding a clip's frames past its joint's keys on the last key, as KO leaves them.
+N3FE version 7 (RQ-087) adds the select camera's turn mode (`select.turn`:
+`rotate`, 1097's, or `path`, 1298's) and, in the path mode, up to 8 camera paths
+(`select.paths`, each a from and to slot and an `.n3camera` read as
+`CN3Camera::Load` reads it: its eye and at keys, engine space; its up keys, at,
+camera data and fog are not cooked), and lets the hall be empty; the 1298 recipe
+cooks 1298's `ka_*_camera.n3camera` paths, slots and spots and no hall yet.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

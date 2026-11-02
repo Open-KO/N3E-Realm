@@ -78,7 +78,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 6, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 7, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -106,7 +106,8 @@ replace the panels when the client has a Discord realm config.
 - **Scenes.** The intro (camera, lights, the model with its clip and plugs, the moon
   as a screen quad) and the select hall (camera, lights, `character_slots` slots with
   their eye and spot light, the spot's growth rate, the front-clip mode (N3FE
-  version 6, RQ-086), the hall meshes, the model with clips 0, 1 and 2 (front,
+  version 6, RQ-086), the turn mode and its camera paths (N3FE version 7,
+  RQ-087), the hall meshes (none or more, version 7), the model with clips 0, 1 and 2 (front,
   start, rest), plugs), each model clip with the time the
   client blends into it over (N3FE version 4, RQ-075; the record's, or the package's
   own for the start clip, RQ-076),
@@ -130,6 +131,15 @@ replace the panels when the client has a Discord realm config.
   the info text shown at rest; the centre rect only takes the click). The recipe
   names it (`select.front_clip`); `games/moradon/front-end-1298.json` uses `loop`
   and is not offered yet (`content/front-end.md`, "Choosing the client").
+- **The select camera's turn mode** (RQ-087, Q77, Q78). How the camera goes from
+  slot to slot: `rotate`, 1097's (the eye turns about `at`, the select UI shown
+  throughout), or `path`, 1298's (the camera plays a recorded path: up to 8 paths
+  between slots, each its eye and at keys from a `.n3camera`, 30 frames a second;
+  the entry path flies in to the centre slot as the hall opens from the realm
+  list; the whole select UI is hidden while a path plays, and ENTER or ESC skip to
+  its end; `specs/KO-FINDINGS.md` §8.4). The recipe names it (`select.turn`, with
+  `select.paths` in the path mode); `games/moradon/front-end.json` uses `rotate`,
+  `games/moradon/front-end-1298.json` `path`.
 - **The select arrows' turn sound** (RQ-077, Q70). 1097's hall plays sound 2501,
   `char_select_turn.wav`, for each turn its arrows start. The package names the
   sound-table id (`front-end.json` `select.turn_sound`), and the cook binds it in
@@ -236,7 +246,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 6 (no music section, no clip blend times and spot rate, no track kinds and restart periods, or no front-clip mode) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 7 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, or no turn mode) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -271,7 +281,11 @@ CPU (`make test`):
    is not integer PCM within the rate and byte bounds, a restart period out of
    bounds, or that names an unknown screen or track. It works on synthetic UIF
    fixtures, synthetic MPEG frames and synthetic WAVs (original bytes). It refuses a
-   select hall without a known front-clip mode (`hover` or `loop`, RQ-086). (The wrapped-UV
+   select hall without a known front-clip mode (`hover` or `loop`, RQ-086), without a
+   known turn mode (`rotate` or `path`), with paths in the rotate mode or a `turn_end`
+   in the path mode, a path outside the slots or from a slot to itself, a pair twice,
+   a missing entry path or way between neighbours, or a `.n3camera` that is truncated, has trailing
+   bytes, or lacks its eye or at keys (RQ-087, synthetic camera files). (The wrapped-UV
    `ka_login_intro_us.uif` is not an input: the 1098 intro scene replaced it.)
 2. **Loader bounds** (`tests/front_end.py`, `tests/front_end.cpp`). The client loader
    refuses malformed blobs, each with its own message and no crash. The music stream
@@ -283,7 +297,11 @@ CPU (`make test`):
    plays both front-clip modes on synthetic clips: the hover mode's character in
    front by the pointer, the others still; the loop mode's front clip looping, the
    others' rest clip once, the spot and info without the pointer, the turn's rest
-   clip on everyone (RQ-086).
+   clip on everyone (RQ-086). The path player (`client/render/select_path.h`) gives
+   a path's last frame and its keys at a frame as 1298's `DataGet` does, takes a
+   loaded path's two first steps, holds the last frame and skips to it; the loader
+   refuses an unknown turn mode, paths in the rotate mode and every path bound
+   (RQ-087).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.

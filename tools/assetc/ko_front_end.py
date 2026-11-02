@@ -6,8 +6,9 @@ its login and server-list layout, the Karus character select hall
 cooked from the pinned client tree, (version 3) the screens' music, KO's
 MP3 frames carried as they are, (version 4) each model clip's blend time
 and the select spot's growth rate, and (version 5) PCM music tracks from KO's
-WAVs and a track's restart period, and (version 6) the select hall's
-front-clip mode. games/moradon/front-end.json names every KO
+WAVs and a track's restart period, (version 6) the select hall's
+front-clip mode, and (version 7) the select camera's turn mode with 1298's
+recorded camera paths. games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
@@ -37,7 +38,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 6
+VERSION = 7
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -57,6 +58,18 @@ START_CLIP = 1
 # others not ticked. `loop`, 1298's (005fef90): the front clip looping
 # whatever the pointer does, the rest clip once on the others.
 FRONT_CLIP = {"hover": 0, "loop": 1}
+# The select camera's turn mode (version 7, `select.turn`): `rotate`, 1097's
+# (0043e4e0): the eye turns about `at` to each slot's `turn_end`; `path`,
+# 1298's (005fa670, 005fe5b0): it plays the recorded camera path the recipe
+# names for the turn (`select.paths`), and an entry path into slot 0 as the
+# hall opens.
+TURN = {"rotate": 0, "path": 1}
+# A path's bounds (the client's): paths per package, keys per set, keys a second.
+MAX_PATHS = 8
+MAX_PATH_KEYS = 4096
+ENTRY = 0xFFFFFFFF
+# __CameraData as 1298's CN3Camera::Load reads it (00439540: 0x16c bytes).
+CAMERA_DATA = 0x16C
 # ANI_BREATH (GameDef.h): the idle InventoryChrAnimationInitialize plays.
 BREATH = 0
 CANVAS = (1024, 768)
@@ -199,6 +212,9 @@ def recipe_paths(config):
     select = section(config.get("select"))
     each("select.lights", select.get("lights"))
     add("select.hall", select.get("hall"))
+    paths = select.get("paths")
+    for at, path in enumerate(paths if type(paths) is list else []):
+        add("select.paths[%d].path" % at, section(path).get("path"))
     add("select.turn_sound", select.get("turn_sound"))
     look = section(select.get("character"))
     add("select.character.joint", look.get("joint"))
@@ -643,7 +659,10 @@ def hall(assets, textures, name):
     parts, five trailing ints. A part is a pivot, a mesh, a 92-byte material
     (CN3Material: 17 floats, then colour op/args, render flags and blend) and
     its textures; a vertex is ((v + pivot) x scale) x rotation + position.
-    Its meshes and textures are its tree's."""
+    Its meshes and textures are its tree's. No name (version 7): a hall of no
+    parts (1298 draws a zone there, which the format does not carry yet)."""
+    if name is None:
+        return u(0)
     assets, name = split(assets, name)
     r = character.Reader(assets.get(name))
     t = character.transform(r)
@@ -748,16 +767,89 @@ def turn_end_eye(camera, slot, index):
     return [at[0] + ox * c + oz * s, eye[1], at[2] - ox * s + oz * c]
 
 
+def camera_path(assets, name):
+    """An .n3camera as 1298's select plays it (specs/KO-FINDINGS.md 8.4):
+    CN3Camera::Load (00439540, after the transform load 0043b480): the name,
+    the eye, a rotation, the up vector, three key sets, the at, __CameraData
+    (0x16c bytes) and the fog's use and colour. The select's camera
+    (004396c0) takes the first key set as the eye's path and the second, when
+    it is vectors, as the at's; it ticks no third (the up), and its Render
+    (005fb1c0) sets its own field of view, near and far, so the file's are
+    not read. (rate, eye keys, rate, at keys), KO space."""
+    r = character.Reader(assets.get(name))
+    r.string()
+    r.floats(3), r.floats(4), r.floats(3)
+    eye, at, up = character.key(r, 0), character.key(r, 0), character.key(r, 0)
+    if eye is None or at is None or up is not None:
+        raise ValueError("front-end camera path %s: eye and at keys, no up keys" % name)
+    if max(len(eye["values"]), len(at["values"])) > MAX_PATH_KEYS:
+        raise ValueError("front-end camera path %s: past %d keys" % (name, MAX_PATH_KEYS))
+    r.floats(3)
+    r.take(CAMERA_DATA)
+    r.unpack("iI")
+    r.end()
+    return eye["rate"], eye["values"], at["rate"], at["values"]
+
+
+def turn_paths(assets, config, slots):
+    """The path mode's paths (version 7): each {from, to, path}, `from`
+    absent for the entry path into slot 0; the arrows' neighbours (1, 0, 2)
+    both ways; a pair once. Returns the records and each slot's rest eye (KO
+    space), the last eye key of the path into it (the entry path's for slot 0,
+    else the one from slot 0)."""
+    paths = config.get("paths")
+    if type(paths) is not list or not 1 <= len(paths) <= MAX_PATHS:
+        raise ValueError("front-end select.paths: 1 to %d camera paths" % MAX_PATHS)
+    out, ends = b"", {}
+    for path in paths:
+        if type(path) is not dict or set(path) - {"from", "to", "path"}:
+            raise ValueError("front-end select.paths: each {from, to, path}")
+        source, to = path.get("from"), path.get("to")
+        if type(to) is not int or not 0 <= to < slots or (
+                source is None and to != 0) or (
+                source is not None and (type(source) is not int or not 0 <= source < slots or source == to)):
+            raise ValueError("front-end select.paths: from a slot (or none, into slot 0) to another")
+        key = (ENTRY if source is None else source, to)
+        if key in ends:
+            raise ValueError("front-end select.paths: %s to %d twice" % (source, to))
+        eye_rate, eye, at_rate, at = camera_path(assets, path.get("path"))
+        ends[key] = eye[-1]
+        out += u(key[0]) + u(to) + f([eye_rate]) + u(len(eye)) + b"".join(f(reflect(v)) for v in eye)
+        out += f([at_rate]) + u(len(at)) + b"".join(f(reflect(v)) for v in at)
+    needed = [(ENTRY, 0)] + [pair for side in (1, 2) if side < slots for pair in ((0, side), (side, 0))]
+    missing = [pair for pair in needed if pair not in ends]
+    if missing:
+        raise ValueError("front-end select.paths: none from %s to %d"
+                         % ("the entry" if missing[0][0] == ENTRY else missing[0][0], missing[0][1]))
+    rest = [ends[(ENTRY, 0)]] + [ends[(0, side)] for side in range(1, slots)]
+    return u(len(paths)) + out, rest
+
+
 def select_scene(assets, textures, config, work):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
     slots (position, yaw, the eye where the camera's turn to the slot ends
     and its spot light), the spot's growth rate, the front-clip mode, the
-    hall, the character with its clips and plugs."""
+    turn mode and its paths (version 7), the hall, the character with its
+    clips and plugs."""
     camera = config["camera"]
+    mode = config.get("front_clip")
+    if type(mode) is not str or mode not in FRONT_CLIP:
+        raise ValueError("front-end select.front_clip: one of %s" % ", ".join(FRONT_CLIP))
+    turn = config.get("turn")
+    if type(turn) is not str or turn not in TURN:
+        raise ValueError("front-end select.turn: one of %s" % ", ".join(TURN))
+    if turn == "path":
+        if any("turn_end" in slot for slot in config["slots"]):
+            raise ValueError("front-end select.turn path: a slot's turn ends with its path, no turn_end")
+        path_records, rest = turn_paths(assets, config, len(config["slots"]))
+    elif "paths" in config:
+        raise ValueError("front-end select.paths: only in the path turn mode")
+    else:
+        path_records, rest = u(0), None
     slots = b""
     for index, slot in enumerate(config["slots"]):
         x, y, z = vector(slot["position"], 3)
-        slot_eye = turn_end_eye(camera, slot, index)
+        slot_eye = rest[index] if rest else turn_end_eye(camera, slot, index)
         spot, target = vector(slot["spot"], 3), vector(slot["spot_target"], 3)
         light = dict(kind=SPOT, diffuse=[1, 1, 1], ambient=[0, 0, 0], position=reflect(spot),
                      direction=reflect([target[i] - spot[i] for i in range(3)]),
@@ -770,9 +862,6 @@ def select_scene(assets, textures, config, work):
     step = config["spot_step"]
     if not (isinstance(step, (int, float)) and 0 < step <= config["spot_theta"] and step * TICKS_PER_SECOND <= 100):
         raise ValueError("front-end spot step")
-    mode = config.get("front_clip")
-    if type(mode) is not str or mode not in FRONT_CLIP:
-        raise ValueError("front-end select.front_clip: one of %s" % ", ".join(FRONT_CLIP))
     look = config["character"]
     if len(look["clips"]) != SELECT_CLIPS:
         raise ValueError("front-end select clips: the front, start and rest clips")
@@ -785,7 +874,8 @@ def select_scene(assets, textures, config, work):
     definition = dict(joint=joint, animation=animation, parts=default_parts(tree, look["race"]))
     out = camera_record(camera) + lights(assets, config["lights"]) + f(vector(config["ambient"], 3))
     out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND]) + u(FRONT_CLIP[mode])
-    out += hall(assets, textures, config["hall"])
+    out += u(TURN[turn]) + path_records
+    out += hall(assets, textures, config.get("hall"))
     out += model(tree, joint, definition, look["clips"], work / "select",
                  own_blends={START_CLIP: config["start_blend"]})
     return out + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])

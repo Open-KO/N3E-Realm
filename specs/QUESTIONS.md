@@ -774,3 +774,27 @@ screen's UI while the camera turns in the loop mode, as 1298 does, now.
 turn, with the camera paths that time it (their last frame is the arrival), and
 goes into front-end data with them, as their own item; the 1298 recipe is not
 offered until then.
+**Decided (RQ-087):** (b), in the path turn mode (N3FE version 7): while a
+recorded camera path plays, the entry path's fly-in included, the client hides the
+whole select UI and shows it again on the path's arrival, as 1298 does
+(KO-FINDINGS §8.4). The rotate mode (1097's) keeps the select screen shown, as
+1097 does; the loop front-clip mode still hides the info text during any turn.
+
+### Q78 — 1298's camera paths where the realm's screens are not 1298's
+
+1298 flies the select camera in on `ka_lording_camera` in every select Init, and
+its ENTER and ESC skip a path (`005fe280`; the tick's `+0x270`, ESC by the later
+source's input layout) in every state but create's (KO-FINDINGS §8.4, binary).
+1298's create is a state of the select (`005ff920`, states 6 and 7, the camera
+turned to the first empty slot by paths 2–7); the realm's create is its own screen,
+and the realm ignores ESC and the arrows while the start clip plays (Q72). Options
+for the path mode: (a) fly in only when the hall opens from the realm list; back
+from create, after a created character and after a refused start, the camera is at
+rest on the slot in focus (the last frame of the path into it); ESC skips only while
+a path plays, stays the realm's back at rest and does nothing while the start clip
+plays; (b) fly in on every return to the hall, as 1298 does on each Init.
+**Default taken (RQ-087):** (a). The realm's create and start are not 1298's states,
+so where the realm returns to the hall from them it keeps the camera at rest, as it
+did before; 1298's ESC during the start clip (back to state 5 after the select was
+sent) has no realm equivalent. The load's extra step, which 1298 takes with the
+last frame's time when a path starts, the client takes with the frame's own.

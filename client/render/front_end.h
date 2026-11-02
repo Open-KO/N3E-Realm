@@ -9,6 +9,7 @@
 #include "platform/gl_load.h"
 #include "render/animation.h"
 #include "render/select_hall.h"
+#include "render/select_path.h"
 #include "render/select_turn.h"
 #include "wire.pb.h"
 #include <SDL3/SDL.h>
@@ -54,11 +55,17 @@ struct FrontPose {
   bool spot = false, info = false;
 };
 // The select camera as the last frame showed it (a test hook): the slot it is
-// at, the slot in focus (they differ while it turns) and its turn from the
-// scene camera's eye (radians, positive to the left; select_turn).
+// at (-1 while the entry path flies it in), the slot in focus (they differ
+// while it turns) and its turn from the scene camera's eye (radians, positive
+// to the left; select_turn). The path mode (RQ-087): the path playing (its
+// index in the package, -1 none), its frame and last frame, and whether the
+// select UI shows (1298 hides it while the camera moves).
 struct FrontTurn {
   int slot = 0, focus = 0;
   float angle = 0;
+  int path = -1;
+  float frame = 0, frames = 0;
+  bool ui = true;
 };
 
 namespace detail {
@@ -361,6 +368,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       const auto key = e.key.key;
       const bool enter = key == SDLK_RETURN || key == SDLK_KP_ENTER;
       if (key == SDLK_BACKSPACE && state == Screen::create && !name.empty()) name.pop_back();
+      // The path mode (1298): ENTER (005fe280) and ESC (the tick 005faf10,
+      // the input's +0x270) while the camera moves put it on its path's last
+      // frame and arrive (state 5, the UI shown); the click does nothing then.
+      if ((enter || key == SDLK_ESCAPE) && state == Screen::select && paths() && choosing < 0 && turning()) {
+        skip = true;
+        return out;
+      }
       if (key == SDLK_ESCAPE) return escape();
       if (enter) return primary();
       if (state == Screen::select && key == SDLK_LEFT) return act(FrontAction::select_prev);
@@ -446,6 +460,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // from the scene camera's eye (select_turn).
   int focus = 0, at_slot = 0, choosing = -1, known = 0;
   float angle = 0;
+  // The path mode (version 7, RQ-087): the camera on its path, and an ENTER
+  // or ESC that skips to its last frame on the next tick.
+  PathCamera path_camera;
+  bool skip = false;
   FrontTurn turn_shown;
   double last_frame = -1;
   // The select hall as CGameProcCharacterSelect keeps it (select_hall.h):
@@ -506,15 +524,46 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const auto &c = fe.select.camera;
     return select_turn(c.eye, c.at, fe.slots[size_t(slot)].eye);
   }
-  // The camera at rest on the slot, which is in focus.
+  bool paths() const { return fe.turn == FrontTurnMode::path; }
+  // The path from slot `from` (FrontPath::kEntry: the entry path) to `to`;
+  // load_front_end checked those the arrows and the entry take are there.
+  const FrontPath *path_to(uint32_t from, uint32_t to) const {
+    for (const auto &p : fe.paths)
+      if (p.from == from && p.to == to) return &p;
+    return nullptr;
+  }
+  // The camera at rest on the slot, which is in focus. The path mode's rest
+  // there is the last frame of the path into it: the entry path's for slot 0,
+  // the one from slot 0 for the others.
   void face(int slot) {
     focus = at_slot = slot;
-    angle = slot_angle(slot);
+    skip = false;
+    if (paths()) {
+      angle = 0;
+      const auto *p = path_to(slot == 0 ? FrontPath::kEntry : 0, uint32_t(slot));
+      if (p) path_camera.start(*p), path_camera.finish();
+    } else
+      angle = slot_angle(slot);
   }
+  // The path mode's entry (1298: Init 005f98c0 sets state 1 and loads the
+  // entry path, 005fa670(1), the select UI hidden): the camera flies in to
+  // slot 0, which is in focus; it has arrived on the path's last frame
+  // (005fe5b0 case 1).
+  void fly_in() {
+    if (!paths()) return;
+    focus = 0;
+    at_slot = -1;
+    skip = false;
+    path_camera.start(*path_to(FrontPath::kEntry, 0));
+  }
+  // 1298 hides the select UI while the camera moves (005fe3c0, 005fe450 and
+  // Init call its +0x3c with 0, the arrival 005fe5b0 with 1; Q77).
+  bool ui_hidden() const { return paths() && state == Screen::select && turning(); }
   // Whether node i draws in this state: its group's state, its parent.
   std::vector<bool> visible(FrontScreen screen) const {
     const auto &nodes = fe.screens[size_t(screen)];
     std::vector<bool> shown(nodes.size());
+    if (screen == FrontScreen::select && ui_hidden()) return shown;
     for (size_t i = 0; i < nodes.size(); ++i) {
       bool on = i == 0 || shown[nodes[i].parent];
       if (nodes[i].action == FrontAction::login_group) on = on && state == Screen::login;
@@ -612,6 +661,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (state == Screen::realms && slide >= realm_height) {
         enter_select();
         face(0);
+        fly_in();
         out.command = Command::enter_realm;
       }
       break;
@@ -631,6 +681,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       // sound object +0x18, which Init 0043a950 creates as sound 2501, played
       // at once by 004327d0); none at the end of the row.
       if (order[at] != focus) out.sound = kSelectTurnSound;
+      // The path mode (1298: DoJobLeft 005fe3c0, DojobRight 005fe450): the
+      // path from the slot to its neighbour (005fa670: 2 centre-left, 3
+      // centre-right, 4 left-centre, 5 right-centre), the UI hidden.
+      if (paths() && order[at] != focus) path_camera.start(*path_to(uint32_t(focus), uint32_t(order[at])));
       focus = order[at];
       break;
     }
@@ -833,18 +887,37 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // ticks the chosen character's start clip under the full spot: its blend
   // first, on the clip's first frame, then the clip, whose end (IsAnimEnd)
   // comes after both.
+  // The path mode (1298, RQ-087): the camera plays the path the turn (or
+  // the entry) started, 30 frames a second; a turn has arrived on the tick
+  // after the one that reached the path's last frame (005fe5b0 tests the
+  // frame before 005faf10 ticks the camera), and that tick is still a turning
+  // one. An ENTER or ESC skip puts it there after this tick's characters.
   void hall(int width, int height, double dt) {
     const bool rest = !turning();
-    if (!rest && select_turn_tick(angle, slot_angle(at_slot), slot_angle(focus), float(dt))) at_slot = focus;
+    if (paths()) {
+      if (!rest && path_camera.ended()) at_slot = focus;
+    } else if (!rest && select_turn_tick(angle, slot_angle(at_slot), slot_angle(focus), float(dt)))
+      at_slot = focus;
     if (choosing >= 0)
       seats.starting(choosing, float(dt));
     else if (rest)
       seats.rest(focus, characters_shown(), in_front(), fe.slots[focus].spot.theta, fe.spot_rate, float(dt));
     else
       seats.turning(characters_shown(), float(dt));
-    const auto &c = fe.select.camera;
-    turn_shown = {at_slot, focus, angle};
-    const auto vp = view_projection(c, select_eye(c.eye, c.at, angle), width, height);
+    if (skip) {
+      skip = false;
+      if (paths() && turning()) path_camera.finish(), at_slot = focus;
+    }
+    auto c = fe.select.camera;
+    V eye = select_eye(c.eye, c.at, angle);
+    if (paths()) {
+      path_camera.tick(float(dt));
+      eye = path_camera.eye;
+      c.at = path_camera.at;
+    }
+    turn_shown = {at_slot, focus, angle, -1, path_camera.frame, path_camera.whole, !ui_hidden()};
+    if (paths() && path_camera.path) turn_shown.path = int(path_camera.path - fe.paths.data());
+    const auto vp = view_projection(c, eye, width, height);
     glEnable(GL_DEPTH_TEST);
     glUseProgram(lit);
     glUniform1i(glGetUniformLocation(lit, "tex"), 0);

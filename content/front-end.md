@@ -4,8 +4,9 @@
 login and server list, the Karus character select hall, character create, loading
 and the OK message box, the screens' music (version 3, Q57), each model
 clip's blend time and the select spot's growth rate (version 4, RQ-075),
-PCM music tracks with a restart period (version 5, RQ-083), and the select
-hall's front-clip mode (version 6, RQ-086).
+PCM music tracks with a restart period (version 5, RQ-083), the select
+hall's front-clip mode (version 6, RQ-086), and the select camera's turn mode
+with 1298's recorded camera paths (version 7, RQ-087).
 `tools/assetc/ko_front_end.py` cooks it from the pinned client tree with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -19,7 +20,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 6, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 7, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤64), each width and height (1–1024) then RGBA8 rows.
 3. Fonts: a count (≤8), each texture index, pixel size (6–48), cap height, atlas
@@ -50,7 +51,9 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 7. The select scene: camera, lights, global ambient, the slots (count equal to
    the character slots), the spot's growth rate (version 4: theta per second,
    above 0 and at most 100), the front-clip mode (version 6: 0 hover, 1 loop;
-   below), the hall (part count ≤64, each a mesh), the model (version 4: three
+   below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
+   (0 in the rotate mode, 1–8 in the path mode) and the paths, the hall (part
+   count ≤64, each a mesh; version 7: it may be 0), the model (version 4: three
    clips, by role the front, start and rest clips), its plugs.
 8. The create model and its plugs (version 2): `CGameProcCharacterCreate`'s
    player (`InitChr`: the race's `UPC_DefaultLooks` joint, animation and default
@@ -94,8 +97,9 @@ address mode); the font atlases and the moon linear.
   The client lights as Direct3D 9's fixed function does, without specular.
 - Slot: position, yaw (radians, engine space), the camera eye at which the
   camera's turn to the slot ends (the scene camera's `at` and up apply; slot 0's
-  is the scene camera's own eye), and the slot's spot light (one light
-  record). The client turns the scene camera's eye about the vertical through
+  is the scene camera's own eye; in the path mode the last eye key of the path
+  into the slot, which the client does not read), and the slot's spot light (one
+  light record). In the rotate mode the client turns the scene camera's eye about the vertical through
   `at`, the short way, at KO's 1.2 rad a second; a turn to another slot ends on
   the first frame past that slot's eye, and a turn back to slot 0 ends on its
   eye (1097: `0043e4e0`, below). The spot's theta is the widest it opens; the
@@ -121,6 +125,31 @@ address mode); the font atlases and the moon linear.
     hidden. The centre rect only takes the click.
 
   While the camera turns the spot is off and keeps its theta, in both modes.
+- Turn mode (version 7, RQ-087): how the camera goes from slot to slot.
+  - 0, rotate (1097, `0043e4e0`; the slot above): the eye turns about `at`.
+    No paths; the select UI shows throughout.
+  - 1, path (1298, `005fa670`, `005fe5b0`; `specs/KO-FINDINGS.md` §8.4,
+    `client/render/select_path.h`): the camera plays a recorded path. A path is
+    its from slot (`0xffffffff`: the entry path), its to slot (below the slot
+    count; the entry path's is 0; from and to differ), then the eye's keys and the
+    at's keys (engine space), each set a rate (keys a second, above 0 and at most
+    1000) and a key count (1–4096) and the keys (3 reals each). A from and to pair
+    is there at most once; the entry path and both ways between the neighbours the
+    arrows turn between (left to right 1, 0, 2) must be. The path's last frame is
+    the larger of its sets' count × rate / 30; the client advances the frame 30 a
+    second (a path started since the last frame takes one step more, its load's),
+    holds it on the last, and takes each set's key i = trunc(frame × rate / 30),
+    the last key at the count, key i blended toward key i + 1 below it
+    (`CN3AnimKey::DataGet`). The scene camera's up, field of view, near and far
+    apply. The entry path flies the camera in to slot 0 when the hall opens from
+    the realm list (KO's Init); an arrow plays the path from the slot to its
+    neighbour; the camera has arrived on the frame after the one that reached the
+    path's last frame. While it plays, the whole select UI is hidden (no node
+    draws or takes a click; Q77) and ENTER or ESC put the camera on the last frame
+    and arrive. At rest the camera is on the last frame of the path into the slot
+    (the entry path's for slot 0, the one from slot 0 for the others), which is
+    where the realm puts it on returning to the hall from create or a start
+    (Q78). The characters play the turn as the front-clip mode says.
 - Model: a byte length and an N3S1 or N3SM scene (`tools/assetc/gltf.py`, atlas
   up to 2048 a side), then a count of further clips and each clip's byte length
   and track list (N3S1's track encoding, on the model's nodes), then (version 4)
@@ -139,8 +168,10 @@ actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
 `realm_connect`; select: `select_prev`, `select_next`, `back`, `exit`,
 `char_info`; create: `create_confirm`, `back`, `name_field`, `char_view`;
 loading: `progress`; message: `message`, `ok`), an action bound twice in a
-screen, and every reference, count and bound above, truncation or trailing
-bytes.
+screen, an unknown turn mode, paths in the rotate mode, a path outside the slots
+or from a slot to itself, an entry path not to slot 0, a from and to pair twice,
+the path mode without its entry path or a way between neighbours, and every
+reference, count and bound above, truncation or trailing bytes.
 
 ## Actions
 
@@ -239,16 +270,17 @@ The clients, per screen, and what the format expresses for each, are in
 Not offered yet: `1298`, `2145` (its UIF versions, its Ogg sounds, its clip
 format) and `steam` (its packs, its protected exe, the pin). Each is its own
 queue item; until it lands the cook refuses it as above. 1298's select
-character is data already (RQ-086): `games/moradon/front-end-1298.json`
-("1298", below) cooks from the pinned tree, but `front-ends.json` does not offer
-it until 1298's recorded camera paths, its select hall and slots, its UIF
-login intro and its select UI hidden while the camera turns are data too.
+character is data already (RQ-086), and its camera paths, slots and spots with
+the select UI hidden while the camera moves (RQ-087):
+`games/moradon/front-end-1298.json` ("1298", below) cooks from the pinned tree,
+but `front-ends.json` does not offer it until 1298's select hall (the
+`karus_intro` zone) and its UIF login intro are data too.
 
 ## 1298 (`games/moradon/front-end-1298.json`, not offered)
 
-The parts of 1298's front end the format expresses (RQ-086,
-`specs/KO-FINDINGS.md` §8 and §8.3, binary); every other part is the 1097
-recipe's, as "Moradon" below says, and marked here:
+The parts of 1298's front end the format expresses (RQ-086, RQ-087,
+`specs/KO-FINDINGS.md` §8, §8.3 and §8.4, binary); every other part is the 1097
+recipe's, as "Moradon" below says, or missing, and marked here:
 
 - Select character: 1298's per-race files, `ChrSelect/upc_ka_tu.n3joint` and
   `upc_ka_tu.n3anim` (`005fb4f0`: race 2, a rogue or a priest), with the race's
@@ -264,15 +296,27 @@ recipe's, as "Moradon" below says, and marked here:
   camera turns; the spot widens to 0.5 by 0.02 a tick (`006a93b4`, `006a93bc`,
   Karus) and stays; the info text shows at rest, empty for an empty slot
   (`006074c0` writes the empty string, so `select_hint` is empty).
+- `turn` `path` (`005fa670`, `005fe5b0`): `ChrSelect/Data/ka_lording_camera.n3camera`
+  flies the camera in to the centre slot in 6 s as the hall opens;
+  `ka_center_left`, `ka_center_right`, `ka_left_center` and `ka_right_center`
+  turn it between the centre and the side slots in 4 s each (1298's paths 2–5;
+  `ka_left_right` and `ka_right_left` are only 1298's in-select create's move,
+  `005ff920`, and are not cooked). The select UI is hidden while a path plays;
+  ENTER or ESC skip to its end.
+- Slots, spots and camera (`005fb4f0`, `005f98c0`, `005fb1c0`): the characters at
+  (128, 0, 91), (108.7, 0.2, 62.9) and (141.3, 0.3, 68.5) turned 180°, 110° and
+  245°; each spot 2 m above and behind its character, pointing at it, phi 1.5; the
+  camera's rest eye and at (128.011, 0.534, 85.922) and (128.077, 4.087, 105.862),
+  field of view 0.96, near 0.1, far 500. These are the `karus_intro` zone's
+  coordinates.
+- No hall: 1298 draws the `karus_intro` zone (10001) there, which the format does
+  not carry yet; the characters stand on black. Its fog is not data either.
 - No turn sound: 1298 plays none (`select.turn_sound` absent).
 - Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
   create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF
-  intro), the select hall `ka_chairs.n3shape`, its lights, camera, slots and the
-  turn about `at` (1298 places its characters elsewhere, `005fb4f0`'s positions,
-  and turns through recorded `.n3camera` paths), the select UI shown while the
-  camera turns (1298 hides it, `005fe3c0`, `005fe450`; Q77), and the layouts (1298's
-  `UI_US`, as today).
+  intro), and the layouts (1298's `UI_US`, as today). The hall lights
+  `ka_light_0/1` are the files both clients name.
 
 ## Moradon (`games/moradon/front-end.json`)
 
@@ -341,8 +385,9 @@ recipe's, as "Moradon" below says, and marked here:
   the next start plays `selected` again. Not 1097's (Q72): 1097 starts the
   clip on the server's answer, takes ENTER during the turn, and a second ENTER
   loads at once (`0043db70`); the realm starts on the press. 1298 draws the
-  hall from other files and loops a clip on the character in front without
-  the pointer (`specs/KO-FINDINGS.md` §8, Q71).
+  hall from other files, loops a clip on the character in front without
+  the pointer and turns through recorded paths (`specs/KO-FINDINGS.md` §8,
+  §8.4, Q71; "1298" above). The recipe's `turn` is `rotate`.
 - Fonts: Liberation Sans regular and bold for Arial, at points × 96 / 72.
 - Music (RQ-083, `specs/KO-FINDINGS.md` §9, binary): 1097's. Login and the
   realm list: `Snd/bgm_login.wav`, 1097's sound 35 (PCM, 22,050 Hz stereo

@@ -54,7 +54,7 @@ Every path below was checked against the pinned tree. The paths and choices live
 |---|---|---|
 | Intro and login | `CGameProcLogIn_1098`'s: `Intro/Intro.N3Chr` (its joint, clip 0, parts and the axe plug), `Intro/0..2.N3Light` (2 is off), `Intro/Moon.dxt`, the camera from the source | `co_login_us.uif` (`Group_LogIn`, `Group_ServerList`) |
 | Server list | the intro scene, still running | `co_login_us.uif` `Group_ServerList` |
-| Character select | `ChrSelect/ka_chairs.n3shape`, `ka_light_0/1.n3light`, the Karus slots, spots and cameras of `CGameProcCharacterSelect::Init`; the Tuarek priest (`upc_ka_tu_pri.n3joint`, `upc_ka_at_wa.n3anim` clips 0 and 1, `UPC_DefaultLooks`, the mace plug) | `ka_characterselect_us.uif` |
+| Character select | `ChrSelect/ka_chairs.n3shape`, `ka_light_0/1.n3light`, the Karus slots, spots and cameras of `CGameProcCharacterSelect::Init`; the Tuarek priest (`upc_ka_tu_pri.n3joint`, `upc_ka_at_wa.n3anim` clips 0, 1 and 2, `UPC_DefaultLooks`, the mace plug) | `ka_characterselect_us.uif` |
 | Character create | the character in `area_character` | `Ka_CharacterCreate_us.uif` |
 | Loading | none | `ka_loading_us.uif` |
 | Message box | over any screen | `co_MsgBoxOk_us.uif` |
@@ -75,7 +75,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 3, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 4, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -102,7 +102,9 @@ replace the panels when the client has a Discord realm config.
   `{version}`.
 - **Scenes.** The intro (camera, lights, the model with its clip and plugs, the moon
   as a screen quad) and the select hall (camera, lights, `character_slots` slots with
-  their eye and spot light, the hall meshes, the model with clips 0 and 1, plugs),
+  their eye and spot light, the spot's growth rate, the hall meshes, the model with
+  clips 0, 1 and 2 (hover, start, rest), plugs), each model clip with its blend time
+  (N3FE version 4, RQ-075),
   and the create model (the race's own looks joint and animation, `ANI_BREATH`, no
   plugs; N3FE version 2).
 - **Music** (N3FE version 3, RQ-018). Up to 4 tracks of MPEG-1 or MPEG-2 Layer III
@@ -155,7 +157,7 @@ prev/next).
 |---|---|---|
 | login | intro scene looping; login bar | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. |
 | realms | intro; the server group with the realm's name from `realm.json` | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
-| select | hall; up to 3 characters with the realm's player model and default looks, each holding clip 0's first frame; the one in front plays clip 0 once when the pointer comes over it and holds its last frame while the pointer stays (`DoProcPreselect`'s centre rect, once-and-freeze: the later source's behaviour for this asset set, not 1298's, Q71); info bar from the character in front | ENTER or a click on the character in front → `SelectCharacter`, its clip 1 to the end (`IsAnimEnd`), → loading; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next turns the camera to the next slot (left to right: 1, 0, 2). |
+| select | hall; up to 3 characters with the realm's player model and default looks, each standing on clip 0's first frame; the one in front, at rest, plays clip 0 (`pre_select`) once while the pointer is in `DoProcPreselect`'s centre rect and holds its last frame, and clip 2 (`dummy`, clip 0's first frame) otherwise, each change blending over the clip's own blend time from the frame reached, the new clip held on its first frame meanwhile; the front slot's spot widens at the package's rate while the pointer is there, narrows when it leaves and is off at 0; the info text (char_info) shows only while the pointer is there. This is the 1097 client's hall for this asset set (KO-FINDINGS §8.1, Q71), not 1298's | ENTER or a click on the character in front → `SelectCharacter`, the spot at its full theta, its clip 1 to the end (`IsAnimEnd`), → loading; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next turns the camera to the next slot (left to right: 1, 0, 2); while it turns nothing is ticked and the spot is off. |
 | create | KO's create screen; the create model breathing in `char_view` (standing, no weapon); name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording; `back` → select. |
 | loading | the loading art; `progress` by real stages: the package and its textures (loaded at start, 2/3), the first `World` (1); `version` shows the client version | the first `World` → in game after the bar shows full. |
 
@@ -189,7 +191,7 @@ stays private.
 |---|---|
 | Package without `front_end` | Today's panels, unchanged. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 3 (no music section) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 4 (no music section, or no clip blend times and spot rate) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -250,8 +252,10 @@ KO (`make live-ko`, needs `assets/ko`):
    playing the screens with key and text events:
    - Discord login → realms → create a character (the name refusal path, then success)
      → select → start → loading → in world;
-   - on select, with the pointer on the character in front, its clip plays once and
-     holds its last frame (RQ-066);
+   - on select, with the pointer on the character in front, its clip blends in on its
+     first frame, plays once and holds its last frame; off it, the rest clip blends
+     back; the spot widens only while the pointer is on it and is off at 0; the info
+     text shows only then (RQ-066, RQ-075);
    - a kick returns to login with the operator's wording;
    - `character_slots` refuses a fourth character.
 

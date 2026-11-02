@@ -183,7 +183,7 @@ It was analysed with Ghidra 12.1.3 (full analysis) in the project
 | Only Tick moves a character. Render (`0043b840`) draws the three (`004466f0`, which ticks no clip). AddChr (`0043ba10`) ends by setting clip 0 once with blend 0 on all three and ticking each once (`0043cee1`–`0043cf0b`). So the characters not in front stand on the start of `pre_select`, and the one in front moves only through `0043f280`. While the camera turns (state 1) nobody is ticked | `0043b840`, `0043ba10` | binary |
 | Click: Tick `0043b550` takes a left click outside state 1 when `PtInRect` finds the point in the same rect (`0043b6f7`–`0043b738`). It then starts the slot's character, or goes to create for an empty slot. Select, `0043ea30` (reached from `0043db54`, in state 2 only), moves to state 3, sets clip 1 (`selected`) once with a 0.6 s blend (`push 0x3f19999a` at `0043ea77`, the call at `0043ea8e`) and sets the spot to 0.5 or 0.38. In state 3, `0043ed20` runs until the clip's loop count reaches 1 (`+0x1f8` with an upper clip, else `+0x1d0`; this is `IsAnimEnd`). Until then it sets clip 1 again (which changes nothing), ticks and fades out. After that it releases the music and activates the main proc (`00545ae0`) | `0043b550`, `0043ea30`, `0043ed20` | binary |
 | AddChr `0043ba10` loads the select models per race and class. Race 1: `upc_ka_at_wa.n3joint` and `.n3anim`, great axe. Race 2: rogue (`0x66`, `0x6b`, `0x6c`) `upc_ka_tu_rog.n3joint` with bow and quiver; priest (`0x68`, `0x6f`, `0x70`) `upc_ka_tu_pri.n3joint` with mace; both use `upc_ka_at_wa.n3anim`. Race 3: `upc_ka_wt_ma.n3joint` with the at_wa clips and staff. Race 4: `upc_el_rf_pri.n3joint` with `upc_el_rf_wa.n3anim`. El Morad uses the `upc_el_*` files. The binary has no `upc_ka_tu.n3joint`/`.n3anim` name. All this is the later source's `AddChr` | `0043ba10`; strings `005a1fb0`–`005a23b4` | binary |
-| 1097's `ChrSelect/upc_ka_at_wa.n3anim` is byte-identical to the pinned tree's (`2c1d83e8…`): `pre_select` 10–65, `selected` 65–200, `dummy` 10–10, all at 30 frames/s with a 0.3 s blend; flags 1 on the first two, and `dummy`'s flag word is `0x3e99999a`, bit 0 clear. `upc_ka_tu_pri.n3joint` and `upc_ka_at_wa.n3joint` match the pinned tree too. 1097 ships no `upc_ka_tu.*`. The other select tables (`pre_select`/`selected`, all `dummy` 10–10 at 30 frames/s, blend 0.3 s): `upc_ka_wt_ma` 10–46/46–290, `upc_el_ba_wa` 10–70/70–200, `upc_el_rf_wa` 10–100/100–260, `upc_el_rm_wa` and `upc_el_rm_rog` 10–60/60–200, `upc_el_rm_pri` 10–60/60–305 | `ChrSelect/*.n3anim` (`tools/assetc/ko_character.py` `animations`) | local-asset |
+| 1097's `ChrSelect/upc_ka_at_wa.n3anim` is byte-identical to the pinned tree's (`2c1d83e8…`): `pre_select` 10–65, `selected` 65–200, `dummy` 10–10, all at 30 frames/s with a 0.3 s blend; flags 1 on the first two, and `dummy`'s flag word is `0x3e99999a`, bit 0 clear. Rechecked against the record layout (RQ-075): each record is a zero word, the eight reals start, end, frames/s, two trace frames, two sound frames and blend, the flag word, two strike reals and the name, and the table parses to its last byte (183). So `dummy`'s blend is its ninth word (0.3, as the other two) and its flag word, the tenth, really holds `0x3e99999a`, the bit pattern of 0.3f: an authoring slip, not a misaligned read. `00447e30` reads the blend at `+0x2c` of the loaded record (`szName` 16 bytes, then the reals from `+0x10`); the flag word, `+0x30`, matters only to a looping clip, and every clip here plays once. `upc_ka_tu_pri.n3joint` and `upc_ka_at_wa.n3joint` match the pinned tree too. 1097 ships no `upc_ka_tu.*`. The other select tables (`pre_select`/`selected`, all `dummy` 10–10 at 30 frames/s, blend 0.3 s): `upc_ka_wt_ma` 10–46/46–290, `upc_el_ba_wa` 10–70/70–200, `upc_el_rf_wa` 10–100/100–260, `upc_el_rm_wa` and `upc_el_rm_rog` 10–60/60–200, `upc_el_rm_pri` 10–60/60–305 | `ChrSelect/*.n3anim` (`tools/assetc/ko_character.py` `animations`) | local-asset |
 
 **Decides:** the hall the Moradon package cooks is KO's own, from 1097. It is not
 only the later source's. 1097 loads the same files the package cooks and plays them
@@ -192,13 +192,25 @@ is in the centre rect and holds its last frame. When the pointer leaves, it goes
 to `dummy` (`pre_select`'s first frame). 1298 changed this later, to per-race files
 and a looping clip 1. So Q71's default (a) is KO's behaviour, not a departure from it.
 
-Within (a), three details still differ from the client:
+Within (a), three details differed from the client; RQ-075 aligned them
+(`content/front-end.md`, "Moradon"):
 
 - A 0.3 s blend goes in each direction. Going in, `pre_select` stays on its first
   frame for the blend.
 - The spot widens only while the pointer is over the character in front (0.02 per
   tick to 0.5 for Karus), narrows when the pointer leaves, and is off at 0.
 - The info text shows only while the pointer is over the character in front.
+
+RQ-075 also read what the turn does to them (binary, the same image):
+
+| Observation | Where | Label |
+|---|---|---|
+| Every select tick turns all eight lights off (`LightEnable(i, 0)`, vtable `+0xb8`, the loop before the hall lights' tick) and then runs `0043e4e0`; only states 2 (`0043f280`) and 3 turn the front spot on again. So while the camera turns (state 1, which moves only the eye) the spot is off and no character is ticked | `0043b550` | binary |
+| The spot's theta `+0x2d0` is stored only by the constructor (`0043a4e0`, which sets the vtable `0058cd10`; the store at `0043a56c`), by Init (`0043a950`: `0043a9b8`, `0043aabf`), by Select (`0043eabc`) and by `0043f280`: a byte scan of the select proc's code (`0043a000`–`00441000`) for the displacement `0x2d0`. The turn does not reset it, so the next slot's spot comes on at the theta the last one had | `0043a4e0`, `0043a950`, `0043ea30`, `0043f280` | binary |
+| The per-tick steps: KO's frame-scaled code elsewhere scales a per-frame step by `30 / s_fFrmPerSec` (the select's own fade-out, `m_fFadeOut += (30.0f / CN3Base::s_fFrmPerSec) * 1.5f`), so 30 ticks a second is the rate the steps are written for; the realm cooks the spot's 0.02 a tick as 0.6 a second | `GameProcCharacterSelect.cpp` `FadeOutProcess` | source |
+
+Not aligned: Select's 0.6 s blend into `selected` (`0043ea77`); the realm's clip
+starts at once, as before (proposed as its own item).
 
 ## Not re-derived here
 
@@ -215,4 +227,4 @@ notes.
 | Q14 | **Add `mute` (timed) in v1**; defer attack-disable. |
 | Q10 | Wording fixed (above). |
 | Q21 | Unchanged (KO's `+monsummon` is untimed; ours gets a bounded duration). |
-| Q71 | §8.1: 1097, the client whose files the package cooks, plays the hall as (a) does, so (a) is KO's behaviour; three details still to align (RQ-074). |
+| Q71 | §8.1: 1097, the client whose files the package cooks, plays the hall as (a) does, so (a) is KO's behaviour; its three remaining details aligned (RQ-075). |

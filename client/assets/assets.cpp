@@ -2675,7 +2675,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 3, "front end version");
+  need(r.u() == 4, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2839,6 +2839,12 @@ FrontEnd load_front_end(const Release &release) {
       out.clips.push_back(std::move(tracks));
     }
     for (const auto &clip : out.clips) need(!clip.empty(), "front end clip without tracks");
+    // Version 4: each clip's blend time (__AnimData::fTimeBlend, seconds).
+    for (size_t i = 0; i < out.clips.size(); ++i) {
+      const float blend = std::bit_cast<float>(r.u());
+      need(std::isfinite(blend) && blend >= 0 && blend <= 10, "front end clip blend");
+      out.blends.push_back(blend);
+    }
     const auto plugs = r.count(4, 0);
     for (uint32_t i = 0; i < plugs; ++i) {
       FrontPlug plug;
@@ -2866,9 +2872,14 @@ FrontEnd load_front_end(const Release &release) {
     slot.spot = light();
     fe.slots.push_back(slot);
   }
+  // Version 4: the spot's growth rate (theta per second).
+  fe.spot_rate = std::bit_cast<float>(r.u());
+  need(std::isfinite(fe.spot_rate) && fe.spot_rate > 0 && fe.spot_rate <= 100, "front end spot rate");
   const auto parts = r.count(64);
   for (uint32_t i = 0; i < parts; ++i) fe.hall.push_back(mesh());
   model(fe.select);
+  // The hover, start and rest clips (pre_select, selected, dummy).
+  need(fe.select.clips.size() == 3, "front end select clips");
   model(fe.create);
   // 9. Music (version 3, RQ-018): each track's frames checked whole here, so
   // the stream that decodes them later meets only well-formed frames.

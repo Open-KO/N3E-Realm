@@ -119,13 +119,15 @@ opening policy. [Contract and remaining corpse gaps](../../content/loot-visual.m
 Spec 11: optional engine42 `presentation["front-end.bin"]` (N3FE) holds KO's
 front end. `ko_front_end.py` reads the local client's UIF trees (login, Karus
 select, create, loading, OK box), the 1098 intro character with its plug and
-lights, the select hall's n3shape, slots, spots and the Tuarek priest with two
-clips, all from the paths and choices in `games/moradon/front-end.json`; the
+lights, the select hall's n3shape, slots, spots and the Tuarek priest with three
+clips (hover, start, rest), all from the paths and choices in `games/moradon/front-end.json`; the
 provenance report records every source path and hash. Text is drawn with the
 Liberation Sans substitutes of N3H9. Untextured images draw nothing, as KO's.
 N3FE version 3 (RQ-018) adds the screens' music: each track's MPEG-1/2 Layer III
 frames as the KO file has them (ID3 tags and a cut-short last frame dropped, any
 other irregularity refused), and the track per screen from `front-end.json`'s
-`music` (Q69).
+`music` (Q69). N3FE version 4 (RQ-075) adds each model clip's blend time, read
+from its clip record, and the select spot's growth rate (`spot_step` a tick at
+30 ticks a second).
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

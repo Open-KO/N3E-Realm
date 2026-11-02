@@ -884,6 +884,7 @@ struct FrontScene {
   V ambient{};
   Scene model;
   std::vector<std::vector<Track>> clips;  // clips[0] is model.tracks
+  std::vector<float> blends;              // version 4: each clip's blend time (seconds)
   std::vector<FrontPlug> plugs;
 };
 struct FrontSlot { V position{}; float yaw = 0; V eye{}; FrontLight spot; };
@@ -897,6 +898,9 @@ struct FrontEnd {
   uint32_t backdrop = 0;
   std::array<float, 4> backdrop_rect{};  // 1024 x 768 units
   std::vector<FrontSlot> slots;
+  // Version 4: the select spot's theta growth (and shrink) per second; the
+  // select model's clips are the hover, start and rest clips.
+  float spot_rate = 0;
   std::vector<FrontMesh> hall;
   // Version 3 (RQ-018, Q57): the screens' music. A track is shared with the
   // stream that plays it; screen_music names one per screen (login, which

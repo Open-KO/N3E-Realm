@@ -7,6 +7,7 @@
 #include "assets/assets.h"
 #include "platform/gl.h"
 #include "platform/gl_load.h"
+#include "render/animation.h"
 #include "wire.pb.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -35,6 +36,15 @@ struct Context {
   std::string version;       // shown by the loading screen's `version` text
   const Characters *characters = nullptr;
   float progress = 0;        // loading: 0..1
+};
+// The select hall's character in front as the last frame showed it (a test
+// hook): its clip (0 hover, 1 start, 2 rest), that clip's time and length
+// (seconds), how far the blend into it has run (1: none or done), the spot's
+// theta and whether the spot is on, and whether the info text shows.
+struct FrontPose {
+  uint32_t clip = 0;
+  float time = 0, length = 0, blend = 1, theta = 0;
+  bool spot = false, info = false;
 };
 
 namespace detail {
@@ -234,16 +244,16 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   void show_message(std::string text) { message = std::move(text); }
   bool showing_message() const { return message.has_value(); }
   bool creating() const { return pending_create; }
-  // The character in front as the last select frame posed it: its clip's
-  // time and that clip's length (seconds). The test client checks the hold.
-  std::array<float, 2> front_pose() const { return front_shown; }
+  // The character in front as the last select frame showed it; the test
+  // client checks the hover, its blends, the spot and the info text.
+  FrontPose front_pose() const { return front_shown; }
   const std::string &message_text() const { static const std::string none; return message ? *message : none; }
   // The server answered CreateCharacter: a longer list is a success (the
   // new character takes its slot), a refusal is shown in a message box.
   void characters(const Characters &list) {
     if (pending_create && list.characters_size() > known) {
       pending_create = false;
-      state = Screen::select;
+      enter_select();
       focus = std::min<int>(list.characters_size() - 1, int(fe.slots.size()) - 1);
       angle = target_angle();
     }
@@ -273,9 +283,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     choosing = -1;
     pending_create = false;
     slide = realm_height;
+    reset_hall();
     focus = 0;
     angle = target_angle();
-    theta = fe.slots[0].spot.theta;
   }
   struct Drawn {
     size_t which;                  // 0 intro, 1 select, 2 create
@@ -369,8 +379,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       slide = std::min(realm_height, slide + std::max(delta, dt > 0 ? 2.f : 0.f));
     }
     if (state == Screen::login || state == Screen::realms) intro(width, height, now);
-    if (state == Screen::select) hall(width, height, now, dt);
-    if (state == Screen::select && choosing >= 0 && now >= chosen_until) {
+    if (state == Screen::select) hall(width, height, dt);
+    // IsAnimEnd: the start clip has played once.
+    if (state == Screen::select && choosing >= 0 && ended(players.at(size_t(choosing)))) {
       choosing = -1;
       state = Screen::loading;
     }
@@ -401,9 +412,22 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   FrontAction pressed = FrontAction::none;
   float realm_height = 0, slide = 0;
   int focus = 0, choosing = -1, known = 0;
-  float angle = 0, theta = 0;
-  double chosen_at = 0, chosen_until = 0, last_frame = -1, hover_since = -1;
-  std::array<float, 2> front_shown{0, 0};  // the character in front: clip time, clip length
+  float angle = 0;
+  double last_frame = -1;
+  // The select hall as CGameProcCharacterSelect keeps it (1097 binary,
+  // specs/KO-FINDINGS.md 8.1): each slot's clip player, the spot's theta
+  // (+0x2d0) and whether it is on, the slot whose info text shows (-1 none).
+  // The select model's clips by role.
+  static constexpr size_t kHover = 0, kStart = 1, kRest = 2;
+  struct Player {
+    size_t clip = kHover, from = kHover;  // the clip, the clip blended from
+    float elapsed = 0, blend = 0, from_time = 0;  // ticked time since set; blend time; from's time
+  };
+  std::array<Player, 3> players{};
+  float theta = 0;
+  bool spot_on = false;
+  int info_slot = -1;
+  FrontPose front_shown;
   std::array<float, 2> screen_pointer{-1, -1};  // the pointer as a share of the window
   bool pending_create = false;
   std::string name;
@@ -520,12 +544,12 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (focus < characters_shown()) {
         // GameProcCharacterSelect: the chosen character plays its "selected"
         // clip; the loading screen follows when it ends.
+        // The select (1097: 0043ea30) widens the spot to its theta. Its 0.6 s
+        // blend into the start clip is not taken here: the clip starts at once.
         choosing = focus;
-        chosen_at = last_frame;
-        float duration = 0;
-        if (clips[1].size() > 1)
-          for (const auto &t : clips[1][1].tracks) duration = std::max(duration, t.keys.back().time);
-        chosen_until = chosen_at + duration;  // IsAnimEnd: the whole clip
+        set_clip(players.at(size_t(focus)), kStart, 0);
+        theta = fe.slots[focus].spot.theta;
+        spot_on = true;
         out.command = Command::select;
         out.character = list->characters(focus).id();
       } else {
@@ -538,7 +562,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   }
   Output escape() {
     if (state == Screen::create) {
-      state = Screen::select;
+      enter_select();
       return {};
     }
     if (state == Screen::select) return act(FrontAction::back);
@@ -554,7 +578,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     case FrontAction::realm_list: break;
     case FrontAction::realm_connect:
       if (state == Screen::realms && slide >= realm_height) {
-        state = Screen::select;
+        enter_select();
         focus = 0;
         angle = target_angle();
         out.command = Command::enter_realm;
@@ -566,12 +590,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       const auto order = slot_order();
       int at = int(std::find(order.begin(), order.end(), focus) - order.begin());
       at = std::clamp(at + (action == FrontAction::select_next ? 1 : -1), 0, int(order.size()) - 1);
+      // The turn keeps the spot's theta (1097: only the proc's init, the
+      // select 0043ea30 and 0043f280 write +0x2d0).
       focus = order[at];
-      theta = 0;
       break;
     }
     case FrontAction::back:
-      if (state == Screen::create) state = Screen::select;
+      if (state == Screen::create) enter_select();
       else if (state == Screen::select && choosing < 0) out.command = Command::back;
       break;
     case FrontAction::create_confirm:
@@ -710,6 +735,40 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::vector<Node> pose(size_t scene, size_t clip, double t, bool loop) {
     return clip_scene(scene, clip).sample(clip_time(scene, clip, t, loop));
   }
+  // The select hall's clip player, as CN3Chr's (1097 binary: the setter
+  // 00447e30, the frame tick 00445bb0). Selecting the clip already set
+  // changes nothing; a negative blend is the clip's own blend time (FLT_MIN);
+  // a blend starts from the frame the previous clip had reached and keeps
+  // the new clip on its first frame until it ends; a clip played once holds
+  // its last frame.
+  void set_clip(Player &p, size_t clip, float blend) {
+    if (clip == p.clip) return;
+    p.from_time = played(p);
+    p.from = p.clip;
+    p.clip = clip;
+    p.elapsed = 0;
+    p.blend = blend < 0 ? fe.select.blends[clip] : blend;
+  }
+  float played(const Player &p) const { return std::clamp(p.elapsed - p.blend, 0.f, clip_length(1, p.clip)); }
+  bool ended(const Player &p) const { return p.elapsed - p.blend >= clip_length(1, p.clip); }
+  std::vector<Node> posed(const Player &p) const {
+    auto now = clip_scene(1, p.clip).sample(played(p));
+    if (p.elapsed >= p.blend) return now;
+    return blend_pose(clip_scene(1, p.from).sample(p.from_time), std::move(now), p.elapsed / p.blend);
+  }
+  // CGameProcCharacterSelect::Init: AddChr sets the hover clip once with no
+  // blend on every character (1097: 0043cee1-0043cf0b), the spot is off and
+  // the info text hidden.
+  void reset_hall() {
+    players = {};
+    theta = 0;
+    spot_on = false;
+    info_slot = -1;
+  }
+  void enter_select() {
+    state = Screen::select;
+    reset_hall();
+  }
   detail::Mat view_projection(const FrontCamera &c, V eye, int width, int height) const {
     return detail::mul(detail::perspective(c.fov, width / float(std::max(height, 1)), c.near_plane, c.far_plane),
                        detail::look_at(eye, c.at, c.up));
@@ -731,14 +790,36 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const auto vp = view_projection(fe.intro.camera, fe.intro.camera.eye, width, height);
     draw_character(0, pose(0, 0, now, true), vp, detail::identity());
   }
-  // CGameProcCharacterSelect::Render: the hall, then each slot's character,
-  // the camera turning about `at` to the slot in focus and that slot's spot
-  // widening to its theta (Tick).
-  void hall(int width, int height, double now, double dt) {
+  // CGameProcCharacterSelect: the hall, then each slot's character, the
+  // camera turning about `at` to the slot in focus. At rest (1097: state 2,
+  // DoProcPreselect 0043f280, every tick) the character in front plays the
+  // hover clip once while the pointer is in the centre rect and the rest clip
+  // (dummy, the hover clip's first frame) otherwise, each with its own blend
+  // time, and is the only one ticked; the spot widens by spot_rate while the
+  // pointer is there, up to its theta, narrows when it leaves and is off at 0;
+  // the info text shows only while the pointer is there. While the camera
+  // turns (state 1) nothing is ticked and the spot is off (0043b550 turns
+  // every light off each tick). Starting (state 3, 0043ed20) ticks the
+  // chosen character's start clip under the full spot.
+  void hall(int width, int height, double dt) {
     const float goal = target_angle();
     float d = goal - angle;
     angle += std::clamp(d, -float(dt) * 1.5f, float(dt) * 1.5f);
-    theta = std::min(fe.slots[focus].spot.theta, theta + float(dt) * .5f);
+    const bool turning = std::abs(goal - angle) > 1e-4f;
+    const float widest = fe.slots[focus].spot.theta;
+    if (choosing >= 0)
+      players.at(size_t(choosing)).elapsed += float(dt);
+    else if (!turning) {
+      const bool over = in_front();
+      if (focus < characters_shown()) {
+        set_clip(players.at(size_t(focus)), over ? kHover : kRest, -1);
+        players.at(size_t(focus)).elapsed += float(dt);
+      }
+      theta = std::clamp(theta + (over ? 1 : -1) * fe.spot_rate * float(dt), 0.f, widest);
+      spot_on = theta > 0;
+      info_slot = over ? focus : -1;
+    } else
+      spot_on = false;
     const auto &c = fe.select.camera;
     const float radius = std::hypot(c.eye[0] - c.at[0], c.eye[2] - c.at[2]);
     const V eye{c.at[0] + radius * std::sin(angle), c.eye[1], c.at[2] + radius * std::cos(angle)};
@@ -749,24 +830,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     glActiveTexture(GL_TEXTURE0);
     auto spot = fe.slots[focus].spot;
     spot.theta = theta;
-    lights(fe.select, {spot});
+    lights(fe.select, spot_on ? std::vector<FrontLight>{spot} : std::vector<FrontLight>{});
     for (size_t i = 0; i < statics.size(); ++i) draw_mesh(statics[i], fe.hall[i], vp, detail::identity());
-    // DoProcPreselect: every character holds pre_select's first frame (its
-    // dummy clip); the one in front plays pre_select once from where the
-    // pointer came in and holds its last frame while the pointer stays
-    // (AniCurSet(SELECT_ANIM_PRE_SELECT, true): once and freeze; RQ-066).
-    const bool over = in_front();
-    if (!over) hover_since = -1;
-    else if (hover_since < 0) hover_since = now;
-    front_shown = {0, 0};
+    const auto &front = players.at(size_t(focus));
+    front_shown = {uint32_t(front.clip), played(front), clip_length(1, front.clip),
+                   front.blend > 0 ? std::min(1.f, front.elapsed / front.blend) : 1.f, theta, spot_on, info_slot >= 0};
     for (int i = 0; i < characters_shown(); ++i) {
       const auto &slot = fe.slots[i];
-      const size_t clip = choosing == i ? 1 : 0;
-      const double t = choosing == i                         ? last_frame - chosen_at
-                       : i == focus && over && choosing < 0 ? now - hover_since
-                                                            : 0;
-      if (i == focus) front_shown = {clip_time(1, clip, t, false), clip_length(1, clip)};
-      draw_character(1, pose(1, clip, t, false), vp, detail::translate_yaw(slot.position, slot.yaw));
+      draw_character(1, posed(players.at(size_t(i))), vp, detail::translate_yaw(slot.position, slot.yaw));
     }
   }
   // Create: the player's own model breathing in `char_view`, as KO's
@@ -924,12 +995,17 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         break;
       case FrontNode::TEXT: {
         std::string value = n.text;
-        const Character *c = nullptr;
-        if (list && focus < characters_shown()) c = &list->characters(focus);
         switch (n.action) {
         case FrontAction::notice: value = context.notice; break;
         case FrontAction::char_info:
-          value = c ? filled(FrontString::select_info, context, c) : filled(FrontString::select_hint, context, nullptr);
+          // DisplayChrInfo (1097: 004402a0, text00, string 1201, or 1202 for
+          // an empty slot) while the pointer is on the character in front;
+          // DontDisplayInfo (004405a0) hides it otherwise.
+          if (info_slot < 0) value.clear();
+          else if (list && info_slot < characters_shown())
+            value = filled(FrontString::select_info, context, &list->characters(info_slot));
+          else
+            value = filled(FrontString::select_hint, context, nullptr);
           break;
         case FrontAction::class_desc: value = filled(FrontString::class_desc, context, nullptr); break;
         case FrontAction::version: value = filled(FrontString::version, context, nullptr); break;

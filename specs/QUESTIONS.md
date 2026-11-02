@@ -582,3 +582,11 @@ later, with the per-race files.
 
 These are proposed as a separate front-end item. (b) is needed only if the realm
 should look like 1298 rather than like the client its files come from.
+
+**RQ-075:** the three details are aligned (`content/front-end.md`, "Moradon";
+KO-FINDINGS §8.1). N3FE version 4 carries each clip's blend time from its record
+and the spot's growth rate; the select model gains clip 2 (`dummy`). The per-tick
+spot step (0.02, Karus) is cooked as 0.6 a second, at the 30 ticks a second KO's
+frame-scaled code is written for (`30 / s_fFrmPerSec`). The turn keeps the spot's
+theta and turns the spot off while it runs, as 1097 does. Still not 1097's: the
+0.6 s blend into `selected` at start (proposed as its own item).

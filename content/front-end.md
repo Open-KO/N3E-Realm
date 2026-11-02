@@ -2,7 +2,8 @@
 
 `front-end.bin` is an optional presentation file (spec 11): KO's 1098 login scene,
 login and server list, the Karus character select hall, character create, loading
-and the OK message box, and the screens' music (version 3, Q57).
+and the OK message box, the screens' music (version 3, Q57), and each model
+clip's blend time and the select spot's growth rate (version 4, RQ-075).
 `tools/assetc/ko_front_end.py` cooks it from the pinned client tree with the
 choices in `games/moradon/front-end.json`; the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
@@ -15,7 +16,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 3, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 4, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤64), each width and height (1–1024) then RGBA8 rows.
 3. Fonts: a count (≤8), each texture index, pixel size (6–48), cap height, atlas
@@ -44,7 +45,9 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    units that the client scales by the window's width and height separately
    (`CGameProcLogIn_1098::Render`'s moon).
 7. The select scene: camera, lights, global ambient, the slots (count equal to
-   the character slots), the hall (part count ≤64, each a mesh), the model, its
+   the character slots), the spot's growth rate (version 4: theta per second,
+   above 0 and at most 100), the hall (part count ≤64, each a mesh), the model
+   (version 4: three clips, by role the hover, start and rest clips), its
    plugs.
 8. The create model and its plugs (version 2): `CGameProcCharacterCreate`'s
    player (`InitChr`: the race's `UPC_DefaultLooks` joint, animation and default
@@ -79,11 +82,15 @@ address mode); the font atlases and the moon linear.
   The client lights as Direct3D 9's fixed function does, without specular.
 - Slot: position, yaw (radians, engine space), the camera eye that faces the
   slot (the scene camera's `at` and up apply), and the slot's spot light (one
-  light record). The spot's theta is its value when the slot is chosen; it is
-  0 otherwise (`CGameProcCharacterSelect::Tick`).
+  light record). The spot's theta is the widest it opens; the client widens it
+  from 0 at the select scene's rate while the pointer is on the character in
+  front and narrows it at that rate otherwise, and the spot is off at 0
+  (1097: `0043f280`, below).
 - Model: a byte length and an N3S1 or N3SM scene (`tools/assetc/gltf.py`, atlas
   up to 2048 a side), then a count of further clips and each clip's byte length
-  and track list (N3S1's track encoding, on the model's nodes).
+  and track list (N3S1's track encoding, on the model's nodes), then (version 4)
+  each clip's blend time, seconds, 0–10: the KO clip record's `fTimeBlend`,
+  which `CN3Chr::AniCurSet` blends over when the caller names no time of its own.
 - Plug: the KO joint index (below the model's joint count), then a mesh in that
   joint's space: world = instance × `Scene::joint_matrix` × vertex.
 - Mesh: texture, flags (1 double-sided, 2 alpha test at 0.5), material diffuse
@@ -129,12 +136,30 @@ is where create draws the character.
   off), `Intro/Moon.dxt` at (100, 50) × 1.3, KO's fixed camera.
 - Select: `ChrSelect/ka_chairs.n3shape`, `ka_light_0/1`, the Karus slots, spots
   and camera from `CGameProcCharacterSelect::Init`, and the Tuarek priest
-  (`upc_ka_tu_pri.n3joint`, default looks, clips 0 and 1, the mace plug). The
-  character in front plays clip 0 (`pre_select`) once when the pointer comes into
-  the centre rect and holds its last frame while it stays, as the later source's
-  `DoProcPreselect` does with this set (RQ-066). 1298 draws the hall from other
-  files and loops a clip on the character in front without the pointer
-  (`specs/KO-FINDINGS.md` §8, Q71).
+  (`upc_ka_tu_pri.n3joint`, default looks, the mace plug) with the clips of
+  `upc_ka_at_wa.n3anim` the 1097 client plays there: 0 `pre_select` (hover), 1
+  `selected` (start) and 2 `dummy` (rest, `pre_select`'s first frame), each
+  with its record's 0.3 s blend time. The hall plays as 1097's does
+  (`specs/KO-FINDINGS.md` §8.1, binary, Q71): at rest, every tick, the
+  character in front plays `pre_select` once while the pointer is in the centre
+  rect and `dummy` once otherwise; setting the clip already set changes
+  nothing, so `pre_select` plays once and holds its last frame. Each change
+  blends from the frame the previous clip had reached over the new clip's own
+  blend time and holds the new clip's first frame meanwhile (`00447e30`,
+  `00445bb0`): going in, `pre_select` stays on its first frame for 0.3 s; going
+  out, the pose returns to `dummy` over 0.3 s. Only the character in front is
+  ticked; the others stand where they were. The spot (`spot_step`, 0.02 a tick,
+  `0043f280`'s Karus step; cooked as 0.6 a second at 30 ticks a second, the
+  rate KO's frame-scaled code is written for) widens while the pointer is
+  there, up to `spot_theta` (0.5), narrows when it leaves and is off at 0; the
+  info text (`text00`, `select_info` or, for an empty slot, `select_hint`:
+  KO's 1201 and 1202) shows only while the pointer is there. While the camera
+  turns nothing is ticked, the spot is off (`0043b550` turns every light off
+  each tick) and keeps its theta for the next slot; starting turns the spot to
+  its full theta (`0043ea30`) and plays `selected` to its end. Not taken:
+  1097's 0.6 s blend into `selected` (the clip starts at once). 1298 draws the
+  hall from other files and loops a clip on the character in front without
+  the pointer (`specs/KO-FINDINGS.md` §8, Q71).
 - Fonts: Liberation Sans regular and bold for Arial, at points × 96 / 72.
 - Music: `Snd/Intro_Sound.mp3` (44.1 kHz stereo, 4,096 frames, 107 s; the
   file's cut-short 4,097th frame is dropped), looping, on login, select and

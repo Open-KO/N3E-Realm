@@ -493,7 +493,7 @@ pub fn load(root: &Path) -> Result<Release> {
             return Err(bad("front end compatibility"));
         }
         let mut p = Reader::open_bounded(&root.join("front-end.bin"), MAX_FRONT_END_ASSET)?;
-        if p.take(4)? != b"N3FE" || p.u()? != 3 {
+        if p.take(4)? != b"N3FE" || p.u()? != 4 {
             return Err(bad("front end magic/version"));
         }
         let slots = p.u()?;

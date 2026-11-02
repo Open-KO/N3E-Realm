@@ -257,9 +257,14 @@ CLIENT = Path("assets/ko")
 # index change. Default features c3dfc2bd... -> 82d75a6a...; classic 0f8ade92...
 # -> 9c3e3d02...; 1097 2fb34600... -> 5f715c99.... The plain cooks and the
 # homelands keep their pins.
+# RQ-075 (Q71, KO-FINDINGS 8.1) changed the three --features pins: front-end.bin
+# is N3FE version 4, with each model clip's blend time, the select spot's growth
+# rate and the select model's third clip (dummy). Default features 82d75a6a...
+# -> 5d175721...; classic 9c3e3d02... -> 61fc225d...; 1097 5f715c99... ->
+# 9d8fa202.... The plain cooks and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "82d75a6ab820039b1af82158c7709c6f655c5a00f72f9c2d69588a58031a2d19"),
+    "features": (["--features"], "5d175721c7f3c698c95ad90bc40f27a699033cb8e803ee6baba147a4b925eaa6"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -280,13 +285,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "9c3e3d02436d757c48fb90081f4572a861666fb805bfd80a2cefbd0be7859517"),
+    "features": (["--features"], "61fc225dbf89b93da3ee0951872402ce87409bfd89364880684679724783708f"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "5f715c99d835016743fef8274284028eca863d0957bab6b26124991df1aba494"),
+    "features": (["--features"], "9d8fa202bfc995738b63aa46cd3ed6dfc8f5d3af17880a61525fcac79e6696df"),
 }
 
 

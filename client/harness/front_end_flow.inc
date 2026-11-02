@@ -13,9 +13,14 @@
 //   FRONT_FLOW message='...'
 //   FRONT_FLOW music=none|streamK (RQ-018: K counts the streams started; a
 //   line each time the mixer's stream changes, a frame after the screen)
-//   FRONT_FLOW hover t=T end=E (RQ-066: on select, before start, the front
-//   character's clip time T and clip length E with the pointer on it; three
-//   lines, the first while it plays, two after its end)
+//   FRONT_FLOW hover phase=P clip=C t=T end=E blend=B theta=H spot=0|1 info=0|1
+//   (RQ-066, RQ-075: on select, before start, the character in front as
+//   View::front_pose reports it: its clip, the clip's time and length, the
+//   blend into it, the spot's theta and light, the info text. Phases: `out`,
+//   the pointer off the centre rect at rest; `in`, the first frame after it
+//   comes on; `play`, a second later; `hold`, after the clip's end;
+//   `back`, the first frame after it leaves; `rest`, a second and a half
+//   later)
 {
   static const char *flow_names = std::getenv("N3E_TEST_FRONT_FLOW");
   static std::vector<std::string> names;
@@ -69,6 +74,56 @@
         SDL_PushEvent(&quit);
       } else
         key(SDLK_RETURN);
+    } else if (screen == 2 && next_name > 0 && world.characters.characters_size() && !front->showing_message()) {
+      // RQ-066, RQ-075: the pointer off the character in front, then on it
+      // (its clip blends in, plays once and holds the last frame, the spot
+      // widens, the info text shows), then off again (the rest clip blends
+      // back, the spot narrows to off, the text hides); then ENTER: the new
+      // character, in focus, starts. Run every frame: the blends last 0.3 s.
+      static int phase = 0;
+      static uint64_t phase_at = 0;
+      const auto pose = front->front_pose();
+      auto pointer = [&](float y) {
+        int lw = 0, lh = 0;
+        SDL_GetWindowSize(w, &lw, &lh);
+        SDL_Event ev{};
+        ev.type = SDL_EVENT_MOUSE_MOTION;
+        ev.motion.x = lw * .5f;
+        ev.motion.y = lh * y;
+        SDL_PushEvent(&ev);
+      };
+      auto report = [&](const char *name) {
+        std::cout << "FRONT_FLOW hover phase=" << name << " clip=" << pose.clip << " t=" << pose.time
+                  << " end=" << pose.length << " blend=" << pose.blend << " theta=" << pose.theta
+                  << " spot=" << pose.spot << " info=" << pose.info << std::endl;
+      };
+      auto next = [&] { ++phase, phase_at = now_ms; };
+      if (phase == 0) {
+        pointer(.2f);
+        next();
+      } else if (phase == 1 && now_ms - phase_at > 1500) {
+        report("out");
+        pointer(.65f);
+        next();
+      } else if (phase == 2 && pose.clip == 0) {
+        report("in");
+        next();
+      } else if (phase == 3 && now_ms - phase_at > 1000) {
+        report("play");
+        next();
+      } else if (phase == 4 && now_ms - phase_at > uint64_t(pose.length * 1000) + 500) {
+        report("hold");
+        pointer(.2f);
+        next();
+      } else if (phase == 5 && pose.clip == 2) {
+        report("back");
+        next();
+      } else if (phase == 6 && now_ms - phase_at > 1500) {
+        report("rest");
+        next();
+        last_push = now_ms;
+        key(SDLK_RETURN);
+      }
     } else if (screen < 5 && !front->showing_message() && now_ms - last_push > 700) {
       last_push = now_ms;
       if (screen == 0 && !entered) {
@@ -82,29 +137,6 @@
       } else if (screen == 1 ||
           (screen == 2 && !world.characters.characters_size()))
         key(SDLK_RETURN);
-      else if (screen == 2 && next_name > 0 && world.characters.characters_size()) {
-        // RQ-066: the pointer on the character in front (the centre rect);
-        // its clip plays once and holds the last frame. One sample while it
-        // plays, two after its end, then ENTER: the new character, in focus,
-        // starts.
-        static uint64_t hover_at = 0;
-        static int samples = 0;
-        const auto [t, length] = front->front_pose();
-        if (!hover_at) {
-          int lw = 0, lh = 0;
-          SDL_GetWindowSize(w, &lw, &lh);
-          SDL_Event ev{};
-          ev.type = SDL_EVENT_MOUSE_MOTION;
-          ev.motion.x = lw * .5f;
-          ev.motion.y = lh * .65f;
-          SDL_PushEvent(&ev);
-          hover_at = now_ms;
-        } else if (samples < 3 && (samples == 0 || now_ms - hover_at > uint64_t(length * 1000) + 500)) {
-          std::cout << "FRONT_FLOW hover t=" << t << " end=" << length << std::endl;
-          ++samples;
-        } else if (samples == 3)
-          key(SDLK_RETURN);
-      }
       else if (screen == 3 && !front->creating() && next_name < names.size()) {
         for (size_t i = 0; i < typed.size(); ++i) key(SDLK_BACKSPACE);
         typed = names[next_name++];

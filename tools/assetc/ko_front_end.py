@@ -3,8 +3,9 @@
 KO's 1098 login scene (the orc with the axe under the moon, GameProcLogIn_1098),
 its login and server-list layout, the Karus character select hall
 (GameProcCharacterSelect), character create, loading and the OK message box,
-cooked from the pinned client tree, and (version 3) the screens' music, KO's
-MP3 frames carried as they are. games/moradon/front-end.json names every KO
+cooked from the pinned client tree, (version 3) the screens' music, KO's
+MP3 frames carried as they are, and (version 4) each model clip's blend time
+and the select spot's growth rate. games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
@@ -26,7 +27,18 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 3
+VERSION = 4
+# The rate KO's frame-scaled code is written for: its per-frame steps are
+# scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
+# N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
+# 0.02, Karus, or 0.015, El Morad, every tick) is cooked as a rate at it.
+TICKS_PER_SECOND = 30
+# A clip's blend time (__AnimData::fTimeBlend, seconds), as the client bounds it.
+MAX_BLEND = 10.0
+# The select model's clips by role (version 4): the hover clip (pre_select),
+# the start clip (selected) and the rest clip (dummy), as DoProcPreselect and
+# the select (1097: 0043f280, 0043ea30) name them.
+SELECT_CLIPS = 3
 # ANI_BREATH (GameDef.h): the idle InventoryChrAnimationInitialize plays.
 BREATH = 0
 CANVAS = (1024, 768)
@@ -240,7 +252,19 @@ def plug_record(assets, textures, name):
 def model(assets, source, definition, clips, work):
     """A character for the front end (ko_character.convert's front-end
     switch): the first clip's N3SM, then each further clip's tracks, each
-    length-prefixed."""
+    length-prefixed, then (version 4) each clip's blend time, the clip
+    record's fTimeBlend: the time CN3Chr::AniCurSet blends into the clip over
+    when the caller names no time of its own (FLT_MIN; 1097 binary: 00447e30
+    reads the record's +0x2c)."""
+    table = character.animations(assets.get(definition["animation"]), unused_word=True)
+    blends = []
+    for clip in clips:
+        if not 0 <= clip < len(table):
+            raise ValueError("front-end clip %d past the table's %d clips" % (clip, len(table)))
+        blend = table[clip]["blend_seconds"]
+        if not (math.isfinite(blend) and 0 <= blend <= MAX_BLEND):
+            raise ValueError("front-end clip blend time")
+        blends.append(blend)
     blobs = []
     for clip in clips:
         target = (work / ("clip-%d" % clip)).resolve()
@@ -259,7 +283,7 @@ def model(assets, source, definition, clips, work):
         if h != head or t != tail:
             raise ValueError("front-end clips do not share one model")
         extra.append(u(len(tracks)) + tracks)
-    return u(len(blobs[0])) + blobs[0] + u(len(extra)) + b"".join(extra)
+    return u(len(blobs[0])) + blobs[0] + u(len(extra)) + b"".join(extra) + f(blends)
 
 
 # --- UI ---------------------------------------------------------------------
@@ -496,7 +520,8 @@ def intro_scene(assets, textures, config, work):
 def select_scene(assets, textures, config, work):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
     slots (position, yaw, the camera that faces the slot and its spot light),
-    the hall, the character with its clips and plugs."""
+    the spot's growth rate, the hall, the character with its clips and
+    plugs."""
     camera = config["camera"]
     eye, at = camera["eye"], camera["at"]
     radius = math.hypot(eye[0] - at[0], eye[2] - at[2])
@@ -513,10 +538,19 @@ def select_scene(assets, textures, config, work):
                      range=6.0, falloff=20.0, attenuation=[0.1, 0, 0], theta=config["spot_theta"],
                      phi=config["spot_phi"])
         slots += f(reflect([x, y, z]) + [-math.radians(slot["yaw"])] + reflect(slot_eye)) + light_record(light)
+    # The spot's growth (version 4): KO's per-tick step as a rate at
+    # TICKS_PER_SECOND, at most the spot's whole theta per tick and the
+    # client's bound of 100 a second.
+    step = config["spot_step"]
+    if not (isinstance(step, (int, float)) and 0 < step <= config["spot_theta"] and step * TICKS_PER_SECOND <= 100):
+        raise ValueError("front-end spot step")
     look = config["character"]
+    if len(look["clips"]) != SELECT_CLIPS:
+        raise ValueError("front-end select clips: the hover, start and rest clips")
     definition = dict(joint=look["joint"], animation=look["animation"], parts=default_parts(assets, look["race"]))
     out = camera_record(camera) + lights(assets, config["lights"]) + f(vector(config["ambient"], 3))
-    out += u(count(len(config["slots"]), 3)) + slots + hall(assets, textures, config["hall"])
+    out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND])
+    out += hall(assets, textures, config["hall"])
     out += model(assets, look["joint"], definition, look["clips"], work / "select")
     return out + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
 

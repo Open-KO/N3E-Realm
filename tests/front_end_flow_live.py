@@ -10,8 +10,10 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   again logs in (the browser step played here on the address it prints) -> realms -> select (no
   characters) -> create "Taken", which another account holds: the server's
   refusal in KO's message box -> create a fresh name -> select with it (the
-  pointer on the character in front: its clip plays once and holds its last
-  frame, RQ-066) -> start -> loading -> the world.
+  pointer off, on and off the character in front: its hover clip blends in on
+  its first frame, plays once and holds its last frame, the rest clip blends
+  back, the spot widens and narrows to off and the info text shows only while
+  the pointer is on it; RQ-066, RQ-075) -> start -> loading -> the world.
 - An operator kick (admin API) returns the client to the login screen with the
   operator's wording in the message box.
 - `character_slots` (3, front-end.bin) refuses a fourth character at the wire,
@@ -202,17 +204,38 @@ try:
     want = ["screen=login", "music=stream1", "screen=realms", "screen=select", "screen=create", "screen=select",
             "screen=loading", "music=none", "screen=world", "screen=login"]
     assert order in (want, want + ["music=stream2"]), flow
-    # RQ-066: with the pointer on the character in front, its clip plays once
-    # and holds its last frame (KO's once-and-freeze), not a loop.
-    hovers = [dict(kv.split("=") for kv in f.split()[1:]) for f in flow if f.startswith("hover ")]
-    assert len(hovers) == 3, flow
-    times = [(float(h["t"]), float(h["end"])) for h in hovers]
-    assert times[0][1] > 0.5 and 0 < times[0][0] < times[0][1], times
-    assert all(abs(t - end) < 1e-4 and end == times[0][1] for t, end in times[1:]), times
+    # RQ-066, RQ-075 (KO-FINDINGS 8.1, the 1097 hall): with the pointer on the
+    # character in front, the hover clip (pre_select) blends in over its own
+    # 0.3 s on its first frame, plays once and holds its last frame; off it,
+    # the rest clip (dummy) blends back. The spot widens only while the
+    # pointer is on (0.02 a tick at 30 ticks/s, to 0.5), narrows when it
+    # leaves and is off at 0; the info text shows only while it is on.
+    hovers = {h["phase"]: h for h in ({k: v for k, v in (kv.split("=") for kv in f.split()[1:])}
+                                      for f in flow if f.startswith("hover "))}
+    assert list(hovers) == ["out", "in", "play", "hold", "back", "rest"], flow
+    v = {phase: {k: (int(x) if k in ("clip", "spot", "info") else float(x)) for k, x in h.items() if k != "phase"}
+         for phase, h in hovers.items()}
+    out_, in_, play, hold, back, rest = (v[p] for p in ("out", "in", "play", "hold", "back", "rest"))
+    widest, rate = 0.5, 0.02 * 30
+    assert out_["clip"] == 2 and out_["blend"] == 1 and out_["theta"] == 0, v
+    assert out_["spot"] == 0 and out_["info"] == 0, v
+    assert in_["clip"] == 0 and in_["t"] == 0 and 0 < in_["blend"] < 1, v  # held on its first frame
+    assert 0 < in_["theta"] < widest and in_["spot"] == 1 and in_["info"] == 1, v
+    assert in_["end"] > 0.5 and play["end"] == in_["end"] == hold["end"], v
+    # A second after it came in, the clip has played that second less the blend.
+    assert play["clip"] == 0 and play["blend"] == 1 and 0.6 < play["t"] < 0.9 < play["end"], v
+    assert play["theta"] == widest and play["spot"] == 1 and play["info"] == 1, v
+    assert hold["clip"] == 0 and abs(hold["t"] - hold["end"]) < 1e-4 and hold["theta"] == widest, v
+    assert hold["info"] == 1, v
+    assert back["clip"] == 2 and 0 < back["blend"] < 1 and back["info"] == 0, v
+    assert widest - rate * 0.25 <= back["theta"] < widest and back["spot"] == 1, v
+    assert rest["clip"] == 2 and rest["blend"] == 1 and abs(rest["t"] - rest["end"]) < 1e-4, v
+    assert rest["theta"] == 0 and rest["spot"] == 0 and rest["info"] == 0, v
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
     print(f"PASS front-end flow: one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box, "
-          "Fresh created) -> select (the front character's clip plays once and holds) -> loading -> world; a kick returns to login with the operator's wording; "
+          "Fresh created) -> select (the front character's hover clip blends in on its first frame, plays once and holds, the rest clip blends back; "
+          "the spot widens and the info text shows only while the pointer is on it) -> loading -> world; a kick returns to login with the operator's wording; "
           "one music stream from login to loading")
     assert server.poll() is None, "server exited"
     print("PASS KO front-end flow")

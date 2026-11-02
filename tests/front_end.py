@@ -247,8 +247,20 @@ def track(data=TRACK, rate=48000, channels=1, loop=1, frames=None):
     return u(rate) + u(channels) + u(loop) + u(len(data) // 96 if frames is None else frames) + u(len(data)) + data
 
 
-def blob(version=3, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
-         canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC):
+_, TRACKS, _ = fe.scene_tracks(model)
+
+
+def character(clips=1, blends=None, plug=None):
+    """A model record (version 4): the demo character, `clips` - 1 further
+    clips (its own tracks again), each clip's blend time, the plugs."""
+    plugs = u(0) if plug is None else u(1) + u(plug) + MESH
+    further = (u(len(TRACKS)) + TRACKS) * (clips - 1)
+    return u(len(model)) + model + u(clips - 1) + further + f([0.3] * clips if blends is None else blends) + plugs
+
+
+def blob(version=4, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+         canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
+         spot_rate=0.6):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -257,13 +269,11 @@ def blob(version=3, slots=1, screen_data=None, font_index=None, light=None, plug
     out += b"".join(string(s) for s in (strings or ["Level: {level}", "ENTER", "Priest", "Heals.", "Loading",
                                                     "Ver. {version}"]))
     lights = u(1) + raw_light(light or LIGHT)
-    plugs = u(0) if plug is None else u(1) + u(plug) + MESH
-    character = u(len(model)) + model + u(0) + plugs
-    out += CAMERA + lights + f([0, 0, 0]) + character + u(0) + f([100, 50, 400, 350])
+    out += CAMERA + lights + f([0, 0, 0]) + character(plug=plug, blends=blends) + u(0) + f([100, 50, 400, 350])
     spot = dict(LIGHT, kind=fe.SPOT, theta=0.5, phi=0.6, range=6.0)
     out += CAMERA + u(0) + f([0, 0, 0]) + u(slots if slot_count is None else slot_count)
     out += (f([0, -1, 2, 0, 0, 0, 7]) + fe.light_record(spot)) * (slots if slot_count is None else slot_count)
-    out += u(1) + MESH + character + character
+    out += f([spot_rate]) + u(1) + MESH + character(select_clips, plug=plug) + character(plug=plug)
     return out + music + extra
 
 
@@ -304,7 +314,11 @@ cases = {
     "bad-truncated": valid[:-1],
     "bad-trailing": valid + b"\0",
     "bad-magic": blob(magic=b"N3FX"),
-    "bad-version": blob(version=2),
+    "bad-version": blob(version=3),
+    "bad-clip-blend": blob(blends=[-0.1]),
+    "bad-clip-blend-nan": blob(blends=[float("nan")]),
+    "bad-spot-rate": blob(spot_rate=0),
+    "bad-select-clips": blob(select_clips=2),
     "ok-music": blob(music=u(1) + track() + u(0) * 3 + u(fe.NO_MUSIC)),
     "ok-music-two": blob(music=u(2) + track() + track(loop=0) + u(0) + u(1) + u(fe.NO_MUSIC) * 2),
     "bad-music-tracks": blob(music=u(5) + track() * 5 + u(fe.NO_MUSIC) * 4),

@@ -111,6 +111,14 @@
   "select": {
     "camera": {"eye": [128.011, 0.534, 85.922], "at": [128.077, 4.087, 105.862], "fov": 0.96, "near": 0.1, "far": 500},
     "lights": ["ChrSelect/ka_light_0.n3light", "ChrSelect/ka_light_1.n3light"],
+    "light_manager": [
+      {"number": 0, "kind": "directional", "diffuse": [0.8, 0.8, 0.8], "ambient": [0.56, 0.56, 0.56],
+       "direction": [0, -1, 0]},
+      {"number": 1, "kind": "directional", "diffuse": [0.5, 0.5, 0.5], "ambient": [0.35, 0.35, 0.35],
+       "direction": [0, 1, 0]},
+      {"number": 2, "kind": "point", "diffuse": [0.3, 0.3, 0.3], "ambient": [0.21, 0.21, 0.21],
+       "position": [0, 0, 0], "range": 128, "falloff": 1, "attenuation": [0.5, 0.015625, 0.00048828125]}
+    ],
     "ambient": [0, 0, 0],
     "spot_theta": 0.5,
     "spot_phi": 1.5,
@@ -118,6 +126,8 @@
     "start_blend": 0.6,
     "front_clip": "loop",
     "turn": "path",
+    "zone": 10001,
+    "fog": true,
     "paths": [
       {"to": 0, "path": "ChrSelect/Data/ka_lording_camera.n3camera"},
       {"from": 0, "to": 1, "path": "ChrSelect/Data/ka_center_left_camera.n3camera"},

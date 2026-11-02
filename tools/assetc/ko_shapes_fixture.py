@@ -90,8 +90,9 @@ def shape_record(kind=0x400, label="prop", position=(1.0, 2.0, 3.0),
                  rotation=(0.0, 0.0, 0.0, 1.0), scale=(1.0, 1.0, 1.0),
                  parts=(("mesh.n3pmesh", ("skin.dxt",), 0.0),),
                  anim_keys=0, event_id=0, event_type=0, npc_id=0,
-                 npc_status=0, collision_mesh="", climb_mesh=""):
-    """One CN3Shape record in the reference layout."""
+                 npc_status=0, collision_mesh="", climb_mesh="", ambient=(0.0, 0.0, 0.0, 0.0)):
+    """One CN3Shape record in the reference layout; `ambient` is every
+    part's material Ambient (zero by default)."""
     out = bytearray()
     out += struct.pack("<I", kind)
     out += name(label)
@@ -122,7 +123,8 @@ def shape_record(kind=0x400, label="prop", position=(1.0, 2.0, 3.0),
         # dwColorOp, dwColorArg1, dwColorArg2, nRenderFlags, dwSrcBlend,
         # dwDestBlend.
         out += struct.pack("<4f", 1.0, 1.0, 1.0, alpha)
-        out += struct.pack("<13f", *([0.0] * 13))
+        out += struct.pack("<4f", *ambient)
+        out += struct.pack("<9f", *([0.0] * 9))
         out += struct.pack("<6I", 4, 2, 1, flags, *blend)
         out += struct.pack("<i", len(textures)) + struct.pack("<f", fps)
         for t in textures:

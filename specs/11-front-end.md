@@ -78,7 +78,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 7, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 8, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -107,7 +107,10 @@ replace the panels when the client has a Discord realm config.
   as a screen quad) and the select hall (camera, lights, `character_slots` slots with
   their eye and spot light, the spot's growth rate, the front-clip mode (N3FE
   version 6, RQ-086), the turn mode and its camera paths (N3FE version 7,
-  RQ-087), the hall meshes (none or more, version 7), the model with clips 0, 1 and 2 (front,
+  RQ-087), the hall meshes (none or more, version 7) or, since version 8 (RQ-095),
+  a zone (up to 256 meshes of a zone's terrain and shapes, each lit or unlit and
+  cut at alpha 0 or blended after the UI, far to near) and the camera files' fog
+  (on or off, its colour and linear start and end), the model with clips 0, 1 and 2 (front,
   start, rest), plugs), each model clip with the time the
   client blends into it over (N3FE version 4, RQ-075; the record's, or the package's
   own for the start clip, RQ-076),
@@ -246,7 +249,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 7 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, or no turn mode) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 8 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, or no zone and fog) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas | The UI scales down uniformly. No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -285,7 +288,15 @@ CPU (`make test`):
    known turn mode (`rotate` or `path`), with paths in the rotate mode or a `turn_end`
    in the path mode, a path outside the slots or from a slot to itself, a pair twice,
    a missing entry path or way between neighbours, or a `.n3camera` that is truncated, has trailing
-   bytes, or lacks its eye or at keys (RQ-087, synthetic camera files). (The wrapped-UV
+   bytes, or lacks its eye or at keys (RQ-087, synthetic camera files). It cooks a
+   synthetic zone (RQ-095: terrain, an opaque, a blended and an unlit shape) into
+   its meshes in hall space and refuses a hall with a zone, an unknown zone key, a
+   zone with an extension file, a second tile layer or a part material other than
+   the terrain's, and a fog the camera files disagree on or outside the path mode;
+   `select.light_manager`'s lights replace the hall lights of their number, and
+   the cook refuses a number twice or past 7, an unknown kind or key, colours
+   past 0–1 and a point light's range or attenuation out of bounds.
+   (The wrapped-UV
    `ka_login_intro_us.uif` is not an input: the 1098 intro scene replaced it.)
 2. **Loader bounds** (`tests/front_end.py`, `tests/front_end.cpp`). The client loader
    refuses malformed blobs, each with its own message and no crash. The music stream
@@ -301,7 +312,13 @@ CPU (`make test`):
    a path's last frame and its keys at a frame as 1298's `DataGet` does, takes a
    loaded path's two first steps, holds the last frame and skips to it; the loader
    refuses an unknown turn mode, paths in the rotate mode and every path bound
-   (RQ-087).
+   (RQ-087). The zone helpers (`client/render/select_zone.h`) give D3D's linear
+   fog factor and the blended meshes far to near; the loader refuses a hall with
+   a zone, zone mesh flags other than lit or unlit with one of cut-zero or blend,
+   more than 256 zone meshes, a zone one mesh past the vertex total (196,608) or
+   the index total (589,824), a zone cut inside a mesh, and a fog out of its
+   range or an off fog with values (RQ-095); the cook refuses a zone past its
+   mesh, vertex or index bound.
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.

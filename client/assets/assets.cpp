@@ -2675,13 +2675,14 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 7, "front end version");
+  need(r.u() == 8, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
   fe.canvas_height = r.u();
   need(fe.canvas_width == 1024 && fe.canvas_height == 768, "front end canvas");
-  const auto textures = r.count(64);
+  // Version 8 (RQ-095): up to 256 textures, a zone hall's tiles and objects.
+  const auto textures = r.count(256);
   for (uint32_t i = 0; i < textures; ++i) {
     HudTexture t;
     t.width = r.count(1024);
@@ -2786,11 +2787,15 @@ FrontEnd load_front_end(const Release &release) {
          "front end light attenuation");
     return l;
   };
-  auto mesh = [&] {
+  auto mesh = [&](bool zone = false) {
     FrontMesh m;
     m.texture = r.u();
     m.flags = r.u();
-    need(m.texture < fe.textures.size() && m.flags <= 3, "front end mesh");
+    // A zone mesh: UNLIT or not, and exactly one of CUT_ZERO and BLEND.
+    const uint32_t kind = m.flags & ~FrontMesh::UNLIT;
+    need(m.texture < fe.textures.size() &&
+             (zone ? kind == FrontMesh::CUT_ZERO || kind == FrontMesh::BLEND : m.flags <= 3),
+         "front end mesh");
     m.diffuse = r.floats<3>();
     m.ambient = r.floats<3>();
     const auto vertices = r.count(65536);
@@ -2918,6 +2923,36 @@ FrontEnd load_front_end(const Release &release) {
   // Version 7: the hall may have no parts (1298 draws a zone there, RQ-087).
   const auto parts = r.count(64, 0);
   for (uint32_t i = 0; i < parts; ++i) fe.hall.push_back(mesh());
+  // Version 8 (RQ-095): the zone the hall draws, up to 256 meshes and N3W1's
+  // totals (196608 vertices, 589824 indices), each with its sort point; a
+  // package has a hall or a zone, not both. Then the camera's fog: on (0 or
+  // 1), colour, start and end (0 <= start < end <= the camera's far), all 0
+  // when off.
+  const auto zone = r.count(256, 0);
+  need(zone == 0 || parts == 0, "front end hall and zone");
+  size_t zone_vertices = 0, zone_indices = 0;
+  for (uint32_t i = 0; i < zone; ++i) {
+    FrontZoneMesh z;
+    z.mesh = mesh(true);
+    z.sort = r.floats<3>();
+    zone_vertices += z.mesh.vertices.size() / 8;
+    zone_indices += z.mesh.indices.size();
+    need(zone_vertices <= 196608 && zone_indices <= 589824, "front end zone totals");
+    fe.zone.push_back(std::move(z));
+  }
+  const auto fog = r.u();
+  need(fog <= 1, "front end fog");
+  fe.fog.on = fog == 1;
+  fe.fog.color = r.floats<3>();
+  fe.fog.start = std::bit_cast<float>(r.u());
+  fe.fog.end = std::bit_cast<float>(r.u());
+  if (fe.fog.on) {
+    for (float c : fe.fog.color) need(c >= 0 && c <= 1, "front end fog colour");
+    need(std::isfinite(fe.fog.start) && std::isfinite(fe.fog.end) && fe.fog.start >= 0 &&
+             fe.fog.start < fe.fog.end && fe.fog.end <= fe.select.camera.far_plane,
+         "front end fog range");
+  } else
+    need(fe.fog.color == V{0, 0, 0} && fe.fog.start == 0 && fe.fog.end == 0, "front end fog off");
   model(fe.select);
   // The front, start and rest clips (1097: pre_select, selected, dummy;
   // 1298: its clips 1, 2 and 0).

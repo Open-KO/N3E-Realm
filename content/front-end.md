@@ -5,8 +5,9 @@ login and server list, the Karus character select hall, character create, loadin
 and the OK message box, the screens' music (version 3, Q57), each model
 clip's blend time and the select spot's growth rate (version 4, RQ-075),
 PCM music tracks with a restart period (version 5, RQ-083), the select
-hall's front-clip mode (version 6, RQ-086), and the select camera's turn mode
-with 1298's recorded camera paths (version 7, RQ-087).
+hall's front-clip mode (version 6, RQ-086), the select camera's turn mode
+with 1298's recorded camera paths (version 7, RQ-087), and a KO zone drawn as
+the select hall with the select camera's fog (version 8, RQ-095).
 `tools/assetc/ko_front_end.py` cooks it from the pinned client tree with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -20,9 +21,10 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 7, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 8, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
-2. Textures: a count (≤64), each width and height (1–1024) then RGBA8 rows.
+2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
+   (1–1024) then RGBA8 rows.
 3. Fonts: a count (≤8), each texture index, pixel size (6–48), cap height, atlas
    top and 95 advances for ASCII 32–126. A font texture is a 512×192 atlas of
    32×32 cells in 16 columns, glyph origin x=2, baseline y=22 (as the N3H9
@@ -53,7 +55,9 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    above 0 and at most 100), the front-clip mode (version 6: 0 hover, 1 loop;
    below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
    (0 in the rotate mode, 1–8 in the path mode) and the paths, the hall (part
-   count ≤64, each a mesh; version 7: it may be 0), the model (version 4: three
+   count ≤64, each a mesh; version 7: it may be 0), the zone (version 8: a
+   mesh count, 0–256, 0 when the hall has parts, each a zone mesh; below), the
+   fog (version 8; below), the model (version 4: three
    clips, by role the front, start and rest clips), its plugs.
 8. The create model and its plugs (version 2): `CGameProcCharacterCreate`'s
    player (`InitChr`: the race's `UPC_DefaultLooks` joint, animation and default
@@ -150,6 +154,26 @@ address mode); the font atlases and the moon linear.
     (the entry path's for slot 0, the one from slot 0 for the others), which is
     where the realm puts it on returning to the hall from create or a start
     (Q78). The characters play the turn as the front-clip mode says.
+- Zone (version 8, RQ-095; `specs/KO-FINDINGS.md` §8.4,
+  `client/render/select_zone.h`): the terrain and shapes of a KO zone the
+  select draws in place of a hall. Each mesh is a mesh record (below) and its
+  sort point (3 reals, engine space); a zone mesh's flags are 4 unlit or none,
+  and exactly one of 16 cut-zero (opaque: its texels of alpha 0 are cut, KO's
+  alpha test GREATER than 0) and 8 blend (source alpha over its inverse, depth
+  tested and written, texels of alpha 0 cut); it is drawn culled (a
+  double-sided part's back faces are triangles of their own) with the select's
+  lights. The opaque meshes draw before the hall's characters; the blend meshes
+  draw after the select UI and the message box, far to near by the eye's
+  distance to their sort points (a tie in file order), as 1298's alpha flush
+  does. The zone's meshes together hold at most 196,608 vertices and 589,824
+  indices (N3W1's bounds).
+- Fog (version 8): on (0 or 1), colour (3 reals, 0–1), start and end (reals,
+  metres from the eye; on: 0 ≤ start < end ≤ the select camera's far; off: all
+  0). Every draw of the select scene, the zone, the hall, the characters and
+  their plugs, lit or not, takes D3D's linear range fog: its colour kept by
+  (end − d) / (end − start), clamped to 0–1, d its distance from the eye,
+  mixed toward the fog colour (the client per pixel, D3D per vertex). The intro
+  and create draw without fog.
 - Model: a byte length and an N3S1 or N3SM scene (`tools/assetc/gltf.py`, atlas
   up to 2048 a side), then a count of further clips and each clip's byte length
   and track list (N3S1's track encoding, on the model's nodes), then (version 4)
@@ -159,7 +183,8 @@ address mode); the font atlases and the moon linear.
   the package's choices name one (Moradon: the start clip's, `start_blend`).
 - Plug: the KO joint index (below the model's joint count), then a mesh in that
   joint's space: world = instance × `Scene::joint_matrix` × vertex.
-- Mesh: texture, flags (1 double-sided, 2 alpha test at 0.5), material diffuse
+- Mesh: texture, flags (1 double-sided, 2 alpha test at 0.5; a zone mesh's
+  above), material diffuse
   and ambient (3 reals each), a vertex count (1–65536) of 8 reals (position,
   normal, uv), an index count (a multiple of 3, ≤196608), the indices.
 
@@ -170,8 +195,10 @@ actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
 loading: `progress`; message: `message`, `ok`), an action bound twice in a
 screen, an unknown turn mode, paths in the rotate mode, a path outside the slots
 or from a slot to itself, an entry path not to slot 0, a from and to pair twice,
-the path mode without its entry path or a way between neighbours, and every
-reference, count and bound above, truncation or trailing bytes.
+the path mode without its entry path or a way between neighbours, a hall with
+a zone, a zone mesh's flags other than above, fog values outside their bounds
+(or not all 0 when off), and every reference, count and bound above,
+truncation or trailing bytes.
 
 ## Actions
 
@@ -270,11 +297,12 @@ The clients, per screen, and what the format expresses for each, are in
 Not offered yet: `1298`, `2145` (its UIF versions, its Ogg sounds, its clip
 format) and `steam` (its packs, its protected exe, the pin). Each is its own
 queue item; until it lands the cook refuses it as above. 1298's select
-character is data already (RQ-086), and its camera paths, slots and spots with
-the select UI hidden while the camera moves (RQ-087):
+character is data already (RQ-086), its camera paths, slots and spots with
+the select UI hidden while the camera moves (RQ-087), and its hall, the
+`karus_intro` zone, with the camera's fog (RQ-095):
 `games/moradon/front-end-1298.json` ("1298", below) cooks from the pinned tree,
-but `front-ends.json` does not offer it until 1298's select hall (the
-`karus_intro` zone) and its UIF login intro are data too.
+but `front-ends.json` does not offer it until its UIF login intro is data too
+(RQ-088); its zone's sky is not drawn yet.
 
 ## 1298 (`games/moradon/front-end-1298.json`, not offered)
 
@@ -309,14 +337,60 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   camera's rest eye and at (128.011, 0.534, 85.922) and (128.077, 4.087, 105.862),
   field of view 0.96, near 0.1, far 500. These are the `karus_intro` zone's
   coordinates.
-- No hall: 1298 draws the `karus_intro` zone (10001) there, which the format does
-  not carry yet; the characters stand on black. Its fog is not data either.
+- Zone (`select.zone` 10001, `select.fog` true; RQ-095, `specs/KO-FINDINGS.md`
+  §8.4, binary): 1298's select Init (`005f98c0`) loads zone 10001
+  (`00600950`, `0046c9d0`), `Data/Zones.tbl`'s `karus_intro`
+  (`Zones/karus_intro.gtd`, `.tct`, `.opd`), and Render (`005fb1c0`) draws the
+  world's terrain and shapes before the characters. `select.zone` names a
+  Zones.tbl key of the first input (or `<input>:<key>`); the cook reads its row's
+  terrain, colour map and objects as the world loader does (`005a3110`:
+  `ko_zone`'s row and name checks; an OPDEXT is refused), checks every file the
+  zone names is there, and expands it as the package's world is
+  (`ko_scene.expand`): every 4 m tile with its tile texture or, where 1298
+  draws the colour map (`005a2640`), the colour map unlit; every static,
+  shown-event and texture-cycling shape's parts in their loaded pose. It
+  groups the triangles into zone meshes by texture and light, each alpha part
+  (`RF_ALPHABLENDING`) a blend mesh of its own with its sort point. For
+  `karus_intro`: 63 native textures (128–512 a side), 88 meshes (19 blend),
+  40,540 vertices and 30,966 triangles; the 1298 recipe's `front-end.bin` is
+  about 54.0 MB of its 64 MiB. Every mesh takes the material
+  1298's terrain render sets (`0059cd90`: diffuse 1, ambient 0.5); the cook
+  refuses a zone part whose own material differs (every `karus_intro` part's
+  is that, local-asset), a second tile layer (`karus_intro` has none), a
+  texture sequence and an alpha part not blended source alpha over its
+  inverse. The fog (`004395c0`, `005fb1c0`): the camera files' (each Karus
+  path's: on, white), linear range fog from 50 to 500 m (0.1 × and 1 × the far
+  Render sets, 500). Not drawn yet (QUESTIONS Q79): the zone's sky
+  (`Misc/Sky/Karus.N3Sky`; Render clears to the sky's colour and draws the sky
+  first, so the background stays black), its terrain light maps
+  (`karus_intro.tlt`), grass and birds, and its animated shapes (11 of 100:
+  those the world bake leaves out too, `ko_shapes.classify`). Approximations:
+  the terrain's near tiles everywhere (1298 draws far patches from the colour
+  map), the shapes' full-detail meshes (no progressive LOD), the textures'
+  mip chains made by the client (KO's DXT files carry their own), fog per
+  pixel.
 - No turn sound: 1298 plays none (`select.turn_sound` absent).
 - Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
   create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF
   intro), and the layouts (1298's `UI_US`, as today). The hall lights
   `ka_light_0/1` are the files both clients name.
+- Lights (`select.light_manager`; RQ-095, `specs/KO-FINDINGS.md` §8.4, binary):
+  1298's select Init (`005f98c0`) resets its light manager (`CLightMgr`,
+  Release `005ba7a0`) and every select tick (`005faf10`) applies the hall lights
+  (D3D lights 0 and 1, point lights 7 m round the hall's origin, far from the
+  zone's slots) and then the manager's (`005baae0`): light 0 directional,
+  straight down, diffuse 0.8, ambient 0.56; light 1 directional, straight up,
+  diffuse 0.5, ambient 0.35; light 2 a point light at the origin, diffuse 0.3,
+  ambient 0.21, range 128, attenuation (0.5, 1/64, 1/2048). They replace the
+  hall lights of their number, so the zone and the characters are lit by the
+  manager's lights and the front slot's spot. `select.light_manager` lists such
+  lights in KO space (each a `number` 0–7 once, a `kind`, `point` with
+  `position`, `range`, `falloff` and `attenuation` or `directional` with
+  `direction`, and `diffuse` and `ambient` colours 0–1); the cook writes the
+  select's lights as the tick leaves them, by number (a directional light's
+  range and attenuation, which D3D ignores, as 1 and (1, 0, 0)). The 1097
+  recipe names none: its lights are as before.
 
 ## Moradon (`games/moradon/front-end.json`)
 

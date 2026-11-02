@@ -870,13 +870,22 @@ struct FrontLight {
 };
 struct FrontCamera { V eye{}, at{}, up{}; float fov = 1, near_plane = .1f, far_plane = 100; };
 struct FrontMesh {
-  static constexpr uint32_t DOUBLE_SIDED = 1, ALPHA_TEST = 2;
+  // A zone mesh (version 8) is UNLIT or lit, and either CUT_ZERO (opaque, its
+  // texels of alpha 0 cut) or BLEND (source alpha over its inverse, drawn after
+  // the UI, far to near).
+  static constexpr uint32_t DOUBLE_SIDED = 1, ALPHA_TEST = 2, UNLIT = 4, BLEND = 8, CUT_ZERO = 16;
   uint32_t texture = 0, flags = 0;
   V diffuse{}, ambient{};
   std::vector<float> vertices;  // position, normal, uv
   std::vector<uint32_t> indices;
 };
 struct FrontPlug { uint32_t joint = 0; FrontMesh mesh; };
+// Version 8 (RQ-095): one mesh of the zone the select hall draws (1298's
+// karus_intro) and the point a BLEND mesh is sorted by (engine space).
+struct FrontZoneMesh { FrontMesh mesh; V sort{}; };
+// Version 8: the select camera's fog, D3D's linear range fog from `start` to
+// `end` metres from the eye, toward `color` (1298: CN3Camera::Apply 004395c0).
+struct FrontFog { bool on = false; V color{}; float start = 0, end = 0; };
 // A scene's model: the first clip in `model`, each further clip's tracks after.
 struct FrontScene {
   FrontCamera camera;
@@ -926,6 +935,8 @@ struct FrontEnd {
   FrontTurnMode turn = FrontTurnMode::rotate;       // version 7
   std::vector<FrontPath> paths;                     // version 7: the path mode's
   std::vector<FrontMesh> hall;                      // version 7: may be empty
+  std::vector<FrontZoneMesh> zone;                  // version 8: may be empty
+  FrontFog fog;                                     // version 8
   // Version 3 (RQ-018, Q57): the screens' music. A track is shared with the
   // stream that plays it; screen_music names one per screen (login, which
   // includes the realm list, select, create, loading), kNoMusic for silence.

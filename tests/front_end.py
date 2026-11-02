@@ -446,6 +446,187 @@ for config in (dict(SELECT, front_clip="loop", turn="rotate", paths=PATHS),
         continue
     raise AssertionError(("cooked", config))
 print("PASS front-end cook: the turn mode's names, 1298's .n3camera paths and their slots")
+
+# RQ-095 (version 8): the select camera's fog, the one the path mode's camera
+# files carry (CN3Camera::Load, 00439540), linear from 0.1 x far to far
+# (004395c0); none in the rotate mode or without `fog`.
+FOGGY = dict(CAMERAS, grey=n3camera(EYE, AT)[:-4] + struct.pack("<I", 0xFF808040),
+             clear=n3camera(EYE, AT)[:-8] + struct.pack("<iI", 0, 0xFFFFFFFF))
+fog_config = dict(turn="path", paths=PATHS, fog=True, camera=dict(far=500))
+assert fe.path_fog(Fixture(FOGGY), fog_config) == u(1) + f([1, 1, 1, 50, 500])
+grey = [dict(p, path="grey") for p in PATHS]
+assert fe.path_fog(Fixture(FOGGY), dict(fog_config, paths=grey)) == u(1) + f([128 / 255, 128 / 255, 64 / 255, 50, 500])
+off = u(0) + f([0] * 5)
+assert fe.path_fog(Fixture(FOGGY), dict(fog_config, paths=[dict(p, path="clear") for p in PATHS])) == off
+assert fe.path_fog(Fixture(FOGGY), {"turn": "rotate"}) == off
+for reason, config in {"two fogs": dict(fog_config, paths=PATHS[:1] + grey[1:]),
+                       "the rotate mode": dict(fog_config, turn="rotate"), "not true": dict(fog_config, fog=1)}.items():
+    try:
+        fe.path_fog(Fixture(FOGGY), config)
+    except ValueError:
+        continue
+    raise AssertionError("cooked a fog with " + reason)
+
+# RQ-095: a zone as the select hall (`select.zone`, a Zones.tbl key), on an
+# original synthetic 33-sample zone (tools/assetc/ko_large_zone_fixture.py):
+# its terrain and static shapes grouped into meshes by texture, light and
+# blend, KO's coordinates with z negated, an alpha part BLEND with its sort
+# point, an RF_NOTUSELIGHT part UNLIT; the files recorded through the tree.
+import csv  # noqa: E402
+import ko_character  # noqa: E402
+import ko_large_zone_fixture as large_zone  # noqa: E402
+import ko_shapes  # noqa: E402
+import ko_shapes_fixture  # noqa: E402
+
+import ko_terrain_fixture  # noqa: E402
+
+zone_root = ROOT / "build/front-end-zone-test"
+large_zone.write(zone_root, samples=33, object_textures=2, name="vale")
+two_layers = (zone_root / "Zones/vale.gtd").read_bytes()
+fixture_tile, references = ko_terrain_fixture.tile, large_zone.REFERENCES
+try:  # one tile layer, as karus_intro's: 512 references, every tex2 past them
+    large_zone.REFERENCES = references[:512]
+    ko_terrain_fixture.tile = lambda x, z, n: dict(fixture_tile(x, z, n), tex1=(z * n + x) % 512, tex2=1023)
+    large_zone.write(zone_root, samples=33, object_textures=2, name="vale")
+finally:
+    ko_terrain_fixture.tile, large_zone.REFERENCES = fixture_tile, references
+MATERIAL = (0.5, 0.5, 0.5, 1.0)  # the terrain's Ambient (0059cd90)
+
+
+def zone_shapes(ambient=MATERIAL):
+    mesh, stone = "orig_pyramid.n3pmesh", ("orig_stone_0.dxt",)
+    return ko_shapes_fixture.build(name="vale", width=128.0, depth=128.0, shapes=[
+        dict(label="plain", position=(40.0, 1.0, 30.0), scale=(2.0, 2.0, 2.0), ambient=ambient,
+             parts=((mesh, stone, 0.0),)),
+        dict(label="glass", position=(80.0, 1.0, 90.0), ambient=ambient,
+             parts=((mesh, ("orig_stone_1.dxt",), 0.0, ko_shapes.RF_ALPHABLENDING),)),
+        dict(label="lamp", position=(20.0, 1.0, 100.0), ambient=ambient,
+             parts=((mesh, stone, 0.0, ko_shapes.RF_NOTUSELIGHT),))])
+
+
+(zone_root / "Zones/vale.opd").write_bytes(zone_shapes())
+(zone_root / "Zones/vale.tlt").write_bytes(bytes(8))
+(zone_root / "Data").mkdir(exist_ok=True)
+
+
+def zone_table(opdext="Reserved"):
+    row = ["10001", "Zones\\vale.gtd", "vale", "Zones\\vale.tct", "Zones\\vale.tlt", "Zones\\vale.opd", opdext,
+           "Zones\\vale.dxt", "Misc\\Sky\\Field.N3Sky"] + ["0"] * 15
+    with (zone_root / "Data/Zones.tbl.csv").open("w", newline="", encoding="utf-8") as handle:
+        csv.writer(handle).writerows([["1 - UInt32"] + ["%d - String" % c for c in range(2, 25)], row])
+
+
+zone_table()
+zone_tree = ko_character.Assets(zone_root)
+zone_textures, zone_report = fe.Textures(fe.Inputs([zone_tree])), {}
+section = fe.zone(fe.Inputs([zone_tree]), zone_textures, 10001, zone_report)
+at, meshes = 4, []
+for _ in range(struct.unpack_from("<I", section)[0]):
+    tex, flags = struct.unpack_from("<2I", section, at)
+    nv = struct.unpack_from("<I", section, at + 32)[0]
+    points = [struct.unpack_from("<3f", section, at + 36 + 32 * i) for i in range(nv)]
+    at += 36 + 32 * nv
+    ni = struct.unpack_from("<I", section, at)[0]
+    at += 4 + 4 * ni
+    meshes.append((tex, flags, points, ni, struct.unpack_from("<3f", section, at)))
+    at += 12
+assert at == len(section), (at, len(section))
+flags = sorted(m[1] for m in meshes)
+assert flags.count(fe.BLEND) == 1 and fe.CUT_ZERO | fe.UNLIT in flags and fe.CUT_ZERO in flags, flags
+assert all(m[1] in (fe.CUT_ZERO, fe.CUT_ZERO | fe.UNLIT, fe.BLEND, fe.BLEND | fe.UNLIT) for m in meshes), flags
+every = [p for m in meshes for p in m[2]]
+assert all(-1 <= x <= 129 and -129 <= z <= 1 for x, _, z in every), "not KO's coordinates with z negated"
+blend = next(m for m in meshes if m[1] == fe.BLEND)
+assert all(78 <= x <= 82 and -92 <= z <= -88 for x, _, z in blend[2]), blend[2]
+assert 78 <= blend[4][0] <= 82 and -92 <= blend[4][2] <= -88, ("sort point", blend[4])
+assert zone_report["zone"]["key"] == 10001 and zone_report["zone"]["meshes"] == len(meshes), zone_report
+assert {"Data/Zones.tbl.csv", "Zones/vale.gtd", "Zones/vale.tct", "Zones/vale.opd", "Object/orig_pyramid.n3pmesh",
+        "Object/orig_stone_0.dxt", "Object/orig_stone_1.dxt"} <= set(zone_tree.sources), sorted(zone_tree.sources)
+assert fe.zone(fe.Inputs([zone_tree]), zone_textures, None, {}) == u(0)
+# The cook's totals: one vertex or index under the zone's own, or one mesh
+# fewer, is refused (the caps are read at call time).
+for cap, value, expect in (("MAX_ZONE_VERTICES", sum(len(m[2]) for m in meshes) - 1, "vertices or"),
+                           ("MAX_ZONE_INDICES", sum(m[3] for m in meshes) - 1, "indices"),
+                           ("MAX_ZONE_MESHES", len(meshes) - 1, "meshes, not 1 to")):
+    saved = getattr(fe, cap)
+    setattr(fe, cap, value)
+    try:
+        fe.zone(fe.Inputs([zone_tree]), fe.Textures(fe.Inputs([zone_tree])), 10001, {})
+        raise AssertionError("cooked a zone past " + cap)
+    except ValueError as error:
+        assert expect in str(error), (cap, error)
+    finally:
+        setattr(fe, cap, saved)
+for reason, setup, value, expect in [
+        ("a part's material other than the terrain's", lambda: (zone_root / "Zones/vale.opd").write_bytes(
+            zone_shapes(ambient=(0.0, 0.0, 0.0, 0.0))), 10001, "not the terrain's"),
+        ("a second tile layer", lambda: ((zone_root / "Zones/vale.opd").write_bytes(zone_shapes()),
+                                         (zone_root / "Zones/vale.gtd").write_bytes(two_layers)),
+         10001, "a second tile layer"),
+        ("an OPDEXT", lambda: zone_table("Zones\\vale.opdext"), 10001, "OPDEXT"),
+        ("a key the table lacks", lambda: zone_table(), 10002, "no row"),
+        ("a key that is not a number", lambda: None, "ten", "a Zones.tbl key")]:
+    setup()
+    try:
+        fe.zone(fe.Inputs([ko_character.Assets(zone_root)]), fe.Textures(fe.Inputs([zone_tree])), value, {})
+    except ValueError as error:
+        assert expect in str(error), (reason, error)
+        continue
+    raise AssertionError("cooked a zone with " + reason)
+try:
+    fe.select_scene(Fixture(CAMERAS), fe.Textures(Fixture({})), dict(SELECT, hall="h.n3shape", zone=10001),
+                    pathlib.Path("/nonexistent"))
+    raise AssertionError("cooked a hall and a zone")
+except ValueError as error:
+    assert "a hall or a zone, not both" in str(error), error
+shutil.rmtree(zone_root)
+print("PASS front-end cook: the camera files' fog, a synthetic zone hall's meshes and its refusals")
+
+
+# RQ-095: select.light_manager's lights replace the hall lights of their
+# number (1298's select tick applies the hall lights, then its light
+# manager's), in number order; without it the hall lights are as before.
+def n3light(number, on=1, x=6.0):
+    """A synthetic .n3light (CN3Light::Load): a still transform, then a point
+    light's D3DLIGHT9 values, bOn and the light number."""
+    return (string("light") + f([x, 1, 0, 0, 0, 0, 1, 1, 1, 1]) + u(0) * 3 + u(fe.POINT) +
+            f([.7, .7, .7, 1] + [0] * 4 + [.5, .5, .5, 1] + [x, 1, 0] + [0, 0, 1] + [7, 0, 2, 0, 0, 0, 0]) +
+            struct.pack("<2i", on, number))
+
+
+HALL_LIGHTS = Fixture({"l0.n3light": n3light(0), "l1.n3light": n3light(1, x=-6.0), "l3.n3light": n3light(3),
+                       "off.n3light": n3light(2, on=0)})
+SUN = {"number": 0, "kind": "directional", "diffuse": [.8, .8, .8], "ambient": [.56, .56, .56],
+       "direction": [0, -1, 0]}
+LAMP = {"number": 2, "kind": "point", "diffuse": [.3, .3, .3], "ambient": [.21, .21, .21], "position": [1, 2, 3],
+        "range": 128, "falloff": 1, "attenuation": [.5, 1 / 64, 1 / 2048]}
+names = ["l0.n3light", "l1.n3light", "l3.n3light", "off.n3light"]
+hall_only = fe.lights(HALL_LIGHTS, names)
+assert hall_only == fe.lights(HALL_LIGHTS, names, None) and hall_only[:4] == u(3), hall_only[:4]
+mixed = fe.lights(HALL_LIGHTS, names, [LAMP, SUN])
+records = [mixed[4 + i * 80:4 + (i + 1) * 80] for i in range(4)]
+assert mixed[:4] == u(4) and len(mixed) == 4 + 4 * 80, len(mixed)
+sun = struct.unpack("<I19f", records[0])
+assert sun[0] == fe.DIRECTIONAL and sun[10:13] == (0, -1, 0) and sun[13] == 1 and sun[15:18] == (1, 0, 0), sun
+assert records[1] == hall_only[4 + 80:4 + 2 * 80], "hall light 1 kept"
+lamp = struct.unpack("<I19f", records[2])
+assert lamp[0] == fe.POINT and lamp[7:10] == (1, 2, -3) and lamp[13:15] == (128, 1), lamp  # KO z reflected
+assert records[3] == hall_only[4 + 2 * 80:], "hall light 3 kept"
+for bad, reason in (([dict(SUN, number=8)], "light numbers"), ([SUN, dict(LAMP, number=0)], "light numbers"),
+                    ([dict(SUN, position=[0, 0, 0])], "a point light"), ([dict(LAMP, kind="spot")], "a point light"),
+                    ([dict(SUN, diffuse=[2, 1, 1])], "colours 0 to 1"), ([dict(SUN, direction=[0, 0, 0])],
+                                                                         "without a direction"),
+                    ([dict(LAMP, range=0)], "range/attenuation"), ([dict(LAMP, attenuation=[0, 0, 0])],
+                                                                    "range/attenuation"),
+                    ([dict(LAMP, falloff="1")], "invalid vector"), ({"0": SUN}, "a list of at most 8"),
+                    ([SUN] * 9, "a list of at most 8")):
+    try:
+        fe.lights(HALL_LIGHTS, names, bad)
+    except ValueError as error:
+        assert reason in str(error), (reason, error)
+        continue
+    raise AssertionError("cooked light_manager lights with " + reason)
+print("PASS front-end cook: select.light_manager lights replace the hall lights of their number, %d refusals" % 11)
 # A front-end clip past its joint's keys holds the last key there (1298's
 # upc_ka_tu.n3anim clip 2); every other caller is refused, as before.
 import ko_character  # noqa: E402
@@ -516,10 +697,35 @@ def path(source=fe.ENTRY, to=0, eye_rate=30.0, eye=((0, 1, 2), (0, 1, 3)), at_ra
 PATHS3 = path() + path(0, 1) + path(0, 2) + path(1, 0) + path(2, 0)
 
 
-def blob(version=7, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def zone_mesh(flags=fe.CUT_ZERO, sort=(0, 0, 5), triangles=1):
+    """A version 8 zone mesh (RQ-095): a mesh record (one triangle drawn
+    `triangles` times) and its sort point."""
+    return fe.mesh_record([[0, 0, 0, 0, 1, 0, 0, 0], [1, 0, 0, 0, 1, 0, 1, 0], [0, 0, 1, 0, 1, 0, 0, 1]],
+                          [0, 1, 2] * triangles, 0, flags, [1, 1, 1], [.5, .5, .5]) + f(list(sort))
+
+
+def truncated_zone():
+    """A blob that ends four bytes into its one zone mesh's sort point."""
+    data, mesh = blob(hall=0, zone=u(1) + zone_mesh()), zone_mesh()
+    return data[:data.index(mesh) + len(mesh) - 8]
+
+
+# The zone's index total, N3W1's 589,824: three meshes of 196,608 (the per-mesh
+# bound) reach it; a fourth index mesh passes it.
+MAX_INDEX_MESH = zone_mesh(triangles=65536)
+# The vertex total, 196,608: three meshes of 65,536 vertices (the per-mesh
+# bound) reach it; a fourth mesh passes it.
+MAX_VERTEX_MESH = fe.mesh_record([[i % 256, 0, i // 256, 0, 1, 0, 0, 0] for i in range(65536)], [0, 1, 256], 0,
+                                 fe.CUT_ZERO, [1, 1, 1], [.5, .5, .5]) + f([0, 0, 5])
+
+
+FOG_OFF = u(0) + f([0] * 5)
+
+
+def blob(version=8, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
-         spot_rate=0.6, front_clip=0, turn=0, paths=None, hall=1):
-    tex = [(w, h, rgba) for w, h, rgba in textures.list] + [FONT]
+         spot_rate=0.6, front_clip=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0):
+    tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
     out += u(1) + u(len(tex) - 1 if font_index is None else font_index) + u(16) + u(12) + u(4) + f([6] * 95)
@@ -534,7 +740,8 @@ def blob(version=7, slots=1, screen_data=None, font_index=None, light=None, plug
     out += f([spot_rate]) + (b"" if front_clip is None else u(front_clip))
     if paths is None:
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
-    out += u(turn) + paths + u(hall) + MESH * hall + character(select_clips, plug=plug) + character(plug=plug)
+    out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
+    out += character(select_clips, plug=plug) + character(plug=plug)
     return out + music + extra
 
 
@@ -603,6 +810,35 @@ cases = {
     "bad-path-rate-high": blob(turn=1, paths=u(1) + path(at_rate=1001.0)),
     "bad-path-keys": blob(turn=1, paths=u(1) + path(eye=())),
     "bad-path-truncated": blob(turn=1, paths=u(1) + path()[:-4]),
+    # RQ-095 (version 8): up to 256 textures, the zone the hall draws (no hall
+    # with it; each mesh UNLIT or lit, and CUT_ZERO or BLEND, with its sort
+    # point) and the camera's fog (on, colour, start, end within the far).
+    "bad-version-7": blob(version=7),
+    "ok-textures-256": blob(more_textures=256 - len(textures.list) - 1),
+    "bad-textures-257": blob(more_textures=257 - len(textures.list) - 1),
+    "ok-zone": blob(hall=0, zone=u(3) + zone_mesh() + zone_mesh(fe.CUT_ZERO | fe.UNLIT) +
+                    zone_mesh(fe.BLEND | fe.UNLIT, (0, 3, 9))),
+    "ok-zone-fog": blob(hall=0, zone=u(1) + zone_mesh(fe.BLEND), fog=u(1) + f([1, 1, 1, 3.2, 32])),
+    "ok-fog-no-zone": blob(fog=u(1) + f([0.5, 0.25, 0, 0, 1])),
+    "bad-zone-and-hall": blob(hall=1, zone=u(1) + zone_mesh()),
+    "bad-zone-flags-none": blob(hall=0, zone=u(1) + zone_mesh(0)),
+    "bad-zone-flags-unlit": blob(hall=0, zone=u(1) + zone_mesh(fe.UNLIT)),
+    "bad-zone-flags-both": blob(hall=0, zone=u(1) + zone_mesh(fe.CUT_ZERO | fe.BLEND)),
+    "bad-zone-flags-alpha-test": blob(hall=0, zone=u(1) + zone_mesh(fe.CUT_ZERO | fe.ALPHA_TEST)),
+    "bad-zone-flags-double": blob(hall=0, zone=u(1) + zone_mesh(fe.BLEND | fe.DOUBLE_SIDED)),
+    "bad-zone-meshes": blob(hall=0, zone=u(257) + zone_mesh() * 257),
+    "bad-zone-truncated": truncated_zone(),
+    "ok-zone-totals": blob(hall=0, zone=u(3) + MAX_INDEX_MESH * 3),
+    "bad-zone-totals": blob(hall=0, zone=u(4) + MAX_INDEX_MESH * 3 + zone_mesh()),
+    "ok-zone-vertex-totals": blob(hall=0, zone=u(3) + MAX_VERTEX_MESH * 3),
+    "bad-zone-vertex-totals": blob(hall=0, zone=u(4) + MAX_VERTEX_MESH * 3 + zone_mesh()),
+    "bad-hall-zone-flags": blob(hall=1).replace(MESH, MESH[:4] + u(fe.CUT_ZERO) + MESH[8:], 1),
+    "bad-fog-flag": blob(fog=u(2) + f([1, 1, 1, 3, 32])),
+    "bad-fog-empty": blob(fog=u(1) + f([1, 1, 1, 10, 10])),
+    "bad-fog-past-far": blob(fog=u(1) + f([1, 1, 1, 3, 33])),
+    "bad-fog-negative": blob(fog=u(1) + f([1, 1, 1, -1, 32])),
+    "bad-fog-colour": blob(fog=u(1) + f([1.5, 1, 1, 3, 32])),
+    "bad-fog-off-values": blob(fog=u(0) + f([1, 0, 0, 0, 0])),
     "bad-clip-blend": blob(blends=[-0.1]),
     "bad-clip-blend-nan": blob(blends=[float("nan")]),
     "bad-spot-rate": blob(spot_rate=0),
@@ -658,5 +894,13 @@ try:
     run = subprocess.run([str(ROOT / "build/client/n3e-front-end-check"), *args], capture_output=True, text=True)
     sys.stdout.write(run.stdout)
     assert run.returncode == 0, run.stdout + run.stderr
+    # RQ-095: the zone's refusals, each for its own reason.
+    for name, reason in (("bad-zone-totals", "front end zone totals"),
+                         ("bad-zone-vertex-totals", "front end zone totals"), ("bad-zone-meshes", "count"),
+                         ("bad-zone-and-hall", "front end hall and zone")):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-zone-truncated:"))
+    assert "fog" not in line, line
 finally:
     shutil.rmtree(work)

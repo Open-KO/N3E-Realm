@@ -6,7 +6,8 @@ from the player's own KO data.
    takes it; the one realm-config.json chooses is the bytes the package holds
    (the `moradon` prepare step's cook). The 1298 recipe, not offered yet
    (RQ-086), cooks the same way from the pinned tree with 1298's select
-   character and camera paths (RQ-087) and no hall, and the loader takes it.
+   character and camera paths (RQ-087), no hall and its select zone and fog
+   (RQ-095), and the loader takes it.
 6. The test client draws each screen at rest at 1280x1024 and 1024x768 (KO's sizes)
    (N3E_TEST_FRONT_END, client/harness/front_end_captures.inc) and this script
    checks the frames:
@@ -83,9 +84,11 @@ for client in sorted(front_end_choice.catalogue("games/moradon")):
 # "1298"), still cooks from the pinned tree to the same bytes twice, in the loop
 # front-clip mode with 1298's per-race select character, and the client loads it.
 # RQ-087: in the path turn mode, with the recipe's .n3camera paths and no hall.
+# RQ-095: with the recipe's select zone (its terrain and shapes) and fog.
 recipe_1298 = json.loads(Path("games/moradon/front-end-1298.json").read_text())
 camera_paths = {p["path"] for p in recipe_1298["select"]["paths"]}
 assert recipe_1298["select"]["turn"] == "path" and "hall" not in recipe_1298["select"], recipe_1298["select"]
+assert "zone" in recipe_1298["select"] and recipe_1298["select"].get("fog") is True, recipe_1298["select"]
 pinned = ko_front_end.inputs(front_end_choice.resolve("games/moradon", "1097"))
 cooked = []
 for i in range(2):
@@ -99,11 +102,18 @@ assert {"ChrSelect/upc_ka_tu.n3joint", "ChrSelect/upc_ka_tu.n3anim"} <= sources,
 assert not any("upc_ka_tu_pri" in s or "wea_ka_mace" in s for s in sources), sorted(sources)
 assert camera_paths <= sources, sorted(camera_paths - sources)
 assert not any(s.lower().endswith(".n3shape") for s in sources), sorted(sources)
+zone = report["zone"]
+assert zone["key"] == recipe_1298["select"]["zone"], zone
+assert {zone[k].replace("\\", "/") for k in ("terrain", "colour_map", "objects")} <= sources, (zone, sorted(sources))
+assert 0 < zone["blended_meshes"] < zone["meshes"] <= ko_front_end.MAX_ZONE_MESHES, zone
+assert any(s.startswith("Object/") and s.lower().endswith(".n3pmesh") for s in sources), sorted(sources)
+assert len(cooked[0]) <= 64 << 20, len(cooked[0])
 loaded = subprocess.run(["build/client/n3e-front-end-check", "ok", str(out)], capture_output=True, text=True)
 assert "PASS front-end loader: 1 loaded, 0 refused" in loaded.stdout, \
     "the client loader refuses the 1298 recipe's front end: %s%s" % (loaded.stdout, loaded.stderr)
 print(f"PASS front-end cook 1298 recipe (not offered): twice identical, {len(cooked[0])} bytes, upc_ka_tu with "
-      f"no plug, {len(camera_paths)} camera paths and no hall, the client loads it")
+      f"no plug, {len(camera_paths)} camera paths, no hall and the zone {zone['name']} ({zone['meshes']} meshes, "
+      f"{zone['blended_meshes']} blended) under its fog, the client loads it")
 
 # --- 6: the captures -----------------------------------------------------------
 

@@ -277,7 +277,8 @@ def _name(r, limit=MAX_NAME_FIELD):
 def _material(r):
     """One part's __Material. Only the fields a static bake can act on."""
     diffuse = [r.f32() for _ in range(4)]
-    for _ in range(MATERIAL_FLOATS - 4):
+    ambient = [r.f32() for _ in range(4)]
+    for _ in range(MATERIAL_FLOATS - 8):
         r.f32()
     r.u32(), r.u32(), r.u32()  # dwColorOp, dwColorArg1, dwColorArg2
     flags = r.u32()
@@ -286,6 +287,11 @@ def _material(r):
         "render_flags": flags,
         "double_sided": bool(flags & RF_DOUBLESIDED),
         "diffuse_alpha": diffuse[3],
+        # RQ-095: the colours the part's material lights it with (D3DMATERIAL9's
+        # Diffuse and Ambient, the part's own `SetMaterial`), for a front end
+        # that draws the zone under D3D lights.
+        "diffuse": diffuse[:3],
+        "ambient": ambient[:3],
         # `00443090` copies +0xd0 / +0xd4 into an RF_ALPHABLENDING part's
         # alpha primitive (PQ-379).
         "source_blend": source,

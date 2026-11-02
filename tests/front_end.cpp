@@ -7,11 +7,13 @@
 // RQ-086: the select hall's characters, spot and info text
 // (client/render/select_hall.h) in both front-clip modes, 1097's hover and
 // 1298's loop, on synthetic clip lengths. RQ-087: 1298's recorded camera
-// paths (client/render/select_path.h) on synthetic keys.
+// paths (client/render/select_path.h) on synthetic keys. RQ-095: the select
+// zone's fog and its BLEND meshes' far-to-near order (client/render/select_zone.h).
 #include "assets/assets.h"
 #include "render/select_hall.h"
 #include "render/select_path.h"
 #include "render/select_turn.h"
+#include "render/select_zone.h"
 #include <algorithm>
 #include <cmath>
 #include <iostream>
@@ -213,6 +215,30 @@ std::string path_check() {
 }
 }  // namespace
 
+// RQ-095: D3DFOG_LINEAR from the eye (1298's 50 to 500 m), and the alpha
+// flush's far-to-near order of the zone's BLEND meshes, ties in file order,
+// the opaque ones left out.
+std::string zone_check() {
+  using namespace n3e::front;
+  if (fog_factor(0, 50, 500) != 1 || fog_factor(50, 50, 500) != 1) return "fogged before its start";
+  if (std::abs(fog_factor(275, 50, 500) - .5f) > 1e-6f) return "not linear between start and end";
+  if (fog_factor(500, 50, 500) != 0 || fog_factor(900, 50, 500) != 0) return "not whole fog from its end";
+  auto mesh = [](uint32_t flags, n3e::V sort) {
+    n3e::FrontZoneMesh z;
+    z.mesh.flags = flags;
+    z.sort = sort;
+    return z;
+  };
+  using M = n3e::FrontMesh;
+  const std::vector<n3e::FrontZoneMesh> zone{
+      mesh(M::CUT_ZERO, {100, 0, 0}), mesh(M::BLEND, {1, 0, 0}), mesh(M::BLEND | M::UNLIT, {0, 0, 9}),
+      mesh(M::BLEND, {0, 3, 0}),      mesh(M::BLEND, {-3, 0, 0}),  mesh(M::CUT_ZERO | M::UNLIT, {50, 0, 0})};
+  const auto order = far_to_near(zone, {0, 0, 0});
+  if (order != std::vector<size_t>{2, 3, 4, 1}) return "BLEND meshes not far to near, ties in file order";
+  if (!far_to_near({zone[0], zone[5]}, {0, 0, 0}).empty()) return "an opaque mesh in the alpha pass";
+  return "";
+}
+
 int main(int argc, char **argv) {
   if (const auto e = turn_check(); !e.empty()) {
     std::cerr << "FAIL select turn: " << e << "\n";
@@ -229,6 +255,11 @@ int main(int argc, char **argv) {
     return 1;
   }
   std::cout << "PASS select path: 1298's camera paths, sampled and played as its CN3Camera does\n";
+  if (const auto e = zone_check(); !e.empty()) {
+    std::cerr << "FAIL select zone: " << e << "\n";
+    return 1;
+  }
+  std::cout << "PASS select zone: the camera's linear range fog, the alpha parts far to near\n";
   int loaded = 0, refused = 0;
   for (int i = 1; i + 1 < argc; i += 2) {
     const std::string want = argv[i];

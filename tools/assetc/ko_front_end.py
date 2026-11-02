@@ -7,8 +7,9 @@ cooked from the pinned client tree, (version 3) the screens' music, KO's
 MP3 frames carried as they are, (version 4) each model clip's blend time
 and the select spot's growth rate, and (version 5) PCM music tracks from KO's
 WAVs and a track's restart period, (version 6) the select hall's
-front-clip mode, and (version 7) the select camera's turn mode with 1298's
-recorded camera paths. games/moradon/front-end.json names every KO
+front-clip mode, (version 7) the select camera's turn mode with 1298's
+recorded camera paths, and (version 8) a KO zone drawn as the select hall
+(1298's `karus_intro`) and the select camera's fog. games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
 local substitutes (Liberation Sans for Arial, as ko_nameplates).
@@ -38,7 +39,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 7
+VERSION = 8
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -92,12 +93,15 @@ STRINGS = ("select_info", "select_hint", "class_name", "class_desc", "loading_in
 # Node flags.
 FIXED_ON, FIXED_DISABLED, FOREGROUND = 1, 2, 4
 STATES = {"on": FIXED_ON, "disabled": FIXED_DISABLED}
-# Mesh flags.
-DOUBLE_SIDED, ALPHA_TEST = 1, 2
+# Mesh flags. A zone mesh (version 8) takes UNLIT, and one of CUT_ZERO (opaque,
+# cut where its texel's alpha is 0) or BLEND (source alpha over its inverse,
+# drawn after the UI far to near).
+DOUBLE_SIDED, ALPHA_TEST, UNLIT, BLEND, CUT_ZERO = 1, 2, 4, 8, 16
 # Light types (D3DLIGHTTYPE).
 POINT, SPOT, DIRECTIONAL = 1, 2, 3
 MAX_NODES = 1024
-MAX_TEXTURES = 64
+# Version 8 (RQ-095): 256, as a zone hall brings its tile and object textures.
+MAX_TEXTURES = 256
 MAX_FONTS = 8
 MAX_TEXT = 1024
 MAX_FILE = 64 * 1024 * 1024
@@ -363,7 +367,7 @@ def light(assets, name):
     r.end()
     if kind not in (POINT, SPOT, DIRECTIONAL) or not 0 <= number < 8:
         raise ValueError("front-end light type")
-    return dict(on=bool(on), kind=kind, diffuse=diffuse[:3], ambient=ambient[:3],
+    return dict(on=bool(on), number=number, kind=kind, diffuse=diffuse[:3], ambient=ambient[:3],
                 position=reflect(position), direction=reflect(direction),
                 range=rng, falloff=falloff, attenuation=[a0, a1, a2], theta=theta, phi=phi)
 
@@ -375,10 +379,69 @@ def light_record(l):
                             [l["range"], l["falloff"]] + l["attenuation"] + [l["theta"], l["phi"]])
 
 
-def lights(assets, names):
+MANAGER_LIGHT_KINDS = {"point": POINT, "directional": DIRECTIONAL}
+MANAGER_LIGHT_KEYS = {
+    "point": {"number", "kind", "diffuse", "ambient", "position", "range", "falloff", "attenuation"},
+    "directional": {"number", "kind", "diffuse", "ambient", "direction"},
+}
+
+
+def manager_lights(values):
+    """`select.light_manager` (version 8 recipes, RQ-095): the lights a client's
+    light manager applies after the hall's on every select tick, each in the
+    D3D light of its `number`, so replacing a hall light of that number. 1298:
+    the select Init (005f98c0) resets its CLightMgr (vtable 006a872c, Release
+    005ba7a0: two directional lights and a point light) and the select tick
+    (005faf10) applies the two hall lights and then the manager's (005baae0).
+    Each is D3DLIGHT9's values in KO space, a point or a directional light.
+    A directional light's range and attenuation, which D3D ignores, are
+    written as 1 and (1, 0, 0), within the record's bounds."""
+    if not isinstance(values, list) or len(values) > 8:
+        raise ValueError("front-end select.light_manager: a list of at most 8 lights")
+    out, numbers = [], set()
+    for value in values:
+        kind = value.get("kind") if isinstance(value, dict) else None
+        if type(kind) is not str or kind not in MANAGER_LIGHT_KINDS or set(value) != MANAGER_LIGHT_KEYS[kind]:
+            raise ValueError("front-end select.light_manager: a point light (%s) or a directional light (%s)"
+                             % tuple(", ".join(sorted(MANAGER_LIGHT_KEYS[k])) for k in ("point", "directional")))
+        number = value["number"]
+        if type(number) is not int or not 0 <= number < 8 or number in numbers:
+            raise ValueError("front-end select.light_manager: light numbers 0 to 7, each once")
+        numbers.add(number)
+        colours = [vector(value[k], 3) for k in ("diffuse", "ambient")]
+        if not all(0 <= c <= 1 for colour in colours for c in colour):
+            raise ValueError("front-end select.light_manager: colours 0 to 1")
+        if kind == "directional":
+            direction = vector(value["direction"], 3)
+            if not any(direction):
+                raise ValueError("front-end select.light_manager: a directional light without a direction")
+            out.append(dict(on=True, number=number, kind=DIRECTIONAL, diffuse=colours[0], ambient=colours[1],
+                            position=[0, 0, 0], direction=reflect(direction), range=1.0, falloff=0.0,
+                            attenuation=[1.0, 0, 0], theta=0.0, phi=0.0))
+        else:
+            rng, falloff = vector([value["range"], value["falloff"]], 2)
+            out.append(dict(on=True, number=number, kind=POINT, diffuse=colours[0], ambient=colours[1],
+                            position=reflect(vector(value["position"], 3)), direction=[0, 0, 0],
+                            range=float(rng), falloff=float(falloff),
+                            attenuation=vector(value["attenuation"], 3), theta=0.0, phi=0.0))
+    return out
+
+
+def lights(assets, names, manager=None):
     """The lights a scene applies; CN3Light::Apply enables only a light that
-    is on."""
+    is on. With `manager` (`manager_lights`), the D3D lights as the select
+    tick leaves them: the scene's, then the manager's, each the last applied
+    to its number, by number."""
     on = [l for l in (light(assets, n) for n in names) if l["on"]]
+    if manager is not None:
+        applied = {}
+        for l in (light(assets, n) for n in names):
+            applied.pop(l["number"], None)
+            if l["on"]:
+                applied[l["number"]] = l
+        for l in manager_lights(manager):
+            applied[l["number"]] = l
+        on = [applied[n] for n in sorted(applied)]
     return u(count(len(on), 8, 0)) + b"".join(light_record(l) for l in on)
 
 
@@ -660,7 +723,7 @@ def hall(assets, textures, name):
     (CN3Material: 17 floats, then colour op/args, render flags and blend) and
     its textures; a vertex is ((v + pivot) x scale) x rotation + position.
     Its meshes and textures are its tree's. No name (version 7): a hall of no
-    parts (1298 draws a zone there, which the format does not carry yet)."""
+    parts (1298 draws a zone there instead: `zone`, version 8)."""
     if name is None:
         return u(0)
     assets, name = split(assets, name)
@@ -691,6 +754,170 @@ def hall(assets, textures, name):
     r.unpack("5i")
     r.end()
     return u(parts) + out
+
+
+# Version 8 (RQ-095, specs/KO-FINDINGS.md 8.4): a KO zone drawn as the select
+# hall. 1298's select Init (005f98c0) calls 00600950, which sets the zone 1000
+# and the nation, so the key 0046c9d0 builds (zone x 10 + nation) is 10001 for
+# Karus, and loads it through CN3WorldManager::InitWorld (005c0de0, a
+# CN3TerrainManager, 005a2f30); Render (005fb1c0) draws the world's sky, terrain
+# and shapes before the characters, under the select's lights. Its bounds are
+# N3W1's (ko_scene), the zone being at most N3W1's 129 samples a side.
+MAX_ZONE_MESHES = 256
+MAX_ZONE_VERTICES = ko_scene.MAX_VERTICES
+MAX_ZONE_INDICES = ko_scene.MAX_INDICES
+MAX_ZONE_TEXTURE = 1024
+# The material 1298's terrain render (0059cd90) sets: Diffuse 1, Ambient 0.5
+# (`SetMaterial`, vtable +0xa8). A shape part sets its own (CN3SPart's
+# __Material); the zone hall carries one material, so every part's must be it.
+ZONE_DIFFUSE, ZONE_AMBIENT = [1.0, 1.0, 1.0], [0.5, 0.5, 0.5]
+# An alpha part's blend as the alpha flush (0043dd80) draws it: SRCALPHA over
+# INVSRCALPHA, blending only (no diffuse alpha, depth written and tested).
+ZONE_BLEND = (5, 6, 1)
+
+
+def zone(assets, textures, value, report):
+    """The select hall's zone (version 8): a mesh count (up to 256) and the
+    meshes, each a mesh record and a sort point (engine space; a BLEND mesh
+    is drawn after the UI, far to near by the eye's distance to it), cooked
+    from the zone `value` names, a Zones.tbl key of the first input or
+    `<input>:<key>`: the row's terrain (column 2), colour map (column 4) and
+    objects (column 6), checked as the world loader checks them (005a3110,
+    `ko_zone`), expanded as the package's world is (`ko_scene.expand`: the
+    terrain's tiles and colour-map tiles, every static shape's parts) and
+    grouped by texture, light and blend. None: no zone (u32 0)."""
+    if value is None:
+        return u(0)
+    import ko_collision
+    import ko_shapes
+    import ko_terrain
+    import ko_zone
+    import world_chunks
+    first = assets.trees[0] if isinstance(assets, Inputs) else assets
+    tree, key = split(assets, value) if type(value) is str else (first, value)
+    if type(key) is str:
+        key = int(key) if key.isascii() and key.isdigit() else None
+    if type(key) is not int or key <= 0:
+        raise ValueError("front-end select.zone: a Zones.tbl key, or <input>:<key>")
+    root = tree.root
+    table, rows = ko_zone.table(root)
+    row = ko_zone.row(rows, key)
+
+    def column(index):
+        return ko_zone.resolve(root, row[index], "Zones.tbl row %d column %d" % (key, index + 1))
+
+    gtd, tct, opd = column(ko_zone.GTD), column(ko_zone.TCT), column(ko_zone.OPD)
+    if row[ko_zone.OPDEXT] != ko_zone.RESERVED:
+        raise ValueError("front-end select.zone %d: its row names an OPDEXT, which the zone hall does not merge" % key)
+    ko_zone.check_names(key, row[ko_zone.NAME], gtd, opd)
+    if ko_terrain.header_samples(gtd, False) > ko_terrain.MAX_SUPPORTED_SAMPLES:
+        raise ValueError("front-end select.zone %d: past %d samples a side"
+                         % (key, ko_terrain.MAX_SUPPORTED_SAMPLES))
+    found = ko_scene.references(gtd, opd, root)
+    if found["missing"]:
+        raise ValueError("front-end select.zone %d names %d missing files: %s"
+                         % (key, len(found["missing"]), ", ".join(found["missing"])))
+    shapes = ko_shapes.load_shapes(opd)["shapes"]
+    objects = ko_scene.object_files(root)
+    meshes = set()
+    for shape in shapes:
+        if ko_shapes.classify(shape) not in ko_shapes.BAKED:
+            continue
+        for part in shape["parts"]:
+            if not part["mesh"]:
+                continue
+            meshes.add(ko_scene._basename(part["mesh"]))
+            if part["diffuse"] != ZONE_DIFFUSE or part["ambient"] != ZONE_AMBIENT:
+                raise ValueError("front-end select.zone %d: a part of %s has the material %s / %s, not the "
+                                 "terrain's" % (key, shape["name"], part["diffuse"], part["ambient"]))
+    heightfield = ko_collision.bake(gtd, opd)[0]
+    built = ko_scene.expand(gtd, opd, root, heightfield, detail=True, color_map=tct, chunked=True)
+    chains, texture_sources = ko_scene.world_chains(root, built)
+    # Every file the zone reads, through the tree (its hash recorded, a
+    # reference install's checked against its manifest).
+    files = {table, gtd, tct, opd} | {pathlib.Path(p) for p in texture_sources}
+    files |= {objects[name] for name in meshes}
+    for path in sorted(files):
+        tree.get(str(pathlib.Path(path).resolve().relative_to(root)))
+
+    vertices, records = built["vertices"], built["chunks"]
+    terrain = built["report"]["terrain_vertices"]
+    if any(v[11] not in (ko_scene.CLEAR, world_chunks.UNLIT_VERTEX) for v in vertices[:terrain]):
+        raise ValueError("front-end select.zone %d: a second tile layer, which the zone hall does not carry" % key)
+    owner = {}
+    for index, record in enumerate(records):
+        if record["kind"] != 1:
+            continue
+        if record["flags"] & world_chunks.SEQUENCE:
+            raise ValueError("front-end select.zone %d: a texture sequence, which the zone hall does not carry" % key)
+        if record["flags"] & world_chunks.ALPHA:
+            alpha = record["alpha"]
+            if (alpha["source"], alpha["destination"], alpha["state"]) != ZONE_BLEND:
+                raise ValueError("front-end select.zone %d: an alpha part's blend %s" % (key, alpha))
+        for v in range(record["base"], record["base"] + record["max_vertices"]):
+            owner[v] = index
+    half = (heightfield["width"] - 1) * heightfield["spacing"] / 2.0
+
+    def place(p):  # the world bake's coordinates to the hall's (KO's, z negated)
+        return [p[0] + half, p[1], p[2] - half]
+
+    groups = {}
+    indices = built["indices"]
+    for t in range(0, len(indices), 3):
+        a, b, c = indices[t:t + 3]
+        slot = int(vertices[a][10])
+        if int(vertices[b][10]) != slot or int(vertices[c][10]) != slot or slot == ko_scene.CLEAR:
+            raise ValueError("front-end select.zone %d: a triangle without one texture" % key)
+        record = records[owner[a]] if a in owner else None
+        unlit = vertices[a][11] == world_chunks.UNLIT_VERTEX or bool(record and record["flags"] & world_chunks.UNLIT)
+        if record and record["flags"] & world_chunks.ALPHA:
+            group = (1, owner[a], slot, unlit)
+        else:
+            group = (0, 0, slot, unlit)
+        groups.setdefault(group, []).append((a, b, c))
+
+    out, slots, emitted, total_vertices, total_indices = [], {}, 0, 0, 0
+    for group in sorted(groups):
+        blended, which, slot, unlit = group
+        if slot not in slots:
+            w, h, rgba = chains[slot][0]
+            if w > MAX_ZONE_TEXTURE or h > MAX_ZONE_TEXTURE:
+                raise ValueError("front-end select.zone %d: a %dx%d texture" % (key, w, h))
+            slots[slot] = textures.raw(w, h, bytes(rgba))
+        flags = (BLEND if blended else CUT_ZERO) | (UNLIT if unlit else 0)
+        sort = place(records[which]["alpha"]["point"]) if blended else [0.0, 0.0, 0.0]
+        triangles, at = groups[group], 0
+        while at < len(triangles):
+            # A mesh holds at most 65536 vertices and 3 x 65536 indices.
+            local, mesh_vertices, mesh_indices = {}, [], []
+            while at < len(triangles) and len(mesh_indices) + 3 <= 3 * 65536 and len(local) + 3 <= 65536:
+                for v in triangles[at]:
+                    if v not in local:
+                        local[v] = len(mesh_vertices)
+                        x = vertices[v]
+                        mesh_vertices.append(place(x[:3]) + list(x[3:8]))
+                    mesh_indices.append(local[v])
+                at += 1
+            out.append(mesh_record(mesh_vertices, mesh_indices, slots[slot], flags, ZONE_DIFFUSE, ZONE_AMBIENT)
+                       + f(sort))
+            total_vertices += len(mesh_vertices)
+            total_indices += len(mesh_indices)
+            emitted += blended
+    if not out or len(out) > MAX_ZONE_MESHES:
+        raise ValueError("front-end select.zone %d: %d meshes, not 1 to %d" % (key, len(out), MAX_ZONE_MESHES))
+    if total_vertices > MAX_ZONE_VERTICES or total_indices > MAX_ZONE_INDICES:
+        raise ValueError("front-end select.zone %d: past %d vertices or %d indices"
+                         % (key, MAX_ZONE_VERTICES, MAX_ZONE_INDICES))
+    objects_report = built["report"]["objects"]
+    report.update(zone=dict(
+        key=key, name=row[ko_zone.NAME], terrain=row[ko_zone.GTD], colour_map=row[ko_zone.TCT],
+        objects=row[ko_zone.OPD], meshes=len(out), blended_meshes=emitted, textures=len(slots),
+        vertices=total_vertices, triangles=total_indices // 3, terrain_tiles=built["report"]["terrain"],
+        placements=objects_report["placements"], alpha_parts=objects_report["alpha_parts"],
+        unlit_parts=objects_report["unlit_parts"],
+        left_out=sorted({ko_shapes.classify(s) for s in shapes} - set(ko_shapes.BAKED)),
+        binary="KnightOnLine.exe 005f98c0, 00600950, 0046c9d0, 005c0de0, 005fb1c0, 0059cd90, 0043dd80"))
+    return u(len(out)) + b"".join(out)
 
 
 def looks(assets, race):
@@ -776,6 +1003,13 @@ def camera_path(assets, name):
     it is vectors, as the at's; it ticks no third (the up), and its Render
     (005fb1c0) sets its own field of view, near and far, so the file's are
     not read. (rate, eye keys, rate, at keys), KO space."""
+    eye, at, _ = camera_file(assets, name)
+    return eye["rate"], eye["values"], at["rate"], at["values"]
+
+
+def camera_file(assets, name):
+    """(eye keys, at keys, (fog use, fog colour)) of an .n3camera
+    (`camera_path`)."""
     r = character.Reader(assets.get(name))
     r.string()
     r.floats(3), r.floats(4), r.floats(3)
@@ -786,9 +1020,41 @@ def camera_path(assets, name):
         raise ValueError("front-end camera path %s: past %d keys" % (name, MAX_PATH_KEYS))
     r.floats(3)
     r.take(CAMERA_DATA)
-    r.unpack("iI")
+    fog = r.unpack("iI")
     r.end()
-    return eye["rate"], eye["values"], at["rate"], at["values"]
+    return eye, at, fog
+
+
+# Version 8 (RQ-095): CN3Camera::Apply (1298: 004395c0) sets linear range
+# vertex fog (D3DRS_FOGVERTEXMODE 3, FOGTABLEMODE 0, RANGEFOGENABLE 1) from
+# FOGSTART = far x 0.1 (`006a3d1c`) to FOGEND = far, the camera's +0x154,
+# which the select's Render (005fb1c0) sets to 500 before it applies.
+FOG_START = 0.1
+
+
+def path_fog(assets, config):
+    """The fog record (version 8): on, colour (r, g, b, 0-1), start, end.
+    `select.fog` true: the fog the path mode's camera files carry
+    (CN3Camera::Load reads its use and colour, 00439540, and Apply sets them,
+    004395c0), which must be one fog for every path (the select keeps one
+    camera and loads each path into it, 005fa670), from 0.1 x far to the
+    select camera's far. Absent: none (all zeros)."""
+    fog = config.get("fog")
+    if fog is None:
+        return u(0) + f([0.0] * 5)
+    if fog is not True or config.get("turn") != "path":
+        raise ValueError("front-end select.fog: true, in the path turn mode (the camera files' fog)")
+    fogs = {tuple(camera_file(assets, path["path"])[2]) for path in config["paths"]}
+    if len(fogs) != 1:
+        raise ValueError("front-end select.fog: the camera paths' files carry %d different fogs" % len(fogs))
+    use, colour = fogs.pop()
+    if use not in (0, 1):
+        raise ValueError("front-end select.fog: a camera file's fog use is %d" % use)
+    if not use:
+        return u(0) + f([0.0] * 5)
+    far = config["camera"]["far"]
+    rgb = [((colour >> shift) & 0xFF) / 255 for shift in (16, 8, 0)]
+    return u(1) + f(rgb + [far * FOG_START, far])
 
 
 def turn_paths(assets, config, slots):
@@ -825,13 +1091,16 @@ def turn_paths(assets, config, slots):
     return u(len(paths)) + out, rest
 
 
-def select_scene(assets, textures, config, work):
+def select_scene(assets, textures, config, work, report=None):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
     slots (position, yaw, the eye where the camera's turn to the slot ends
     and its spot light), the spot's growth rate, the front-clip mode, the
-    turn mode and its paths (version 7), the hall, the character with its
-    clips and plugs."""
+    turn mode and its paths (version 7), the hall, the zone and the fog
+    (version 8), the character with its clips and plugs. `report` receives
+    the zone's provenance."""
     camera = config["camera"]
+    if config.get("zone") is not None and config.get("hall") is not None:
+        raise ValueError("front-end select: a hall or a zone, not both")
     mode = config.get("front_clip")
     if type(mode) is not str or mode not in FRONT_CLIP:
         raise ValueError("front-end select.front_clip: one of %s" % ", ".join(FRONT_CLIP))
@@ -872,10 +1141,15 @@ def select_scene(assets, textures, config, work):
     tree, joint = character_tree(assets, look)
     _, animation = split(assets, look["animation"])
     definition = dict(joint=joint, animation=animation, parts=default_parts(tree, look["race"]))
-    out = camera_record(camera) + lights(assets, config["lights"]) + f(vector(config["ambient"], 3))
+    out = (camera_record(camera) + lights(assets, config["lights"], config.get("light_manager")) +
+           f(vector(config["ambient"], 3)))
     out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND]) + u(FRONT_CLIP[mode])
     out += u(TURN[turn]) + path_records
     out += hall(assets, textures, config.get("hall"))
+    # Version 8 (RQ-095): the zone the hall draws (1298's karus_intro) and the
+    # camera's fog.
+    out += zone(assets, textures, config.get("zone"), report if report is not None else {})
+    out += path_fog(assets, config)
     out += model(tree, joint, definition, look["clips"], work / "select",
                  own_blends={START_CLIP: config["start_blend"]})
     return out + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
@@ -1076,7 +1350,8 @@ def write(assets, out, config, work):
             raise ValueError("front-end string length")
         table += u(len(data)) + data
     scenes = intro_scene(assets, textures, config["intro"], pathlib.Path(work))
-    scenes += select_scene(assets, textures, config["select"], pathlib.Path(work))
+    zone_report = {}
+    scenes += select_scene(assets, textures, config["select"], pathlib.Path(work), zone_report)
     scenes += create_scene(character_tree(assets, config["select"]["character"])[0],
                            config["select"]["character"]["race"], pathlib.Path(work))
     atlases = b""
@@ -1095,4 +1370,4 @@ def write(assets, out, config, work):
     (out / "front-end.bin").write_bytes(data)
     return dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), textures=len(textures.list),
                 fonts=len(fonts), music=played, font_substitutes=sorted(str(p) for p in sources.values()),
-                sources=dict(sorted(assets.sources.items())))
+                sources=dict(sorted(assets.sources.items())), **zone_report)

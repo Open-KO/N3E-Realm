@@ -798,3 +798,24 @@ so where the realm returns to the hall from them it keeps the camera at rest, as
 did before; 1298's ESC during the start clip (back to state 5 after the select was
 sent) has no realm equivalent. The load's extra step, which 1298 takes with the
 last frame's time when a path starts, the client takes with the frame's own.
+
+### Q79 — 1298's select zone: what the hall draws before its sky is data
+
+1298's select draws zone 10001 `karus_intro` as its hall (KO-FINDINGS §8.4,
+binary): Render (`005fb1c0`) clears to the sky manager's colour, then draws the
+world's sky, terrain, shapes, grass and birds, the characters, the select UI and
+the other windows, and last the alpha flush (`0043dd80`), all under the camera
+file's fog. RQ-095 carries the terrain, the static shapes, their alpha parts and the
+fog (N3FE version 8); the sky (`Misc/Sky/Karus.N3Sky`, a dome, clouds, sun and moon
+keyed by the game time), the terrain's light maps (`karus_intro.tlt`), its grass,
+the birds and the animated shapes (11 of 100) are not data yet. Options: (a) draw
+what is data and leave the background black (the clear colour the RQ-087 hall
+had) until the sky is its own item; (b) clear to a fixed colour, the fog's white,
+meanwhile; (c) hold the zone back until the sky is data.
+**Default taken (RQ-095):** (a). The 1298 recipe is not offered (RQ-088), so no
+player sees it before the sky item lands; a colour 1298 never clears to (b) would be
+the realm's own, and holding the terrain back (c) leaves the characters on black
+for longer. The fog fades the far shapes toward white against that black until
+then. The approximations recorded in `content/front-end.md` ("1298") stand: the
+near tiles everywhere, the shapes' full-detail meshes, the client's mip chains,
+the fog per pixel.

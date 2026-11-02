@@ -11,6 +11,7 @@
 #include "render/select_hall.h"
 #include "render/select_path.h"
 #include "render/select_turn.h"
+#include "render/select_zone.h"
 #include "wire.pb.h"
 #include <SDL3/SDL.h>
 #include <algorithm>
@@ -159,6 +160,7 @@ class View {
     for (const auto &f : fe.fonts) use[f.texture] = 1;
     use[fe.backdrop] = 1;
     for (const auto &m : fe.hall) use[m.texture] = 2;
+    for (const auto &z : fe.zone) use[z.mesh.texture] = 2;
     for (const auto *scene : {&fe.intro, &fe.select, &fe.create})
       for (const auto &plug : scene->plugs) use[plug.mesh.texture] = 2;
     for (size_t i = 0; i < textures.size(); ++i) {
@@ -184,7 +186,10 @@ void main(){vec4 w=model*vec4(p,1);wp=w.xyz;wn=mat3(model)*n;uv=t;gl_Position=mv
                   R"(#version 330 core
 in vec3 wp,wn;in vec2 uv;out vec4 o;uniform sampler2D tex;uniform int count;uniform int kind[9];
 uniform vec3 ld[9],la[9],lp[9],ldir[9],latt[9];uniform vec4 lr[9];uniform vec3 md,ma,ga;uniform float unlit,cut;
-void main(){vec4 c=texture(tex,uv);if(c.a<=cut)discard;if(unlit>.5){o=c;return;}
+uniform vec3 fog,fogcolor,eye;
+vec4 fogged(vec4 c){if(fog.x<.5)return c;
+float f=clamp((fog.z-length(wp-eye))/(fog.z-fog.y),0.,1.);return vec4(mix(fogcolor,c.rgb,f),c.a);}
+void main(){vec4 c=texture(tex,uv);if(c.a<=cut)discard;if(unlit>.5){o=fogged(c);return;}
 vec3 N=normalize(wn);vec3 col=ma*ga;
 for(int i=0;i<count;i++){vec3 L;float a=1.,s=1.;
 if(kind[i]==3)L=normalize(-ldir[i]);else{vec3 d=lp[i]-wp;float r=length(d);if(r>lr[i].x)continue;L=d/max(r,1e-5);
@@ -192,7 +197,7 @@ a=1./max(latt[i].x+latt[i].y*r+latt[i].z*r*r,1e-5);
 if(kind[i]==2){float rho=dot(normalize(ldir[i]),-L),ct=cos(lr[i].z*.5),cp=cos(lr[i].w*.5);
 if(rho<=cp)s=0.;else if(rho<ct)s=pow((rho-cp)/max(ct-cp,1e-5),lr[i].y);}}
 col+=a*s*(ma*la[i]+md*ld[i]*max(dot(N,L),0.));}
-o=vec4(c.rgb*clamp(col,0.,1.),c.a);})");
+o=fogged(vec4(c.rgb*clamp(col,0.,1.),c.a));})");
     flat = program(R"(#version 330 core
 layout(location=0) in vec2 p;layout(location=1) in vec2 t;layout(location=2) in vec4 c;uniform vec2 screen;
 out vec2 uv;out vec4 tint;void main(){uv=t;tint=c;gl_Position=vec4(p.x/screen.x*2.-1.,1.-p.y/screen.y*2.,0,1);})",
@@ -202,6 +207,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     glGenVertexArrays(1, &vao);
     glGenBuffers(1, &vbo);
     for (auto &mesh : fe.hall) statics.push_back(upload(mesh));
+    for (auto &z : fe.zone) zone_meshes.push_back(upload(z.mesh));
     for (auto &plug : fe.intro.plugs) intro_plugs.push_back(upload(plug.mesh));
     for (auto &plug : fe.select.plugs) select_plugs.push_back(upload(plug.mesh));
     for (auto &plug : fe.create.plugs) create_plugs.push_back(upload(plug.mesh));
@@ -230,7 +236,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   ~View() {
     glDeleteTextures(GLsizei(textures.size()), textures.data());
     glDeleteTextures(GLsizei(models.size()), models.data());
-    for (auto *set : {&statics, &intro_plugs, &select_plugs, &create_plugs})
+    for (auto *set : {&statics, &zone_meshes, &intro_plugs, &select_plugs, &create_plugs})
       for (auto &m : *set) {
         glDeleteBuffers(1, &m.vbo);
         glDeleteBuffers(1, &m.ebo);
@@ -407,6 +413,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const double dt = last_frame < 0 ? 0 : std::clamp(now - last_frame, 0.0, 0.25);
     last_frame = now;
     drawn_boxes.clear();
+    hall_camera.reset();
     glViewport(0, 0, width, height);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -437,6 +444,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     if (message) ui(FrontScreen::message, context, now);
     flush();
+    // The zone's alpha parts after the UI, only while the select is the
+    // screen (not on the frame the start clip's end turns it to loading).
+    if (hall_camera && state == Screen::select) zone_alpha(hall_camera->first, hall_camera->second);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
@@ -447,7 +457,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   FrontEnd fe;
   std::vector<GLuint> textures, models;
   GLuint lit = 0, flat = 0, vao = 0, vbo = 0;
-  std::vector<Buffer> statics, intro_plugs, select_plugs, create_plugs;
+  std::vector<Buffer> statics, zone_meshes, intro_plugs, select_plugs, create_plugs;
   std::vector<std::vector<Scene>> clips;  // per scene: each clip's poses
   Screen state = Screen::login;
   std::optional<std::string> message;
@@ -466,6 +476,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   bool skip = false;
   FrontTurn turn_shown;
   double last_frame = -1;
+  // The select camera this frame drew the hall with, for the zone's BLEND
+  // meshes after the UI (version 8); none on a frame without the hall.
+  std::optional<std::pair<detail::Mat, V>> hall_camera;
   // The select hall as CGameProcCharacterSelect keeps it (select_hall.h):
   // each slot's clip player, the spot's theta and whether it is on, the
   // slot whose info text shows, in the package's front-clip mode.
@@ -734,6 +747,43 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     glUniform1f(glGetUniformLocation(lit, "unlit"), unlit ? 1.f : 0.f);
     glUniform1f(glGetUniformLocation(lit, "cut"), cut);
   }
+  // The select camera's fog (version 8) from `eye`, or none (the intro, create).
+  void fog(const FrontFog *f, const V &eye) {
+    const bool on = f && f->on;
+    glUniform3f(glGetUniformLocation(lit, "fog"), on ? 1.f : 0.f, on ? f->start : 0.f, on ? f->end : 0.f);
+    glUniform3fv(glGetUniformLocation(lit, "fogcolor"), 1, on ? f->color.data() : V{}.data());
+    glUniform3fv(glGetUniformLocation(lit, "eye"), 1, eye.data());
+  }
+  // A zone mesh (version 8): its texels of alpha 0 cut (1298's alpha test,
+  // GREATER than 0, 0043ade0), lit unless UNLIT; a BLEND mesh blends source
+  // alpha over its inverse, writing depth. Its back faces are triangles of
+  // their own, so it culls.
+  void draw_zone(size_t i, const detail::Mat &vp) {
+    const auto &m = fe.zone[i].mesh;
+    transform(vp, detail::identity());
+    material(m.diffuse, m.ambient, m.flags & FrontMesh::UNLIT, 0.f);
+    glEnable(GL_CULL_FACE);
+    glBindTexture(GL_TEXTURE_2D, textures[m.texture]);
+    glBindVertexArray(zone_meshes[i].vao);
+    glDrawElements(GL_TRIANGLES, zone_meshes[i].count, GL_UNSIGNED_INT, nullptr);
+  }
+  // The alpha flush (1298: 0043dd80, after the select UI and the other
+  // windows in Render 005fb1c0): the zone's BLEND meshes far to near, under
+  // the hall's lights and fog, tested against the hall's depth.
+  void zone_alpha(const detail::Mat &vp, const V &eye) {
+    const auto order = far_to_near(fe.zone, eye);
+    if (order.empty()) return;
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glUseProgram(lit);
+    glUniform1i(glGetUniformLocation(lit, "tex"), 0);
+    glActiveTexture(GL_TEXTURE0);
+    for (size_t i : order) draw_zone(i, vp);
+    glDisable(GL_BLEND);
+    glBindVertexArray(0);
+  }
   void transform(const detail::Mat &view_projection, const detail::Mat &model) {
     const auto mvp = detail::mul(view_projection, model);
     glUniformMatrix4fv(glGetUniformLocation(lit, "mvp"), 1, GL_FALSE, mvp.data());
@@ -870,6 +920,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     glUniform1i(glGetUniformLocation(lit, "tex"), 0);
     glActiveTexture(GL_TEXTURE0);
     lights(fe.intro, {});
+    fog(nullptr, fe.intro.camera.eye);
     const auto vp = view_projection(fe.intro.camera, fe.intro.camera.eye, width, height);
     draw_character(0, pose(0, 0, now, true), vp, detail::identity());
   }
@@ -925,6 +976,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     auto spot = fe.slots[focus].spot;
     spot.theta = seats.theta;
     lights(fe.select, seats.spot_on ? std::vector<FrontLight>{spot} : std::vector<FrontLight>{});
+    // Version 8 (RQ-095): the camera's fog on everything the hall draws, and
+    // the zone's terrain and shapes before the characters (1298: Render
+    // 005fb1c0 draws the world manager's terrain, then its shapes); their
+    // alpha parts after the UI (zone_alpha).
+    fog(&fe.fog, eye);
+    hall_camera.emplace(vp, eye);
+    for (size_t i = 0; i < fe.zone.size(); ++i)
+      if (!(fe.zone[i].mesh.flags & FrontMesh::BLEND)) draw_zone(i, vp);
     for (size_t i = 0; i < statics.size(); ++i) draw_mesh(statics[i], fe.hall[i], vp, detail::identity());
     const auto &front = seats.players.at(size_t(focus));
     front_shown = {uint32_t(front.clip), seats.played(front), clip_length(1, front.clip),
@@ -959,6 +1018,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     scene.lights = {FrontLight{FrontLight::DIRECTIONAL, {1, 1, 1}, {.5f, .5f, .5f}, {}, {.3f, -.4f, 1}, 1, 0, {1, 0, 0}, 0, 0}};
     scene.ambient = {.3f, .3f, .3f};
     lights(scene, {});
+    fog(nullptr, eye);
     draw_character(2, pose(2, 0, now, true), view_projection(camera, eye, w, h), detail::translate_yaw({0, 0, 0}, 0));
     glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, width, height);

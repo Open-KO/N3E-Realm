@@ -510,11 +510,13 @@ repackaged into an engine container, not necessarily re-encoded.
 
 ### Q70 — The front-end screens' other sounds, and the switch that silences them
 
-The 2026-11-01 playtest follow-up (RQ-071) asked for the select hall's rotate sound
+The maintainer's 2026-11-01 playtest asked that the login and select screens get sound;
+RQ-018 added KO's front-end music, the sound 1298 plays there. RQ-071, filed by the loop after RQ-018 and not asked for by
+the maintainer, proposed the select hall's rotate sound
 (`ID_SOUND_CHR_SELECT_ROTATE`, `char_select_turn.wav`), the UIF buttons' hover and
 click sounds on login, select, create and the message box, and KO's Option.ini
-`[Sound] Bgm` switch, each to be confirmed against the 1298 binary. It does not
-confirm them (binary, `KnightOnLine.exe`; local-asset, the pinned UIFs):
+`[Sound] Bgm` switch, each to be confirmed against the 1298 binary. The binary does
+not confirm them (binary, `KnightOnLine.exe`; local-asset, the pinned UIFs):
 
 - The rotate sound is the later source's. 1298's select left and right (`005fe3c0`,
   `005fe450`) play no sound, and no function of the select proc, its UI class
@@ -534,7 +536,7 @@ confirm them (binary, `KnightOnLine.exe`; local-asset, the pinned UIFs):
 (`content/front-end.md`, "Moradon"), and the client reads `[Sound] Effect` (default 1):
 at 0 it opens no audio device, so the front end's music and every in-world sound are
 silent, as in KO. `[Sound] Bgm` is not read, since n3e plays no zone music. If the
-maintainer wants the later source's rotate sound or a music-only switch anyway, each
+maintainer ever wants the later source's rotate sound or a music-only switch, each
 is a small addition (a sound-table id bound in `audio.bin`; an Option.ini key) that
 departs from 1298 and is recorded as such.
 

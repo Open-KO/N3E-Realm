@@ -26,14 +26,14 @@ The bot's application can also be the login application.
 
 ## Once per round: the realm on the Linux machine
 
-Use the machine's LAN address (`ip -4 addr`; below, `192.168.86.21`).
+Use the machine's LAN address (`ip -4 addr`; below, the example `192.168.1.20` stands for it).
 
 ```sh
 source tools/env.sh
 make client server                       # the client and the server
 make realm-assets                        # the KO tree (once) and build/packages/moradon
 cargo build --release --locked -p realm-launcher
-tools/local-realm 192.168.86.21          # stack on the LAN; the certificate names the address
+tools/local-realm 192.168.1.20           # stack on the LAN; the certificate names the address
 ```
 
 `tools/local-realm` prints `realm test-local-<package hash> on port 7777 (LAN, …)`. For the bot, the
@@ -44,7 +44,7 @@ docker compose exec server n3e-server admin mint --name bot --perm world.catalog
   --perm world.spawn --perm world.kill --perm world.event --perm 'account.*' \
   --perm realm.status --perm realm.notice
 # .env: REALM_ADMIN_TOKEN=<the printed token>
-tools/local-realm 192.168.86.21          # now also "bot started"
+tools/local-realm 192.168.1.20           # now also "bot started"
 ```
 
 The database keeps the token; a new one is needed only after `docker compose down -v`.
@@ -65,9 +65,10 @@ target/release/realm-launcher --add-realm local http://127.0.0.1:8770/manifest.j
 target/release/realm-launcher --realm local --ca deploy/local/ca.pem
 ```
 
-Against the realm on its host (`deploy/HOST.md`, `gn100`) instead of this machine's
-stack: `python tools/local_release.py --host gn100-69be.local`, then the launcher with
-`--ca build/gn100/ca.pem` (copied from the host's `deploy/local/ca.pem`). Run this
+Against the realm on its host (`deploy/HOST.md`) instead of this machine's stack:
+`python tools/local_release.py --host "$N3E_REALM_HOST"` (the host's name, from
+`deploy/host.local`, `deploy/HOST.md` "Releases"), then the launcher with
+`--ca build/realm-host/ca.pem` (copied from the host's `deploy/local/ca.pem`). Run this
 machine's `tools/local-realm` without its bot meanwhile: one bot per Discord token.
 
 The window is 1280x1024; add `--fixed-window 1024x768` (or `1600x1200`) for another of
@@ -94,11 +95,11 @@ On the Linux machine, once CI's `client` job has passed for the commit you are o
 (the Actions tab), build the kit and copy it to the Windows PC:
 
 ```sh
-python tools/windows_kit.py --host 192.168.86.21     # build/windows-kit.zip
+python tools/windows_kit.py --host 192.168.1.20      # build/windows-kit.zip
 ```
 
 It holds CI's `n3e-client.exe` and `realm-launcher.exe`, the Moradon package the
-realm serves, `realm.json` naming `192.168.86.21:7777`, the local CA and three `.bat` files.
+realm serves, `realm.json` naming `192.168.1.20:7777`, the local CA and three `.bat` files.
 Unzip it anywhere on the Windows PC. Windows may say the files are from an unknown
 publisher (they are unsigned, Q26): **More info → Run anyway**.
 
@@ -114,7 +115,7 @@ publisher (they are unsigned, Q26): **More info → Run anyway**.
 
 If the game says it cannot connect, the Linux firewall is the usual cause. Docker
 normally opens the published port past `ufw`; if not:
-`sudo ufw allow from 192.168.86.0/24 to any port 7777 proto tcp`.
+`sudo ufw allow from 192.168.1.0/24 to any port 7777 proto tcp` (your LAN's subnet).
 
 ## Afterwards
 

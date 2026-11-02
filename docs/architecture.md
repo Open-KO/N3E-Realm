@@ -315,7 +315,7 @@ Step 2 is the first time a gateway box would earn its place in the runtime diagr
 
 #### Decision, 2026-11-01: a home host behind Cloudflare's WebSocket proxy (Q64)
 
-The realm runs on the maintainer's own machine (`gn100`) instead of a rented VPS, with
+The realm runs on the maintainer's own machine (the realm host) instead of a rented VPS, with
 the game wire carried as a WebSocket through Cloudflare (spec 12). Why:
 
 - **Cost.** The maintainer has idle, powerful machines and wants no monthly bill. The

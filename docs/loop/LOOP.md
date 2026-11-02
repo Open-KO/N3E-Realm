@@ -135,7 +135,7 @@ runs `tools/host-realm mint-bot` or `tools/host-tls`, changes the host's TLS, tu
 firewall, publishes a release by hand (except the hosted release below), force-pushes, rewrites history, reads or writes `.env` or any
 secret, runs `docker compose config` unfiltered, commits `assets/ko`, or adds items
 about its own machinery unless INBOX asks. Reverse engineering uses n3e's Ghidra
-setup and `~/Projects/n3e/ref/` read-only.
+setup and the n3e checkout's `ref/` read-only (`$N3E_HOME`, `.claude/agents/realm-worker.md`).
 
 Until CI publishes releases (RQ-030), the loop may build and copy the hosted release
 by `deploy/HOST.md`'s Releases steps (the maintainer allowed it, 2026-11-01), under the same deploy conditions.

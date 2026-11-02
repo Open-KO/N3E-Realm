@@ -35,13 +35,16 @@ before assuming it.
 ## KO evidence
 
 Claims about KO's behaviour carry labelled evidence per `specs/KO-FINDINGS.md`:
-**binary** (program and address), **source** (`~/Projects/n3e/ref/ko-src` path) or
-**local-asset**. References, read-only: `~/Projects/n3e/ref/{ko-bin,ko-src,ko-db,ko-maps,ko-blender}`.
+**binary** (program and address), **source** (`$N3E_HOME/ref/ko-src` path) or
+**local-asset**. `$N3E_HOME` is the n3e checkout: the environment's, or by default the
+one beside this checkout (`N3E_HOME="${N3E_HOME:-$(cd ../n3e && pwd)}"` from the
+repository root). References, read-only: `$N3E_HOME/ref/{ko-bin,ko-src,ko-db,ko-maps,ko-blender}`.
 Decompile with n3e's Ghidra project:
 
 ```sh
-~/Projects/n3e/tools/ghidra/run headless ~/Projects/n3e/build/ghidra/audit-2026-09-19 ko-audit \
-  -process '<program>' -noanalysis -readOnly -scriptPath ~/Projects/n3e/tools/ghidra \
+N3E_HOME="${N3E_HOME:-$(cd ../n3e && pwd)}"
+"$N3E_HOME/tools/ghidra/run" headless "$N3E_HOME/build/ghidra/audit-2026-09-19" ko-audit \
+  -process '<program>' -noanalysis -readOnly -scriptPath "$N3E_HOME/tools/ghidra" \
   -postScript AuditReference.java <outdir under build/> decompile <address>
 ```
 

@@ -30,6 +30,8 @@ Testing/
 *.swp
 # Local dev TLS pair (deploy/local-ca.sh)
 /deploy/local/
+# Where the realm host is (deploy/HOST.md "Releases"): the maintainer's own values
+/deploy/host.local
 # Raw KO client assets: a pinned build input fetched by tools/fetch-ko-assets.sh,
 # never committed (see specs/10-content.md). Also the legacy path, in case.
 /assets/ko/

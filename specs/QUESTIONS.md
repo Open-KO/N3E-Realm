@@ -440,7 +440,7 @@ not carry over. Revisit with a production conversion path for progression packag
 
 ### Q64 — The realm's host: a home machine behind Cloudflare, not a VPS
 
-The maintainer chose on 2026-11-01 to host on their own machine (`gn100`) rather than
+The maintainer chose on 2026-11-01 to host on their own machine (the realm host) rather than
 pay for a VPS with scrubbing (spec 07's requirement), and to carry the game wire as a
 WebSocket through Cloudflare's free proxy and a Tunnel so the home address is never
 public. The reasoning and the providers checked are in `architecture.md`, "DDoS". Spec

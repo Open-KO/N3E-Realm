@@ -2655,7 +2655,7 @@ keeping server authority and fixing known bugs. Three decisions were the user's:
   the loop only.
 - **Look and feel reference:** a time-boxed reference-rig spike that runs the
   original 1298 client and the reference servers in isolation, using
-  `~/Downloads/ko-1298` among its inputs. This is the "explicitly scoped action"
+  a local `ko-1298` collection among its inputs. This is the "explicitly scoped action"
   BINARY-POLICY requires for any runtime reference setup.
 - **Paid systems** (KOF-0041/0042/0049/0050/0057): mechanics only, with
   entitlements granted by an audited operator command. No payment path.
@@ -2704,7 +2704,7 @@ Before merging the parity-loop design, the user asked for the reference-rig spik
 
 - **Servers:** the pinned Ebenezer, AI server and Aujard run unmodified under
   Wine 8.0 in containers with no route out. They use the 1.298 database, maps
-  and scripts from the user's `~/Downloads/ko-1298` collection, and its
+  and scripts from the user's local `ko-1298` collection, and its
   third-party login server.
 - **Client:** it reaches Moradon by script from a fresh database in about
   6.5 minutes, passing through the launcher, login, server list, nation,

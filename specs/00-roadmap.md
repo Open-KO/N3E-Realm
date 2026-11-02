@@ -113,7 +113,7 @@ login (`docs/manual-testing.md` W1–W7).
 realm, creates and selects a character in the Karus hall, and loads into Moradon,
 on Linux and Windows; spec 11 tests 1–7 pass.
 
-Evidence so far (this machine, RTX 4090, offscreen): spec 11 tests 1–2
+Evidence so far (the maintainer's GPU workstation, offscreen): spec 11 tests 1–2
 (`tests/front_end.py`) and 4 (`tests/check.py`) in `make test`, exit 0; test 3 is the
 existing suites (`make live`, LIVE_OK 73/73, graphical); tests 5–7
 (`tests/front_end_live.py`, `tests/front_end_flow_live.py`) pass on the Moradon
@@ -174,7 +174,7 @@ and play, and the rebuild runbook has been followed successfully once.
 
 ## M7a — Home host behind Cloudflare (spec 12) — **done 2026-11-01**
 
-The realm runs on the maintainer's machine `gn100` instead of a VPS (Q64).
+The realm runs on the maintainer's machine (the realm host) instead of a VPS (Q64).
 
 - Done first, LAN only: `deploy/compose.prod.yaml` (spec 07's production stack) and
   `tools/host-realm` on the host; `deploy/HOST.md`.

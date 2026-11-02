@@ -8,7 +8,7 @@
 #
 #   tools/host-tls issue    the first certificate
 #   tools/host-tls renew    renew when due; run daily from the maintainer's crontab:
-#     17 4 * * * cd ~/Projects/N3E-Realm && tools/host-tls renew >> ~/.cache/n3e-host-tls.log 2>&1
+#     17 4 * * * cd <checkout> && tools/host-tls renew >> ~/.cache/n3e-host-tls.log 2>&1
 set -euo pipefail
 cd "$(dirname "$0")/.."
 domain="${N3E_TLS_DOMAIN:-play.openko.net}"

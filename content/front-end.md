@@ -85,7 +85,12 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    first frame, with a fresh decoder; one whose whole pass decodes nothing
    ends. A track with a restart period starts again at its first sample each
    time it has played that long, whether it has ended (silent meanwhile) or
-   not, so it never ends; the period takes precedence over the loop.
+   not, so it never ends; the period takes precedence over the loop. The
+   period runs on a clock the client keeps for the track for the whole process
+   (RQ-096, Q75; `client/render/audio.h`): it counts only while a screen
+   naming the track shows, and stops while another track or none plays. The
+   first entry starts the track at once; a later one starts it only when the
+   clock next reaches the period, silent until then.
 
 The client samples as KO sets its devices: UIF images with point sampling on whole
 screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
@@ -480,10 +485,14 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   loop byte and plays it, then opens select; select (`0043a950`,
   `0043b550`) and create leave it; the select releases it when the chosen
   character's clip has played, before loading (`0043ed20`; `0043db70` too).
-  Not KO's (Q75): back on the login from select, the realm starts sound 35 at
-  once; 1097 waits for its login timer, which no Init resets, to pass 21.66 s
-  again. KO 1298 plays `Snd/Intro_Sound.mp3` instead (44.1 kHz stereo, 4,096
-  frames, 107 s; the file's cut-short 4,097th frame is dropped), looping on
+  Back on the login from select (RQ-096, Q75, KO's): the login Init creates
+  sound 35 again but does not play it; only the tick's timer, which no Init
+  resets and which runs only while the login shows, does, when it next passes
+  21.66 s. The realm does the same with the track's process clock: silent for
+  the rest of the 21.66 s period, then `bgm_login.wav` from its first sample.
+  KO 1264 does the same (`specs/KO-FINDINGS.md` §9.1, binary: the tick
+  `005be500` and its timer `007ac9d0`). KO 1298 plays `Snd/Intro_Sound.mp3`
+  instead (44.1 kHz stereo, 4,096 frames, 107 s; the file's cut-short 4,097th frame is dropped), looping on
   login, select and create, carried as its frames (Q69); RQ-018 to RQ-078 cooked
   it, and a 1298 choice would name it. KO 1298 (binary, `KnightOnLine.exe`):
   the login proc `005f68e0` creates the BGM stream for that file (`0044d240`),

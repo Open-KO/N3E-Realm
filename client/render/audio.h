@@ -40,11 +40,32 @@ struct AudioMixer {
   // 1298 005f68e0: the login keeps a BGM of the same file, even one that
   // has ended), starts another from its first frame and stops on nullptr
   // (005fea70 releases the BGM).
+  // RQ-096 (Q75): a restarting track keeps its clock for the process. The
+  // clock runs only while the track is the screen's (it counts the frames
+  // mixed for it); a stream that leaves keeps its phase, and the next stream
+  // of that track starts at it, silent until the period, as KO 1097's and
+  // 1264's login Init creates the login track again but only the login
+  // tick's own timer (006e0344, 007ac9d0) plays it. At most kMusicTracks
+  // phases are kept, those of tracks no longer loaded dropped first.
   std::unique_ptr<MusicStream> music;
+  struct MusicPhase {std::weak_ptr<const MusicTrack> track;uint64_t frames=0;};
+  std::vector<MusicPhase> music_phases;
+  uint64_t music_phase(const std::shared_ptr<const MusicTrack>&track)const{
+    for(const auto&p:music_phases)if(p.track.lock()==track)return p.frames;
+    return 0;
+  }
+  void keep_music_phase(){
+    if(!music||!music->restarting())return;
+    std::erase_if(music_phases,[](const auto&p){return p.track.expired();});
+    for(auto&p:music_phases)if(p.track.lock()==music->track()){p.frames=music->period_phase();return;}
+    if(music_phases.size()>=kMusicTracks)music_phases.erase(music_phases.begin());
+    music_phases.push_back({music->track(),music->period_phase()});
+  }
   void play_music(const std::shared_ptr<const MusicTrack>&track){
-    if(!track){music.reset();return;}
     if(music&&music->track()==track)return;
-    music=std::make_unique<MusicStream>(track);
+    keep_music_phase();
+    if(!track){music.reset();return;}
+    music=std::make_unique<MusicStream>(track,music_phase(track));
   }
   bool music_playing()const{return music&&!music->ended();}
   bool play(const Audio&data,const std::string&key,double start,V position={},bool positional=false,uint64_t request=0,bool effect=false){

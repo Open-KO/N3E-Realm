@@ -169,6 +169,14 @@ The snapshot was rebuilt into a PE (sha256 `82abb582…ea8febaf`):
   its 213 slots resolve through the export tables of the Wine DLLs in the process;
   kernel32's go through ASProtect's redirect stubs. The 9 kernel32 slots ASProtect
   emulates are named `aspr_<slot>`.
+  *Corrected by RQ-096 (§9.1):* the stubs' kernel32 names are one stub late. Each
+  stub's alternate code (the stolen bytes and the jump into the API) precedes it,
+  where `build/rq074/tools/rebuild.py` reads the one after it, so a slot carries
+  the name of the slot after it: VC6's CRT calls `GetStartupInfoA` through
+  `0058c144` (named `MoveFileA`), and `0052d371` calls `GetUserDefaultLangID`
+  through `0058c198` (named `GetLastError`; RQ-085's row reads it as the language
+  id). The other DLLs' slots resolve directly and are unaffected. This 1097 dump
+  was not rebuilt again.
 
 It was analysed with Ghidra 12.1.3 (full analysis) in the project
 `build/ghidra/rq074/` with `AuditReference.java`. The scripts are in
@@ -434,7 +442,7 @@ per screen. A choice can be offered only when every row it needs is data:
 | Login scene | the 1098 scene (1097's): camera, lights, the model's one clip and plugs, the moon quad | 1298's UIF intro (`ka_login_intro_us.uif`, wrapped UVs; spec 11 left it out), 2145's `re_login_intro`, Steam's intro procs |
 | Layouts | UIF trees `ko_hud.parse` reads (1298's; 2145's `co_login`, `ka_characterselect`), bindings, moves, hidden, states | 1097's UIF version; the 2145 versions it refuses; Steam's pack |
 | Select hall | meshes, lights, slots, the turn about `at` with per-slot ends, the spot's rate, front/start/rest clips with blend times, plugs; since version 6 (RQ-086) the front-clip mode, 1097's hover or 1298's loop, and as recipe data 1298's per-race joint and clips with the default looks (§8.3); since version 7 (RQ-087) the path turn mode with 1298's recorded `.n3camera` paths, its select UI hidden while they play, and as recipe data its slots and spots (§8.4); since version 8 (RQ-095) a zone as the hall, 1298's `karus_intro` (its terrain, static shapes and alpha parts), and the camera's fog | the zone's sky, light maps, grass, birds and animated shapes (Q79); each slot's own looks (RQ-005); 2145's `.n3anim` format (convertible: `anim_2145.to_1298`) |
-| Music | MPEG-1/2 Layer III tracks per screen, looping or once (1298's `Intro_Sound.mp3`); since version 5 (RQ-083) 16-bit PCM tracks and a restart period (1097's `bgm_login.wav` every 21.66 s, `bgm_el_battle.wav` looping) | Ogg Vorbis (2145, Steam); 1097's process-lifetime login timer (Q75) |
+| Music | MPEG-1/2 Layer III tracks per screen, looping or once (1298's `Intro_Sound.mp3`); since version 5 (RQ-083) 16-bit PCM tracks and a restart period (1097's `bgm_login.wav` every 21.66 s, `bgm_el_battle.wav` looping); since RQ-096 the period's clock is the process's, 1097's and 1264's login timer (Q75, §9.1; client behaviour, no format change) | Ogg Vorbis (2145, Steam) |
 | Sounds | a sound-table id bound in `audio.bin` (1097's turn sound 2501) | 2145's Ogg `char_select_turn.ogg` |
 | Text | six strings, KO's UIF texts as they are | KO's text tables for them (RQ-013) |
 
@@ -462,7 +470,75 @@ Korean Windows, the login, create and message box carry Korean labels in their a
 and 1097 has no English layouts to draw instead. Its select and loading carry none,
 but its select has no back button, which the realm's select requires (`back`). The
 "1097" choice therefore keeps 1298's English `UI_US` layouts until the maintainer
-decides whether to ship 1097's art as it is.
+decides whether to ship 1097's art as it is. *Maintainer (2026-11-02):* the 1097
+choice draws 1264's English `UI_US` layouts. §9.1 (RQ-096) finds them the pinned
+tree's own files, which `ko_hud` reads.
+
+### 9.1 The 1264 client: login music and layouts (RQ-096, 2026-11-02)
+
+The 1264 client is `build/ko-reference/installer-1264/client/KnightOnLine.exe`
+(sha256 `75481f77…36de69e163`), unpacked from the installer
+`knightonlinesetup_1264.exe` (`eb4e1a35…`) by `tools/ko-reference/unpack_installer.py`.
+It is packed with ASProtect like 1097's (§8.1): nameless sections at entropy 8.0, an
+empty `.adata`, one import per DLL, and the entry `push 007b7001; call; ret` into a
+stub in the fifth section. It was unpacked as §8.1's was, with `build/rq074/tools/`'s
+scripts copied to `build/rq-1264/tools/`:
+
+- A copy of the exe and the install's `mss32.dll` (Miles, `7855b8fb…`, which it
+  imports) ran under Wine 11.20 (WoW64) in a new throwaway `WINEPREFIX` under
+  `build/rq-1264/`, inside `unshare -n -c` (no network) and `xvfb-run`, with
+  `WINEDLLOVERRIDES` disabling `winemenubuilder` from the first command (`wineboot`
+  included). The desktop entries, MIME and icon trees were unchanged afterwards.
+- The runner, a child subreaper, copied the image (`00400000`–`007ca000`) every few
+  milliseconds. Without `mss32.dll` beside it Wine did not start it (the import
+  was not found). With it, three of four runs ended in ASProtect's loader: it
+  picks random kernel32
+  exports and reads the three bytes before each, looking for a `ret`
+  (`018b1ab4`–`018b1aef`), and one read fell before kernel32's base
+  (`018b1ac8`). The fourth ran on to the display-mode change and was stopped.
+- The kept snapshot is the one after the last code-section change and before the
+  program wrote its data (0.939 s; sha256 `0078c302…dfc7aefb38`).
+
+The snapshot was rebuilt into a PE (sha256 `61e9a086…99e136471`):
+
+- Raw layout equals the virtual layout.
+- The entry is `006296bb`, VC6's `WinMainCRTStartup`; its first 38 bytes were stolen
+  and stay zero (the first kept instruction, `006296e1`, calls `GetVersion`).
+- A new import directory sits on the original IAT, `00648000`–`00648468`: 262 of its
+  269 slots resolve, 40 of them to `mss32.dll`. The 7 kernel32 slots ASProtect
+  emulates are named `aspr_<slot>`. The other kernel32 slots go through redirect
+  stubs whose alternate code precedes them (`alt = stub - 0x0c`). Checked at the CRT
+  entry (`00648154`, `GetStartupInfoA`) and the UIF loader (`0064818c`,
+  `ReadFile`); the 1097 rebuild has the same offset (§8.1, corrected).
+
+It was analysed with Ghidra 12.1.3 (full analysis) in `build/ghidra/rq096/` with
+`AuditReference.java`, and with `objdump` for code Ghidra left undefined. Nothing here
+is committed. Addresses are the 1264 image's (base `00400000`). The tables were read
+with `tools/assetc/ko_tbl.py` and the layouts with `tools/assetc/ko_hud.parse`.
+
+| Observation | Where | Label |
+|---|---|---|
+| **1264 draws the 1098 login scene too.** The login Init `005bd9b0` loads `Intro\Moon.dxt`, `Intro\Intro.N3Chr` and `Intro\0–2.N3Light` (strings `0066df28`–`0066df6c`; pushed at `005bda15`–`005bdd21`). Its select names `ChrSelect\ka_chairs.n3shape` and `el_chairs.n3shape` (`0043fcde`, `0043f921`): 1097's hall | `005bd9b0`; strings | binary |
+| **The login music is sound 35, a looping Miles stream.** The login Init releases the BGM `007ad084` (`004347a0` at `005bdd80`) and creates sound 35 as a stream (`00434540(0x23, 2)` at `005bdd8f`, the store at `005bdd99`); it does not play it. Kind 2 opens a stream (`00436990`: `AIL_open_stream` at `00436c2f`) and sets its loop count to 0 (`AIL_set_stream_loop_count` at `00436c3f`), which Miles plays without end. So unlike 1097's (§9, `00432f60`), 1264's stream would loop by itself. 1264's `Data/sound.tbl` (`b123c238…`) row 35 is `Snd\bgm_login.mp3`, the pinned tree's `Snd/bgm_login.MP3` byte for byte (`9616c423…`; MPEG-2 Layer III, 22,050 Hz mono, 829 frames, 21.66 s). 1264 also ships 1097's `bgm_login.wav` (`c4cc37c9…`), which its table does not name | `005bd9b0`, `00434540`, `004345d0`, `00436990`; `Data/sound.tbl`; `Snd/` | binary; local-asset |
+| **The login tick keeps 1097's timer.** The login tick `005be500` (procedure vtable entry `0064dc60`) plays the BGM (`00437090(0,0,0)`: `AIL_set_stream_position(…, 0)`, then `AIL_start_stream`) when its timer `007ac9d0` equals 0.0 (`0064875c`). It then adds the frame time (`006699a0`), and past 21.66 (`0064dc6c`, `ae47ad41`) sets the timer to 0 and calls Stop (`004371a0(0)`: `AIL_pause_stream(…, 1)`). The next tick plays from the first sample. Only this tick reads or writes `007ac9d0` (`005be538`, `005be56f`, `005be575`, `005be58a`): the timer counts only while the login shows, and no Init resets it | `005be500`, `00437090`, `004371a0`; refs of `007ac9d0` | binary |
+| **The game-server login answer** `005bf910` reads the nation (`+0x39c`, `005bfc35`). With none, it releases the BGM (`005bfc4a`) and opens the nation select silent. For 1 or 2, it releases it, creates sound 20003 (`push 0x4e23` at `005bfc80`, `00434540` at `005bfc85`), sets it looping (`00437380(1)` at `005bfc97`: loop count 0), plays it (`005bfca5`) and opens the character select. 1264's row 20003 is `Snd\bgm_el_battle.mp3`, the pinned tree's file byte for byte (`331a3f6f…`; 22,050 Hz mono, 362 s). 1097 starts 20003 for a character without a nation too (§9) | `005bf910` | binary; local-asset |
+| **A return from select to the login:** the Init runs again. It releases sound 20003 and creates sound 35, unplayed. The tick plays it only when `007ac9d0` next passes 21.66 s, so the login is silent for the rest of that 21.66 s, as in 1097 (§9). The first login of a process plays at once (the timer starts at 0). The BGM is also released before loading (`004426d0` at `00442774`, `00443810` at `00443901`, both ending in "Loading data...") | `005bd9b0`, `005be500`, `004426d0`, `00443810` | binary |
+| A logo procedure (Init `005fa500`, Tick `005fa7c0`, vtable entries `0064e080`/`0064e084`) loads `co_usa_logo_us.uif` (column 130, `+0x824` of the table node). It creates the BGM stream once (`00437380(0)`) when none is held, plays it 1 s after the first tick (`006489e4`) and stops it with a 4 s fade on its UI's state 2. The login Init releases it. Not one of the five screens; its sound and when it runs were not read | `005fa500`, `005fa7c0` | binary |
+| **1264 reads `Data\UIs_us.tbl` whatever the Windows language.** Its table tail is set to `".tbl"` and then `"_us.tbl"` with no test between (`005ceef8`–`005cef29`, the string assignment `004071b0`; the same at `005f6d34`–`005f6dbd`) and joined to `"Data\UIs"` (`0066e738`, `005cf4b9`). The image imports no language-id call. 1264's `UIs_us.tbl` (`04d2abd3…`) has two rows (1 Karus, 2 El Morad) of 130 strings; the pinned tree's (`c91c3579…`) has 144, the first 130 of them the same names (letter case aside) | `005ce7c0`, `005f6850`; `Data/UIs_us.tbl` | binary; local-asset |
+| **The five screens' layouts.** A row's string `k` is at `+4 + 16(k − 1)` of the row (`+0x10` of its map node). Login (`005bd9b0`): the first row's column 1, `UI_us\co_login_us.uif`. Select (`0043f530`, vtable entry `00648ea0`): the player's nation's row (`+0x39c`), `+0x174` (`0043f71e`), column 24, `Ka_CharacterSelect_us.uif` or `El_CharacterSelect_us.uif`. Create (`00439550`, `00648dd8`): the nation's row, `+0x164` (`004398be`), column 23, `Ka_CharacterCreate_us.uif` or `El_CharacterCreate_us.uif`. Message box: `MessageBoxPost` (`005f7f80`, the source's name; called from the login's `005bdf00`, `005bf010`, `005bf910` and `005c1d10`, among others) runs `0050c730`, which makes a box (`0050b060`) and loads row 2's column 26 (`+0x194`, `0050c817`), `El_MessageBox_us.uif`, for either nation. Loading (`005f9a30`): row 2, by its argument (kept at `+0x7a8` of `007acf84`; the source's `LoadingUIChange` passes the last war's victor): 1 column 54 `ka_loading_us.uif`, 2 column 53 `el_loading_us.uif`, else column 27 `Co_Loading_us.uif` (node `+0x364`, `+0x354`, `+0x1b4`) | `005bd9b0`, `0043f530`, `00439550`, `0050c730`, `005f9a30`; `Data/UIs_us.tbl`; `GameProcedure.cpp` | binary; local-asset; source (the victor) |
+| **They are the pinned tree's files, and `ko_hud.parse` reads them.** `co_login_us.uif` (`e4b10e58…`), `ka_characterselect_us.uif` (`29e3d930…`), `el_characterselect_us.uif` (`2925fc33…`), `Ka_CharacterCreate_us.uif` (`4a1b072a…`), `El_CharacterCreate_us.uif` (`d99738e8…`), `ka_messagebox_us.uif` (`db400aae…`), `el_messagebox_us.uif` (`8f7773d5…`), `co_loading_us.uif` (`19c594d1…`), `el_loading_us.uif` (`284d998a…`), `ka_loading_us.uif` (`32fa6749…`) and `co_MsgBoxOk_us.uif` (`afc88d54…`) in 1264's `UI_US/` match the pinned tree's byte for byte. `ko_hud.parse` reads all ten 1264 screens' files | 1264's and the pinned tree's `UI_US/` (sha256); `ko_hud.parse` | local-asset |
+| **1264's UIF loader is 1298's version.** The base loader `00401860` (vtable `00648470` slot 3) reads the child count as 16 bits (`push 2` at `0040189e`), then a 16-bit header word (`004018b5`), then each child's 32-bit type (`004018d7`), through `ReadFile` (`0064818c`). That is `ko_hud.parse`'s layout (`reserved_header`), not 1097's 32-bit count (§9, `00401840`). Its string loader (the line spacing) was not read; the files above are 1298's byte for byte, which the same reader parses to their last byte | `00401860` | binary |
+
+**Decides:** Q75 (b). 1264 keeps 1097's login timer, so the realm follows both: the
+restart period's clock is the process's (content/front-end.md section 9). For RQ-085,
+1264 draws the pinned tree's own English `UI_US` login, select, create, loading and
+message box layouts, which `ko_hud` already reads, so no reader (RQ-094) is needed for
+them. Two of 1264's choices differ from what the package draws today, and they are
+RQ-085's to take:
+
+- the message box is `El_MessageBox_us.uif` for both nations; the package draws
+  `co_MsgBoxOk_us.uif`;
+- loading is chosen by the last war's victor.
 
 ## Not re-derived here
 
@@ -483,4 +559,5 @@ notes.
 | Q70 | §8.2 (RQ-077): 1097's select arrows play sound 2501 (`char_select_turn.wav`) for each turn they start; the realm plays it. 1097's Karus front-end layouts name no button sounds; its sound switch is `[Sound] Enable`. |
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |
 | Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. |
+| Q75 | §9.1 (RQ-096): 1264's login tick keeps 1097's timer (`007ac9d0`, written only by the tick), so in both a return to the login is silent until it passes 21.66 s; the realm now does the same (the restart period's clock is the process's). |
 | Q72 | §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077): 1097's arrows also start a turn from state 3, during the start clip; the realm ignores them then. |

@@ -67,12 +67,19 @@ void check_music_track(const MusicTrack &track) {
 
 struct MusicStream::Decoder { mp3dec_t dec; };
 
-MusicStream::MusicStream(std::shared_ptr<const MusicTrack> track)
+MusicStream::MusicStream(std::shared_ptr<const MusicTrack> track, uint64_t phase)
     : source(std::move(track)), decoder(std::make_unique<Decoder>()), pcm(MINIMP3_MAX_SAMPLES_PER_FRAME) {
   need(source != nullptr && source->rate > 0, "music stream without a track");
   mp3dec_init(&decoder->dec);
   step = double(source->rate) / kRate;
   if (source->restart > 0) restart_frames = std::max<uint64_t>(1, uint64_t(std::llround(double(source->restart) * kRate)));
+  // RQ-096 (Q75): part way into the period, KO's login tick has not played
+  // the new stream yet (it plays only when its timer is 0): silent until the
+  // period, then mix() rewinds to the first sample.
+  if (restart_frames && phase > 0) {
+    played = std::min(phase, restart_frames);
+    done = true;
+  }
 }
 MusicStream::~MusicStream() = default;
 

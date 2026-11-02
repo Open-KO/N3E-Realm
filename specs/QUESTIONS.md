@@ -742,6 +742,15 @@ per-process timer for the track, as 1097 does.
 track's start; a phase carried across screens would be a second, KO-specific timer
 for a silence that reads as a fault. The first login of a process is the same either
 way (the timer starts at 0, so 1097 plays at once).
+**Decided (RQ-096, maintainer 2026-11-02: "use 1264's approach"):** (b). KO 1264
+keeps the same timer (KO-FINDINGS §9.1, binary: the login tick `005be500` plays
+sound 35 when `007ac9d0` is 0 and stops it past 21.66 s; only that tick writes it),
+so 1097 and 1264 agree. The client keeps each restarting track's clock for the
+process (`client/render/audio.h`, content/front-end.md section 9): it runs only
+while a screen naming the track shows, the first entry plays at once, and a return
+to the login is silent until the clock next reaches 21.66 s, then starts the track
+at its first sample. No format change: the restart period's bytes are as before,
+its clock is now the process's.
 
 ### Q76 — How a front-end recipe names its input trees, and when an install's files are checked
 

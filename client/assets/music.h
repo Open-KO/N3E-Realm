@@ -8,7 +8,11 @@
 // RQ-083 (N3FE version 5): a track can instead be 16-bit PCM (KO 1097's WAV
 // tracks), streamed 1152 sample frames at a time the same way, and can restart
 // at its first sample every `restart` seconds of playback (KO 1097's login
-// tick, 005248f5-00524957). No file access, threads or device calls.
+// tick, 005248f5-00524957). RQ-096 (Q75): that clock is the track's for the
+// process, as KO 1097's and 1264's login timer is (006e0344, 007ac9d0, which
+// no Init resets): a stream can start at a saved phase, silent until the
+// period, and reports its phase for the next one. No file access, threads or
+// device calls.
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -49,7 +53,11 @@ void check_music_track(const MusicTrack &track);
 class MusicStream {
  public:
   static constexpr unsigned kRate = 48000;
-  explicit MusicStream(std::shared_ptr<const MusicTrack> track);
+  // `phase`: 48 kHz frames of a restarting track's period already counted
+  // (0: start at the first sample now). A stream that starts part way is
+  // silent until its period and then starts at its first sample; a track
+  // without a restart period ignores it.
+  explicit MusicStream(std::shared_ptr<const MusicTrack> track, uint64_t phase = 0);
   ~MusicStream();
   MusicStream(const MusicStream &) = delete;
   MusicStream &operator=(const MusicStream &) = delete;
@@ -64,6 +72,9 @@ class MusicStream {
   // restarts included.
   uint64_t decoded_frames() const { return decoded; }
   uint64_t restarts() const { return restarted; }
+  // A restarting track's frames into its period (0 for any other track).
+  bool restarting() const { return restart_frames != 0; }
+  uint64_t period_phase() const { return restart_frames ? played : 0; }
 
  private:
   struct Decoder;

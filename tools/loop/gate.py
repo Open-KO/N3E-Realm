@@ -25,6 +25,11 @@ A failed live suite whose covers the change does not touch is rerun once alone;
 passing alone makes it a flake (the loop files an item), not a failure. A SKIP line
 in a make test log fails the step unless SKIP_ALLOWED names it. The gate sources
 tools/env.sh and removes CLEARED from the environment it passes on.
+
+A game client running beside a step (GAME_CLIENTS: the player client, not a test
+client and not one a step started) is noted on that step's line, in playing.txt in
+the log directory, and on a GATE_PLAYING / DAILY_PLAYING line before the times
+line, so a failure is judged with that in mind (RQ-069; it passes or fails nothing).
 """
 import fnmatch
 import json
@@ -65,6 +70,13 @@ SKIP_ALLOWED = (
 # and the cook's synthetic fixtures (the cooker library itself is make test's).
 TRACED = re.compile(r"(tests/[\w-]+\.py|tools/[\w-]+\.py|tools/assetc/\w*fixture\w*\.py)")
 LIVE_RUNNERS = {"live": "tests/live.py", "live-ko": "tests/live_ko.py"}
+# RQ-069: a game client someone is playing on this machine: the player client's
+# process (natively or under Wine) with none of the test client's arguments
+# (tests/client_launchers.py ARGUMENTS), and not started by this gate. Sampled
+# every SAMPLE_SECONDS while a step runs; only pids and this name are logged.
+GAME_CLIENTS = ("n3e-client", "n3e-client.exe")
+HARNESS_ARGS = re.compile(r"--(auto-login|smoke|capture|npc-observe|unsupported|time|[\w-]+-smoke)(=.*)?")
+SAMPLE_SECONDS = 5
 
 
 def changed():
@@ -254,18 +266,76 @@ def daily_plan():
     return steps
 
 
-def run_step(name, cmd, env, log_dir, timings):
+def game_clients(proc="/proc", own=None):
+    """The pids of game clients running now (GAME_CLIENTS): by each process's name
+    and arguments in `proc`, leaving out this process's descendants (a suite's own
+    launcher stubs and player-build checks)."""
+    own = os.getpid() if own is None else own
+    parents, names = {}, {}
+    for entry in Path(proc).iterdir():
+        if not entry.name.isdigit():
+            continue
+        try:
+            stat = (entry / "stat").read_text(errors="replace")
+        except OSError:
+            continue
+        # pid (comm) state ppid ...: comm may hold spaces and parentheses.
+        head, _, rest = stat.rpartition(")")
+        names[int(entry.name)] = head.partition("(")[2]
+        parents[int(entry.name)] = int(rest.split()[1])
+    found = []
+    for pid, name in names.items():
+        if name not in GAME_CLIENTS:
+            continue
+        seen, up = set(), pid
+        while up in parents and up not in seen and up != own:
+            seen.add(up)
+            up = parents[up]
+        if up == own:
+            continue
+        try:
+            args = (Path(proc) / str(pid) / "cmdline").read_bytes().split(b"\0")[1:]
+        except OSError:
+            continue
+        if not any(HARNESS_ARGS.fullmatch(a.decode(errors="replace")) for a in args):
+            found.append(pid)
+    return sorted(found)
+
+
+def run_step(name, cmd, env, log_dir, timings, playing=None):
+    """Run one step to its log. `playing` ({step: pids}) gets the game clients seen
+    while it ran."""
     log = log_dir / f"{name}.log"
     started = time.time()
+    seen = set(game_clients())
     with log.open("w") as out:
-        code = subprocess.run(cmd, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
-                              env=run_env(env)).returncode
+        child = subprocess.Popen(cmd, cwd=ROOT, stdout=out, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                                 env=run_env(env))
+        try:
+            while True:
+                try:
+                    code = child.wait(timeout=SAMPLE_SECONDS)
+                    break
+                except subprocess.TimeoutExpired:
+                    seen.update(game_clients())
+        except BaseException:
+            # As subprocess.run would: an interrupted gate leaves no step running.
+            child.kill()
+            child.wait()
+            raise
     seconds = int(time.time() - started)
     timings.append((name, code, seconds))
     with (log_dir / "timings.tsv").open("a") as out:
         out.write(f"{name}\t{code}\t{seconds}\n")
     tail = log.read_text(errors="replace").strip().splitlines()[-1:] or [""]
-    print(f"{name}: exit {code} in {seconds}s, {log.relative_to(ROOT)}", flush=True)
+    note = ""
+    if seen:
+        if playing is not None:
+            playing[name] = sorted(seen)
+        with (log_dir / "playing.txt").open("a") as out:
+            out.write(f"{name}\t{' '.join(map(str, sorted(seen)))}\n")
+        note = f" (a game client was running: pid {', '.join(map(str, sorted(seen)))})"
+    print(f"{name}: exit {code} in {seconds}s, {log.relative_to(ROOT)}{note}", flush=True)
     return code, tail[0]
 
 
@@ -286,15 +356,24 @@ def live_failures(target, since):
     return data.get("failed", []), sorted(data.get("not_run", {}))
 
 
+def print_playing(kind, playing):
+    """The GATE_PLAYING / DAILY_PLAYING line: the steps that ran beside a game
+    client (RQ-069), so a failure among them is read with that in mind."""
+    if playing:
+        print(f"{kind}_PLAYING {' '.join(playing)}: a game client was running "
+              f"(pid {', '.join(str(p) for p in sorted(set().union(*playing.values())))})")
+
+
 def times_line(timings):
     return "; ".join(f"{name} {code} {seconds}s" for name, code, seconds in timings)
 
 
-def check_step(name, cmd, env, log_dir, timings, files):
+def check_step(name, cmd, env, log_dir, timings, files, playing=None):
     """Run one step. Returns (failure or None, flaky suites). A failed live suite
-    whose covers `files` do not touch (files=None: always) is rerun alone once."""
+    whose covers `files` do not touch (files=None: always) is rerun alone once.
+    `playing` as for run_step."""
     started = time.time()
-    code, last = run_step(name, cmd, env, log_dir, timings)
+    code, last = run_step(name, cmd, env, log_dir, timings, playing)
     log = (log_dir / f"{name}.log").read_text(errors="replace")
     if name.startswith("make-test"):
         if code != 0:
@@ -320,7 +399,7 @@ def check_step(name, cmd, env, log_dir, timings, files):
     var = "LIVE_SUITES" if target == "live" else "LIVE_KO_SUITES"
     flakes = []
     for suite in failed:
-        code, last = run_step(f"rerun-{suite}", cmd, {**env, var: suite}, log_dir, timings)
+        code, last = run_step(f"rerun-{suite}", cmd, {**env, var: suite}, log_dir, timings, playing)
         if code != 0 or (target == "live-ko" and not last.startswith("LIVE_KO_OK")):
             return f"{name}: {suite} failed again alone: {last}", flakes
         flakes.append(suite)
@@ -336,14 +415,16 @@ def new_log_dir(kind):
 def gate(files):
     log_dir = new_log_dir("gate")
     (log_dir / "files.txt").write_text("".join(f + "\n" for f in files))
-    timings, flakes = [], []
+    timings, flakes, playing = [], [], {}
     for name, cmd, env in plan(files):
-        failure, flaky = check_step(name, cmd, env, log_dir, timings, files)
+        failure, flaky = check_step(name, cmd, env, log_dir, timings, files, playing)
         flakes += flaky
         if failure:
+            print_playing("GATE", playing)
             print(f"GATE_TIMES {times_line(timings)}")
             print(f"GATE_FAIL {failure}")
             return 1
+    print_playing("GATE", playing)
     print(f"GATE_TIMES {times_line(timings)}")
     print(f"GATE_FLAKE {' '.join(flakes)}" if flakes else "GATE_OK")
     return 0
@@ -382,9 +463,9 @@ def daily():
     log_dir = new_log_dir("daily")
     head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
     (log_dir / "head.txt").write_text(head + "\n")
-    timings, flakes, failures = [], [], []
+    timings, flakes, failures, playing = [], [], [], {}
     for name, cmd, env in daily_plan():
-        failure, flaky = check_step(name, cmd, env, log_dir, timings, None)
+        failure, flaky = check_step(name, cmd, env, log_dir, timings, None, playing)
         flakes += flaky
         if failure:
             failures.append(failure)
@@ -397,7 +478,8 @@ def daily():
                else f"FLAKE {' '.join(flakes)}" if flakes else "OK")
     (ROOT / "build/loop/daily-last.json").write_text(json.dumps(
         {"head": head, "verdict": verdict, "at": int(time.time()), "log": log_dir.relative_to(ROOT).as_posix(),
-         "flakes": flakes, "failures": failures}, indent=1) + "\n")
+         "flakes": flakes, "failures": failures, "playing": sorted(playing)}, indent=1) + "\n")
+    print_playing("DAILY", playing)
     print(f"DAILY_TIMES {times_line(timings)}")
     print(f"DAILY_{verdict}")
     return 1 if failures else 0

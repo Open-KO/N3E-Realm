@@ -77,6 +77,9 @@ Spawn `realm-worker` (Agent, `subagent_type: realm-worker`) with the item's JSON
   `GATE_FLAKE <suites>`: pass; add one `flake` item per suite (`lane: flake, kind: fix`)
   at the end of the queue. The full make live and make live-ko are the daily gate's
   (step 2), not the item's.
+- A `GATE_PLAYING` / `DAILY_PLAYING` line (a game client ran beside those steps,
+  LOOP.md "A game beside the gate") goes into the LOG row; a failure or flake in a
+  step it names goes to the worker, or into the filed item, with that line.
 
 ## 5a. Commit
 

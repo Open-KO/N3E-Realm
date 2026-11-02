@@ -99,6 +99,34 @@ What is slow and catches little per item moves to the daily gate by the same rul
 make test script into `SLOW_TESTS`, a live suite by keeping its covers to what it
 exercises.
 
+**A game beside the gate** (RQ-069). The maintainer may play on this machine while the
+loop runs. The live suites draw offscreen with their own HOME, ports and Docker
+networks, so what a game shares with them is CPU and GPU time. Both gates look for a
+game client every 5 s while a step runs: the player `n3e-client` (`n3e-client.exe`
+under Wine), started without the test client's arguments and not by the gate itself
+(a test client is `n3e-test-client`). A step that ran beside one says so on its line
+and in `playing.txt` in the log directory, and a `GATE_PLAYING` / `DAILY_PLAYING`
+line before the times line names those steps (only pids are recorded). It passes and
+fails nothing. The orchestrator puts that line in the LOG row; when a step it names
+fails, the worker's failing log and any `flake` or `daily-*` item filed from it say a
+game client was running.
+
+Measured 2026-11-02 on the loop's machine: one on-screen client in Moradon (the
+hosted realm's package, on a disposable stack) at 60 frames a second, beside 14
+`make live` suites four at a time (the graphical, NPC, combat, session and admin
+ones), then 7 `make live-ko` suites (front end, Moradon, field), against the same
+suites with no client: two rounds each way (the `make live-ko` suites in the first)
+and, in the second, `npc_live` alone three times. No suite was slower beside the
+client (each within 3 s of its time without one, or faster), and the client held 60
+frames a second throughout. The one failure was `npc_live` once in the first
+round beside the client (the server closed a test peer's session on its 2 s frame
+deadline); it passed in the second round and alone three times beside the client,
+so it counts as a flake, not as contention. No suite needs the machine to itself, so
+INBOX has no PLAYING line and the loop picks and gates items the same way while the
+maintainer plays. If a later failure lines up with `GATE_PLAYING` and fails again
+beside a game but passes without one, measure again; a PLAYING line (the loop picks
+items that need no `make live` until it is removed) is the change that would follow.
+
 ## Review
 
 Only these block: a correctness bug; a broken contract (a spec interface changed

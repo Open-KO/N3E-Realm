@@ -173,3 +173,62 @@ out = subprocess.run([sys.executable, "tools/loop/gate.py", "plan", "tests/front
                      capture_output=True, text=True, check=True).stdout
 assert "make-live-ko: LIVE_GRAPHICAL=1 LIVE_KO_SUITES=front_end_live make live-ko" in out, out
 print("PASS gate.py plan FILE... prints the per-item steps for that change")
+
+# RQ-069: a game client beside the gate (the player client, natively or under
+# Wine, without the test client's arguments, not started by the gate) is noted,
+# never a test client or a step's own n3e-client.
+proc = ROOT / "build/loop/gate-test-proc"
+shutil.rmtree(proc, ignore_errors=True)
+
+
+def process(pid, ppid, name, *args):
+    (proc / str(pid)).mkdir(parents=True)
+    (proc / str(pid) / "stat").write_text(f"{pid} ({name}) S {ppid} {pid} {pid} 0 -1 4194304\n")
+    (proc / str(pid) / "cmdline").write_bytes(b"\0".join(a.encode() for a in (name, *args)) + b"\0")
+
+
+# The player binary's names from the gate, so this file names no client to start
+# (tests/client_launchers.py).
+PLAYER, PLAYER_WINE = gate.GAME_CLIENTS
+process(1, 0, "systemd")
+process(100, 1, "realm-launcher")
+process(101, 100, PLAYER, "content", "--realm", "realm.json", "--fixed-window", "1280x1024")  # played
+process(200, 1, "wine-preloader")
+process(201, 200, PLAYER_WINE, "package", "--realm", "realm.json")  # played under Wine
+process(300, 1, "n3e-test-client", "pkg", "--auto-login")  # a test client
+process(301, 1, PLAYER, "pkg", "--auto-login", "--world-smoke", "4")  # a harness run, by name
+process(400, 1, "python3")  # the gate
+process(401, 400, "make")
+process(402, 401, PLAYER, "pkg", "--version")  # a step's own (launcher_live's stub)
+process(500, 1, f"a ({PLAYER}) b")  # a name that only contains it
+(proc / "self").mkdir()
+assert gate.game_clients(proc, own=400) == [101, 201], gate.game_clients(proc, own=400)
+assert gate.game_clients(proc, own=100) == [201, 402]  # another runner's stub counts
+shutil.rmtree(proc)
+import client_launchers  # noqa: E402
+for argument in client_launchers.ARGUMENTS + ["--world-smoke", "--capture=x.ppm"]:
+    assert gate.HARNESS_ARGS.fullmatch(argument), argument
+for argument in ["--realm", "--fixed-window", "--fullscreen", "--logout", "--ca", "--self-test"]:
+    assert not gate.HARNESS_ARGS.fullmatch(argument), argument
+log_dir.mkdir(parents=True)
+saved_clients = gate.game_clients
+gate.game_clients = lambda: [4242]
+try:
+    playing, timings = {}, []
+    failure, _ = gate.check_step("make-test-fast", [sys.executable, "-c", "print('PASS')"], {}, log_dir, timings, [],
+                                 playing)
+finally:
+    gate.game_clients = saved_clients
+assert failure is None and playing == {"make-test-fast": [4242]}, (failure, playing)
+assert (log_dir / "playing.txt").read_text() == "make-test-fast\t4242\n"
+playing = {}
+gate.check_step("make-test-fast", [sys.executable, "-c", "print('PASS')"], {}, log_dir, [], [], playing)
+assert playing == {}, playing
+shutil.rmtree(log_dir)
+import contextlib, io  # noqa: E402,E401
+out = io.StringIO()
+with contextlib.redirect_stdout(out):
+    gate.print_playing("GATE", {"make-live": [7, 9], "rerun-gameplay": [9]})
+    gate.print_playing("DAILY", {})
+assert out.getvalue() == "GATE_PLAYING make-live rerun-gameplay: a game client was running (pid 7, 9)\n", out.getvalue()
+print("PASS a game client beside a step is noted (playing.txt, GATE_PLAYING); test clients and a step's own are not")

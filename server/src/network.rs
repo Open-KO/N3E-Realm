@@ -48,8 +48,77 @@ pub fn refusal(code: i32, request: u32, detail: &str) -> Envelope {
         })),
     }
 }
-async fn read(s: &mut (impl tokio::io::AsyncRead + Unpin)) -> Result<(Envelope, usize)> {
-    timeout(DEADLINE, frame(s)).await?
+/// A session's frame wait that ran out (spec 01, "After the handshake"), named
+/// in the line the server writes when it ends the session.
+#[derive(Debug, PartialEq)]
+enum Overdue {
+    /// No byte of a next frame within the connection idle limit.
+    Idle(Duration),
+    /// A frame begun but not whole within `DEADLINE`: `have` bytes of it read, of
+    /// `length` once its length prefix was whole (the 4 prefix bytes included).
+    Stalled { have: usize, length: Option<usize> },
+    /// A frame not written within `DEADLINE`.
+    Write,
+}
+impl std::fmt::Display for Overdue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let limit = DEADLINE.as_secs();
+        match self {
+            Overdue::Idle(idle) => write!(f, "no frame begun for {} s, the connection idle limit", idle.as_secs_f64()),
+            Overdue::Stalled { have, length: Some(length) } => {
+                write!(f, "a frame begun but not completed within {limit} s ({have} of its {length} bytes)")
+            }
+            Overdue::Stalled { have, length: None } => {
+                write!(f, "a frame begun but not completed within {limit} s ({have} of its 4 length bytes)")
+            }
+            Overdue::Write => write!(f, "a frame not written within {limit} s"),
+        }
+    }
+}
+impl std::error::Error for Overdue {}
+fn ended_early() -> Box<dyn std::error::Error + Send + Sync> {
+    std::io::Error::from(std::io::ErrorKind::UnexpectedEof).into()
+}
+/// One frame after the handshake (spec 01): its first byte within `idle`, so a
+/// gap in the client's stream up to that long is survived, and the rest of it
+/// within `DEADLINE` of that byte, so a stalled frame still ends the session.
+async fn read(s: &mut (impl tokio::io::AsyncRead + Unpin), idle: Duration) -> Result<(Envelope, usize)> {
+    let mut prefix = [0; 4];
+    // `read` is cancel safe: an operator's kick may drop this wait.
+    let mut have = match timeout(idle, s.read(&mut prefix)).await {
+        Err(_) => return Err(Box::new(Overdue::Idle(idle))),
+        Ok(n) => n?,
+    };
+    if have == 0 {
+        return Err(ended_early());
+    }
+    let mut length = None;
+    let rest = timeout(DEADLINE, async {
+        while have < 4 {
+            match s.read(&mut prefix[have..]).await? {
+                0 => return Err(ended_early()),
+                n => have += n,
+            }
+        }
+        let n = u32::from_be_bytes(prefix) as usize;
+        if n == 0 || n > LIMIT {
+            return Err(bad("inbound frame bound"));
+        }
+        length = Some(4 + n);
+        let mut b = vec![0; n];
+        while have < 4 + n {
+            match s.read(&mut b[have - 4..]).await? {
+                0 => return Err(ended_early()),
+                k => have += k,
+            }
+        }
+        Ok((Envelope::decode(b.as_slice())?, n))
+    })
+    .await;
+    match rest {
+        Err(_) => Err(Box::new(Overdue::Stalled { have, length })),
+        Ok(r) => r,
+    }
 }
 /// One frame, unbounded in time: the caller bounds it.
 async fn frame(s: &mut (impl tokio::io::AsyncRead + Unpin)) -> Result<(Envelope, usize)> {
@@ -71,7 +140,8 @@ async fn send(s: &mut (impl tokio::io::AsyncWrite + Unpin), e: Envelope) -> Resu
         s.write_all(&b).await?;
         Ok::<_, std::io::Error>(())
     })
-    .await??;
+    .await
+    .map_err(|_| Overdue::Write)??;
     Ok(())
 }
 /// One stderr line per refused handshake (PQ-368), with the reason the client
@@ -133,8 +203,8 @@ fn ended_line(ip: &str, character: Option<i64>, why: &str) -> String {
 /// when the client did: its stream ended, reset or broke, or its TLS failed.
 fn closed_by_server(e: &(dyn std::error::Error + 'static)) -> Option<String> {
     use std::io::ErrorKind::*;
-    if e.is::<tokio::time::error::Elapsed>() {
-        return Some(format!("a frame not read or written within {} s", DEADLINE.as_secs()));
+    if let Some(overdue) = e.downcast_ref::<Overdue>() {
+        return Some(overdue.to_string());
     }
     if e.is::<tokio::sync::mpsc::error::TrySendError<crate::simulation::Command>>() {
         return Some(format!("the world command queue was full ({e})"));
@@ -187,9 +257,8 @@ mod refusal_tests {
     async fn a_close_is_named_only_when_the_server_chose_it() {
         // PQ-427: the server's own reasons are named; the client's end of the
         // stream (EOF, reset, broken pipe, a TLS failure) is not.
-        let elapsed = timeout(Duration::ZERO, std::future::pending::<()>()).await.unwrap_err();
         let named = |e: Box<dyn std::error::Error + Send + Sync>| closed_by_server(e.as_ref());
-        assert_eq!(named(elapsed.into()).as_deref(), Some("a frame not read or written within 2 s"));
+        assert_eq!(named(Box::new(Overdue::Write)).as_deref(), Some("a frame not written within 2 s"));
         assert_eq!(named(bad("realm ownership unavailable")).as_deref(), Some("realm ownership unavailable"));
         assert_eq!(named(bad("reliable queue overflow")).as_deref(), Some("reliable queue overflow"));
         let (tx, _rx) = tokio::sync::mpsc::channel::<Envelope>(1);
@@ -203,8 +272,80 @@ mod refusal_tests {
         let tls = std::io::Error::other(openssl::error::ErrorStack::get());
         assert_eq!(named(tls.into()), None);
     }
+    /// `body` as one frame on the wire: its length prefix, then it.
+    fn framed(body: &Envelope) -> Vec<u8> {
+        let b = body.encode_to_vec();
+        [(b.len() as u32).to_be_bytes().as_slice(), &b].concat()
+    }
+    const IDLE: Duration = Duration::from_secs(30);
+    #[tokio::test(start_paused = true)]
+    async fn a_gap_between_frames_up_to_the_idle_limit_is_survived() {
+        // RQ-131: a 2 s gap in the client's stream (a Wi-Fi or tunnel hiccup)
+        // ended the session; only a gap of the idle limit does now.
+        let (mut client, mut server) = tokio::io::duplex(1024);
+        let ping = Envelope { body: Some(Body::Ping(wire::Ping {})) };
+        let wire = framed(&ping);
+        let started = Instant::now();
+        let sender = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            client.write_all(&wire).await.unwrap();
+            client
+        });
+        let (e, n) = read(&mut server, IDLE).await.unwrap();
+        assert_eq!((e, n), (ping.clone(), ping.encoded_len()));
+        assert_eq!(started.elapsed(), Duration::from_secs(5));
+        // The next frame after a gap of just under the limit is read too.
+        let mut client = sender.await.unwrap();
+        tokio::time::sleep(IDLE - Duration::from_millis(1)).await;
+        client.write_all(&framed(&ping)).await.unwrap();
+        assert_eq!(read(&mut server, IDLE).await.unwrap().0, ping);
+        // A gap of the limit ends it, naming the gap.
+        let started = Instant::now();
+        let e = read(&mut server, IDLE).await.unwrap_err();
+        assert_eq!(started.elapsed(), IDLE);
+        assert_eq!(e.downcast_ref::<Overdue>(), Some(&Overdue::Idle(IDLE)));
+        assert_eq!(closed_by_server(e.as_ref()).as_deref(), Some("no frame begun for 30 s, the connection idle limit"));
+        drop(client);
+    }
+    #[tokio::test(start_paused = true)]
+    async fn a_stalled_frame_still_closes_in_two_seconds() {
+        // Once a frame's first byte has arrived the rest of it, prefix and body,
+        // has DEADLINE, however long the idle limit.
+        for (sent, have, length, why) in [
+            (&[0u8, 0, 0, 10, 1, 2][..], 6, Some(14), "a frame begun but not completed within 2 s (6 of its 14 bytes)"),
+            (&[0, 0][..], 2, None, "a frame begun but not completed within 2 s (2 of its 4 length bytes)"),
+        ] {
+            let (mut client, mut server) = tokio::io::duplex(1024);
+            client.write_all(sent).await.unwrap();
+            let started = Instant::now();
+            let e = read(&mut server, IDLE).await.unwrap_err();
+            assert_eq!(started.elapsed(), DEADLINE, "{sent:?}");
+            assert_eq!(e.downcast_ref::<Overdue>(), Some(&Overdue::Stalled { have, length }));
+            assert_eq!(closed_by_server(e.as_ref()).as_deref(), Some(why));
+            drop(client);
+        }
+        // A frame trickled in a byte at a time, whole within DEADLINE, is read.
+        let (mut client, mut server) = tokio::io::duplex(1024);
+        let ping = Envelope { body: Some(Body::Ping(wire::Ping {})) };
+        let wire = framed(&ping);
+        let sender = tokio::spawn(async move {
+            for b in wire {
+                client.write_all(&[b]).await.unwrap();
+                tokio::time::sleep(Duration::from_millis(300)).await;
+            }
+            client
+        });
+        assert_eq!(read(&mut server, IDLE).await.unwrap().0, ping);
+        // The client's end of the stream, mid-frame or between frames, is its own close.
+        let mut client = sender.await.unwrap();
+        client.write_all(&[0, 0, 0, 9, 1]).await.unwrap();
+        drop(client);
+        assert_eq!(closed_by_server(read(&mut server, IDLE).await.unwrap_err().as_ref()), None);
+        assert_eq!(closed_by_server(read(&mut server, IDLE).await.unwrap_err().as_ref()), None);
+    }
     #[test]
     fn request_tags_match_the_wire() {
+
         // PQ-405 (D-208): each constant is the field number its request is
         // encoded under, read back from an encoded Envelope (prost names none).
         let tag = |body: Body| {
@@ -527,6 +668,8 @@ async fn peer(
     let mut bytes = 0;
     // PQ-427: the reason a session the server ends cleanly was ended, for its line.
     let mut kicked: Option<String> = None;
+    // Spec 01: the longest gap between the client's frames.
+    let idle = gate.limits.connection_idle;
     let mut result: Result<()> = async {
         loop {
             if writer.is_finished() {
@@ -540,9 +683,9 @@ async fn peer(
                         let _ = out.try_send(error(5, &format!("kicked:{reason}")));
                         break;
                     }
-                    frame = read(&mut input) => frame?,
+                    frame = read(&mut input, idle) => frame?,
                 },
-                None => read(&mut input).await?,
+                None => read(&mut input, idle).await?,
             };
             if !ready.owned() {
                 return Err(bad("realm ownership unavailable"));

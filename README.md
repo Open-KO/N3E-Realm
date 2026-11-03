@@ -213,7 +213,9 @@ curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7780/v1/realm/status
 The public listener refuses, before any TLS work, sockets past `N3E_MAX_CONNECTIONS`
 (64), a source's `N3E_IP_MAX_CONCURRENT` (3) or `N3E_IP_CONNECT_RATE` (10 a minute), or
 the `N3E_PREAUTH_MAX_SLOTS` (16) between accept and login, and closes a socket that has
-not sent its first frame in `N3E_PREAUTH_IDLE_MS` (2000) (spec 01). The local Compose
+not sent its first frame in `N3E_PREAUTH_IDLE_MS` (2000). After the handshake it closes
+one that sends no frame for `N3E_CONNECTION_IDLE_MS` (30000), or leaves a frame it began
+unfinished for 2 s (spec 01). The local Compose
 stack, `tools/demo_session.py` and the live suites widen the per-source limits, since
 every local client shares one address. Counters are under `connections` in
 `/v1/realm/status`.

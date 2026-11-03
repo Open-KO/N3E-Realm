@@ -18,15 +18,15 @@ import weakref
 
 # A logged-in peer pings when it has sent nothing for KEEPALIVE seconds, as the real
 # client does every second (client/network/world.cpp). The server drops a peer that
-# sends no frame for two seconds (DEADLINE, server/src/network.rs), so a peer the
-# test leaves idle while it works elsewhere (other peers, SQL, docker, sleeps) would
-# otherwise be disconnected under load (PQ-112, PQ-119).
+# sends no frame for N3E_CONNECTION_IDLE_MS (spec 01; 30 s, two before RQ-131), so a
+# peer the test leaves idle while it works elsewhere (other peers, SQL, docker,
+# sleeps) would otherwise be disconnected under load (PQ-112, PQ-119).
 KEEPALIVE = 0.75
 # How often the keepalive thread looks at the tended peers.
 WAKE = 0.25
-# The server's read deadline (DEADLINE in server/src/network.rs). A tended peer that
-# the thread was free to ping but did not for this long may already be closed by the
-# server, so the keepalive has failed (PQ-120).
+# How late a ping may be before the keepalive counts as failed: the server's old 2 s
+# wait between frames (RQ-131 lengthened it), kept so a starved keepalive thread is
+# still caught long before a suite's server could close a peer (PQ-120).
 DEADLINE = 2.0
 # What a peer meets when the server process exits or drops the connection, the
 # disconnect a crash test expects (PQ-126): the read finds the stream's end
@@ -104,7 +104,7 @@ def _ping(p, now):
     if late >= DEADLINE:
         _fail(
             f"a logged-in peer went {late:.2f} s without a frame while the keepalive "
-            f"was free to ping it (server deadline {DEADLINE} s); the keepalive thread "
+            f"was free to ping it (keepalive deadline {DEADLINE} s); the keepalive thread "
             "was starved or stopped"
         )
     try:

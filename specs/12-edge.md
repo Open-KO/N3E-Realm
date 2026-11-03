@@ -67,7 +67,8 @@ field:
   receivers reassemble. A frame over 64 KiB + 1 KiB closes the connection with status
   1009. Text frames close it with 1003. Ping and pong are answered; `realm-edge` pings
   every 30 s and closes after 75 s without a frame (Cloudflare drops idle sockets at
-  100 s).
+  100 s). The server's own wait between the client's frames (spec 01,
+  `N3E_CONNECTION_IDLE_MS`, 30 s) is shorter, so it names a stalled client first.
 - The client's outer handshake has the inner handshake's deadline (spec 01,
   `N3E_PREAUTH_IDLE_MS`) plus 5 s.
 - A closed WebSocket is a closed connection: the client reconnects as it does after a

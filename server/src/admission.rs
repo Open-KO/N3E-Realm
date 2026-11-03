@@ -35,6 +35,8 @@ pub struct Limits {
     pub ip_max_concurrent: u32,
     pub ip_connect_rate: u32,
     pub preauth_idle: Duration,
+    /// After the handshake, the longest wait for the next frame to begin.
+    pub connection_idle: Duration,
     pub preauth_slots: u64,
     pub trusted_proxies: Vec<(IpAddr, u8)>,
 }
@@ -55,6 +57,7 @@ impl Limits {
             ip_max_concurrent: number("N3E_IP_MAX_CONCURRENT", 3)? as u32,
             ip_connect_rate: number("N3E_IP_CONNECT_RATE", 10)? as u32,
             preauth_idle: Duration::from_millis(number("N3E_PREAUTH_IDLE_MS", 2000)?),
+            connection_idle: Duration::from_millis(number("N3E_CONNECTION_IDLE_MS", 30000)?),
             preauth_slots: number("N3E_PREAUTH_MAX_SLOTS", 16)?,
             trusted_proxies: cidrs(&std::env::var("N3E_TRUSTED_PROXY_CIDRS").unwrap_or_default())?,
         })
@@ -418,6 +421,7 @@ mod tests {
             ip_max_concurrent: concurrent,
             ip_connect_rate: rate,
             preauth_idle: Duration::from_millis(2000),
+            connection_idle: Duration::from_millis(30000),
             preauth_slots: slots,
             trusted_proxies: vec![],
         }

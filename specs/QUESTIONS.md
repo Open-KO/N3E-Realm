@@ -1245,3 +1245,18 @@ the class buttons a race cannot take, which 1298 hides for their `img_*` after t
 race click (the recipe draws them fixed disabled); the stat texts; and the realm's
 fixed `on`, which draws the button's on image where KO's chosen button draws its
 down image (the 1097 choice's create too).
+
+### Q88 — How long the server waits between a client's frames
+
+RQ-131 (maintainer feedback, 2026-11-03): one 2 s bound covered both the wait for a
+client's next frame and the rest of a frame once begun, so a 2 s gap in the stream (a
+Wi-Fi or tunnel hiccup) ended sessions on the hosted realm, one in the world and one
+before it. Spec 01 now splits them: 2 s within a frame and for writes, and
+`N3E_CONNECTION_IDLE_MS` between frames. Options for its default: (a) 30 s, 30 of the
+client's one-a-second pings, under the edge's 75 s idle close so the server names a
+stalled client; (b) 75 s, the edge's own bound, so a session survives any gap the edge
+does. **Default taken:** (a). The cost of either: a socket past its handshake and
+before login holds its pre-auth slot this long without sending (two seconds before),
+bounded per source by `N3E_IP_MAX_CONCURRENT`; a dead client in the world is still
+caught sooner by the 2 s write bound once its socket buffers fill. The client's own
+2 s bound on a frame it has begun to receive (`client/network/world.cpp`) is unchanged.

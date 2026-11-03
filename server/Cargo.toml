@@ -15,5 +15,7 @@ serde_json = "=1.0.154"
 [dev-dependencies]
 # The admin route table is checked against the bot's contract copy.
 realm-bot = { path = "../bot" }
+# Paused time for the frame deadline tests (server/src/network.rs).
+tokio = { version = "=1.53.1", features = ["test-util"] }
 [build-dependencies]
 prost-build = "=0.13.5"

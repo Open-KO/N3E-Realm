@@ -13,9 +13,9 @@ stop admitting new ones.
 ## Scope
 
 In: the accept loop for `:7777`; per-IP and global limits; pre-handshake idle timeout;
-drain state; counters. Out: anything after the game-wire `Handshake` is accepted (the
-server's existing per-frame and per-tick limits cover that); IP reputation lists;
-geo-blocking.
+the time bounds on a connection's frames after its `Handshake`; drain state; counters.
+Out: the rest of what happens after the game-wire `Handshake` is accepted (the server's
+existing per-frame and per-tick limits cover that); IP reputation lists; geo-blocking.
 
 ## Where it lives
 
@@ -34,6 +34,7 @@ deadline. The checks below go **in front of** the semaphore, before TLS starts.
 | `N3E_IP_MAX_CONCURRENT` | `3` | Open sockets per source IP (any state). |
 | `N3E_IP_CONNECT_RATE` | `10` | New connections per source IP per 60 s window. |
 | `N3E_PREAUTH_IDLE_MS` | `2000` | Accept → first complete `Handshake` frame, else close. Matches the existing handshake deadline. |
+| `N3E_CONNECTION_IDLE_MS` | `30000` | After the `Handshake`: the longest wait for the next frame to begin, else close. See "After the handshake". |
 | `N3E_PREAUTH_MAX_SLOTS` | `16` | Sockets between accept and completed login at once. Bounds TLS handshakes in flight. |
 | `N3E_TRUSTED_PROXY_CIDRS` | *(empty)* | If set, PROXY protocol v2 is accepted from these ranges and the client IP is taken from it (future relay tier). Otherwise PROXY headers are rejected. Comma-separated `a.b.c.d/n` or `x::/n`; a bare address is one host. An IPv4-mapped range (`::ffff:a.b.c.d/n`) means the IPv4 range `/n-96`, and one shorter than `/96`, or any entry that does not parse, refuses to start, naming the variable. |
 
@@ -92,6 +93,28 @@ After step 6:
 - The rate window is a fixed 60 s ring or an equivalent sliding approximation; ±10 %
   precision is fine.
 
+### After the handshake
+
+From the `Handshake` reply until the socket closes, through login, the realm and
+character screens and the world alike, each frame is bounded twice:
+
+- **Between frames:** the next frame's first byte within `N3E_CONNECTION_IDLE_MS` of the
+  server asking for it, else close. The client pings every second in every phase
+  (`client/network/world.cpp`), so only an outage this long ends a session; it is under
+  the edge's 75 s idle close (spec 12), so the server, not the edge, names it.
+- **Within a frame:** once its first byte has arrived, the rest of it (the length
+  prefix and the body) within 2 s, else close; each frame the server writes, within 2 s.
+
+RQ-131: one 2 s bound used to cover both, so any 2 s gap in the client's stream (a
+Wi-Fi or tunnel hiccup) ended the session; the 30 s default is Q88's. A socket in this phase before login still
+holds its pre-auth slot; `N3E_IP_MAX_CONCURRENT` bounds how many one source holds.
+
+Either close writes the server's one line for a session it ended (PQ-427), naming the
+gap or the stall: `session from <address> closed by the server: no frame begun for
+30 s, the connection idle limit`, or `…: a frame begun but not completed within 2 s
+(6 of its 14 bytes)` (bytes read of the frame, its 4 length bytes included), or
+`…: a frame not written within 2 s`.
+
 ### Drain
 
 A single boolean in process memory, set/cleared via spec 03. While set: new sockets
@@ -142,9 +165,15 @@ Scriptable against a running stack with a throwaway cert:
    unaffected with the realm's global and pre-auth defaults. Every suite connects from one
    address, so the harness lifts the per-source limits (Q31); `connections_live` tests
    them with small values from distinct loopback sources.
+9. **Frames after the handshake.** A 5 s gap between frames keeps the session; a frame
+   whose length prefix has arrived but whose body stalls closes within 2 s + 0.3 s; a
+   session that sends nothing closes at `N3E_CONNECTION_IDLE_MS` (± 0.3 s); each close
+   logs its line.
 
-Evidence: `tests/connections_live.py` (tests 1–7, the roadmap's 500 connections from one
-address, PROXY v2 trusted and untrusted, the status counters).
+Evidence: `tests/connections_live.py` (tests 1–7 and 9, the roadmap's 500 connections from
+one address, PROXY v2 trusted and untrusted, the status counters); test 9's bounds also
+in `server/src/network.rs` (`a_gap_between_frames_up_to_the_idle_limit_is_survived`,
+`a_stalled_frame_still_closes_in_two_seconds`).
 
 ## Open questions
 

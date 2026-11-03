@@ -1,10 +1,10 @@
 """Connection hardening on the public listener (specs/01-connection-hardening.md, M2).
 
 One native server with small limits (3 per source, 10 connects a minute per source,
-4 pre-auth slots, 2 s pre-auth idle); each scenario connects from its own loopback
-source address (Linux routes all of 127/8 to lo), so the per-source state of one
-does not leak into the next. Spec 01 acceptance tests 1-7, the roadmap's 500
-connections from one address, PROXY v2 from trusted and untrusted peers, and the
+4 pre-auth slots, 2 s pre-auth idle, 8 s connection idle); each scenario connects from
+its own loopback source address (Linux routes all of 127/8 to lo), so the per-source
+state of one does not leak into the next. Spec 01 acceptance tests 1-7 and 9, the
+roadmap's 500 connections from one address, PROXY v2 from trusted and untrusted peers, and the
 status counters of spec 03. Test 8 is `make live` itself.
 """
 import json
@@ -21,7 +21,7 @@ import urllib.request
 import uuid
 from readiness import free_ports, wait_postgres
 from isolation import DISPOSABLE_POSTGRES, container_logs
-from world_peer import Peer
+from world_peer import Peer, blob, first
 
 ROOT = Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
@@ -33,6 +33,9 @@ name = "n3e-connections-" + uuid.uuid4().hex[:10]
 out = ROOT / "build/live/connections"
 out.mkdir(parents=True, exist_ok=True)
 CAP, RATE, SLOTS, IDLE = 3, 10, 4, 2.0
+# Spec 01 "After the handshake": the wait between frames (N3E_CONNECTION_IDLE_MS),
+# over test 9's 5 s gap, and the bound on a frame once begun (DEADLINE in network.rs).
+CONNECTION_IDLE, FRAME = 8.0, 2.0
 TLS = ssl.create_default_context(cafile=str(ROOT / "deploy/local/ca.pem"))
 
 
@@ -67,6 +70,22 @@ def closed_within(s, wait):
 def admitted(s):
     """Not closed at once: an admitted socket waits for its ClientHello."""
     return closed_within(s, 0.05) is None
+
+
+def closed_at(p, until):
+    """When (monotonic) the server ended Peer `p`'s TLS stream, or None if it is still
+    open at `until`."""
+    s = p.s._s
+    while (left := until - time.monotonic()) > 0:
+        s.settimeout(left)
+        try:
+            if s.recv(1) == b"":
+                return time.monotonic()
+        except TimeoutError:
+            return None
+        except (ConnectionResetError, ssl.SSLError):
+            return time.monotonic()
+    return None
 
 
 def tls(s):
@@ -124,7 +143,8 @@ try:
                N3E_LISTEN=f"127.0.0.1:{listen}", N3E_HEALTH=f"127.0.0.1:{health}",
                N3E_ADMIN_LISTEN=f"127.0.0.1:{admin}", N3E_IP_MAX_CONCURRENT=str(CAP),
                N3E_IP_CONNECT_RATE=str(RATE), N3E_PREAUTH_MAX_SLOTS=str(SLOTS),
-               N3E_PREAUTH_IDLE_MS=str(int(IDLE * 1000)), N3E_TRUSTED_PROXY_CIDRS="::ffff:127.0.0.100")
+               N3E_PREAUTH_IDLE_MS=str(int(IDLE * 1000)), N3E_TRUSTED_PROXY_CIDRS="::ffff:127.0.0.100",
+               N3E_CONNECTION_IDLE_MS=str(int(CONNECTION_IDLE * 1000)))
     run(server_binary, "migrate", env=env)
     run(server_binary, "convert-progression", env={**env, "N3E_TEST_PROGRESSION": "disposable"})
     token = run(server_binary, "admin", "mint", "--name", "ops", "--perm", "realm.*", env=env).stdout.strip()
@@ -353,6 +373,50 @@ try:
     print(f"PASS drain: new socket closed in {took * 1000:.2f} ms with zero bytes; the logged-in client took "
           f"{frames} frames over 30 s; resume admits again")
     peer.s.close()
+
+    # 9. After the handshake (RQ-131), three sessions at once from their own sources:
+    # one whose next frame comes after a 5 s gap keeps going, one whose frame stalls
+    # after its length prefix closes in 2 s, one that sends nothing closes at the
+    # connection idle limit; the server names the last two.
+    settle("open", 0, seconds=IDLE + 2)
+    lines_before = len(log_path.read_text().splitlines())
+    hello = dict(content=content, game=manifest["game_id"], protocol=manifest["protocol_version"])
+    gap = Peer(listen, source="127.0.0.61", **hello)
+    gap_from = time.monotonic()
+    stall = Peer(listen, source="127.0.0.62", **hello)
+    stall.s.sendall(struct.pack(">I", 10) + b"\x01\x02")
+    stall_from = time.monotonic()
+    silent = Peer(listen, source="127.0.0.63", **hello)
+    silent_from = time.monotonic()
+    stalled = closed_at(stall, stall_from + FRAME + 1)
+    assert stalled is not None and FRAME - 0.05 <= stalled - stall_from <= FRAME + 0.3, \
+        (stalled and stalled - stall_from)
+    time.sleep(max(0.0, gap_from + 5 - time.monotonic()))
+    assert not select.select([gap.s], [], [], 0.01)[0], "the session with a 5 s gap was closed"
+    gap.send(7, blob(1, "Gap"))  # unauthenticated: answered with an Error, so it was read
+    tag, data = gap.until(4)
+    assert first(data, 2, b"") == b"authenticate and select character first", data
+    gap_took = time.monotonic() - gap_from
+    ended = closed_at(silent, silent_from + CONNECTION_IDLE + 1)
+    assert ended is not None and CONNECTION_IDLE - 0.1 <= ended - silent_from <= CONNECTION_IDLE + 0.3, \
+        (ended and ended - silent_from)
+    assert not select.select([gap.s], [], [], 0.05)[0], "the session with a 5 s gap was closed"
+    for p in (gap, stall, silent):
+        p.s.close()
+    want = {"127.0.0.62": f"a frame begun but not completed within {FRAME:.0f} s (6 of its 14 bytes)",
+            "127.0.0.63": f"no frame begun for {CONNECTION_IDLE:.0f} s, the connection idle limit"}
+    deadline = time.monotonic() + 5
+    while True:
+        closes = [line for line in log_path.read_text().splitlines()[lines_before:] if "closed by the server" in line]
+        if all(any(f"session from {a} closed by the server: {why}" == line for line in closes)
+               for a, why in want.items()):
+            break
+        assert time.monotonic() < deadline, closes
+        time.sleep(0.05)
+    assert not any("127.0.0.61" in line for line in closes), closes
+    print(f"PASS after the handshake: a frame after a {gap_took:.1f} s gap was read; a frame stalled after "
+          f"its prefix closed in {stalled - stall_from:.3f} s, a silent session in {ended - silent_from:.3f} s "
+          f"(connection idle {CONNECTION_IDLE:.0f} s), each named in the log")
 
     # 2, continued: the burst source is admitted once its window has passed.
     time.sleep(max(0.0, burst + 60.5 - time.monotonic()))

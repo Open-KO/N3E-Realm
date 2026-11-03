@@ -842,11 +842,15 @@ Hud load_hud(const Release &release);
 inline constexpr size_t kFrontEndFile = 64 * 1024 * 1024;
 // title is version 10's (RQ-102); login_closed version 12's (RQ-108): a login
 // screen node drawn only while the login group is not (a login waiting for its
-// answer, and the realm list; render/front_end.h View::visible).
+// answer, and the realm list; render/front_end.h View::visible). Version 13
+// (RQ-109): 1298's select bar, select screen only: its start, create and
+// delete buttons and its three info texts (the character's name, level and
+// class), which a select layout may bind in place of char_info.
 enum class FrontAction : uint32_t {
   none, login, exit, login_group, realm_group, realm_list, realm_connect, notice, select_prev,
   select_next, back, char_info, create_confirm, name_field, char_view, class_desc, progress,
-  version, info, message, ok, title, login_closed, count
+  version, info, message, ok, title, login_closed, select_start, select_create, select_delete,
+  char_name, char_level, char_class, count
 };
 enum class FrontScreen : uint32_t { login, select, create, loading, message, count };
 enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };
@@ -949,6 +953,8 @@ enum class FrontMessage : uint32_t {
   create_name,        // create with an empty name
   create_refused,     // the realm refused a create
   select_refused,     // the realm refused a select
+  create_full,        // version 13: create with no empty slot (1298's btn_create)
+  delete_disabled,    // version 13: delete, which the realm does not offer (1298's btn_delete)
   count
 };
 struct FrontMessageText {

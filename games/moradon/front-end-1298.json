@@ -20,22 +20,20 @@
       "hidden": ["Img_Daum", "Img_MGame", "Text_Rights", "premium", "Group_Notice_1", "Group_Notice_2", "Group_Notice_3"]
     },
     "select": {
-      "ui": "UI_US/ka_characterselect_us.uif",
-      "place": "origin",
-      "moves": [
-        {"node": "bt_left", "x": {"middle": -100, "ratio": -26, "edge": "end"}, "bottom": 10},
-        {"node": "bt_right", "x": {"middle": 100, "ratio": 26}, "bottom": 10},
-        {"node": "bt_exit", "x": "centre", "bottom": 10},
-        {"node": "bt_back", "x": "centre", "above": ["bt_exit", 10]}
-      ],
+      "ui": "UI_US/co_CharacterSelect_us.uif",
+      "place": {"bottom": 10},
       "bindings": {
-        "text00": "char_info",
-        "bt_left": "select_prev",
-        "bt_right": "select_next",
-        "bt_back": "back",
-        "bt_exit": "exit"
-      },
-      "hidden": ["bt_delete"]
+        "btn_start": "select_start",
+        "btn_create": "select_create",
+        "btn_delete": "select_delete",
+        "btn_back": "back",
+        "btn_exit": "exit",
+        "btn_left": "select_prev",
+        "btn_right": "select_next",
+        "str_id": "char_name",
+        "str_lev": "char_level",
+        "str_job": "char_class"
+      }
     },
     "create": {
       "ui": "UI_US/Ka_CharacterCreate_us.uif",
@@ -91,6 +89,10 @@
       "place": "centre",
       "bindings": {"text_msg": "message", "btn_ok": "ok"}
     }
+  },
+  "messages": {
+    "create_full": {"text": {"table": "Data/Texts_us.tbl", "row": 7675}},
+    "delete_disabled": {"text": {"table": "Data/Texts_us.tbl", "row": 1501}}
   },
   "strings": {
     "select_info": "Level: {level}\nSpecialty: {class}\nID: {name}",

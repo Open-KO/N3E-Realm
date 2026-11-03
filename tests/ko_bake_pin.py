@@ -360,9 +360,16 @@ CLIENT = Path("assets/ko")
 # index change. Default features 0443e894... -> 94dcf450...; classic
 # e616f08b... -> 69b24c2a...; 1097 4a8ebcac... -> ffe2e20c.... The plain cooks
 # and the homelands keep their pins.
+# RQ-109 (KO-FINDINGS 9.6) changed the three --features pins: front-end.bin is
+# N3FE version 13 (1298's select bar actions and two messages, which the 1097
+# recipe does not bind). Against the earlier cooks only front-end.bin's version
+# word (53,802,056 bytes, one byte differs), recipe.json and the release index
+# change. Default features 94dcf450... -> 193b84d4...; classic 69b24c2a... ->
+# 699a2b8b...; 1097 ffe2e20c... -> 94be4cc7.... The plain cooks and the
+# homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "94dcf450d0f85c551ac37a75b97b6f63c07d3d7fd2c4392b20baa2265c4d9c6b"),
+    "features": (["--features"], "193b84d45bbf436fa5aed939b350113736769732b839a3095e87c364684f5dbd"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -383,13 +390,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "69b24c2a0036c38d5d4fc2044d67c4e129120b543fcc487f4d445d8e63df59ab"),
+    "features": (["--features"], "699a2b8b58d7d5ae5aea6d3652494f3464158fb78c6156a1493472c1bc5f208b"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "ffe2e20cf0d6d9718aeedf2d115f7601bd5530f6d488a680f5eb76c623219f64"),
+    "features": (["--features"], "94be4cc701a3ddccc19992657b21aed7771e75190f44211bbc969eaefbb93bd4"),
 }
 
 

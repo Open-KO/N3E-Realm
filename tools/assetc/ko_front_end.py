@@ -15,8 +15,10 @@ present or absent as the recipe's `logo` says, and (version 10) each message
 box message's title and wording (RQ-102, Q81), from the recipe's `messages`:
 a KO text-table row or the recipe's own string, and (version 11) where each
 layout's nodes go at a window's own size, as KO's UI code places them by the
-viewport (RQ-106, Q82), and (version 12) the action `login_closed`, a node
-drawn only while the login group is not (1264's SetVisibleLogInUIs, RQ-108).
+viewport (RQ-106, Q82), (version 12) the action `login_closed`, a node
+drawn only while the login group is not (1264's SetVisibleLogInUIs, RQ-108),
+and (version 13) 1298's select bar's actions, its start, create and delete
+buttons and its three info texts, with two messages (RQ-109).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -47,7 +49,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 12
+VERSION = 13
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -93,11 +95,23 @@ UIF_KINDS = {0: "group", 1: "button", 3: "progress", 4: "image", 6: "text", 8: "
 # shows Text_Rights.
 ACTIONS = ("", "login", "exit", "login_group", "realm_group", "realm_list", "realm_connect", "notice",
            "select_prev", "select_next", "back", "char_info", "create_confirm", "name_field", "char_view",
-           "class_desc", "progress", "version", "info", "message", "ok", "title", "login_closed")
+           "class_desc", "progress", "version", "info", "message", "ok", "title", "login_closed",
+           "select_start", "select_create", "select_delete", "char_name", "char_level", "char_class")
+# Version 13 (RQ-109, specs/KO-FINDINGS.md 9.6): 1298's select bar
+# (co_CharacterSelect_us.uif, its ReceiveMessage 00607160): `select_start`
+# (btn_start, 005ff870: the centre click's start), `select_create` (btn_create,
+# 005ff920: create in the first empty slot, or KO's message when there is
+# none), `select_delete` (btn_delete: KO's "deletion disabled" message for a
+# character at rest) and the info texts its 006074c0 fills: `char_name`
+# (str_id), `char_level` (str_lev, "%d") and `char_class` (str_job).
+SELECT_ONLY = ("select_start", "select_create", "select_delete", "char_name", "char_level", "char_class")
 # Actions bound on one screen only (the others never draw or use them).
-ONLY_ON = {"login_closed": "login"}
+ONLY_ON = {"login_closed": "login", **{a: "select" for a in SELECT_ONLY}}
+# The select's info text: 1097's and 1264's one text00 (char_info), or any of
+# 1298's three (version 13); a select layout binds at least one.
+INFO_TEXTS = {"char_info", "char_name", "char_level", "char_class"}
 REQUIRED = {"login": {"login", "exit", "login_group", "realm_group", "realm_list", "realm_connect"},
-            "select": {"select_prev", "select_next", "back", "exit", "char_info"},
+            "select": {"select_prev", "select_next", "back", "exit"},
             "create": {"create_confirm", "back", "name_field", "char_view"},
             "loading": {"progress"},
             "message": {"message", "ok"}}
@@ -162,7 +176,7 @@ UI_SCALE = {"native": 0, "window": 1}
 # message screen's node bound to `title`) and a `text` replacing the client's
 # own wording, each a string or a KO text-table row ({"table", "row"}).
 MESSAGES = ("connect_failed", "disconnected", "login", "login_blocked", "login_unavailable", "create_name",
-            "create_refused", "select_refused")
+            "create_refused", "select_refused", "create_full", "delete_disabled")
 # A KO text table's columns (Data/Texts_us.tbl: the row id and its text; the
 # 1264 and 1298 clients' tables have these types).
 TEXT_TYPES = [6, 7]
@@ -649,9 +663,16 @@ def place(root, rule):
     (CGameProcCharacterSelect::Init's SetPos(0, 0)); `centre`
     (CN3UIBase::SetPosCenter, CUICharacterCreate::Load, MessageBoxPost);
     `bottom`, centred on the bottom edge (CGameProcLogIn_1098::Init: 1264
-    005bde22-005bde3b, 1097 00524147-00524165)."""
+    005bde22-005bde3b, 1097 00524147-00524165); {"bottom": N}, centred with
+    its bottom edge N pixels above the window's (1298's select bar,
+    co_CharacterSelect_us.uif's Load 00606c10: ((W - w) >> 1, H - 10 - h),
+    006070bd-0060710a)."""
     x0, y0, x1, y1 = root["rect"]
     w, h = x1 - x0, y1 - y0
+    if type(rule) is dict:
+        if set(rule) != {"bottom"}:
+            raise ValueError("front-end placement %r" % rule)
+        return centred(w), axis(LINEAR, 1.0, -offset(rule["bottom"]) - h)
     if rule == "origin":
         return axis(LINEAR), axis(LINEAR)
     if rule == "centre":
@@ -868,6 +889,8 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None):
     found = {}
     emit(root, None, 15, 0)
     missing = REQUIRED.get(name, set()) - seen
+    if name == "select" and not INFO_TEXTS & seen:
+        missing = missing | {"char_info"}
     if missing:
         raise ValueError("front-end %s: unbound %s" % (name, sorted(missing)))
     data = u(len(nodes)) + b"".join(nodes)

@@ -8,6 +8,11 @@
 //   FRONT_SHOT name=N size=WxH path=P rect=x0,y0,x1,y1 drawn=intro|hall|create:x0,y0,x1,y1;... origin=X,Y,S
 // then the select's buttons where the select placed them (RQ-106):
 //   FRONT_PLACED select_prev=x0,y0,x1,y1 select_next=... back=... exit=...
+// then (RQ-109), for a select that binds 1298's bar (front-end-1298.json), its
+// other buttons and its info texts where the select placed them, and a select
+// of no character (the shot select-0, its info texts empty):
+//   FRONT_SELECT_BAR select_start=x0,y0,x1,y1 select_create=... select_delete=...
+//     char_name=... char_level=... char_class=...
 // then (RQ-108) whether the login layout's login group, realm group and
 // login_closed node draw at rest, with a login under way and on the realm
 // list, each 0 or 1:
@@ -88,6 +93,19 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     if (r) std::cout << int((*r)[0]) << "," << int((*r)[1]) << "," << int((*r)[2]) << "," << int((*r)[3]);
   }
   std::cout << std::endl;
+  if (front->action_rect(A::char_name, width, height)) {
+    std::cout << "FRONT_SELECT_BAR";
+    for (const auto &[label, action] :
+         {std::pair{"select_start", A::select_start}, std::pair{"select_create", A::select_create},
+          std::pair{"select_delete", A::select_delete}, std::pair{"char_name", A::char_name},
+          std::pair{"char_level", A::char_level}, std::pair{"char_class", A::char_class}}) {
+      const auto r = front->action_rect(action, width, height);
+      std::cout << " " << label << "=";
+      if (r) std::cout << int((*r)[0]) << "," << int((*r)[1]) << "," << int((*r)[2]) << "," << int((*r)[3]);
+    }
+    std::cout << std::endl;
+    shot("select-0", Screen::select, 0, "Local Realm", 0, A::char_name, "");
+  }
   std::cout << "FRONT_LOGIN";
   for (const auto &[label, screen, waiting] :
        {std::tuple{"idle", Screen::login, false}, std::tuple{"waiting", Screen::login, true},

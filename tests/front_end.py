@@ -295,6 +295,13 @@ problems = {
                                                        button("bt_exit"), text("text00"), text("rights")])[1]},
         specs={**{n: spec(n) for n in fe.SCREENS},
                "select": spec("select", bindings={**BINDINGS["select"], "rights": "login_closed"})}),
+    # RQ-109 (version 13): a select binds an info text (char_info or any of
+    # 1298's three), and 1298's bar actions are the select's only.
+    "select without an info text": dict(specs={**{n: spec(n) for n in fe.SCREENS},
+                                               "select": spec("select", hidden=["text00"])}),
+    "select bar action off the select": dict(specs={**{n: spec(n) for n in fe.SCREENS},
+                                                    "login": spec("login", bindings={**BINDINGS["login"],
+                                                                                     "notice": "char_name"})}),
     "edit with two strings": dict(trees={**trees, "create.uif": node(0, "root", [
         button("btn_create"), button("btn_cancel"), node(8, "edit_name", [text(""), text("")]),
         node(9, "area_character")])[1]}),
@@ -314,6 +321,31 @@ try:
 except ValueError as error:
     assert str(error) == "front-end screens", error
 print("PASS front-end cook: five synthetic screens, %d refusals and a missing screen" % len(problems))
+
+# RQ-109 (version 13, KO-FINDINGS 9.6): 1298's select bar, its start, create
+# and delete buttons and its three info texts in place of char_info.
+BAR_BINDINGS = {"btn_start": "select_start", "btn_create": "select_create", "btn_delete": "select_delete",
+                "btn_back": "back", "btn_exit": "exit", "btn_left": "select_prev", "btn_right": "select_next",
+                "str_id": "char_name", "str_lev": "char_level", "str_job": "char_class"}
+
+
+def bar_tree(info=("str_id", "str_lev", "str_job")):
+    return node(0, "root", [button(b) for b in ("btn_create", "btn_start", "btn_delete", "btn_back", "btn_exit",
+                                                "btn_left", "btn_right")] + [text(t) for t in info])[1]
+
+
+def bar(info=("str_id", "str_lev", "str_job")):
+    """The synthetic screens with a 1298 bar for the select."""
+    bindings = {k: v for k, v in BAR_BINDINGS.items() if not k.startswith("str_") or k in info}
+    return cook_screens(trees={**trees, "select.uif": bar_tree(info)},
+                        specs={**{n: spec(n) for n in fe.SCREENS}, "select": spec("select", bindings=bindings)})[0]
+
+
+bar_screens = bar()
+assert struct.unpack_from("<I", bar_screens[1])[0] == 1 + 7 * 6 + 3, struct.unpack_from("<I", bar_screens[1])
+for info in (("str_id",), ("str_lev",), ("str_job",)):
+    bar(info)
+print("PASS front-end cook: 1298's select bar, its info texts in place of char_info")
 
 
 # RQ-084: a layout from another input (`<name>:<path>`) reads its textures from
@@ -742,7 +774,7 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=12, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=13, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
          logo=u(0), messages=u(0), placement=NO_PLACEMENT):
@@ -913,7 +945,8 @@ def message_raw(*entries, count=None):
 MESSAGE_CASES = {
     "ok-messages": blob(messages=MESSAGES_OK),
     "ok-messages-every": blob(messages=message_raw(*((k, "t", 0, "") for k in range(len(fe.MESSAGES))))),
-    "bad-messages-nine": blob(messages=message_raw(*((k % len(fe.MESSAGES), "t", 0, "") for k in range(9)))),
+    "bad-messages-over": blob(messages=message_raw(*((k % len(fe.MESSAGES), "t", 0, "")
+                                                     for k in range(len(fe.MESSAGES) + 1)))),
     "bad-message-kind": blob(messages=message_raw((len(fe.MESSAGES), "t", 0, ""))),
     "bad-message-twice": blob(messages=message_raw((1, "t", 0, ""), (1, "u", 0, ""))),
     "bad-message-replaces": blob(messages=message_raw((1, "t", 2, ""))),
@@ -1034,15 +1067,32 @@ PLACE_SPECS = {
 }
 
 
-def cook_placed(specs=PLACE_SPECS, trees=PLACE_TREES):
+# RQ-109 (KO-FINDINGS 9.6): 1298's select bar at co_CharacterSelect_us.uif's
+# rects, 1024 x 113, and front-end-1298.json's placement of it.
+BAR_PLACE_TREE = frame("root", 0, (0, 0, 1024, 113), [
+    frame("btn_create", 1, (28, 57, 178, 91)), frame("btn_start", 1, (233, 57, 383, 91)),
+    frame("btn_delete", 1, (435, 56, 585, 90)), frame("btn_back", 1, (645, 56, 795, 90)),
+    frame("btn_exit", 1, (846, 56, 996, 90)), frame("str_id", 6, (431, 23, 629, 40)),
+    frame("str_lev", 6, (158, 24, 184, 40)), frame("str_job", 6, (760, 25, 918, 41)),
+    frame("btn_left", 1, (27, 23, 64, 41)), frame("btn_right", 1, (958, 23, 995, 41))])[1]
+BAR_PLACE_SPEC = {"place": {"bottom": 10}}
+
+
+def cook_placed(specs=PLACE_SPECS, trees=PLACE_TREES, bindings=PLACE_BINDINGS):
     assets = Fixture(trees)
     textures, fonts, placements = fe.Textures(assets), {}, []
-    data = [fe.screen(n, {"ui": n + ".uif", "bindings": dict(PLACE_BINDINGS[n]), **specs[n]}, assets, textures,
+    data = [fe.screen(n, {"ui": n + ".uif", "bindings": dict(bindings[n]), **specs[n]}, assets, textures,
                       fonts, placements=placements) for n in fe.SCREENS]
     return data, placements
 
 
-def ko_rects(width, height):
+def cook_placed_bar(specs=None):
+    specs = specs or {**PLACE_SPECS, "select": BAR_PLACE_SPEC}
+    return cook_placed(specs, {**PLACE_TREES, "select.uif": BAR_PLACE_TREE},
+                       {**PLACE_BINDINGS, "select": BAR_BINDINGS})
+
+
+def ko_rects(width, height, bar=False):
     """KO's own placements of the layouts above at a viewport, written from the
     binaries (KO-FINDINGS 9.3), each node's top-left: 1264's login Init
     (005bde22: ((W - w) >> 1, H - h)), its server list tick (005c25b0:
@@ -1068,6 +1118,12 @@ def ko_rects(width, height):
         "loading": {"root": (centre(width, 678), centre(height, 433)), "Text_Version": (10, 10),
                     "Progress_Loading": (centre(width, 678) + 366, centre(height, 433) + 398)},
         "message": {"root": ((width - 327) >> 1, (height - 156) >> 1)},
+        # RQ-109: 1298's select bar (00606c10: its root at ((W - w) >> 1,
+        # H - 10 - h), 006070bd-0060710a), its nodes carried with it.
+        **({"select": {ident: (((width - 1024) >> 1) + x, height - 10 - 113 + y) for ident, (x, y) in (
+            ("root", (0, 0)), ("btn_create", (28, 57)), ("btn_start", (233, 57)), ("btn_delete", (435, 56)),
+            ("btn_back", (645, 56)), ("btn_exit", (846, 56)), ("str_id", (431, 23)), ("str_lev", (158, 24)),
+            ("str_job", (760, 25)), ("btn_left", (27, 23)), ("btn_right", (958, 23)))}} if bar else {}),
     }
 
 
@@ -1076,35 +1132,61 @@ placed_screens, placements = cook_placed()
 # KO's at 1024 x 768 (1264's select: bt_right at 638, exit and back at 412).
 canvas_rects = ko_rects(1024, 768)
 assert len(placements) == 5 and [struct.unpack_from("<I", p)[0] for p in placements] == [3, 5, 1, 2, 1], placements
-PLACED_NODES = {n: {} for n in fe.SCREENS}
-for n, data in zip(fe.SCREENS, placed_screens):
-    at = 4
-    for i in range(struct.unpack_from("<I", data)[0]):
-        rect = struct.unpack_from("<4f", data, at + 8)
-        length = struct.unpack_from("<I", data, at + 24)[0]
-        ident = data[at + 28:at + 28 + length].decode() or ("root" if i == 0 else "")
-        if ident and ident not in PLACED_NODES[n]:
-            PLACED_NODES[n][ident] = (i, rect)
-        at = fe.node_end(data, at)
+
+
+def placed_nodes(screens):
+    """{screen: {id: (index, canvas rect)}} of the named nodes (and the root)."""
+    out = {n: {} for n in fe.SCREENS}
+    for n, data in zip(fe.SCREENS, screens):
+        at = 4
+        for i in range(struct.unpack_from("<I", data)[0]):
+            rect = struct.unpack_from("<4f", data, at + 8)
+            length = struct.unpack_from("<I", data, at + 24)[0]
+            ident = data[at + 28:at + 28 + length].decode() or ("root" if i == 0 else "")
+            if ident and ident not in out[n]:
+                out[n][ident] = (i, rect)
+            at = fe.node_end(data, at)
+    return out
+
+
+PLACED_NODES = placed_nodes(placed_screens)
 for n, want in canvas_rects.items():
     for ident, xy in want.items():
         assert PLACED_NODES[n][ident][1][:2] == xy, (n, ident, PLACED_NODES[n][ident], xy)
+# RQ-109: the 1298 bar's one move, its root's, at the canvas: 10 px above the
+# bottom edge, centred (1298's 00606c10).
+bar_placed_screens, bar_placements = cook_placed_bar()
+assert bar_placements[1] == u(1) + u(0) + u(fe.LINEAR) + f([0.5, -512]) + u(fe.LINEAR) + f([1, -123]), \
+    bar_placements[1]
+assert bar_placements[:1] + bar_placements[2:] == placements[:1] + placements[2:]
+BAR_PLACED_NODES = placed_nodes(bar_placed_screens)
+for ident, xy in ko_rects(1024, 768, bar=True)["select"].items():
+    assert BAR_PLACED_NODES["select"][ident][1][:2] == xy, (ident, BAR_PLACED_NODES["select"][ident], xy)
 # Both Moradon recipes place their layouts as PLACE_SPECS does, so the loader's
 # checks below (KO's placements at 1024x768, 1280x1024, 1600x1200 and
 # 1281x1025) hold for each, but for the copyright line, which only the 1097
 # choice places and shows as 1264 does (RQ-108); 1298's login has none
-# (RQ-110, KO-FINDINGS 9.5), so its recipe hides it. The 1298 recipe cooks the pinned tree's
-# ka_characterselect_us.uif, byte for byte 1264's, which 1298's binary never
-# places (its select is co_CharacterSelect_us.uif, KO-FINDINGS 9.3), so it takes
-# 1264's code too; a move without its x would keep the 1024-wide x on a wider
-# window.
+# (RQ-110, KO-FINDINGS 9.5), so its recipe hides it; and for the select, which
+# in the 1298 recipe is 1298's own bar (co_CharacterSelect_us.uif, RQ-109,
+# KO-FINDINGS 9.6), placed as 1298's 00606c10 places it; a move without its x
+# would keep the 1024-wide x on a wider window.
 PLACE_SPECS_1298 = {**PLACE_SPECS, "login": {"place": "bottom",
-                                             "moves": [{"node": "Group_ServerList", "x": 0, "y": 0}]}}
+                                             "moves": [{"node": "Group_ServerList", "x": 0, "y": 0}]},
+                    "select": BAR_PLACE_SPEC}
 for recipe, want in (("front-end.json", PLACE_SPECS), ("front-end-1298.json", PLACE_SPECS_1298)):
     recipe_screens = json.loads((ROOT / "games/moradon" / recipe).read_text())["screens"]
     specs = {n: {k: v for k, v in recipe_screens[n].items() if k in ("place", "moves")} for n in fe.SCREENS}
     assert specs == want, (recipe, specs)
-    assert cook_placed(specs)[1][1:] == placements[1:], recipe
+    if recipe == "front-end.json":
+        assert cook_placed(specs)[1][1:] == placements[1:], recipe
+    else:
+        assert cook_placed_bar(specs)[1][1:] == bar_placements[1:], recipe
+# The 1298 recipe binds 1298's bar as its ReceiveMessage (00607160) and info
+# fill (006074c0) use it, its delete button included, and draws all of it.
+select_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text())["screens"]["select"]
+assert select_1298["ui"] == "UI_US/co_CharacterSelect_us.uif" and select_1298["bindings"] == BAR_BINDINGS, \
+    select_1298
+assert not select_1298.get("hidden") and not select_1298.get("moves"), select_1298
 # The 1097 choice binds the line it places to login_closed (RQ-108).
 assert json.loads((ROOT / "games/moradon/front-end.json").read_text())["screens"]["login"]["bindings"][
     "Text_Rights"] == "login_closed"
@@ -1113,6 +1195,8 @@ login_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text()
 assert "Text_Rights" in login_1298["hidden"] and "login_closed" not in login_1298["bindings"].values(), login_1298
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
+    "a bottom placement of another key": {**PLACE_SPECS, "message": {"place": {"bottom": 10, "x": 1}}},
+    "a bottom placement of no number": {**PLACE_SPECS, "message": {"place": {"bottom": "10"}}},
     "an unknown move key": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "z": 1}]}},
     "two y rules": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "y": 1,
                                                                              "bottom": 2}]}},
@@ -1142,7 +1226,7 @@ for reason, specs in placement_problems.items():
 hidden = cook_placed({**PLACE_SPECS, "loading": {**PLACE_SPECS["loading"], "hidden": ["Text_Version"]}})[1]
 assert hidden[3] == u(1) + u(0) + u(fe.LINEAR) + f([0.5, -339]) + u(fe.LINEAR) + f([0.5, -216.5]), hidden[3]
 print("PASS front-end placement cook: KO's placements at the canvas, the 1097 and 1298 recipes' the same "
-      "but for the 1097 choice's copyright line, %d refusals" % len(placement_problems))
+      "but for the 1097 choice's copyright line and 1298's own select bar, %d refusals" % len(placement_problems))
 PLACEMENT_OK = u(0) + b"".join(placements) + u(0)
 SIZES = ((1024, 768), (1280, 1024), (1600, 1200), (1281, 1025), (800, 600))
 
@@ -1159,6 +1243,7 @@ NAN = struct.unpack("<f", struct.pack("<I", 0x7FC00000))[0]
 PLACEMENT_CASES = {
     "ok-placed": blob(screen_data=placed_screens, placement=PLACEMENT_OK),
     "ok-placed-scaled": blob(screen_data=placed_screens, placement=u(1) + PLACEMENT_OK[4:]),
+    "ok-placed-bar": blob(screen_data=bar_placed_screens, placement=u(0) + b"".join(bar_placements) + u(0)),
     "ok-placement-keep": blob(placement=moves_raw((1, (fe.KEEP, 0, 0), (fe.KEEP, 0, 0)))),
     "bad-placement-flags": blob(placement=u(2) + NO_PLACEMENT[4:]),
     "bad-placement-missing": blob(placement=b""),
@@ -1205,6 +1290,29 @@ def rights(screen):
         return cook_screens(trees=trees, specs=specs)[0]
     finally:
         fe.ONLY_ON.update(saved)
+
+
+# RQ-109 (version 13): screens the cook refuses, cooked without its checks
+# for the loader's own: a bar action on the login, and a select of no info text.
+def bar_off_select():
+    specs = {n: spec(n) for n in fe.SCREENS}
+    specs["login"]["bindings"]["notice"] = "select_start"
+    saved = dict(fe.ONLY_ON)
+    fe.ONLY_ON.clear()
+    try:
+        return cook_screens(specs=specs)[0]
+    finally:
+        fe.ONLY_ON.update(saved)
+
+
+def no_info():
+    saved = set(fe.INFO_TEXTS)
+    fe.INFO_TEXTS.add("exit")
+    try:
+        return cook_screens(specs={**{n: spec(n) for n in fe.SCREENS}, "select": spec("select", hidden=["text00"])})[0]
+    finally:
+        fe.INFO_TEXTS.clear()
+        fe.INFO_TEXTS.update(saved)
 
 
 cases = {
@@ -1261,6 +1369,13 @@ cases = {
     "bad-version-11": blob(version=11),
     "ok-login-closed": blob(screen_data=rights("login")),
     "bad-login-closed-off-login": blob(screen_data=rights("select")),
+    # RQ-109 (version 13): 1298's select bar, its info texts in place of
+    # char_info; its actions on the select only, and an info text there.
+    "bad-version-12": blob(version=12),
+    "ok-select-bar": blob(screen_data=bar_screens),
+    "ok-select-bar-name": blob(screen_data=bar(("str_id",))),
+    "bad-select-bar-off-select": blob(screen_data=bar_off_select()),
+    "bad-select-no-info": blob(screen_data=no_info()),
     "ok-textures-256": blob(more_textures=256 - len(textures.list) - 1),
     "bad-textures-257": blob(more_textures=257 - len(textures.list) - 1),
     "ok-zone": blob(hall=0, zone=u(3) + zone_mesh() + zone_mesh(fe.CUT_ZERO | fe.UNLIT) +
@@ -1352,6 +1467,11 @@ try:
     # RQ-108: login_closed off the login screen, for that reason.
     line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-login-closed-off-login:"))
     assert "login_closed off the login" in line, line
+    # RQ-109: a bar action off the select, and a select of no info text.
+    line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-select-bar-off-select:"))
+    assert "select action off the select" in line, line
+    line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-select-no-info:"))
+    assert "front end screen action unbound" in line, line
     # RQ-102: the loaded messages, by FrontMessage index; the message refusals
     # are the section's own.
     worded = [l for l in run.stdout.splitlines() if l.startswith("message ok-messages: ")]
@@ -1392,7 +1512,20 @@ try:
                     assert got[:2] == ko and got[2] - got[0] == rect[2] - rect[0], (n, ident, width, got, ko)
                     checked += 1
     assert checked == 4 * sum(len(v) for v in ko_rects(1024, 768).values()), checked
+    # RQ-109: 1298's select bar where 1298's 00606c10 puts it at each size.
+    bar_checked = 0
+    for width, height in SIZES:
+        if width < 1024:
+            continue
+        for ident, (index, rect) in BAR_PLACED_NODES["select"].items():
+            got = placed[("ok-placed-bar", 1, width, height, index)]
+            ko = ko_rects(width, height, bar=True)["select"].get(ident)
+            if ko is not None:
+                assert got[:2] == ko and got[2] - got[0] == rect[2] - rect[0], (ident, width, got, ko)
+                bar_checked += 1
+    assert bar_checked == 4 * len(ko_rects(1024, 768, bar=True)["select"]), bar_checked
     print("PASS front-end placement: %d nodes where KO's code puts them at 1024x768, 1280x1024, 1600x1200 and "
-          "1281x1025, the canvas scaled at 800x600 and with the scale flag" % checked)
+          "1281x1025, the canvas scaled at 800x600 and with the scale flag; 1298's select bar's %d nodes "
+          "where 1298 puts them" % (checked, bar_checked))
 finally:
     shutil.rmtree(work)

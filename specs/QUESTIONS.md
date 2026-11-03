@@ -1076,3 +1076,25 @@ wait (up to 5 minutes; ESC cancels, and the realm's message boxes still show), w
 **Decided (maintainer, 2026-11-02):** (a), "Hide the bar, as 1298": under the 1298
 recipe the bar is hidden for the whole login and nothing takes its place, ESC
 cancelling; one rule for every front end.
+
+### Q87 — The 1298 recipe's select bar where the realm differs from 1298
+
+RQ-109 read 1298's select bar (KO-FINDINGS §9.6) and the 1298 recipe (not offered)
+now draws it at 1298's place with its Start, Create and Delete buttons and its info
+texts (N3FE version 13). Three of its buttons and its arrows do what the realm's
+other selects do, not what 1298 does:
+- **Exit.** 1298 asks "Are you sure you want to exit?" (row 1502) with Yes and No
+  (`MB_YESNO`, `BEHAVIOR_EXIT`); the realm's message box has one button, so Exit
+  leaves at once, as the 1097 choice's does.
+- **Back.** 1298 disconnects and returns to its login with the flag that connects
+  and opens the server list at once (`005f6bca`–`005f6c05`), so its Back lands on the
+  server list; the realm's Back drops the connection and returns to the login.
+- **The arrows.** 1298 never hides one arrow; at the end of the row its click does
+  nothing. The realm hides the arrow with no neighbour, for every layout.
+- **Create from an occupied slot.** 1298 flies the camera to the first empty slot
+  (`ka_left_right`, `ka_right_left` among its paths) while its in-select create
+  opens; the realm puts the camera on that slot and opens its own create screen.
+**Default taken (RQ-109):** keep the realm's behaviour for all four, as package data
+cannot yet say otherwise; each 1298 behaviour is a client change (a yes/no message
+box, a Back that opens the realm list, an arrow rule per layout, the two uncooked
+paths) and is proposed as its own item.

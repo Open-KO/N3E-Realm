@@ -18,8 +18,10 @@ ko-assets:
 # The realm's package (specs/10-content.md): the Moradon bake, zone key 210, with the
 # games/moradon feature set, from the pinned client tree and the front-end choice's
 # inputs (games/moradon/front-ends.json: the pinned 1264 install, RQ-085). Prints the package hash.
+# tools/assetc/realm_assets.py stamps it with the hash of the tree inputs it was baked
+# from (build/packages/moradon.inputs), so make test-fast bakes it again only when they change.
 realm-assets: ko-assets
-	python tools/assetc/ko_bake.py 210 --features --into=build
+	python tools/assetc/realm_assets.py --always
 codegen:
 	mkdir -p build/generated
 	protoc -I protocol --cpp_out=build/generated protocol/wire.proto
@@ -37,6 +39,9 @@ test-fast:
 	$(MAKE) client
 	$(MAKE) server
 	$(MAKE) assets
+# tests/npc_reference.py reads build/packages/moradon with this tree's readers: bake
+# it again when the cook or its recipes changed since (nothing without the KO data).
+	python tools/assetc/realm_assets.py
 	python tools/assetc/main.py tests/fixtures/legacy-demo build/packages/legacy-demo
 	python tests/player_build.py
 	python tests/client_launchers.py

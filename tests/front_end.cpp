@@ -21,6 +21,7 @@
 #include "assets/front_place.h"
 #include "render/front_login.h"
 #include "render/front_logo.h"
+#include "render/select_bar.h"
 #include "render/select_hall.h"
 #include "render/select_path.h"
 #include "render/select_turn.h"
@@ -351,6 +352,30 @@ int main(int argc, char **argv) {
     }
     std::cout << "PASS login states: the bar at rest and hidden while a login is under way, KO's line instead "
                  "then and on the realm list\n";
+  }
+  {
+    // RQ-109 (KO-FINDINGS 9.6, 1298 005ff920, 00607160): btn_create takes the
+    // slot in focus when it is empty, else the first empty one, else none
+    // (KO's row 7675); btn_delete posts its box only for a character in
+    // focus at rest.
+    struct Want { int focus, shown, slots, slot; };
+    for (const auto &w : {Want{0, 0, 3, 0}, Want{1, 1, 3, 1}, Want{2, 1, 3, 2}, Want{0, 1, 3, 1},
+                          Want{1, 2, 3, 2}, Want{2, 2, 3, 2}, Want{0, 3, 3, -1}, Want{2, 3, 3, -1},
+                          Want{0, 1, 1, -1}, Want{0, 0, 1, 0}}) {
+      const int slot = n3e::front::select_create_slot(w.focus, w.shown, w.slots);
+      if (slot != w.slot) {
+        std::cerr << "FAIL select bar: create from slot " << w.focus << " with " << w.shown << " of " << w.slots
+                  << ": slot " << slot << ", want " << w.slot << "\n";
+        return 1;
+      }
+    }
+    if (!n3e::front::select_delete_posts(0, 1, true) || n3e::front::select_delete_posts(1, 1, true) ||
+        n3e::front::select_delete_posts(0, 1, false) || n3e::front::select_delete_posts(0, 0, true)) {
+      std::cerr << "FAIL select bar: delete's box\n";
+      return 1;
+    }
+    std::cout << "PASS select bar: 1298's create takes the slot in focus or the first empty one, or none when "
+                 "all are taken; its delete box only for a character at rest\n";
   }
   int loaded = 0, refused = 0;
   for (int i = 1; i + 1 < argc; i += 2) {

@@ -440,7 +440,7 @@ per screen. A choice can be offered only when every row it needs is data:
 | | Data today | Not yet |
 |---|---|---|
 | Login scene | the 1098 scene (1097's): camera, lights, the model's one clip and plugs, the moon quad | 1298's UIF intro (`ka_login_intro_us.uif`, wrapped UVs; spec 11 left it out), 2145's `re_login_intro`, Steam's intro procs |
-| Layouts | UIF trees `ko_hud.parse` reads (1298's and 1264's, the same files; 2145's `co_login`, `ka_characterselect`), bindings, moves, hidden, states, a string's text; a state image's own children (1264's message box labels, §9.2; client behaviour, no format change) | 1097's UIF version; the 2145 versions it refuses; Steam's pack; a loading layout chosen at run time by the last war's victor (Q80) |
+| Layouts | UIF trees `ko_hud.parse` reads (1298's and 1264's, the same files; 2145's `co_login`, `ka_characterselect`), bindings, moves, hidden, states, a string's text; a state image's own children (1264's message box labels, §9.2; client behaviour, no format change); since version 13 (RQ-109, §9.6) 1298's select bar, `co_CharacterSelect_us.uif`, with its start, create and delete buttons and three info texts | 1097's UIF version; the 2145 versions it refuses; Steam's pack; a loading layout chosen at run time by the last war's victor (Q80) |
 | Select hall | meshes, lights, slots, the turn about `at` with per-slot ends, the spot's rate, front/start/rest clips with blend times, plugs; since version 6 (RQ-086) the front-clip mode, 1097's hover or 1298's loop, and as recipe data 1298's per-race joint and clips with the default looks (§8.3); since version 7 (RQ-087) the path turn mode with 1298's recorded `.n3camera` paths, its select UI hidden while they play, and as recipe data its slots and spots (§8.4); since version 8 (RQ-095) a zone as the hall, 1298's `karus_intro` (its terrain, static shapes and alpha parts), and the camera's fog | the zone's sky, light maps, grass, birds and animated shapes (Q79); each slot's own looks (RQ-005); 2145's `.n3anim` format (convertible: `anim_2145.to_1298`) |
 | Music | MPEG-1/2 Layer III tracks per screen, looping or once (1298's `Intro_Sound.mp3`); since version 5 (RQ-083) 16-bit PCM tracks and a restart period (1097's `bgm_login.wav` every 21.66 s, `bgm_el_battle.wav` looping); RQ-096 carried the period's clock for the process, 1097's and 1264's login timer (Q75, §9.1; client behaviour, no format change), off by default since RQ-105 (Q75 (a): every entry starts the track at once) | Ogg Vorbis (2145, Steam) |
 | Sounds | a sound-table id bound in `audio.bin` (1097's turn sound 2501) | 2145's Ogg `char_select_turn.ogg` |
@@ -459,7 +459,8 @@ the camera paths, 1298's hall and slots and its UIF intro are not. *RQ-087:* the
 camera paths, the UI hidden while they play, and 1298's slots and spots are data
 (N3FE version 7, §8.4); 1298's hall (the `karus_intro` zone) and its UIF intro are
 not. *RQ-095:* the `karus_intro` zone and the camera's fog are data (N3FE version
-8, §8.4), its sky not yet (Q79); the UIF intro is not. A "2145" choice needs a reader for its UIF versions and an Ogg
+8, §8.4), its sky not yet (Q79); the UIF intro is not. *RQ-109:* 1298's own select
+bar is data (N3FE version 13, §9.6). A "2145" choice needs a reader for its UIF versions and an Ogg
 decision. Steam is not cookable yet: the packs are not readable, the exe is protected,
 and the install changes with every Steam update. The follow-up items are filed under
 RQ-078.
@@ -677,7 +678,7 @@ select's arrows by `004448f0`, Q84). The 1298 recipe (not offered) cooks the
 pinned tree's layouts, its select byte for byte 1264's, which 1298's code never
 places, so it takes 1264's placements too; drawing 1298's own
 `co_CharacterSelect_us.uif` bar at 1298's placement is a layout change (a new
-item). The placements are package data (`front-end.bin`
+item; *RQ-109 (§9.6): drawn now*). The placements are package data (`front-end.bin`
 version 11, the recipe's `place` and `moves`): each layout's moves, evaluated at the
 window's size by the client and at 1024 × 768 by the cook for the canvas rects.
 The realm's earlier scaling of the canvas to fit the window stays as the recipe's
@@ -756,6 +757,41 @@ answer. The client's login rule no longer depends on a `login_closed` node
 is under way, so the 1298 recipe shows neither the bar nor a line then, as 1298 does
 (Q86). No format change; the 1097 choice is unchanged.
 
+### 9.6 1298's select bar (RQ-109, 2026-11-02)
+
+Read statically in n3e's 1298 `KnightOnLine.exe` (sha256 `828ab0db…`, Ghidra project
+`build/ghidra/audit-2026-09-19`, `-readOnly -noanalysis`, `AuditReference.java`
+`decompile`; output under `build/ghidra/rq109/`, not committed), with `objdump` for the
+select bar class's field uses and a PE reader for its vtable and strings; RQ-106's
+decompile of the bar's Load (`build/ghidra/rq106/`) and RQ-066's and RQ-087's of the
+select tick and ENTER; the pinned tree's `co_CharacterSelect_us.uif` through
+`ko_hud.parse` and its `Data/Texts_us.tbl` through `ko_tbl` (nothing committed from
+them). Not run (Wine is approved for 1097 and 1264 only). The source agrees where named.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The bar's layout.** `co_CharacterSelect_us.uif` is a 1024 × 113 root: three backdrop images (`ui_characterCreate_03_us.dxt`), the buttons `btn_create` "Create Character" (28, 57)–(178, 91), `btn_start` "Start" (233, 57), `btn_delete` "Delete Character" (435, 56), `btn_back` "Back" (645, 56), `btn_exit` "Exit" (846, 56), each 150 × 34 with its labels drawn in its state images (`ui_login_02_us.dxt`), the arrows `btn_left` (27, 23) and `btn_right` (958, 23), the labels "Level :", "I D :" and "Class :", and the empty strings `str_lev` (158, 24)–(184, 40), `str_id` (431, 23)–(629, 40) and `str_job` (760, 25)–(918, 41) | the pinned tree's `UI_US/co_CharacterSelect_us.uif` | local-asset |
+| **Its Load finds ten nodes and places the root.** The vtable at `006a94c8` (Load `00606c10` at slot 3, ReceiveMessage `00607160` at slot 19) finds `btn_start` (`+0xb0`), `btn_create` (`+0xb4`), `btn_delete` (`+0xb8`), `btn_back` (`+0xbc`), `btn_exit` (`+0xc0`), `btn_right` (`+0xc4`), `btn_left` (`+0xc8`), `str_id` (`+0xcc`), `str_job` (`+0xd0`) and `str_lev` (`+0xd4`) by name, then puts the root at `((W − w) >> 1, H − 10 − h)` and the region the whole screen (`006070bd`–`0060710a`, §9.3) | 1298 `00606c10`; vtable `006a94c8`; strings `006d5afc`, `006d58fc`, `006d4fc8`, `006d671c`, `006d4fe8`, `006d564c`, `006d5658`, `006d8b2c`, `006d8b24`, `006d8b1c` | binary |
+| **No code hides an arrow or any other one button.** The bar's arrow fields are written by its constructor, Release and Load and read only by ReceiveMessage's compares (`objdump` of `00606a90`–`00608100`); the select procedure touches the bar (`+0x384`) only whole: shown, hidden, ticked and rendered (`objdump` of `005f9000`–`00608200`). Both arrows stay drawn at the ends of the row, where DoJobLeft (`005fe3c0`) and DojobRight do nothing | 1298 `00606a90`–`00608100`, `005f9000`–`00608200` | binary |
+| **ReceiveMessage: a click (message 1) on each button.** `btn_exit` posts a box of row 1502 ("Are you sure you want to exit? ") untitled, style 4 and behaviour 1 (the source's `MB_YESNO`, `BEHAVIOR_EXIT`); `btn_delete`, for a slot 0–2 holding a character with the select at rest (`+0x394` 5), posts row 1501 ("Character deletion has been disabled currently") untitled, style 0; `btn_back` calls `004512f0` on `00818984`, activates the login procedure (`00646b50(008189a8)`) and sets its byte `+0x21`, which makes its Init connect, ask for the server list and hide the bar (§9.5), so Back returns to the server list; `btn_start` calls `005ff870`, `btn_create` `005ff920`, `btn_right` DojobRight (`005fe450`) and `btn_left` DoJobLeft (`005fe3c0`), each on the select procedure (`008189b4`). Nothing runs unless the UI flag `00818994 + 0xb4` is set | 1298 `00607160`; source `UICharacterSelect.cpp` `ReceiveMessage` (exit and delete the same) | binary; source |
+| **Start is the centre click.** `005ff870` closes the message boxes (`00646c30(−1)`); for an empty slot in focus (`00818a20`) it sets the select state 6, hides the bar and shows the in-select create UI (`+0x388`); otherwise it sets the main procedure's zone fields and the character's name and calls the procedure's `+0x18`, the same body as the select tick's left click in the centre rect (`005faf10`, §8), without that click's state-5 test (the bar is hidden while the camera moves) | 1298 `005ff870`, `005faf10` | binary |
+| **Create takes the slot in focus, or the first empty one, or says none.** `005ff920` closes the boxes; for an empty slot in focus it opens create as Start does; otherwise it takes the first of slots 0–2 that is empty as the focus (`00818a20`, `+0x390`), flies the camera there by the path from the current slot (`005fa670`: 2–7, `ka_left_right` and `ka_right_left` among them), sets state 6, hides the bar and shows create; with every slot taken it posts row 7675 ("Cannot create additional characters.") untitled | 1298 `005ff920`; the pinned tree's `Data/Texts_us.tbl` rows 7675, 1501, 1502 | binary; local-asset |
+| **The info texts.** `006074c0`, from the front-clip tick at rest (`005fef90`) with the slot in focus, sets `str_id`, `str_job` and `str_lev` to the empty string (`006dfe28`, in the zero-filled tail of the data section) for an empty slot; otherwise `str_id` to the character's name, `str_job` to its class's text (`00613ea0`: rows from 1304, the pinned tree's 1307 "Priest" among them) and `str_lev` to its level by `"%d"` (`006d3a54`) | 1298 `006074c0`, `00613ea0`, `005fef90` | binary |
+
+**Decides (RQ-109):** the 1298 recipe (not offered) cooks 1298's own select,
+`co_CharacterSelect_us.uif`, in place of the pinned tree's `ka_characterselect_us.uif`
+(1264's), with 1298's placement (`place` `{"bottom": 10}`) and every node drawn. N3FE
+version 13 adds the select actions `select_start`, `select_create`, `select_delete`
+and the info texts `char_name`, `char_level`, `char_class` (a select binds `char_info`
+or any of them), and the messages `create_full` and `delete_disabled`, which the
+recipe words with rows 7675 and 1501. Start is the realm's centre click; Create opens
+the realm's create screen for the slot 1298 picks, the camera put on that slot rather
+than flown there (the realm's create is a screen of its own); Delete shows row 1501
+for a character at rest. Not 1298's (Q87): Exit leaves at once, with no yes/no box
+(the realm's message box has one button); Back returns to the login, not the server
+list; the arrows hide at the ends of the row, as every realm select's do. The 1097
+choice changes by the version word only.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -776,6 +812,7 @@ notes.
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |
 | Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. §9.2 (RQ-085): the 1097 choice's layouts are the 1264 install's, its message box and loading 1264's. |
 | Q85 | §9.4 (RQ-108): 1264 shows the login's copyright line, at `((W − w) / 2, H − h − 20)`, only while its login bar is hidden: from a login press until a failed answer, and with the server list after a success; the 1097 choice does the same (N3FE version 12's `login_closed`), the bar hidden while the Discord flow runs. |
+| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. |
 | Q86 | §9.5 (RQ-110): 1298's login draws no copyright line (its login is the intro layout, no `Text_Rights`) and hides its bar from a press until a failed answer; the 1298 recipe hides the line and, like every layout now, its bar while a login is under way. |
 | Q82 | §9.2 (RQ-101): 1264's logo procedure runs first, once a process: three groups fading in, holding and fading out on black over 12 s, `Snd\bless.wav` from 1 s faded out over 4 s from the third, any key skipping to the login, the cursor hidden; the 1097 choice shows it (N3FE version 9). §9.3 (RQ-106): KO draws every front-end layout unscaled, placed by the screen's size (the login on the bottom edge, the server list at the top-left, the select's buttons on the bottom edge, create, loading, the message box and the logo centred), the 3D scenes filling the screen; the realm does the same (N3FE version 11). |
 | Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. §9.2 (RQ-102): 1264 titles its login answer's and its create failures; the 1097 choice gives the realm's matching messages KO's title and wording (N3FE version 10) and leaves the rest untitled. |

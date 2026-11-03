@@ -176,5 +176,13 @@ earlier scaling to the window); the 1097 recipe gives 1264's placements
 recipe binds 1264's copyright line, `Text_Rights`, to it at 1264's place
 (`specs/KO-FINDINGS.md` §9.4); the 1298 recipe hides it, 1298's login having none
 (§9.5, RQ-110).
+N3FE version 13 (RQ-109) adds 1298's select bar actions, select screen only:
+`select_start`, `select_create` and `select_delete` (its start, create and
+delete buttons) and the info texts `char_name`, `char_level` and `char_class`, any
+of which a select may bind in place of `char_info`, with the messages
+`create_full` and `delete_disabled`, and a root placement `{"bottom": N}`; the
+1298 recipe cooks 1298's own select, the `co_CharacterSelect_us.uif` bar, centred
+10 px above the bottom edge, with KO's rows 7675 and 1501 for the two messages
+(`specs/KO-FINDINGS.md` §9.6).
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

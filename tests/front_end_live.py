@@ -58,6 +58,11 @@ from the player's own KO data.
      past its end without ending. The logo (RQ-101): 1264's Snd/bless.wav
      (PCM, 305,280 frames at 22,050 Hz mono), once, from 1 s in, faded out
      over 4 s from the third group.
+   - the 1298 recipe's select (RQ-109, KO-FINDINGS 9.6): its cook swapped into
+     the chosen package (the release index rewritten) draws 1298's
+     co_CharacterSelect_us.uif bar unscaled at ((W - w) >> 1, H - 10 - h)
+     (00606c10), its ten bound nodes where that puts them, its art drawn, and
+     its name, level and class texts filled for a character and empty with none.
 
 No server or stack.
 """
@@ -139,6 +144,7 @@ for i in range(2):
     report = ko_front_end.cook(pinned, out, Path("games/moradon/front-end-1298.json"), out / "work")
     cooked.append((out / "front-end.bin").read_bytes())
 assert cooked[0] == cooked[1], "the 1298 recipe's cook is not deterministic"
+front_end_1298 = out / "front-end.bin"
 assert cooked[0][4:8] == ko_front_end.VERSION.to_bytes(4, "little"), cooked[0][:8]
 sources = set(report["sources"])
 assert {"ChrSelect/upc_ka_tu.n3joint", "ChrSelect/upc_ka_tu.n3anim"} <= sources, sorted(sources)
@@ -467,4 +473,92 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
           f"instead of the bar while a login waits and on the realm list, 1-3 characters in the hall, create stands "
           f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}, the logo's three "
           f"groups (faded {ratio:.2f}), music {frames} PCM frames, restarted, looped and played once")
+
+# RQ-109 (KO-FINDINGS 9.6): the 1298 recipe's select is 1298's own bar,
+# co_CharacterSelect_us.uif, placed as its Load (00606c10) places it, its
+# nodes bound as its ReceiveMessage (00607160) and info fill (006074c0) use
+# them. The chosen package with the 1298 cook as its front-end.bin (its
+# release index rewritten; no server reads it here) draws it at KO's sizes.
+
+
+def repack(base, front_end, into):
+    """A copy of package `base` with `front_end` as its front-end.bin and its
+    release index (tools/assetc/main.py's N3R1: each file's name, size and
+    sha256) rewritten; the other files linked where the file system allows."""
+    import hashlib
+    import shutil
+    if into.exists():
+        shutil.rmtree(into)
+    into.mkdir(parents=True)
+    index = (base / "release.bin").read_bytes()
+    data = front_end.read_bytes()
+    at = 4 + 12
+    for _ in range(2):
+        at += 4 + struct.unpack_from("<I", index, at)[0]
+    head, files, at = index[:at + 4], struct.unpack_from("<I", index, at)[0], at + 4
+    entries = b""
+    for _ in range(files):
+        length = struct.unpack_from("<I", index, at)[0]
+        name = index[at + 4:at + 4 + length].decode()
+        end = at + 4 + length + 4 + 32
+        if name == "front-end.bin":
+            entries += index[at:at + 4 + length] + struct.pack("<I", len(data)) + hashlib.sha256(data).digest()
+            shutil.copyfile(front_end, into / name)
+        else:
+            entries += index[at:end]
+            try:
+                os.link(base / name, into / name)
+            except OSError:
+                shutil.copyfile(base / name, into / name)
+        at = end
+    assert at == len(index), (at, len(index))
+    (into / "release.bin").write_bytes(head + entries)
+    (into / "release.sha256").write_text(hashlib.sha256(head + entries).hexdigest() + "\n")
+    return into
+
+
+package_1298 = repack(package, front_end_1298, B / "package-1298")
+bar_tree = ko_hud.parse(pinned.get(recipe_1298["screens"]["select"]["ui"]))
+bar_w = bar_tree["rect"][2] - bar_tree["rect"][0]
+bar_h = bar_tree["rect"][3] - bar_tree["rect"][1]
+BAR = {"select_prev": "btn_left", "select_next": "btn_right", "back": "btn_back", "exit": "btn_exit",
+       "select_start": "btn_start", "select_create": "btn_create", "select_delete": "btn_delete",
+       "char_name": "str_id", "char_level": "str_lev", "char_class": "str_job"}
+for size in ("1024x768", "1280x1024", "1600x1200"):
+    width, height = map(int, size.split("x"))
+    run = subprocess.run(["build/client/n3e-test-client", str(package_1298), "--realm", str(realm),
+                          "--fixed-window", size],
+                         capture_output=True, text=True, timeout=600,
+                         env={**os.environ, "N3E_TEST_FRONT_END": str(B / ("1298-" + size))})
+    (B / f"client-1298-{size}.log").write_text(run.stdout + run.stderr)
+    assert run.returncode == 0 and "FRONT_SHOTS done" in run.stdout, (size, run.stdout[-2000:], run.stderr[-2000:])
+    shots = {m.group(1): (Path(m.group(2)), m.group(3)) for m in re.finditer(
+        r"^FRONT_SHOT name=(\S+) size=\S+ path=(\S+) rect=(\S*) drawn=\S* origin=\S+,\S+,1$", run.stdout, re.M)}
+    assert {"select-0", "select-1", "select-3"} <= set(shots), (size, sorted(shots))
+    # The bar's root at ((W - w) >> 1, H - 10 - h), each node carried with it.
+    x0, y0 = (width - bar_w) >> 1, height - 10 - bar_h
+    want = {}
+    for action, ident in BAR.items():
+        r = find(bar_tree, ident)["rect"]
+        want[action] = (x0 + r[0] - bar_tree["rect"][0], y0 + r[1] - bar_tree["rect"][1],
+                        x0 + r[2] - bar_tree["rect"][0], y0 + r[3] - bar_tree["rect"][1])
+    got = {}
+    for line in ("FRONT_PLACED", "FRONT_SELECT_BAR"):
+        found = re.search(r"^%s (.*)$" % line, run.stdout, re.M)
+        assert found, (size, line)
+        got.update({k: tuple(map(int, v.split(","))) for k, v in re.findall(r"(\w+)=(\S+)", found.group(1))})
+    assert got == want, (size, {k: (got.get(k), v) for k, v in want.items() if got.get(k) != v})
+    # The bar's art is drawn there: its three backdrop images span it.
+    art = region(shots["select-1"][0], (x0, y0 + 2, x0 + bar_w, y0 + bar_h - 2))
+    assert len(set(art)) > 50 and sum(p == b"\0\0\0" for p in art) < len(art) // 20, (size, len(set(art)))
+    # The info texts: empty with no character, the character's name, level
+    # and class with one (pixels differ inside each text's rect).
+    margin = 4
+    for action in ("char_name", "char_level", "char_class"):
+        r = want[action]
+        inside, _ = differing(shots["select-0"][0], shots["select-1"][0],
+                              [(r[0] - margin, r[1] - margin, r[2] + margin, r[3] + margin)])
+        assert inside > 20, (size, action, inside)
+    print(f"PASS front-end captures 1298 recipe {size}: 1298's select bar at ({x0}, {y0}), unscaled, its ten "
+          f"bound nodes where 1298's Load puts them, its info texts filled for a character and empty without")
 print("PASS KO front end graphical")

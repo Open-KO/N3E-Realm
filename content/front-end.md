@@ -11,8 +11,9 @@ the select hall with the select camera's fog (version 8, RQ-095), a logo
 screen before the login (version 9, RQ-101: 1264's "K2 Network presents Knight
 Online"), each message box message's title and wording (version 10,
 RQ-102, Q81), where each layout's nodes go on a window of its own size
-(version 11, RQ-106, Q82), and the action `login_closed`, a login node drawn
-only while the login group is not (version 12, RQ-108, Q85).
+(version 11, RQ-106, Q82), the action `login_closed`, a login node drawn
+only while the login group is not (version 12, RQ-108, Q85), and 1298's select
+bar's actions and two messages (version 13, RQ-109).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -26,7 +27,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 12, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 13, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -140,7 +141,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    when the screen ends, as 1264 connects from its login; a message raised
    while it shows (the latest) waits for the login. A reset connection leaves
    the screen playing.
-11. The messages (version 10, RQ-102, Q81): a count (0–8, at most one per
+11. The messages (version 10, RQ-102, Q81): a count (0–10, at most one per
    message) and each: the message (an index of the closed set below, each
    once), its title (≤1024 ASCII bytes, may be empty), whether its text
    replaces the client's own wording (0 or 1) and that text (≤1024 ASCII
@@ -152,7 +153,9 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    banned account), 4 `login_unavailable` (the realm refused the login: a
    dependency is down), 5 `create_name` (create with an empty name),
    6 `create_refused` (the realm refused a create), 7 `select_refused` (the
-   realm refused a select). The client shows a message in the message box
+   realm refused a select), and (version 13, RQ-109) 8 `create_full` (create
+   with every slot taken: 1298's `btn_create`) and 9 `delete_disabled` (delete,
+   which the realm does not offer: 1298's `btn_delete`). The client shows a message in the message box
    with the package's title in the node bound to `title` (empty for a message
    the package does not name) and the package's text where it replaces, its
    own wording otherwise. The cook writes the recipe's `messages` (below): a
@@ -290,8 +293,9 @@ address mode); the font atlases and the moon linear.
 
 The loader refuses an unknown action, a screen missing one of its required
 actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
-`realm_connect`; select: `select_prev`, `select_next`, `back`, `exit`,
-`char_info`; create: `create_confirm`, `back`, `name_field`, `char_view`;
+`realm_connect`; select: `select_prev`, `select_next`, `back`, `exit` and an
+info text, `char_info` or (version 13) any of `char_name`, `char_level` and
+`char_class`; create: `create_confirm`, `back`, `name_field`, `char_view`;
 loading: `progress`; message: `message`, `ok`), an action bound twice in a
 screen, an unknown turn mode, paths in the rotate mode, a path outside the slots
 or from a slot to itself, an entry path not to slot 0, a from and to pair twice,
@@ -299,7 +303,9 @@ the path mode without its entry path or a way between neighbours, a hall with
 a zone, a zone mesh's flags other than above, fog values outside their bounds
 (or not all 0 when off), a message outside the set or named twice, a replace
 flag other than 0 or 1 or a text that does not replace, a node bound to
-`login_closed` on a screen other than the login (version 12), placement flags
+`login_closed` on a screen other than the login (version 12), a node bound to
+`select_start`, `select_create`, `select_delete`, `char_name`, `char_level` or
+`char_class` on a screen other than the select (version 13), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
 file does not have, a rule of another kind or outside its bounds, a keep rule
 with a or c not 0, moves that do not leave the canvas rects where the file puts
@@ -311,11 +317,24 @@ The closed set, by index: none, `login`, `exit`, `login_group`, `realm_group`,
 `realm_list`, `realm_connect`, `notice`, `select_prev`, `select_next`, `back`,
 `char_info`, `create_confirm`, `name_field`, `char_view`, `class_desc`,
 `progress`, `version`, `info`, `message`, `ok`, `title` (version 10), `login_closed`
-(version 12). A group bound to `login_group` or
+(version 12), `select_start`, `select_create`, `select_delete`, `char_name`,
+`char_level`, `char_class` (version 13). A group bound to `login_group` or
 `realm_group` is shown in its state only; `realm_list` lists the realm from
 `realm.json`; `notice`, `char_info`, `class_desc`, `version`, `info`,
 `message` and `title` (the message's title, item 11) are texts the client fills; `name_field` is the name entry; `char_view`
 is where create draws the character.
+
+1298's select bar (version 13, RQ-109, `specs/KO-FINDINGS.md` §9.6,
+`client/render/select_bar.h`), select screen only: `select_start` is the
+start ENTER and the centre click make (the character in focus, or create for
+an empty slot; at rest only); `select_create` opens create for the slot in
+focus when it is empty, else for the first empty slot (the camera put on it),
+else shows the message `create_full`; `select_delete` shows the message
+`delete_disabled` for a character in focus at rest, and does nothing else. The
+texts `char_name`, `char_level` and `char_class` are the character in focus's
+name, level (decimal) and the `class_name` string while the hall is at rest
+(the loop front-clip mode: always at rest; hover: while the pointer is on the
+character, as `char_info`), and empty for an empty slot or otherwise.
 
 On the login screen (RQ-108, Q85, RQ-110, `client/render/front_login.h`) a
 login under way closes the login group:
@@ -445,8 +464,9 @@ recipe's, as "Moradon" below says, or missing, and marked here:
 - `front_clip` `loop` (`005fef90`): the front clip looping on the character in
   front at rest, the rest clip once on the others and on everyone while the
   camera turns; the spot widens to 0.5 by 0.02 a tick (`006a93b4`, `006a93bc`,
-  Karus) and stays; the info text shows at rest, empty for an empty slot
-  (`006074c0` writes the empty string, so `select_hint` is empty).
+  Karus) and stays; the info texts show at rest, empty for an empty slot
+  (`006074c0` writes the empty string; `select_hint`, which only `char_info`
+  shows, is empty).
 - `turn` `path` (`005fa670`, `005fe5b0`): `ChrSelect/Data/ka_lording_camera.n3camera`
   flies the camera in to the centre slot in 6 s as the hall opens;
   `ka_center_left`, `ka_center_right`, `ka_left_center` and `ka_right_center`
@@ -476,7 +496,7 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   (`RF_ALPHABLENDING`) a blend mesh of its own with its sort point. For
   `karus_intro`: 63 native textures (128–512 a side), 88 meshes (19 blend),
   40,540 vertices and 30,966 triangles; the 1298 recipe's `front-end.bin` is
-  about 54.0 MB of its 64 MiB. Every mesh takes the material
+  about 56.1 MB of its 64 MiB (54.0 MB before RQ-109's select bar). Every mesh takes the material
   1298's terrain render sets (`0059cd90`: diffuse 1, ambient 0.5); the cook
   refuses a zone part whose own material differs (every `karus_intro` part's
   is that, local-asset), a second tile layer (`karus_intro` has none), a
@@ -496,15 +516,28 @@ recipe's, as "Moradon" below says, or missing, and marked here:
 - Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
   create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF
-  intro), and the layouts (1298's `UI_US`, as today). The hall lights
-  `ka_light_0/1` are the files both clients name.
+  intro), and the login, create, loading and message layouts (the pinned
+  tree's `UI_US`, as today). The hall lights `ka_light_0/1` are the files both
+  clients name.
+- Select (RQ-109, version 13, `specs/KO-FINDINGS.md` §9.6, binary): 1298's own,
+  `UI_US/co_CharacterSelect_us.uif`, a 1024 × 113 bar, every node drawn,
+  `place` `{"bottom": 10}` (its Load `00606c10`: ((W − w) >> 1, H − 10 − h)),
+  bound as its ReceiveMessage (`00607160`) and info fill (`006074c0`) use it:
+  `btn_start` `select_start`, `btn_create` `select_create`, `btn_delete`
+  `select_delete`, `btn_back` `back`, `btn_exit` `exit`, `btn_left`
+  `select_prev`, `btn_right` `select_next`, `str_id` `char_name`, `str_lev`
+  `char_level`, `str_job` `char_class`. `messages` words `create_full` with
+  row 7675 ("Cannot create additional characters.") and `delete_disabled`
+  with row 1501 ("Character deletion has been disabled currently") of the
+  pinned tree's `Data/Texts_us.tbl`, untitled, as 1298 posts them. Not 1298's
+  (QUESTIONS Q87): Exit leaves at once (1298 asks row 1502, yes or no), Back
+  returns to the login (1298's to the server list), an arrow with no
+  neighbour is hidden (1298 draws both), and Create from an occupied slot puts
+  the camera on the empty slot (1298 flies it there).
 - Placement (RQ-106, `specs/KO-FINDINGS.md` §9.3, binary): the 1097 recipe's
-  `place` and `moves` (1264's code), but for the login's copyright line
-  (below). The select layout it cooks, the pinned
-  tree's `ka_characterselect_us.uif`, is byte for byte 1264's, and 1298's binary
-  never places it: 1298's own select is the `co_CharacterSelect_us.uif` bar,
-  which its Load (`00606c10`) puts at ((W − w) >> 1, H − 10 − h). Drawing that
-  bar is a layout change, not a placement one.
+  `place` and `moves` (1264's code) for the login, create, loading and message
+  layouts, but for the login's copyright line (below); the select's is 1298's
+  (above).
 - The copyright line (RQ-110, `specs/KO-FINDINGS.md` §9.5, binary): hidden.
   1298's login draws none: its Init (`005f68e0`) loads only the nation's
   intro layout (`ka_login_intro_us.uif` or `el_login_intro_us.uif`), which has
@@ -557,7 +590,8 @@ box and loading are 1264's.
 
 - Placement (RQ-106, Q82, `specs/KO-FINDINGS.md` §9.3, binary): each screen's
   `place` (its root: `origin`, `centre` or `bottom`, centred on the bottom
-  edge) and `moves` (a node, then `x`: a number, `centre` or
+  edge, or `{"bottom": N}`, centred with its bottom edge N pixels above the
+  window's, 1298's select bar, RQ-109) and `moves` (a node, then `x`: a number, `centre` or
   `{"middle": c, "ratio": k, "edge": "start"|"end"}`, the node's start or end
   edge at (S >> 1) + c + k·S / the root's extent; and one of `y`: a number or
   `centre`, `bottom`: its bottom edge that far above the window's, or

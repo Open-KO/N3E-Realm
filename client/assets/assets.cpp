@@ -2676,7 +2676,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 12, "front end version");
+  need(r.u() == 13, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2714,8 +2714,7 @@ FrontEnd load_front_end(const Release &release) {
   static const std::array<std::vector<FrontAction>, size_t(FrontScreen::count)> required{{
       {FrontAction::login, FrontAction::exit, FrontAction::login_group, FrontAction::realm_group,
        FrontAction::realm_list, FrontAction::realm_connect},
-      {FrontAction::select_prev, FrontAction::select_next, FrontAction::back, FrontAction::exit,
-       FrontAction::char_info},
+      {FrontAction::select_prev, FrontAction::select_next, FrontAction::back, FrontAction::exit},
       {FrontAction::create_confirm, FrontAction::back, FrontAction::name_field, FrontAction::char_view},
       {FrontAction::progress},
       {FrontAction::message, FrontAction::ok},
@@ -2772,6 +2771,16 @@ FrontEnd load_front_end(const Release &release) {
     // Version 12 (RQ-108): login_closed is the login screen's only.
     need(screen == size_t(FrontScreen::login) || !bound.contains(FrontAction::login_closed),
          "front end login_closed off the login");
+    // Version 13 (RQ-109): 1298's select bar actions are the select's only,
+    // and a select binds an info text: char_info or any of 1298's three.
+    const auto select_only = {FrontAction::select_start, FrontAction::select_create, FrontAction::select_delete,
+                              FrontAction::char_name, FrontAction::char_level, FrontAction::char_class};
+    if (screen != size_t(FrontScreen::select))
+      for (auto action : select_only) need(!bound.contains(action), "front end select action off the select");
+    else
+      need(bound.contains(FrontAction::char_info) || bound.contains(FrontAction::char_name) ||
+               bound.contains(FrontAction::char_level) || bound.contains(FrontAction::char_class),
+           "front end screen action unbound");
   }
   for (auto &s : fe.strings) s = ascii(text(1024));
   // D3DLIGHT9's range is unclamped (the intro's point lights carry 1e6 and

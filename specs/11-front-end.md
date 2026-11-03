@@ -82,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 12, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 13, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -98,13 +98,17 @@ replace the panels when the client has a Discord realm config.
   `char_view`, `class_desc`, `progress`, `version`, `info`, `message`, `ok`, `title`,
   `login_closed` (N3FE version 12, RQ-108: a login node drawn only while the login
   group is not, KO's copyright line; RQ-110: every layout hides its login group
-  while a login is under way, as 1264 and 1298 do, whether it binds one or not). The cook
+  while a login is under way, as 1264 and 1298 do, whether it binds one or not),
+  `select_start`, `select_create`, `select_delete`, `char_name`, `char_level`,
+  `char_class` (N3FE version 13, RQ-109: 1298's select bar, its Start, Create and
+  Delete buttons and its name, level and class texts; KO-FINDINGS §9.6). The cook
   and the loader refuse an unknown action, an action bound twice in a screen, a
-  `login_closed` off the login screen and a
+  `login_closed` off the login screen, one of version 13's off the select, and a
   screen whose required actions are unbound. Required per screen:
   - login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
     `realm_connect` (`notice` is optional; the Moradon package has none, Q61);
-  - select: `select_prev`, `select_next`, `back`, `exit`, `char_info`;
+  - select: `select_prev`, `select_next`, `back`, `exit`, and an info text:
+    `char_info`, or any of `char_name`, `char_level`, `char_class`;
   - create: `create_confirm`, `back`, `name_field`, `char_view`;
   - loading: `progress`;
   - message: `message`, `ok`.
@@ -166,7 +170,8 @@ replace the panels when the client has a Discord realm config.
 - **The messages** (N3FE version 10, RQ-102, Q81). The front end's messages are a
   closed engine set (a failed connection, a closed one, the Discord flow's
   failures, a banned or unavailable login, an empty name, a refused create or
-  select; `content/front-end.md` section 11). The package may give any of them
+  select, and (version 13) a create with every slot taken and a delete;
+  `content/front-end.md` section 11). The package may give any of them
   a title, drawn in the message box's node bound to `title`, and a text that
   replaces the client's wording; the recipe's `messages` names each as a
   string or a row of a KO client's text table. The 1097 recipe titles and
@@ -302,7 +307,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 12 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, or no `login_closed` action) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 13 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, or no select bar actions) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas (1024 × 768) | KO's placements would cut the layouts off, so the UI scales down uniformly, centred, as with `ui_scale` `window` (RQ-106). No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -410,6 +415,14 @@ CPU (`make test`):
    login is under way and on the realm list; RQ-110: the login group is hidden
    while a login is under way whatever the layout binds, and the 1298 recipe
    hides `Text_Rights` and binds nothing to `login_closed` (`tests/front_end.py`).
+   RQ-109: the cook takes a synthetic 1298 select bar with its info texts in place
+   of `char_info` and places it as 1298's Load does (`{"bottom": 10}`), and refuses
+   a select with no info text and a bar action off the select; the loader takes the
+   bar and refuses version 12, a bar action off the select and a select with no
+   info text, and puts the bar's nodes where 1298 puts them at each size; Create
+   takes the slot in focus or the first empty one, or none, and Delete's box shows
+   only for a character at rest (`client/render/select_bar.h`, `tests/front_end.cpp`);
+   the 1298 recipe binds its bar as 1298 does.
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.
@@ -455,7 +468,11 @@ KO (`make live-ko`, needs `assets/ko`):
    draws the copyright line, where 1264 places it at that size, and not the bar:
    it differs from the login at rest only within the bar and the line, and from
    the realm list only within the server group; the login group, the server
-   group and the line draw in exactly their states.
+   group and the line draw in exactly their states. RQ-109: the 1298 recipe's cook,
+   swapped into the chosen package, draws 1298's select bar unscaled at
+   ((W − w) >> 1, H − 10 − h) at each size, its ten bound nodes where 1298's Load
+   puts them, its art drawn, and its name, level and class texts filled for a
+   character and empty with none.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

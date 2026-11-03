@@ -13,6 +13,7 @@
 #include "render/front_logo.h"
 #include "render/front_login.h"
 #include "render/scene_clock.h"
+#include "render/select_bar.h"
 #include "render/select_hall.h"
 #include "render/select_path.h"
 #include "render/select_turn.h"
@@ -861,6 +862,37 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (state == Screen::create) enter_select();
       else if (state == Screen::select && choosing < 0) out.command = Command::back;
       break;
+    // Version 13 (RQ-109, specs/KO-FINDINGS.md 9.6): 1298's select bar
+    // (ReceiveMessage 00607160). btn_start (005ff870) is the centre click's
+    // own start: the character in focus, or create for an empty slot.
+    case FrontAction::select_start:
+      if (state == Screen::select) return primary();
+      break;
+    // btn_create (005ff920, render/select_bar.h): create in the slot in
+    // focus when it is empty, else in the first empty slot (the camera on
+    // it), else KO's "Cannot create additional characters." (row 7675). The
+    // realm's create is a screen of its own, so the camera is put on the slot
+    // rather than flown there.
+    case FrontAction::select_create: {
+      if (state != Screen::select || choosing >= 0 || turning()) break;
+      const int slot = select_create_slot(focus, characters_shown(), int(fe.slots.size()));
+      if (slot < 0) {
+        show_message(FrontMessage::create_full, "No more characters can be made in this realm.");
+        break;
+      }
+      if (slot != focus) face(slot);
+      state = Screen::create;
+      name.clear();
+      break;
+    }
+    // btn_delete: for a character in focus at rest (state 5), KO's
+    // "Character deletion has been disabled currently" (row 1501); the realm
+    // deletes no character either.
+    case FrontAction::select_delete:
+      if (state == Screen::select &&
+          select_delete_posts(focus, characters_shown(), choosing < 0 && !turning()))
+        show_message(FrontMessage::delete_disabled, "Characters cannot be deleted in this realm.");
+      break;
     case FrontAction::create_confirm:
       if (state == Screen::create && !pending_create) {
         if (name.empty()) {
@@ -1348,6 +1380,20 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
             value = filled(FrontString::select_info, context, &list->characters(seats.info_slot));
           else
             value = filled(FrontString::select_hint, context, nullptr);
+          break;
+        case FrontAction::char_name:
+        case FrontAction::char_level:
+        case FrontAction::char_class:
+          // 1298's bar (006074c0, from 005fef90 at rest): str_id the name,
+          // str_lev the level ("%d"), str_job the class; all three empty for
+          // an empty slot.
+          value.clear();
+          if (list && seats.info_slot >= 0 && seats.info_slot < characters_shown()) {
+            const auto &c = list->characters(seats.info_slot);
+            value = n.action == FrontAction::char_name    ? c.name()
+                    : n.action == FrontAction::char_level ? std::to_string(std::max<uint32_t>(1, c.level()))
+                                                          : fe.strings[size_t(FrontString::class_name)];
+          }
           break;
         case FrontAction::class_desc: value = filled(FrontString::class_desc, context, nullptr); break;
         case FrontAction::version: value = filled(FrontString::version, context, nullptr); break;

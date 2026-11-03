@@ -452,6 +452,20 @@ for escape in ("Exit", "quit", "None", "skip", 1, 2, None):
     raise AssertionError(("cooked escape", escape))
 assert fe.ESCAPE == {"back": 0, "exit": 1, "none": 2}, fe.ESCAPE
 
+# RQ-112: select.back names where the select's Back lands, `login` (the
+# realm's, the default) or `realms` (1298's Back sets its login procedure's
+# +0x21, whose Init 005f68e0 connects, asks for the server list and hides the
+# bar), and is refused misspelt, before any KO file is read.
+for back in ("Login", "servers", "server_list", "realm", 0, 1, None):
+    config = dict(SELECT, front_clip="loop", turn="rotate", back=back)
+    try:
+        fe.select_scene(Fixture({}), fe.Textures(Fixture({})), config, pathlib.Path("/nonexistent"))
+    except ValueError as error:
+        assert str(error) == "front-end select.back: one of login, realms", error
+        continue
+    raise AssertionError(("cooked back", back))
+assert fe.BACK == {"login": 0, "realms": 1}, fe.BACK
+
 
 def n3camera(eye, at, rate=30.0, up_keys=0, at_kind=0, tail=b""):
     """A synthetic .n3camera as CN3Camera::Load reads it (1298: 00439540 after
@@ -791,9 +805,9 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=16, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=17, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
-         spot_rate=0.6, front_clip=0, escape=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
+         spot_rate=0.6, front_clip=0, escape=0, back=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
          logo=u(0), messages=u(0), placement=NO_PLACEMENT):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
@@ -808,6 +822,7 @@ def blob(version=16, slots=1, screen_data=None, font_index=None, light=None, plu
     out += CAMERA + u(0) + f([0, 0, 0]) + u(slots if slot_count is None else slot_count)
     out += (f([0, -1, 2, 0, 0, 0, 7]) + fe.light_record(spot)) * (slots if slot_count is None else slot_count)
     out += f([spot_rate]) + (b"" if front_clip is None else u(front_clip)) + (b"" if escape is None else u(escape))
+    out += b"" if back is None else u(back)
     if paths is None:
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
     out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
@@ -1276,6 +1291,12 @@ assert recipe_1097["messages"]["exit_confirm"] == {"text": {"table": "installer-
 # maintainer chose it, 2026-11-02).
 assert recipe_1097["select"]["escape"] == "exit", recipe_1097["select"]
 assert recipe_1298["select"]["escape"] == "none", recipe_1298["select"]
+# RQ-112 (KO-FINDINGS 9.12): 1298's Back lands on its server list (00607160
+# sets the login procedure's +0x21; Init 005f68e0), so the 1298 recipe's lands
+# on the realm list; the 1097 choice keeps the realm's, the login (1264's lands
+# on its server list too, a difference left to the maintainer).
+assert recipe_1298["select"]["back"] == "realms", recipe_1298["select"]
+assert "back" not in recipe_1097["select"], recipe_1097["select"]
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
     "a bottom placement of another key": {**PLACE_SPECS, "message": {"place": {"bottom": 10, "x": 1}}},
@@ -1465,6 +1486,11 @@ cases = {
     "ok-select-escape-none": blob(escape=2),
     "bad-select-escape": blob(escape=3),
     "bad-select-escape-missing": blob(escape=None),
+    # RQ-112 (version 17): where the select's Back lands, 0 login or 1 realms.
+    "bad-version-16": blob(version=16),
+    "ok-select-back-realms": blob(back=1),
+    "bad-select-back": blob(back=2),
+    "bad-select-back-missing": blob(back=None),
     "ok-select-bar": blob(screen_data=bar_screens),
     "ok-select-bar-name": blob(screen_data=bar(("str_id",))),
     "bad-select-bar-off-select": blob(screen_data=bar_off_select()),
@@ -1578,6 +1604,12 @@ try:
     assert escapes == ["escape ok-select-escape-exit: 1", "escape ok-select-escape-none: 2"], escapes
     line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-select-escape:"))
     assert "front end select escape" in line, line
+    # RQ-112: Back lands on the login unless the package says realms; a value
+    # past realms refused for that reason.
+    backs = [l for l in run.stdout.splitlines() if l.startswith("back ")]
+    assert backs == ["back ok-select-back-realms: 1"], backs
+    line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-select-back:"))
+    assert "front end select back" in line, line
     exit_line = [l for l in run.stdout.splitlines() if l.startswith("message ok-exit-confirm: ")]
     assert exit_line == ["message ok-exit-confirm: %d title='' replaces=1 text='Enter a name. '"
                          % (len(fe.MESSAGES) - 1)], exit_line

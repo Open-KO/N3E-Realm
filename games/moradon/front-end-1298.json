@@ -131,6 +131,7 @@
     "front_clip": "loop",
     "turn": "path",
     "escape": "none",
+    "back": "realms",
     "zone": 10001,
     "fog": true,
     "paths": [

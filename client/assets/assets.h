@@ -926,6 +926,14 @@ enum class FrontTurnMode : uint32_t { rotate, path };
 // which only skips a playing path, KO-FINDINGS 9.9), so otherwise ESC does
 // nothing.
 enum class FrontSelectEscape : uint32_t { back, exit, none };
+// Version 17 (RQ-112): where the select's Back lands. Either way it drops the
+// connection and returns to the login, which connects again and logs in with a
+// stored session as at start, the realm list following. login, the realm's:
+// the login bar shown until that login starts; realms, 1298's and 1264's (their
+// Back sets the login procedure's byte +0x21, 1264's +0x35, whose Init connects,
+// asks for the server list and hides the bar: 005f68e0, 005bd9b0, KO-FINDINGS
+// 9.12): the bar hidden from the click, through the connection, to the list.
+enum class FrontSelectBack : uint32_t { login, realms };
 // One recorded path (an .n3camera's eye keys and at keys, engine space): from
 // one slot to another, or (from kEntry) the entry path to slot 0.
 struct FrontPath {
@@ -1001,6 +1009,7 @@ struct FrontEnd {
   float spot_rate = 0;
   FrontClipMode front_clip = FrontClipMode::hover;  // version 6
   FrontSelectEscape select_escape = FrontSelectEscape::back;  // version 15 (16: none)
+  FrontSelectBack select_back = FrontSelectBack::login;      // version 17
   FrontTurnMode turn = FrontTurnMode::rotate;       // version 7
   std::vector<FrontPath> paths;                     // version 7: the path mode's
   std::vector<FrontMesh> hall;                      // version 7: may be empty

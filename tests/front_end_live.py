@@ -78,7 +78,12 @@ from the player's own KO data.
      bt_exit for DIK_ESCAPE; the 1298 recipe's does nothing (RQ-119,
      KO-FINDINGS 9.9: 1298's bar OnKeyPress 00607810 presses no button);
      while a start clip plays (RQ-121, KO-FINDINGS 9.10), ESC and a click on
-     Exit do nothing in either, as KO's select takes no input then.
+     Exit do nothing in either, as KO's select takes no input then;
+   - the select's Back (RQ-112, KO-FINDINGS 9.12): a click on it at rest is
+     the Back command in either; the 1298 recipe's lands on the realm list,
+     as 1298's Back sets its login procedure's +0x21 (00607160, Init
+     005f68e0), the chosen package's on the login (the realm's; 1264's lands
+     on its server list too, a known difference left to the maintainer).
 
 No server or stack.
 """
@@ -279,14 +284,15 @@ EXIT_ASKS = ("asks=1 shown=0,1,1 plain=1,0,0 esc=closed:none enter=closed:exit "
 START_IGNORES = " started=1 start_esc=none start_exit=none"
 
 
-def check_exit(size, stdout, box_tree, width, height, plain, question, yes, escape):
+def check_exit(size, stdout, box_tree, width, height, plain, question, yes, escape, back):
     """The select's exit question against its box, `box_tree` centred at
     ((W - w) >> 1, (H - h) >> 1): the client's report, ESC on the select at
-    rest doing `escape` (RQ-116: `asks`; RQ-119: `none`), the Yes rect the shot
+    rest doing `escape` (RQ-116: `asks`; RQ-119: `none`), Back landing on
+    `back` (RQ-112: `login` or `realms`), the Yes rect the shot
     names (`yes`), Yes and No drawn where the OK box (`plain`) draws OK and
     the text in the message rect. Returns the box's origin."""
     exits = re.search(r"^FRONT_EXIT (.*)$", stdout, re.M)
-    want = EXIT_ASKS + " select_esc=" + escape + START_IGNORES
+    want = EXIT_ASKS + " select_esc=" + escape + START_IGNORES + " back=back:" + back
     assert exits and exits.group(1) == want, (size, exits and exits.group(1), want)
     root = box_tree["rect"]
     bx, by = (width - (root[2] - root[0])) >> 1, (height - (root[3] - root[1])) >> 1
@@ -410,7 +416,7 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     # 1264's bt_exit does (00444e60), in 1264's El_MessageBox_us.uif; RQ-116:
     # its ESC asks the same, as 1264's OnKeyPress (004454e0) presses bt_exit.
     exit_box = check_exit(size, run.stdout, LAYOUTS["message"], width, height, shots["message"][0],
-                          shots["message-exit"][0], shots["message-exit"][1], "asks")
+                          shots["message-exit"][0], shots["message-exit"][1], "asks", "login")
     waiting, line, _ = shots["login-waiting"]
     login = LAYOUTS["login"]
     root_x, root_y = (width - (login["rect"][2] - login["rect"][0])) >> 1, height - (login["rect"][3] - login["rect"][1])
@@ -628,9 +634,9 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     # OnKeyPress (00607810) presses no button for it.
     assert {"message", "message-exit"} <= set(shots), (size, sorted(shots))
     bx, by = check_exit(size, run.stdout, box_tree, width, height, shots["message"][0], shots["message-exit"][0],
-                        tuple(map(int, shots["message-exit"][1].split(","))), "none")
+                        tuple(map(int, shots["message-exit"][1].split(","))), "none", "realms")
     print(f"PASS front-end captures 1298 recipe {size}: 1298's select bar at ({x0}, {y0}), unscaled, its ten "
           f"bound nodes where 1298's Load puts them, its info texts filled for a character and empty without; "
           f"its Exit asks yes or no in its centred box at ({bx}, {by}), ESC and No closing it, ENTER and Yes leaving the game; "
-          f"ESC on the select does nothing")
+          f"ESC on the select does nothing; Back lands on the realm list")
 print("PASS KO front end graphical")

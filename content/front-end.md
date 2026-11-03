@@ -15,8 +15,8 @@ RQ-102, Q81), where each layout's nodes go on a window of its own size
 only while the login group is not (version 12, RQ-108, Q85), 1298's select
 bar's actions and two messages (version 13, RQ-109), the message box's
 Yes and No with the select's exit question (version 14, RQ-111), what ESC
-presses on the select (version 15, RQ-116) and its `none`, 1298's (version 16,
-RQ-119).
+presses on the select (version 15, RQ-116), its `none`, 1298's (version 16,
+RQ-119), and where the select's Back lands (version 17, RQ-112).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -30,7 +30,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 16, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 17, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -62,7 +62,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 7. The select scene: camera, lights, global ambient, the slots (count equal to
    the character slots), the spot's growth rate (version 4: theta per second,
    above 0 and at most 100), the front-clip mode (version 6: 0 hover, 1 loop;
-   below), the select's ESC (version 15: 0 back, 1 exit; version 16: 2 none; below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
+   below), the select's ESC (version 15: 0 back, 1 exit; version 16: 2 none; below), where the select's Back lands (version 17: 0 login, 1 realms; below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
    (0 in the rotate mode, 1–8 in the path mode) and the paths, the hall (part
    count ≤64, each a mesh; version 7: it may be 0), the zone (version 8: a
    mesh count, 0–256, 0 when the hall has parts, each a zone mesh; below), the
@@ -257,6 +257,25 @@ address mode); the font atlases and the moon linear.
   nothing, so ESC only skips a path and otherwise does nothing, the start
   clip's time included. The nodes bound to `back` and `exit` keep their
   clicks.
+- Where the select's Back lands (version 17, RQ-112; `client/render/front_end.h`
+  `back_lands`, `client/render/viewer.cpp`). Either way Back drops the realm
+  connection and returns to the login screen, which connects again; with a
+  stored session the client logs in with it at once, as at start, and its
+  answer opens the realm list, so the player is back on the realm list after one
+  round trip. Without one (none saved, or refused) the login waits for a Discord
+  login. 0, login (the realm's): the login bar shows while the client connects,
+  and hides from the stored session's login to its answer, as for any login
+  (below). 1, realms (1298's, `specs/KO-FINDINGS.md` §9.12, binary: its Back,
+  `00607160`, sets the login procedure's byte `+0x21`, whose Init, `005f68e0`,
+  connects, asks for the server list and hides the bar; 1264's the same, `+0x35`,
+  `005bd9b0`): the bar hidden from the click, through the connection, to the
+  stored session's answer and the realm list; it shows again when there is no
+  stored session to log in with, and a connection that fails shows the
+  `connect_failed` message over it, as after a login press. A layout's
+  `login_closed` node shows while the bar is hidden, as for any login (1264
+  shows its line neither then nor on its list after a Back: SetVisibleLogInUIs
+  is not called). The recipe names it (`select.back`: `login`, the default, or
+  `realms`).
 - Turn mode (version 7, RQ-087): how the camera goes from slot to slot.
   - 0, rotate (1097, `0043e4e0`; the slot above): the eye turns about `at`.
     No paths; the select UI shows throughout.
@@ -333,7 +352,8 @@ flag other than 0 or 1 or a text that does not replace, a node bound to
 `char_class` on a screen other than the select (version 13), a node bound to
 `yes` or `no` on a screen other than the message box, or `exit_confirm` named
 without nodes bound to both on it (version 14), a select ESC other than 0, 1 or
-2 (version 15; 2 since version 16), placement flags
+2 (version 15; 2 since version 16), a select Back other than 0 or 1 (version
+17), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
 file does not have, a rule of another kind or outside its bounds, a keep rule
 with a or c not 0, moves that do not leave the canvas rects where the file puts
@@ -562,6 +582,11 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   1298's bar OnKeyPress (`00607810`) presses no button for ESC; it calls
   `005faad0`, the select tick's own ESC body, which skips a playing path and
   at rest changes nothing (Q87). Back and Exit stay on their buttons.
+- `select.back` `realms` (RQ-112, `specs/KO-FINDINGS.md` §9.12, binary): Back
+  lands on the realm list, the bar hidden from the click, as 1298's Back
+  (`00607160`) sets its login procedure's `+0x21` and the login's Init
+  (`005f68e0`) then connects, asks for the server list (`0xf5`) and hides
+  `Group_LogIn` (Q87).
 - Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
   create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF
@@ -700,7 +725,11 @@ box and loading are 1264's.
   or ESC closes the box. ESC on the select asks the same (`select.escape`
   `exit`; RQ-116, §9.8, binary: OnKeyPress `004454e0` presses `bt_exit` for
   `DIK_ESCAPE`, as a click), the maintainer's choice (2026-11-02) over the
-  realm's ESC there, Back, which stays on `bt_back`.
+  realm's ESC there, Back, which stays on `bt_back`. Back lands as the realm's
+  does (`select.back` absent, `login`); 1264's lands on its server list with
+  neither its bar nor its line (RQ-112, §9.12, binary: `bt_back` sets the login
+  procedure's `+0x35`, whose Init `005bd9b0` connects, asks for the list and
+  hides `Group_LogIn` alone), a difference left to the maintainer.
 - Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest fixed
   on, every other race, class, face, hair and stat arrow fixed disabled, the
   bonus points and stat highlights hidden (Q52).

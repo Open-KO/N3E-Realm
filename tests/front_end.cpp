@@ -439,6 +439,9 @@ int main(int argc, char **argv) {
       // RQ-116: a select whose ESC presses exit, not back.
       if (fe.select_escape != n3e::FrontSelectEscape::back)
         std::cout << "escape " << release.root.filename().string() << ": " << uint32_t(fe.select_escape) << "\n";
+      // RQ-112: a select whose Back lands on the realm list, not the login.
+      if (fe.select_back != n3e::FrontSelectBack::login)
+        std::cout << "back " << release.root.filename().string() << ": " << uint32_t(fe.select_back) << "\n";
       // RQ-106: placed NAME: layout=L size=WxH node=I rect=x0,y0,x1,y1
       if (release.root.filename().string().starts_with("ok-placed"))
         for (const auto [w, h] : {std::pair{1024, 768}, {1280, 1024}, {1600, 1200}, {1281, 1025}, {800, 600}}) {

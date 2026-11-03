@@ -32,6 +32,8 @@
 // and (RQ-121) whether ENTER on one character starts it, and what ESC and a
 // click on Exit do while its start clip plays:
 // started=0|1 start_esc=asks|back|exit|none start_exit=asks|back|exit|none
+// and (RQ-112) what a click on Back at rest does and where the package says
+// it lands: back=asks|back|exit|none:login|realms
 // (the shot message-exit is the select with that box, rect= Yes's);
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
@@ -215,6 +217,12 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     std::cout << " started=" << started << " start_esc=" << did(key(SDLK_ESCAPE));
     std::cout << " start_exit=" << did(click(A::exit));
     list.Clear();
+    front->jump(Screen::select);
+    // RQ-112 (KO-FINDINGS 9.12): a click on Back at rest, and where the
+    // package says it lands: login, or realms (1298's, through a login held
+    // with the bar hidden from the click).
+    std::cout << " back=" << did(click(A::back)) << ":"
+              << (front->back_lands() == n3e::FrontSelectBack::realms ? "realms" : "login");
     front->jump(Screen::select);
     std::cout << std::endl;
     if (asked)

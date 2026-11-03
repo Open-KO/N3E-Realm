@@ -797,7 +797,8 @@ for a character at rest. Not 1298's (Q87): Exit leaves at once, with no yes/no b
 (the realm's message box has one button); Back returns to the login, not the server
 list; the arrows hide at the ends of the row, as every realm select's do. The 1097
 choice changes by the version word only. *RQ-111 (§9.7): Exit now asks, as 1298's
-does.*
+does.* *RQ-112 (§9.12): Back now lands on the realm list, the bar hidden from the
+click, as 1298's does.*
 
 ### 9.7 1298's message box and its Exit question (RQ-111, 2026-11-02)
 
@@ -851,7 +852,7 @@ them). Not run: the static reading answers it. The source agrees where named.
 | Observation | Where | Label |
 |---|---|---|
 | **The select's handlers.** CUICharacterSelect's vtable is at `00648f14` (Load `004448f0` at slot 3, §9.3; ReceiveMessage `00444e60` at slot 19; OnKeyPress `004454e0` at slot 24). Load keeps `bt_left` at `+0xb0`, `bt_right` `+0xb4`, `bt_exit` `+0xb8`, `bt_delete` `+0xbc` and `bt_back` `+0xc0` (strings `0066a840`, `0066a834`, `0066a82c`, `0066a820`, `0066a818`) | 1264 vtable `00648f14`, `004448f0` | binary |
-| **Exit posts a yes/no box of row 1502, untitled.** ReceiveMessage, on a click (message 1) and with the UI flag `007ad09c + 0xb4` set: `bt_exit` looks up row `0x5de` (1502, `005d2350`), makes an empty title (`00674f68`) and calls MessageBoxPost (`005f7f80`) with style 4 and behaviour 1, the source's `MB_YESNO` and `BEHAVIOR_EXIT`. `bt_left` and `bt_right` call `00442e60` and `00442ed0` (DoJobLeft, DojobRight); `bt_back` calls `00438010`, then `005f7f30` with the procedure `007ad0b0`, and sets that procedure's byte `+0x35` (the source's Disconnect and ProcActiveSet(s_pProcLogIn); not read further) | 1264 `00444e60`; source `UICharacterSelect.cpp` `ReceiveMessage` | binary; source |
+| **Exit posts a yes/no box of row 1502, untitled.** ReceiveMessage, on a click (message 1) and with the UI flag `007ad09c + 0xb4` set: `bt_exit` looks up row `0x5de` (1502, `005d2350`), makes an empty title (`00674f68`) and calls MessageBoxPost (`005f7f80`) with style 4 and behaviour 1, the source's `MB_YESNO` and `BEHAVIOR_EXIT`. `bt_left` and `bt_right` call `00442e60` and `00442ed0` (DoJobLeft, DojobRight); `bt_back` calls `00438010`, then `005f7f30` with the procedure `007ad0b0`, and sets that procedure's byte `+0x35` (the source's Disconnect and ProcActiveSet(s_pProcLogIn); the flag, read in §9.12, makes the login's Init ask for the server list) | 1264 `00444e60`; source `UICharacterSelect.cpp` `ReceiveMessage` | binary; source |
 | **It is the box every message uses, as 1298's.** MessageBoxPost passes (text, title, style, behaviour) to the manager (`0050c730`, §9.2), which loads `El_MessageBox_us.uif` (row 2, column 26) and centres it, keeps the behaviour at `+0xd0` and calls SetBoxStyle (`0050bfb0`): it hides `Btn_OK` (`+0xb0`), `Btn_Yes` (`+0xb4`), `Btn_No` (`+0xb8`) and `Btn_Cancel` (`+0xbc`), keeps the style at `+0xd4`, then shows Yes and No for 4, Cancel for 6 and OK otherwise. The box's Load (`0050b0e0`, vtable `0064b49c` slot 3) finds those four and `Text_Message`, `Text_Title`, `Edit_Common` by name | 1264 `0050c730`, `0050bfb0`, `0050b0e0`; strings `0066bf5c`, `0066c7f4`, `0066c7ec`, `0066b9bc`, `0066b988`, `0066b504`, `0066c7e0` | binary |
 | **Yes on BEHAVIOR_EXIT quits; No closes.** The box's ReceiveMessage (`0050b510`, slot 19), on a click: `Btn_OK` or `Btn_Yes` calls the parent's callback with 1, then by behaviour; behaviour 1 calls `005aacd0` when the main procedure is the active one and `PostQuitMessage(0)`. `Btn_No` or `Btn_Cancel` calls the callback with 2, hides the box and empties its texts, then by behaviour (no case for 1). Either way it then hides the box, empties `Text_Message` and `Text_Title`, empties and hides the edit and resets the behaviour to 0 | 1264 `0050b510`; source `UIMessageBox.cpp` `ReceiveMessage` | binary; source |
 | **ENTER is Yes, ESC is No.** The box's OnKeyPress (`0050c1d0`, slot 24), with the box shown: in a style-4 box `DIK_ESCAPE` presses `Btn_No` and `DIK_RETURN` or `DIK_NUMPADENTER` presses `Btn_Yes`; in a style-6 box any of the three presses `Btn_Cancel`; in a style-0 box, unless the behaviour is 3, `Btn_OK`. The same as 1298's `00527c60` | 1264 `0050c1d0` | binary |
@@ -1011,6 +1012,51 @@ difference to change; the item's premise (that `escape()` quits from loading) wa
 `escape()` read alone. The window's close button during loading (the source's
 `WM_CLOSE`, RequestExit once the main procedure is active) was not read.
 
+### 9.12 Back on 1298's and 1264's select returns to the server list (RQ-112, 2026-11-03)
+
+Read statically in n3e's 1298 `KnightOnLine.exe` (sha256 `828ab0db…43a5e5`, Ghidra
+project `build/ghidra/audit-2026-09-19`, `-readOnly -noanalysis`, `AuditReference.java`
+`recover`, the functions in memory only; output under `build/ghidra/rq112/`, not
+committed) and §9.1's 1264 image (`ko1264-unpacked.exe`, sha256 `61e9a086…99e136471`,
+Ghidra project `build/ghidra/rq096`, the same way), with `objdump` of both images
+for the flag's writers and readers. Not run (Wine is approved for 1097 and 1264 only;
+the static reading answers it). The source differs where named.
+
+| Observation | Where | Label |
+|---|---|---|
+| **1298's Back disconnects, changes the procedure and sets a flag.** The bar's ReceiveMessage (`00607160`, §9.6) for `btn_back` (`+0xbc`) calls `004512f0` on `00818984`, which closes the socket (ws2_32 ordinal 3, `closesocket`) and empties its buffers; then ProcActiveSet (`00646b50`) with the login procedure `008189a8`, which sets the UI flag, closes the message boxes (`00528790`), keeps the select as the previous procedure and makes the login active, calling no Init; then sets the login procedure's byte `+0x21` to 1. The later source's Back only disconnects and changes the procedure (no flag) | 1298 `00607160`, `004512f0`, `00646b50` | binary; source `UICharacterSelect.cpp` `ReceiveMessage` |
+| **With `+0x21` set, the login's Init asks for the server list, the bar hidden.** Init (`005f68e0`, which runs on the next tick, as 1264's procedure change does, §9.11) makes and places the login UI and shows `Group_LogIn` (`+0xd0`, §9.5); then with `+0x21` clear it calls the auto-login send (`005f7690`) when `00818a10` is set, and otherwise waits for the player; with it set it connects to the login server (`005f6e20`: `Server.ini`'s list, "LogIn Server fail" when none), sends `0xf5` (the server list request; no account login, `0xf3`, is sent), hides `Group_LogIn` again (SetVisible(0) through `+0x3c`) and sets the UI's requested-login byte `+0x680` | 1298 `005f68e0`, `005f6e20` | binary |
+| **The flag stays until a server is chosen.** Its writers are the procedure's constructor (`005f6768`, 0), the bar's Back (`00607447`, 1), another UI's button that does the same three steps (`0060c880`–`0060c89f`, not identified here; the source's nation select Back changes the procedure only) and the login UI's ENTER (`00609100`, message `0x1000`): with `+0x21` or `+0x680` set it sends no account login and, with the server list shown and no box over it, connects to the chosen game server (`005f8880`) and clears the flag (`006093c9`) | 1298 `005f6768`, `00607447`, `0060c89f`, `00609100`, `005f8880` | binary |
+| **1264 is the same.** `bt_back` (`00444e60`, §9.8) calls `00438010` on `007ad08c` (`closesocket`), ProcActiveSet (`005f7f30`, no Init, §9.11) with the login procedure `007ad0b0`, then sets its byte `+0x35` (`00445145`). The login's Init (`005bd9b0`) recreates its music (sound 35), makes and places the login UI and, with `+0x35` set, connects to the login server (`005bdf00`, `Server.ini`), sends `0xf5`, hides `Group_LogIn` (`+0xd8`) alone through its SetVisible (`+0x3c`) and sets the UI's `+0x12c`; with it clear it calls `005bea20` when `007ad118` is set (not read). The constructor (`005bd83b`) and the login UI's ENTER on the shown list (`005c0db3`, after `005bfe80`) clear it; two buttons of another UI (`005bc332`, `005bc4eb`, not identified) set it as Back does | 1264 `00444e60`, `00438010`, `00445145`, `005bd9b0`, `005bdf00`, `005bd83b`, `005c0db3` | binary |
+| **So 1264 shows neither the bar nor the line from Back to its list.** Its Init hides the group directly, not through SetVisibleLogInUIs (`005c2820`), the only code that shows `Text_Rights`, which Load hides (§9.4); the server list's answer (`005beba0`) opens the list touching neither (§9.4). After a Back 1264's server list shows without the copyright line that a login press leaves on it | 1264 `005bd9b0`, `005c2820`, `005beba0` | binary |
+
+**The realm (`client/render/viewer.cpp`, `client/network/discord_login.cpp`).** Back
+(`Command::back`) drops the connection and resets the front end to the login, where
+the client connects again at once (the connection starts on every frame but the
+logo's). The Discord flow, reset with it, logs in with a stored session as soon as the
+connection is up, as at start (`Flow::update`, phase `start` → `session`), without a
+press; its answer (`done`) opens the realm list (`logged_in`). So with a stored
+session the realm's Back already lands on the realm list after one round trip, as
+KO's does; the item's premise ("the realm Back returns to the login") holds only for a
+player without one, whose login then waits for a Discord login (KO keeps the account
+in memory and never meets that case). The realm's own way (`login`, below) shows the
+login bar while the client connects (no login is under way until the session's is
+sent) and hides it from the session's login to its answer; the 1097 choice draws its
+copyright line meanwhile and on the list, as after a login press (RQ-108). The flow test's return after a kick
+shows that re-login (`tests/front_end_flow_live.py`).
+
+**Decides (RQ-112):** N3FE version 17 carries where the select's Back lands
+(`select.back`): `login` (the realm's, the default) or `realms`, 1298's: the viewer
+then holds a login from the click, the bar hidden through the connection until the
+flow has started (the stored session's login, which keeps it hidden to the answer and
+the list, or none, where the bar shows again), and a connection that fails meanwhile
+shows its `connect_failed` box, as after a login press. The 1298 recipe (not offered)
+names `realms`. The 1097 choice keeps `login`: 1264's Back lands on its server list
+too, its bar and its line hidden from the click (above), a look-and-feel difference
+for the maintainer, proposed as its own item; `realms` alone would still draw a
+layout's `login_closed` line while the bar is hidden and on the list, which 1264 does
+not after a Back.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -1031,7 +1077,7 @@ notes.
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |
 | Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. §9.2 (RQ-085): the 1097 choice's layouts are the 1264 install's, its message box and loading 1264's. |
 | Q85 | §9.4 (RQ-108): 1264 shows the login's copyright line, at `((W − w) / 2, H − h − 20)`, only while its login bar is hidden: from a login press until a failed answer, and with the server list after a success; the 1097 choice does the same (N3FE version 12's `login_closed`), the bar hidden while the Discord flow runs. |
-| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. §9.7 (RQ-111): 1298's Exit box is `El_MessageBox_us.uif` with Yes and No (labelled OK and Cancel), ENTER Yes and ESC No, Yes quitting; the 1298 recipe asks so (N3FE version 14). §9.8 (RQ-115): 1264's select Exit (`bt_exit`, `00444e60`) asks the same, row 1502 yes or no in its `El_MessageBox_us.uif`; the 1097 choice asks so too. RQ-116: 1264's select presses `bt_exit` for ESC (`004454e0`), and the 1097 choice's ESC asks so (N3FE version 15, `select.escape`). §9.9 (RQ-117): 1298's select ESC presses no button (`00607810` → `005faad0`): it skips a path and at rest does nothing; RQ-119: the 1298 recipe's ESC does the same (N3FE version 16, `select.escape` `none`), the maintainer's choice. |
+| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. §9.7 (RQ-111): 1298's Exit box is `El_MessageBox_us.uif` with Yes and No (labelled OK and Cancel), ENTER Yes and ESC No, Yes quitting; the 1298 recipe asks so (N3FE version 14). §9.8 (RQ-115): 1264's select Exit (`bt_exit`, `00444e60`) asks the same, row 1502 yes or no in its `El_MessageBox_us.uif`; the 1097 choice asks so too. RQ-116: 1264's select presses `bt_exit` for ESC (`004454e0`), and the 1097 choice's ESC asks so (N3FE version 15, `select.escape`). §9.9 (RQ-117): 1298's select ESC presses no button (`00607810` → `005faad0`): it skips a path and at rest does nothing; RQ-119: the 1298 recipe's ESC does the same (N3FE version 16, `select.escape` `none`), the maintainer's choice. §9.12 (RQ-112): 1298's Back sets its login procedure's `+0x21`, whose Init connects, asks for the server list and hides the bar (`005f68e0`), 1264's the same (`+0x35`, `005bd9b0`, its line hidden too); the realm's Back, with a stored session, already reaches the realm list through the session's login; the 1298 recipe hides the bar from the click (N3FE version 17, `select.back` `realms`), and the 1097 choice keeps the realm's. |
 | Q86 | §9.5 (RQ-110): 1298's login draws no copyright line (its login is the intro layout, no `Text_Rights`) and hides its bar from a press until a failed answer; the 1298 recipe hides the line and, like every layout now, its bar while a login is under way. |
 | Q82 | §9.2 (RQ-101): 1264's logo procedure runs first, once a process: three groups fading in, holding and fading out on black over 12 s, `Snd\bless.wav` from 1 s faded out over 4 s from the third, any key skipping to the login, the cursor hidden; the 1097 choice shows it (N3FE version 9). §9.3 (RQ-106): KO draws every front-end layout unscaled, placed by the screen's size (the login on the bottom edge, the server list at the top-left, the select's buttons on the bottom edge, create, loading, the message box and the logo centred), the 3D scenes filling the screen; the realm does the same (N3FE version 11). |
 | Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. §9.2 (RQ-102): 1264 titles its login answer's and its create failures; the 1097 choice gives the realm's matching messages KO's title and wording (N3FE version 10) and leaves the rest untitled. |

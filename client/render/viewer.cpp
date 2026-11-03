@@ -1200,6 +1200,10 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     // ENTER (or the Discord button) on the login screen: held until the
     // connection is up, so a press while connecting still logs in.
     bool front_login = false;
+    // RQ-112: a select Back that lands on the realm list (the package's
+    // select.back realms): held from the click until the new connection's
+    // flow has started, the login bar hidden meanwhile.
+    bool front_back = false;
     uint64_t front_alerts = 0;
     double front_hold = 0;
     uint64_t front_refusals = 0;
@@ -1696,7 +1700,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
       automated_login = automated_select = false;
 #endif
       front_progress = 0;
-      front_entering = front_chose = front_connected = front_login = false;
+      front_entering = front_chose = front_connected = front_login = front_back = false;
       front_hold = 0;
       front_refusals = 0;
     };
@@ -1813,9 +1817,16 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             message.mutable_create_character()->set_name(out.name);
             network->send(message);
             break;
+          // The select's Back: a new connection, the login screen, where the
+          // stored session logs in again as at start and its answer opens the
+          // realm list (front->logged_in). RQ-112 (KO-FINDINGS 9.12): a package
+          // whose Back lands on the realm list holds a login from the click,
+          // the bar hidden through the connection, as 1298's login Init with
+          // +0x21 (005f68e0) hides it as it connects and asks for the list.
           case n3e::front::Command::back:
             reset_connection();
             front->reset();
+            front_back = front->back_lands() == n3e::FrontSelectBack::realms;
             break;
           default: break;
           }
@@ -2428,6 +2439,19 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             front_login = false;
             front->show_message(n3e::FrontMessage::connect_failed, why);
           }
+          // RQ-112: a Back to the realm list holds until the new connection's
+          // flow has started: to a stored session's login, which keeps the bar
+          // hidden below until its answer, or, without one, to idle, where the
+          // bar shows again. A connection that fails meanwhile shows its
+          // failure, as a held login press's does.
+          if (front_back && world.connected && discord_flow->phase() != n3e::login::Flow::Phase::start)
+            front_back = false;
+          if (front_back && !world.connected && world.status != "Connecting") {
+            std::string why = world.status;
+            if (const auto bar = why.find(" | F12"); bar != std::string::npos) why.resize(bar);
+            front_back = false;
+            front->show_message(n3e::FrontMessage::connect_failed, why);
+          }
           if (front_connected && !world.connected) {
             const std::string why = world.disconnect.empty() ? "Disconnected from server" : world.disconnect;
             reset_connection();
@@ -2451,10 +2475,11 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           // (held through the connection) or a stored session's login, through
           // the browser step and its code, to the answer; a failure (back to
           // idle) or a reset connection ends it. 1298 hides its bar the same
-          // way and has no line (RQ-110, 005f74c0; front_login.h).
+          // way and has no line (RQ-110, 005f74c0; front_login.h). RQ-112: a
+          // Back to the realm list holds it hidden from the click (front_back).
           using Phase = n3e::login::Flow::Phase;
           const auto phase = discord_flow->phase();
-          front->login_waiting(front_login || phase == Phase::session || phase == Phase::browser ||
+          front->login_waiting(front_login || front_back || phase == Phase::session || phase == Phase::browser ||
                                phase == Phase::code || phase == Phase::done);
         }
         // PQ-406 (D-209): a new chat, whisper, rest or admin refusal takes the

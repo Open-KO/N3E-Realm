@@ -2676,7 +2676,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 16, "front end version");
+  need(r.u() == 17, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2913,6 +2913,10 @@ FrontEnd load_front_end(const Release &release) {
   const auto escape = r.u();
   need(escape <= uint32_t(FrontSelectEscape::none), "front end select escape");
   fe.select_escape = FrontSelectEscape(escape);
+  // Version 17 (RQ-112): where the select's Back lands, 0 login or 1 realms.
+  const auto back = r.u();
+  need(back <= uint32_t(FrontSelectBack::realms), "front end select back");
+  fe.select_back = FrontSelectBack(back);
   // Version 7 (RQ-087): the turn mode, 0 rotate or 1 path, and the path
   // mode's camera paths (none in the rotate mode): each from a slot (or
   // kEntry) to another, then its eye keys and its at keys, each set a rate

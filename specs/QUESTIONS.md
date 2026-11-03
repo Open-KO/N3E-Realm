@@ -1141,3 +1141,19 @@ option (b). N3FE version 16 adds `select.escape` `none`: ESC on the select press
 nothing, so in the path mode it only skips a playing path and otherwise does nothing,
 as 1298's. The 1298 recipe names it; its Back and Exit buttons keep their clicks, and
 where Back leads, the arrows and Create from an occupied slot stay as above.
+**Back read (RQ-112, KO-FINDINGS §9.12):** 1298's Back disconnects, activates the
+login and sets its `+0x21`, whose Init connects, asks for the server list (`0xf5`, no
+account login) and hides the bar (`005f68e0`); 1264's does the same with `+0x35`
+(`005bd9b0`), hiding its line too. The realm's Back already reaches the realm list
+when the player has a stored session: the reconnected login logs in with it at once,
+as at start, and its answer opens the list; only the bar's look on the way differs
+(shown while the client connects; the 1097 choice's line during the session's login
+and on the list). N3FE version 17 makes it package data (`select.back`: `login`, the
+realm's and the default, or `realms`, the bar hidden from the click through the
+connection to the list); the 1298 recipe (not offered) names `realms`. **Default
+taken:** the 1097 choice keeps `login` until the maintainer chooses, as RQ-116 was
+chosen (a look-and-feel difference to the offered front end); naming `realms` there
+and hiding its line through a Back's login and on the list after it, as 1264 does, is
+proposed as its own item. Without a stored session the realm's Back waits on the login
+for a Discord login whatever the package says (KO keeps the account in memory). The
+arrows and Create from an occupied slot stay as above.

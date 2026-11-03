@@ -339,6 +339,12 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::optional<FrontMessage> message_kind() const {
     return message ? std::optional<FrontMessage>(message->kind) : std::nullopt;
   }
+  // RQ-112 (version 17, KO-FINDINGS 9.12): where the select's Back lands, as
+  // the package says: the login (the realm's) or, through a login the viewer
+  // holds from the click with the bar hidden, the realm list (1298's Back sets
+  // its login procedure's +0x21, whose Init connects, asks for the server list
+  // and hides the bar, 005f68e0).
+  FrontSelectBack back_lands() const { return fe.select_back; }
   bool creating() const { return pending_create; }
   // The character in front as the last select frame showed it; the test
   // client checks the hover, its blends, the spot and the info text.
@@ -911,6 +917,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       focus = order[at];
       break;
     }
+    // The select's Back drops the connection (the viewer's reset); where it
+    // then lands is the package's (back_lands, RQ-112).
     case FrontAction::back:
       if (state == Screen::create) enter_select();
       else if (state == Screen::select && choosing < 0) out.command = Command::back;

@@ -975,6 +975,42 @@ the package's `select.escape` and `exit_confirm` say, as 1264's, 1097's and (the
 above) 1298's select take no input then; no package data changes. The realm's ENTER
 does not skip the clip (Q72's start on the press, at rest only, unchanged).
 
+### 9.11 ESC on 1264's loading screen does nothing (RQ-122, 2026-11-03)
+
+Read statically in §9.1's 1264 image (`ko1264-unpacked.exe`, as §9.10; Ghidra project
+`build/ghidra/rq096`, `-readOnly -noanalysis`, `AuditReference.java` `recover`, the
+functions in memory only; output under `build/ghidra/rq122/`, not committed), with
+`objdump` for the main loop, the procedure change and the main procedure's load flag,
+a PE reader for its vtable and the image's import slots (`build/rq-1264/ko1264-imports.json`).
+Not run (no Wine): the static reading answers it. The source agrees where named,
+except where a row says otherwise.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The procedure change waits a frame.** ProcActiveSet (`005f7f30`), which the select's state-3 tick calls when the start clip has played (`00443810`, §9.10) and ProcessOnReturn after the second ENTER (`004426d0`, which then draws "Loading data..." through `005f7d50`), sets the UI flag (`007ad09c + 0xb4`) 1, closes any box (`0050cba0`), keeps the select as the previous procedure (`007ad0a8`) and makes the main procedure (`007ad0c0`) active (`007ad0ac`); it calls no Init | 1264 `005f7f30`, `00443810`, `004426d0` | binary |
+| **The main procedure's Init runs inside a tick, with no message pump.** The game loop (`0060253e`–`00602572`) takes a window message with PeekMessageA (slot `006482c4`, `PM_REMOVE`), translating and dispatching it, and otherwise calls TickActive (`005f7cf0`) and RenderActive (`005f7d30`), until `WM_QUIT`; PeekMessageA and DispatchMessageA are named nowhere else in the image. TickActive, with the active procedure not the previous one, calls the previous one's slot 0 (Release), the active one's slot 7 (Init) and makes it the previous one, then calls its slot 8 (Tick); RenderActive calls slot 9 (Render) only when the two are the same | 1264 `00602564`, `005f7cf0`, `005f7d30`; `ko1264-imports.json` | binary |
+| **That Init draws the loading screen as it loads.** The main procedure's vtable (`0064d1d0`, stored by its constructor `00590b60` at `00590d22`): slot 2 ProcessPacket `00593f40`, 7 Init `005929b0`, 8 Tick `00592db0`, 9 Render `00593a30`, 10 the key pass `005b1010`. Init loads the UI (`005a0270`), the zone (`005a3580`, which clears the load flag `+0x184` and draws the loading UI `007ad0a0` through `005f7d50`) and the characters (`005b21e0`: "Loading Character Data..." to "... 100 %", through `005f7d50`), then sends `0x0d` (the source's `WIZ_GAMESTART`) and returns. While it runs no key, click or window message is handled, and the keyboard is read as a state (the input tick `005fd7f0`: GetActiveWindow, the device's GetDeviceState for 256 keys, Acquire on failure; the source's `CLocalInput::Tick` takes a press as a key down now and up on the last tick), so an ESC pressed and released during the load is never seen | 1264 `00590b60`, `005929b0`, `005a3580`, `005b21e0`, `005f7d50`, `005fd7f0`; source `LocalInput.cpp` | binary; source (the press edge) |
+| **After Init, until the server answers, the screen stays as the load left it.** The load flag `+0x184` is set only by ProcessPacket's `0x0d` case (`0059451e`: `005a3b30(0)` sends `0x0d` again, then the flag 1) and by one of `0x27`'s (`005948d4`); the constructor (`00590d34`), the Release (`005926e1`), the zone load and another `0x27` case (`00594866`) clear it. Render returns at once with it clear, so the last loading frame stays shown. Tick runs the base tick (`005f7990`: the input tick, the key pass with 1, the UI manager's mouse pass) and returns with it clear, before any of the main procedure's own input | 1264 `00593f40`, `005a3b30`, `00593a30`, `00592db0`, `005f7990` | binary |
+| **ESC then reaches only a focused UI.** The key pass (`005b1010`), with the chat window (`+0x40`) out of chat mode (`005240e0`), runs the base pass (`005f97a0(1)`, §9.10): a shown box takes the keys, else the UI manager's focused, visible UI (`+0xb8`) through OnKeyPress; then an ENTER no UI took focuses the chat (`00523ea0`). ProcActiveSet has closed every box, and the main procedure's HUD windows, in the source, take ESC only to close an open window (`CUIStateBar`, `CUIChat`, `CUIHotKeyDlg`, `CUICmd`: `ReFocusUI` and pass it on; `CUICmdList`: Close): none asks or quits. Which UI 1264 focuses then, and its OnKeyPress, were not read. The source's window procedure (`WarFareMain.cpp`) does not handle `WM_KEYDOWN` | 1264 `005b1010`, `005f97a0`; source `UIStateBar.cpp`, `UIChat.cpp`, `UICmdList.cpp`, `WarFareMain.cpp` | binary; source |
+
+**The realm (`client/render/front_end.h`).** The realm's loading screen spans KO's
+procedure change, Init and wait: it shows from the start clip's end until the first
+`World`, then `0.4` s with the bar full. Every event reaches the front end then
+(`viewer.cpp`: the KO screens take every event while they are active), and its
+`event()` returns before the key dispatch on `Screen::loading`, so ESC there does
+nothing: `escape()`'s last line, `act(FrontAction::exit)` (quit at once), is reached
+only from the login and the server list. A box showing then would take ESC as OK or
+No, as KO's box manager does, but nothing shows one on loading (a drop returns to the
+login first, a refusal to the select). Clicks do nothing too; only the engine's F12
+reconnect (`viewer.cpp`, before the front end's `event()`) and the window close act.
+
+**Decides (RQ-122):** ESC on 1264's loading screen neither asks nor quits: during the
+load nothing reads input, and after it, until the game-start answer, ESC reaches only
+the main procedure's focused UI. The realm does the same, nothing, so there is no
+difference to change; the item's premise (that `escape()` quits from loading) was
+`escape()` read alone. The window's close button during loading (the source's
+`WM_CLOSE`, RequestExit once the main procedure is active) was not read.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

@@ -238,14 +238,20 @@ address mode); the font atlases and the moon linear.
 
   While the camera turns the spot is off and keeps its theta, in both modes.
 - The select's ESC (version 15, RQ-116; `client/render/front_end.h`): what ESC
-  presses on the select, the camera at rest (in the path mode ESC while a path
-  plays still skips it, below). 0, back (the realm's): the select's `back`.
+  presses on the select, in every select state but one: in the path mode ESC
+  while a path plays still skips it (below). So in the rotate mode it presses
+  while the camera turns too, and in both modes while the start clip plays,
+  where `back` does nothing and `exit` asks. 0, back (the realm's): the
+  select's `back`.
   1, exit (1264's: its select's OnKeyPress, `004454e0`, sends `DIK_ESCAPE` to
   ReceiveMessage as a click on `bt_exit`, `specs/KO-FINDINGS.md` §9.8): the
   select's `exit`, as a click on it, so a package that names `exit_confirm`
   asks the exit question and one that does not leaves at once. The node bound
   to `back` keeps its click either way. The recipe names it
-  (`select.escape`: `back`, the default, or `exit`).
+  (`select.escape`: `back`, the default, or `exit`). 1298's is neither
+  (RQ-117, `specs/KO-FINDINGS.md` §9.9): its bar's OnKeyPress (`00607810`)
+  sends ESC to `005faad0`, which only puts the select at rest, so at rest it
+  does nothing.
 - Turn mode (version 7, RQ-087): how the camera goes from slot to slot.
   - 0, rotate (1097, `0043e4e0`; the slot above): the eye turns about `at`.
     No paths; the select UI shows throughout.
@@ -545,8 +551,11 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   mip chains made by the client (KO's DXT files carry their own), fog per
   pixel.
 - No turn sound: 1298 plays none (`select.turn_sound` absent).
-- No `select.escape`: ESC on the select at rest is the realm's back (RQ-116;
-  1298's own select key handling was not read).
+- No `select.escape`: ESC on the select is the realm's back (RQ-116). Not
+  1298's (RQ-117, `specs/KO-FINDINGS.md` §9.9, binary): 1298's bar OnKeyPress
+  (`00607810`) presses no button for ESC; it calls `005faad0`, the select
+  tick's own ESC body, which skips a playing path and at rest changes nothing.
+  The format has no value for that yet (Q87).
 - Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
   create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF

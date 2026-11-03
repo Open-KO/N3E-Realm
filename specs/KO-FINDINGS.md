@@ -379,7 +379,8 @@ The realm flies in only from the realm list, not on a return from create (1298's
 create is a state of the select, `005ff920`) or after a created character; ESC at
 rest stays the realm's back, and ESC while the start clip plays does nothing
 (1298 puts it back to rest); a path the arrows start takes its load's step with
-the frame's own time (Q78).
+the frame's own time (Q78). *RQ-117 (§9.9): 1298's ESC at rest does nothing (the bar's
+OnKeyPress runs the same skip); the 1298 recipe's stays Back.*
 
 ## 9. The front end per client (RQ-078, 2026-11-02)
 
@@ -871,6 +872,42 @@ recipe names `exit`, so ESC on its select asks row 1502 yes or no as its Exit bu
 does, 1264's OnKeyPress pressing `bt_exit`; its Back stays on `bt_back`. The 1298
 recipe keeps `back` (1298's select key handling was not read). ESC while a path
 plays (the path mode) still skips it. Not run: the static reading answers it.
+*RQ-117 (§9.9): 1298's ESC presses neither Exit nor Back; the 1298 recipe keeps
+`back` as a known difference. The realm's select ESC is not only "at rest": it
+presses `back` or `exit` in every select state but a playing path's (§9.9).*
+
+### 9.9 1298's select keys (RQ-117, 2026-11-02)
+
+Read statically in n3e's 1298 `KnightOnLine.exe` (sha256 `828ab0db…43a5e5`, Ghidra
+project `build/ghidra/audit-2026-09-19`, `-readOnly -noanalysis`, `AuditReference.java`
+`recover` and `decompile`; the functions the project has not marked recovered in
+memory only; output under `build/ghidra/rq117/`, not committed), with a PE reader for
+the bar's vtable and OnKeyPress's jump tables; §9.6's reading of the bar and §8.4's
+of the select tick. Not run (Wine is approved for 1097 and 1264 only): the static
+reading answers it. The source differs where named.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The bar's OnKeyPress is `00607810`**, slot 24 (`+0x60`) of its vtable `006a94c8` (slot 19 ReceiveMessage `00607160`, §9.6), as the message box's OnKeyPress is its slot 24 (§9.7) | 1298 vtable `006a94c8` | binary |
+| **ESC skips, it presses no button.** With the UI flag `00818994 + 0xb4` set (the one ReceiveMessage tests), OnKeyPress switches on the key through the byte table `00607898` (key − 1, up to `0xcc`) and the jump table `00607884`: `DIK_ESCAPE` (1) calls `005faad0` on the select procedure (`008189b4`); `DIK_RETURN` (`0x1c`) and `DIK_NUMPADENTER` (`0x9c`) call its own ReceiveMessage (vtable `+0x4c`) with `btn_start` (`+0xb0`) and message 1, a click on Start (`005ff870`, §9.6); `DIK_LEFT` (`0xcb`) calls DoJobLeft (`005fe3c0`) and `DIK_RIGHT` (`0xcd`) DojobRight (`005fe450`) directly; each returns 1, any other key (or the flag clear) 0. No key presses `btn_exit` or `btn_back` | 1298 `00607810` (its jump tables decoded from the image) | binary |
+| **`005faad0` is the tick's ESC body.** Unless the select state (`+0x394`) is 6 or 7 (the in-select create), it puts the camera's frame (`+0x1a4`'s `+0x110`) on its last (`+0x10c`), the slot (`+0x38c`) on the destination (`+0x390`), the state on 5 and shows the bar (`+0x384`'s vtable `+0x3c` with 1) when it is hidden (its `+0xa0` byte 0). OnKeyPress is its only caller. The select tick (`005faf10`) runs the same body inline for the input's `+0x270` (ESC, §8.4) when `00648ce0` returns 0: both bytes `00818a26` and `00818a27` clear, the source's `s_bKeyPress` and `s_bKeyPressed` (a UI took no key this frame, `IsUIKeyOperated`) | 1298 `005faad0`, `005faf10`, `00648ce0`; source `GameProcedure.h` | binary; source |
+| So ESC on 1298's select skips a playing path (§8.4) and at rest (state 5, the frame already on the last, the slot on the destination, the bar shown) changes nothing; it asks no question and does not return to the server list. With the exit box shown the box takes the keys first (its ESC is No, §9.7; the source's `ProcessUIKeyInput` gives the message box precedence over the focused UI) | `005faad0`; source `GameProcedure.cpp` `ProcessUIKeyInput` | binary; source |
+| The later source's `CUICharacterSelect::OnKeyPress` presses `m_pBtnExit` for ESC and `m_pBtnLeft`, `m_pBtnRight` for the arrows, and calls `CharacterSelectOrCreate` for ENTER: 1264's (`004454e0`, §9.8), not 1298's | source `UICharacterSelect.cpp` `OnKeyPress` | source |
+
+**Decides (RQ-117):** 1298's select ESC presses neither Exit nor Back: it only puts
+the select at rest, skipping a path, and at rest does nothing. The 1298 recipe (not
+offered) keeps `select.escape` `back`, a known difference from 1298 (Q87): N3FE
+version 15 has no value for "nothing at rest", and which the realm owner wants is a
+look-and-feel choice for the maintainer (proposed as its own item). Its ENTER (Start,
+the realm's primary) and arrows (a turn) already match. The realm's select ESC
+(`client/render/front_end.h` `escape`) presses `back` or `exit` in every select state
+but while a path plays in the path mode, which it skips: in the rotate mode also while
+the camera turns, and in both modes while the start clip plays, where `back` does
+nothing (the realm's back needs no character chosen) and `exit` asks. The later
+source disables the select's UI as a character is chosen
+(`GameProcCharacterSelect.cpp`: `MsgSend_CharacterSelect` and `CharacterSelect`,
+`EnableOperationSet(false)`), which would make KO's select OnKeyPress, and so its ESC,
+do nothing then; 1264's binary was not read for it (proposed as its own item).
 
 ## Not re-derived here
 
@@ -892,7 +929,7 @@ notes.
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |
 | Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. §9.2 (RQ-085): the 1097 choice's layouts are the 1264 install's, its message box and loading 1264's. |
 | Q85 | §9.4 (RQ-108): 1264 shows the login's copyright line, at `((W − w) / 2, H − h − 20)`, only while its login bar is hidden: from a login press until a failed answer, and with the server list after a success; the 1097 choice does the same (N3FE version 12's `login_closed`), the bar hidden while the Discord flow runs. |
-| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. §9.7 (RQ-111): 1298's Exit box is `El_MessageBox_us.uif` with Yes and No (labelled OK and Cancel), ENTER Yes and ESC No, Yes quitting; the 1298 recipe asks so (N3FE version 14). §9.8 (RQ-115): 1264's select Exit (`bt_exit`, `00444e60`) asks the same, row 1502 yes or no in its `El_MessageBox_us.uif`; the 1097 choice asks so too. RQ-116: 1264's select presses `bt_exit` for ESC (`004454e0`), and the 1097 choice's ESC asks so (N3FE version 15, `select.escape`). |
+| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. §9.7 (RQ-111): 1298's Exit box is `El_MessageBox_us.uif` with Yes and No (labelled OK and Cancel), ENTER Yes and ESC No, Yes quitting; the 1298 recipe asks so (N3FE version 14). §9.8 (RQ-115): 1264's select Exit (`bt_exit`, `00444e60`) asks the same, row 1502 yes or no in its `El_MessageBox_us.uif`; the 1097 choice asks so too. RQ-116: 1264's select presses `bt_exit` for ESC (`004454e0`), and the 1097 choice's ESC asks so (N3FE version 15, `select.escape`). §9.9 (RQ-117): 1298's select ESC presses no button (`00607810` → `005faad0`): it skips a path and at rest does nothing; the 1298 recipe keeps the realm's Back. |
 | Q86 | §9.5 (RQ-110): 1298's login draws no copyright line (its login is the intro layout, no `Text_Rights`) and hides its bar from a press until a failed answer; the 1298 recipe hides the line and, like every layout now, its bar while a login is under way. |
 | Q82 | §9.2 (RQ-101): 1264's logo procedure runs first, once a process: three groups fading in, holding and fading out on black over 12 s, `Snd\bless.wav` from 1 s faded out over 4 s from the third, any key skipping to the login, the cursor hidden; the 1097 choice shows it (N3FE version 9). §9.3 (RQ-106): KO draws every front-end layout unscaled, placed by the screen's size (the login on the bottom edge, the server list at the top-left, the select's buttons on the bottom edge, create, loading, the message box and the logo centred), the 3D scenes filling the screen; the realm does the same (N3FE version 11). |
 | Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. §9.2 (RQ-102): 1264 titles its login answer's and its create failures; the 1097 choice gives the realm's matching messages KO's title and wording (N3FE version 10) and leaves the rest untitled. |

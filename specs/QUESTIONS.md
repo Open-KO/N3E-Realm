@@ -1115,3 +1115,12 @@ select OnKeyPress (`004454e0`) presses `bt_exit` for ESC, so N3FE version 15 let
 package say what ESC presses on the select (`select.escape`: `back`, the default, or
 `exit`); the 1097 choice names `exit` and its ESC asks the exit question, Back staying
 on its button. The 1298 recipe keeps `back` (1298's select keys not read).
+**1298 read (RQ-117, KO-FINDINGS §9.9):** 1298's select presses neither Exit nor Back
+for ESC: its bar's OnKeyPress (`00607810`) calls `005faad0`, the tick's own ESC body,
+which skips a playing path and at rest does nothing. Options for the 1298 recipe:
+(a) keep `back`; (b) a new `select.escape` value for ESC doing nothing on the select
+but skipping a path, as 1298's. **Default taken:** (a) until the maintainer chooses,
+as RQ-116 was chosen (a look-and-feel difference); (b) is proposed as its own item.
+The realm's select ESC presses its action in every state but a playing path's, the
+start clip's included, where the later source disables KO's select UI (`EnableOperationSet(false)`);
+whether 1264's does is proposed as its own item.

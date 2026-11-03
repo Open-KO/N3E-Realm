@@ -160,6 +160,65 @@ A Rust binary in this workspace (`edge/`), image `deploy/Dockerfile --target edg
    to `wss://play.openko.net/v1/wire` and plays; `play.openko.net` resolves only to
    Cloudflare addresses; the router has no forwarded ports.
 
+## Measured round trip
+
+Measured 2026-11-03 (RQ-132) from one workstation on the realm host's home network to
+the hosted realm, over 30 minutes, with `tools/edge_rtt.py` (its docstring is the
+method): a measuring tool beside the client that speaks the client's transport and
+Handshake and, without logging in, times what the deployed server already answers. No
+server or client change was needed; the game server logs nothing, and `realm-edge`
+writes its usual one line per connection.
+
+- **echo:** an empty `Input` before login, answered by `Error{UNAUTHENTICATED}`: the
+  whole path to the server's connection task (not its tick).
+- **wsping:** a WebSocket ping, answered by `realm-edge` on the host. It runs within
+  2 ms of the echo, so the pong comes from the host, not from Cloudflare (the
+  Cloudflare edge itself is half that away), and the bridge and server add about 2 ms.
+- **idle** is the echo at 1 Hz (the client's Ping); **moving** at 20 Hz (the client's
+  Move rate in the world). Moving here is the upstream rate only: the World snapshots
+  and the tick are not exercised, since that needs a login.
+- **direct:** the host keeps the game port on loopback (above), so from the LAN the
+  direct path is the workstation's ICMP round trip to the host (1 Hz, the whole run)
+  plus the same ~2 ms; ICMP to the Cloudflare edge is the client's first leg.
+
+| ms | n | median | p95 | p99 | worst |
+|---|---|---|---|---|---|
+| echo through the edge, idle | 599 | 35.0 | 52.6 | 77.8 | 179 |
+| echo through the edge, moving | 11 969 | 36.7 | 67.0 | 144 | 556 |
+| WebSocket ping, idle / moving | 598 / 598 | 33.2 / 35.2 | 48.1 / 67.5 | 63.4 / 122 | 140 / 331 |
+| ICMP to the realm host on the LAN | 1 978 | 7.7 | 15.3 | 27.9 | 120 |
+| ICMP to the Cloudflare edge | 1 977 | 15.6 | 34.5 | 67.8 | 324 |
+
+The worst gap between the server's replies was 1.12 s idle (a 1 s cadence, so 0.12 s
+late) and 0.57 s moving, far under spec 01's 30 s. No session ended early and no connect
+failed (8 sessions of up to 150 s, 38 connects).
+
+Connect, 38 connects (DNS cached after the first):
+
+| ms | median | p95 | worst |
+|---|---|---|---|
+| TCP to Cloudflare | 14.5 | 22.6 | 23.1 |
+| outer TLS | 31.8 | 42.0 | 108 |
+| WebSocket upgrade (includes `realm-edge`'s upstream connect and PROXY header) | 97.1 | 184 | 200 |
+| inner TLS (about two echo round trips) | 81.3 | 105 | 114 |
+| Handshake to Snapshot | 35.7 | 45.4 | 45.7 |
+| **total, connect to Snapshot** | **271** | **412** | **415** |
+
+Login to Characters needs an account and is not measured: one more round trip (about
+35 ms) plus the server's login work.
+
+What it means: from inside the home network, the edge costs about 25 ms over the LAN
+at the median (35 against about 10) and more in the tail, because that path leaves the
+home connection twice. The leg from the Cloudflare edge to the host through the tunnel
+is about 20 ms (35 − 15.6). A player elsewhere pays their own way to their nearest
+Cloudflare edge plus roughly that leg, against their way to the home connection
+directly; for a player near the same Cloudflare edge that is an estimate of 5–15 ms
+more, not a measurement (it needs a second vantage point). Connecting through the edge
+takes about a quarter of a second, nearly all of it round trips.
+
+Still to measure: a logged-in session (moving with World snapshots and the tick), and a
+player away from the home network; both need the client to time its own round trip.
+
 ## Open questions
 
 Q64 (why), Q65 (Cloudflare's free-plan WebSocket limits are unpublished).

@@ -336,9 +336,16 @@ the game wire carried as a WebSocket through Cloudflare (spec 12). Why:
   larger than any VPS provider's scrubbing.
 - **The cost is work, not money:** a WebSocket transport in the client, a small bridge
   that hands the player's address to the server through PROXY protocol v2 (spec 01
-  already accepts it), and the tunnel. Latency grows by Cloudflare's hop (roughly 5–20
-  ms), and Cloudflare may drop long-lived sockets, which the session token's reconnect
-  already covers.
+  already accepts it), and the tunnel. Latency grows by Cloudflare's hop, and
+  Cloudflare may drop long-lived sockets, which the session token's reconnect already
+  covers. Measured on 2026-11-03 from the home network over 30 minutes (spec 12,
+  "Measured round trip"; `tools/edge_rtt.py`): a round trip to the server through the
+  edge has a median of 35 ms (p95 53–67, p99 78–144, worst 0.56 s), against about
+  10 ms on the LAN (derived: ICMP to the host, 7.7 ms, plus about 2 ms for the bridge
+  and server); the Cloudflare edge to the host through the tunnel is about 20 ms
+  of it. A player away from home should pay an estimated 5–15 ms over a direct
+  connection (not yet measured). Connecting to the Handshake takes about 0.27 s
+  (p95 0.41 s).
 
 The VPS path is not lost: spec 07 still describes it, and moving is a DNS change plus
 the runbook. If the free plan's WebSocket limits (unpublished, Q65) or Cloudflare's

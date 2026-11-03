@@ -75,7 +75,8 @@ from the player's own KO data.
      the chosen package's select checks as the 1298 recipe's;
    - the select's ESC (RQ-116, KO-FINDINGS 9.8): the chosen package's asks
      the exit question, as 1264's select OnKeyPress (004454e0) presses
-     bt_exit for DIK_ESCAPE; the 1298 recipe's stays the realm's Back.
+     bt_exit for DIK_ESCAPE; the 1298 recipe's does nothing (RQ-119,
+     KO-FINDINGS 9.9: 1298's bar OnKeyPress 00607810 presses no button).
 
 No server or stack.
 """
@@ -274,7 +275,7 @@ EXIT_ASKS = ("asks=1 shown=0,1,1 plain=1,0,0 esc=closed:none enter=closed:exit "
 def check_exit(size, stdout, box_tree, width, height, plain, question, yes, escape):
     """The select's exit question against its box, `box_tree` centred at
     ((W - w) >> 1, (H - h) >> 1): the client's report, ESC on the select at
-    rest doing `escape` (RQ-116: `asks` or `back`), the Yes rect the shot
+    rest doing `escape` (RQ-116: `asks`; RQ-119: `none`), the Yes rect the shot
     names (`yes`), Yes and No drawn where the OK box (`plain`) draws OK and
     the text in the message rect. Returns the box's origin."""
     exits = re.search(r"^FRONT_EXIT (.*)$", stdout, re.M)
@@ -615,13 +616,14 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
         assert inside > 20, (size, action, inside)
     # RQ-111 (KO-FINDINGS 9.7): Exit asks row 1502 with Yes and No, as
     # 00607160 posts it (MB_YESNO, BEHAVIOR_EXIT), in the box 005282a0 loads
-    # and centres; ESC and No close it, ENTER and Yes leave. RQ-116: ESC on
-    # the select stays the realm's Back.
+    # and centres; ESC and No close it, ENTER and Yes leave. RQ-119
+    # (KO-FINDINGS 9.9): ESC on the select at rest does nothing, as 1298's bar
+    # OnKeyPress (00607810) presses no button for it.
     assert {"message", "message-exit"} <= set(shots), (size, sorted(shots))
     bx, by = check_exit(size, run.stdout, box_tree, width, height, shots["message"][0], shots["message-exit"][0],
-                        tuple(map(int, shots["message-exit"][1].split(","))), "back")
+                        tuple(map(int, shots["message-exit"][1].split(","))), "none")
     print(f"PASS front-end captures 1298 recipe {size}: 1298's select bar at ({x0}, {y0}), unscaled, its ten "
           f"bound nodes where 1298's Load puts them, its info texts filled for a character and empty without; "
           f"its Exit asks yes or no in its centred box at ({bx}, {by}), ESC and No closing it, ENTER and Yes leaving the game; "
-          f"ESC on the select is Back")
+          f"ESC on the select does nothing")
 print("PASS KO front end graphical")

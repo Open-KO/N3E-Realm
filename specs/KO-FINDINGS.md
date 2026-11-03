@@ -380,7 +380,9 @@ create is a state of the select, `005ff920`) or after a created character; ESC a
 rest stays the realm's back, and ESC while the start clip plays does nothing
 (1298 puts it back to rest); a path the arrows start takes its load's step with
 the frame's own time (Q78). *RQ-117 (§9.9): 1298's ESC at rest does nothing (the bar's
-OnKeyPress runs the same skip); the 1298 recipe's stays Back.*
+OnKeyPress runs the same skip); the 1298 recipe's stays Back.* *RQ-119: the 1298
+recipe's ESC now does nothing but skip a path (N3FE version 16, `select.escape`
+`none`, §9.9).*
 
 ## 9. The front end per client (RQ-078, 2026-11-02)
 
@@ -875,6 +877,7 @@ plays (the path mode) still skips it. Not run: the static reading answers it.
 *RQ-117 (§9.9): 1298's ESC presses neither Exit nor Back; the 1298 recipe keeps
 `back` as a known difference. The realm's select ESC is not only "at rest": it
 presses `back` or `exit` in every select state but a playing path's (§9.9).*
+*RQ-119 (§9.9): the 1298 recipe now names `none` (N3FE version 16).*
 
 ### 9.9 1298's select keys (RQ-117, 2026-11-02)
 
@@ -909,6 +912,15 @@ source disables the select's UI as a character is chosen
 `EnableOperationSet(false)`), which would make KO's select OnKeyPress, and so its ESC,
 do nothing then; 1264's binary was not read for it (proposed as its own item).
 
+**Decides (RQ-119, the maintainer, 2026-11-02: "Do nothing, as 1298"):** N3FE version
+16 adds a third `select.escape` value, `none`: ESC on the select presses nothing, so it
+only skips a playing path in the path mode, as the realm's ESC does whatever the value
+(`front_end.h`'s key handler), and otherwise does nothing, as 1298's `005faad0` does at
+rest. The 1298 recipe names it; Back and Exit stay on their buttons. While the start
+clip plays it does nothing too, as the realm's `back` does then. No new reading: §9.9's
+static reading of the 1298 binary is its evidence (not run; Wine is approved for 1097
+and 1264 only).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -929,7 +941,7 @@ notes.
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |
 | Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. §9.2 (RQ-085): the 1097 choice's layouts are the 1264 install's, its message box and loading 1264's. |
 | Q85 | §9.4 (RQ-108): 1264 shows the login's copyright line, at `((W − w) / 2, H − h − 20)`, only while its login bar is hidden: from a login press until a failed answer, and with the server list after a success; the 1097 choice does the same (N3FE version 12's `login_closed`), the bar hidden while the Discord flow runs. |
-| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. §9.7 (RQ-111): 1298's Exit box is `El_MessageBox_us.uif` with Yes and No (labelled OK and Cancel), ENTER Yes and ESC No, Yes quitting; the 1298 recipe asks so (N3FE version 14). §9.8 (RQ-115): 1264's select Exit (`bt_exit`, `00444e60`) asks the same, row 1502 yes or no in its `El_MessageBox_us.uif`; the 1097 choice asks so too. RQ-116: 1264's select presses `bt_exit` for ESC (`004454e0`), and the 1097 choice's ESC asks so (N3FE version 15, `select.escape`). §9.9 (RQ-117): 1298's select ESC presses no button (`00607810` → `005faad0`): it skips a path and at rest does nothing; the 1298 recipe keeps the realm's Back. |
+| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. §9.7 (RQ-111): 1298's Exit box is `El_MessageBox_us.uif` with Yes and No (labelled OK and Cancel), ENTER Yes and ESC No, Yes quitting; the 1298 recipe asks so (N3FE version 14). §9.8 (RQ-115): 1264's select Exit (`bt_exit`, `00444e60`) asks the same, row 1502 yes or no in its `El_MessageBox_us.uif`; the 1097 choice asks so too. RQ-116: 1264's select presses `bt_exit` for ESC (`004454e0`), and the 1097 choice's ESC asks so (N3FE version 15, `select.escape`). §9.9 (RQ-117): 1298's select ESC presses no button (`00607810` → `005faad0`): it skips a path and at rest does nothing; RQ-119: the 1298 recipe's ESC does the same (N3FE version 16, `select.escape` `none`), the maintainer's choice. |
 | Q86 | §9.5 (RQ-110): 1298's login draws no copyright line (its login is the intro layout, no `Text_Rights`) and hides its bar from a press until a failed answer; the 1298 recipe hides the line and, like every layout now, its bar while a login is under way. |
 | Q82 | §9.2 (RQ-101): 1264's logo procedure runs first, once a process: three groups fading in, holding and fading out on black over 12 s, `Snd\bless.wav` from 1 s faded out over 4 s from the third, any key skipping to the login, the cursor hidden; the 1097 choice shows it (N3FE version 9). §9.3 (RQ-106): KO draws every front-end layout unscaled, placed by the screen's size (the login on the bottom edge, the server list at the top-left, the select's buttons on the bottom edge, create, loading, the message box and the logo centred), the 3D scenes filling the screen; the realm does the same (N3FE version 11). |
 | Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. §9.2 (RQ-102): 1264 titles its login answer's and its create failures; the 1097 choice gives the realm's matching messages KO's title and wording (N3FE version 10) and leaves the rest untitled. |

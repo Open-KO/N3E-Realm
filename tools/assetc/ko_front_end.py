@@ -20,7 +20,8 @@ drawn only while the login group is not (1264's SetVisibleLogInUIs, RQ-108),
 (version 13) 1298's select bar's actions, its start, create and delete
 buttons and its three info texts, with two messages (RQ-109), and (version
 14) the message box's yes and no buttons, with the message exit_confirm, the
-select's exit asked yes or no as 1298 asks it (RQ-111).
+select's exit asked yes or no as 1298 asks it (RQ-111), (version 15) what ESC
+presses on the select (RQ-116) and (version 16) its `none`, 1298's (RQ-119).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -51,7 +52,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 15
+VERSION = 16
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -77,11 +78,15 @@ FRONT_CLIP = {"hover": 0, "loop": 1}
 # names for the turn (`select.paths`), and an entry path into slot 0 as the
 # hall opens.
 TURN = {"rotate": 0, "path": 1}
-# What ESC presses on the select at rest (version 15, `select.escape`, RQ-116):
-# `back`, the realm's (the default), or `exit`, 1264's: its select's OnKeyPress
+# What ESC presses on the select (version 15, `select.escape`, RQ-116), but
+# while a path plays in the path mode, which it skips whatever this says:
+# `back`, the realm's (the default); `exit`, 1264's: its select's OnKeyPress
 # (004454e0) sends DIK_ESCAPE to ReceiveMessage as a click on bt_exit, so ESC
-# asks the exit question as the Exit button does (specs/KO-FINDINGS.md 9.8).
-ESCAPE = {"back": 0, "exit": 1}
+# asks the exit question as the Exit button does (specs/KO-FINDINGS.md 9.8);
+# or (version 16, RQ-119) `none`, 1298's: its bar's OnKeyPress (00607810)
+# presses no button for ESC, it calls 005faad0, which only skips a playing
+# path (specs/KO-FINDINGS.md 9.9), so otherwise ESC does nothing.
+ESCAPE = {"back": 0, "exit": 1, "none": 2}
 # A path's bounds (the client's): paths per package, keys per set, keys a second.
 MAX_PATHS = 8
 MAX_PATH_KEYS = 4096
@@ -1298,7 +1303,7 @@ def select_scene(assets, textures, config, work, report=None):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
     slots (position, yaw, the eye where the camera's turn to the slot ends
     and its spot light), the spot's growth rate, the front-clip mode, what
-    ESC presses (version 15), the turn mode and its paths (version 7), the hall, the zone and the fog
+    ESC presses (version 15; 16: `none`), the turn mode and its paths (version 7), the hall, the zone and the fog
     (version 8), the character with its clips and plugs. `report` receives
     the zone's provenance."""
     camera = config["camera"]

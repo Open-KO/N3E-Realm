@@ -440,16 +440,17 @@ assert fe.TURN == {"rotate": 0, "path": 1}, fe.TURN
 
 # RQ-116: select.escape names what ESC presses on the select, `back` (the
 # realm's, the default) or `exit` (1264's OnKeyPress 004454e0 presses bt_exit),
-# and is refused misspelt, before any KO file is read.
-for escape in ("Exit", "quit", 1, None):
+# or (RQ-119) `none` (1298's bar OnKeyPress 00607810 presses no button, only
+# skipping a playing path), and is refused misspelt, before any KO file is read.
+for escape in ("Exit", "quit", "None", "skip", 1, 2, None):
     config = dict(SELECT, front_clip="loop", turn="rotate", escape=escape)
     try:
         fe.select_scene(Fixture({}), fe.Textures(Fixture({})), config, pathlib.Path("/nonexistent"))
     except ValueError as error:
-        assert str(error) == "front-end select.escape: one of back, exit", error
+        assert str(error) == "front-end select.escape: one of back, exit, none", error
         continue
     raise AssertionError(("cooked escape", escape))
-assert fe.ESCAPE == {"back": 0, "exit": 1}, fe.ESCAPE
+assert fe.ESCAPE == {"back": 0, "exit": 1, "none": 2}, fe.ESCAPE
 
 
 def n3camera(eye, at, rate=30.0, up_keys=0, at_kind=0, tail=b""):
@@ -790,7 +791,7 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=15, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=16, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
          logo=u(0), messages=u(0), placement=NO_PLACEMENT):
@@ -1269,10 +1270,12 @@ assert recipe_1097["screens"]["message"] == {
 assert recipe_1097["messages"]["exit_confirm"] == {"text": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1502}}
 # RQ-116 (KO-FINDINGS 9.8): 1264's select OnKeyPress (004454e0) presses bt_exit
 # for DIK_ESCAPE, so the 1097 choice's ESC asks to exit (the maintainer chose
-# it, 2026-11-02); Back stays on its button. The 1298 recipe keeps the realm's
-# ESC, Back (1298's select OnKeyPress not read).
+# it, 2026-11-02); Back stays on its button. RQ-119 (KO-FINDINGS 9.9): 1298's
+# bar OnKeyPress (00607810) presses no button for ESC, only skipping a playing
+# path (005faad0), so the 1298 recipe's ESC does nothing otherwise (the
+# maintainer chose it, 2026-11-02).
 assert recipe_1097["select"]["escape"] == "exit", recipe_1097["select"]
-assert "escape" not in recipe_1298["select"], recipe_1298["select"]
+assert recipe_1298["select"]["escape"] == "none", recipe_1298["select"]
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
     "a bottom placement of another key": {**PLACE_SPECS, "message": {"place": {"bottom": 10, "x": 1}}},
@@ -1457,7 +1460,10 @@ cases = {
     # RQ-116 (version 15): what ESC presses on the select, 0 back or 1 exit.
     "bad-version-14": blob(version=14),
     "ok-select-escape-exit": blob(escape=1),
-    "bad-select-escape": blob(escape=2),
+    # RQ-119 (version 16): or 2 none.
+    "bad-version-15": blob(version=15),
+    "ok-select-escape-none": blob(escape=2),
+    "bad-select-escape": blob(escape=3),
     "bad-select-escape-missing": blob(escape=None),
     "ok-select-bar": blob(screen_data=bar_screens),
     "ok-select-bar-name": blob(screen_data=bar(("str_id",))),
@@ -1566,10 +1572,10 @@ try:
                          ("bad-exit-confirm-no-no", "exit_confirm without yes and no")):
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
-    # RQ-116: the select's ESC, back unless the package says exit; a value
-    # past exit refused for that reason.
+    # RQ-116: the select's ESC, back unless the package says exit or (RQ-119)
+    # none; a value past none refused for that reason.
     escapes = [l for l in run.stdout.splitlines() if l.startswith("escape ")]
-    assert escapes == ["escape ok-select-escape-exit: 1"], escapes
+    assert escapes == ["escape ok-select-escape-exit: 1", "escape ok-select-escape-none: 2"], escapes
     line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-select-escape:"))
     assert "front end select escape" in line, line
     exit_line = [l for l in run.stdout.splitlines() if l.startswith("message ok-exit-confirm: ")]

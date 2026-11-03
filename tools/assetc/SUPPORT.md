@@ -193,6 +193,8 @@ binds 1264's box's Yes and No and words it with the 1264 install's row 1502, as
 1264's select asks the same (RQ-115, §9.8).
 N3FE version 15 (RQ-116) adds what ESC presses on the select (`select.escape`:
 `back`, the default, or `exit`, as 1264's select presses `bt_exit` for ESC,
-§9.8); the 1097 recipe names `exit`.
+§9.8); the 1097 recipe names `exit`. N3FE version 16 (RQ-119) adds `none`, as
+1298's select presses no button for ESC and only skips a playing path (§9.9); the
+1298 recipe names it.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

@@ -14,8 +14,9 @@ RQ-102, Q81), where each layout's nodes go on a window of its own size
 (version 11, RQ-106, Q82), the action `login_closed`, a login node drawn
 only while the login group is not (version 12, RQ-108, Q85), 1298's select
 bar's actions and two messages (version 13, RQ-109), the message box's
-Yes and No with the select's exit question (version 14, RQ-111), and what ESC
-presses on the select (version 15, RQ-116).
+Yes and No with the select's exit question (version 14, RQ-111), what ESC
+presses on the select (version 15, RQ-116) and its `none`, 1298's (version 16,
+RQ-119).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -29,7 +30,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 15, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 16, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -61,7 +62,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 7. The select scene: camera, lights, global ambient, the slots (count equal to
    the character slots), the spot's growth rate (version 4: theta per second,
    above 0 and at most 100), the front-clip mode (version 6: 0 hover, 1 loop;
-   below), the select's ESC (version 15: 0 back, 1 exit; below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
+   below), the select's ESC (version 15: 0 back, 1 exit; version 16: 2 none; below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
    (0 in the rotate mode, 1–8 in the path mode) and the paths, the hall (part
    count ≤64, each a mesh; version 7: it may be 0), the zone (version 8: a
    mesh count, 0–256, 0 when the hall has parts, each a zone mesh; below), the
@@ -239,19 +240,22 @@ address mode); the font atlases and the moon linear.
   While the camera turns the spot is off and keeps its theta, in both modes.
 - The select's ESC (version 15, RQ-116; `client/render/front_end.h`): what ESC
   presses on the select, in every select state but one: in the path mode ESC
-  while a path plays still skips it (below). So in the rotate mode it presses
-  while the camera turns too, and in both modes while the start clip plays,
-  where `back` does nothing and `exit` asks. 0, back (the realm's): the
-  select's `back`.
+  while a path plays still skips it (below), whatever this says. So in the
+  rotate mode it presses while the camera turns too, and in both modes while
+  the start clip plays, where `back` does nothing and `exit` asks. 0, back (the
+  realm's): the select's `back`.
   1, exit (1264's: its select's OnKeyPress, `004454e0`, sends `DIK_ESCAPE` to
   ReceiveMessage as a click on `bt_exit`, `specs/KO-FINDINGS.md` §9.8): the
   select's `exit`, as a click on it, so a package that names `exit_confirm`
   asks the exit question and one that does not leaves at once. The node bound
   to `back` keeps its click either way. The recipe names it
-  (`select.escape`: `back`, the default, or `exit`). 1298's is neither
-  (RQ-117, `specs/KO-FINDINGS.md` §9.9): its bar's OnKeyPress (`00607810`)
-  sends ESC to `005faad0`, which only puts the select at rest, so at rest it
-  does nothing.
+  (`select.escape`: `back`, the default, `exit` or `none`).
+  2, none (version 16, RQ-119; 1298's, `specs/KO-FINDINGS.md` §9.9, binary:
+  its bar's OnKeyPress, `00607810`, presses no button for ESC; it sends it to
+  `005faad0`, which only puts the select at rest, skipping a playing path):
+  nothing, so ESC only skips a path and otherwise does nothing, the start
+  clip's time included. The nodes bound to `back` and `exit` keep their
+  clicks.
 - Turn mode (version 7, RQ-087): how the camera goes from slot to slot.
   - 0, rotate (1097, `0043e4e0`; the slot above): the eye turns about `at`.
     No paths; the select UI shows throughout.
@@ -327,8 +331,8 @@ flag other than 0 or 1 or a text that does not replace, a node bound to
 `select_start`, `select_create`, `select_delete`, `char_name`, `char_level` or
 `char_class` on a screen other than the select (version 13), a node bound to
 `yes` or `no` on a screen other than the message box, or `exit_confirm` named
-without nodes bound to both on it (version 14), a select ESC other than 0 or 1
-(version 15), placement flags
+without nodes bound to both on it (version 14), a select ESC other than 0, 1 or
+2 (version 15; 2 since version 16), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
 file does not have, a rule of another kind or outside its bounds, a keep rule
 with a or c not 0, moves that do not leave the canvas rects where the file puts
@@ -551,11 +555,12 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   mip chains made by the client (KO's DXT files carry their own), fog per
   pixel.
 - No turn sound: 1298 plays none (`select.turn_sound` absent).
-- No `select.escape`: ESC on the select is the realm's back (RQ-116). Not
-  1298's (RQ-117, `specs/KO-FINDINGS.md` §9.9, binary): 1298's bar OnKeyPress
-  (`00607810`) presses no button for ESC; it calls `005faad0`, the select
-  tick's own ESC body, which skips a playing path and at rest changes nothing.
-  The format has no value for that yet (Q87).
+- `select.escape` `none` (RQ-119, the maintainer's choice, 2026-11-02: "Do
+  nothing, as 1298"): ESC on the select skips a playing path and otherwise
+  does nothing, as 1298's (RQ-117, `specs/KO-FINDINGS.md` §9.9, binary):
+  1298's bar OnKeyPress (`00607810`) presses no button for ESC; it calls
+  `005faad0`, the select tick's own ESC body, which skips a playing path and
+  at rest changes nothing (Q87). Back and Exit stay on their buttons.
 - Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
   create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF

@@ -1124,3 +1124,8 @@ as RQ-116 was chosen (a look-and-feel difference); (b) is proposed as its own it
 The realm's select ESC presses its action in every state but a playing path's, the
 start clip's included, where the later source disables KO's select UI (`EnableOperationSet(false)`);
 whether 1264's does is proposed as its own item.
+**1298 ESC decided (RQ-119, the maintainer, 2026-11-02: "Do nothing, as 1298"):**
+option (b). N3FE version 16 adds `select.escape` `none`: ESC on the select presses
+nothing, so in the path mode it only skips a playing path and otherwise does nothing,
+as 1298's. The 1298 recipe names it; its Back and Exit buttons keep their clicks, and
+where Back leads, the arrows and Create from an occupied slot stay as above.

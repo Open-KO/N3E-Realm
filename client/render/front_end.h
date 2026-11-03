@@ -843,9 +843,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     // RQ-116 (version 15): 1264's select presses bt_exit for ESC (OnKeyPress
     // 004454e0 -> ReceiveMessage 00444e60, as a click), so with the package's
-    // `exit` ESC asks the exit question; otherwise it is the realm's back.
-    if (state == Screen::select)
+    // `exit` ESC asks the exit question; RQ-119 (version 16): 1298's presses
+    // no button (its bar's OnKeyPress 00607810 calls 005faad0, which only
+    // skips a playing path, as the key handler does before this), so with
+    // `none` it does nothing; otherwise it is the realm's back.
+    if (state == Screen::select) {
+      if (fe.select_escape == FrontSelectEscape::none) return {};
       return act(fe.select_escape == FrontSelectEscape::exit ? FrontAction::exit : FrontAction::back);
+    }
     return act(FrontAction::exit);
   }
   Output act(FrontAction action) {

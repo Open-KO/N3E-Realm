@@ -130,6 +130,7 @@
     "start_blend": 0.6,
     "front_clip": "loop",
     "turn": "path",
+    "escape": "none",
     "zone": 10001,
     "fog": true,
     "paths": [

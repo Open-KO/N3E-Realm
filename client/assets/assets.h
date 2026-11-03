@@ -917,11 +917,15 @@ enum class FrontClipMode : uint32_t { hover, loop };
 // hidden until its last frame (render/select_path.h); an entry path flies it
 // in to slot 0 as the hall opens.
 enum class FrontTurnMode : uint32_t { rotate, path };
-// Version 15 (RQ-116): what ESC presses on the select at rest. back, the
-// realm's; exit, 1264's (its select's OnKeyPress 004454e0 sends DIK_ESCAPE to
-// ReceiveMessage as a click on bt_exit, KO-FINDINGS 9.8), so ESC asks the exit
-// question where the package names exit_confirm. Back stays on its button.
-enum class FrontSelectEscape : uint32_t { back, exit };
+// Version 15 (RQ-116): what ESC presses on the select (but while a path plays
+// in the path mode, which it skips). back, the realm's; exit, 1264's (its
+// select's OnKeyPress 004454e0 sends DIK_ESCAPE to ReceiveMessage as a click on
+// bt_exit, KO-FINDINGS 9.8), so ESC asks the exit question where the package
+// names exit_confirm, Back staying on its button; or (version 16, RQ-119) none,
+// 1298's (its bar's OnKeyPress 00607810 presses no button, calling 005faad0,
+// which only skips a playing path, KO-FINDINGS 9.9), so otherwise ESC does
+// nothing.
+enum class FrontSelectEscape : uint32_t { back, exit, none };
 // One recorded path (an .n3camera's eye keys and at keys, engine space): from
 // one slot to another, or (from kEntry) the entry path to slot 0.
 struct FrontPath {
@@ -996,7 +1000,7 @@ struct FrontEnd {
   // select model's clips are the front, start and rest clips.
   float spot_rate = 0;
   FrontClipMode front_clip = FrontClipMode::hover;  // version 6
-  FrontSelectEscape select_escape = FrontSelectEscape::back;  // version 15
+  FrontSelectEscape select_escape = FrontSelectEscape::back;  // version 15 (16: none)
   FrontTurnMode turn = FrontTurnMode::rotate;       // version 7
   std::vector<FrontPath> paths;                     // version 7: the path mode's
   std::vector<FrontMesh> hall;                      // version 7: may be empty

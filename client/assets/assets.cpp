@@ -2676,7 +2676,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 19, "front end version");
+  need(r.u() == 20, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -3140,6 +3140,47 @@ FrontEnd load_front_end(const Release &release) {
     const auto placed = front_place(nodes, fe.moves[layout], int(fe.canvas_width), int(fe.canvas_height));
     for (size_t i = 0; i < nodes.size(); ++i)
       for (int k = 0; k < 4; ++k) need(std::abs(placed[i][k] - nodes[i].rect[k]) < .5f, "front end placement");
+  }
+  // 13. Version 20 (RQ-126): create's slide (1298's 00606450). A node count
+  // (at most 8; 0: none), then with nodes the rate (finite, above 0, at most
+  // 100000) and the floor (finite, 1/16 to 1024: at least the float step
+  // below 10^6, so d always grows to the slide's bound), and each node: a
+  // node of the create layout (each once; the first, the lead, with an
+  // extent on its axis), its axis (0 x, 1 y), its start rule (a move's,
+  // linear or half), num and den (finite, above 0, at most 16384).
+  const auto &created = fe.screens[size_t(FrontScreen::create)];
+  const auto slid = r.count(8, 0);
+  if (slid > 0) {
+    fe.create_slide.rate = std::bit_cast<float>(r.u());
+    fe.create_slide.floor = std::bit_cast<float>(r.u());
+    need(std::isfinite(fe.create_slide.rate) && fe.create_slide.rate > 0 && fe.create_slide.rate <= 100000 &&
+             std::isfinite(fe.create_slide.floor) && fe.create_slide.floor >= 1.f / 16 &&
+             fe.create_slide.floor <= 1024,
+         "front end slide step");
+  }
+  std::set<uint32_t> sliding;
+  for (uint32_t i = 0; i < slid; ++i) {
+    FrontSlideNode n;
+    n.node = r.u();
+    need(n.node < created.size() && sliding.insert(n.node).second, "front end slide node");
+    n.axis = r.u();
+    n.start.kind = r.u();
+    n.start.a = std::bit_cast<float>(r.u());
+    n.start.c = std::bit_cast<float>(r.u());
+    n.num = std::bit_cast<float>(r.u());
+    n.den = std::bit_cast<float>(r.u());
+    need(n.axis <= FrontSlideNode::Y &&
+             (n.start.kind == FrontAxis::LINEAR || n.start.kind == FrontAxis::HALF) && std::isfinite(n.start.a) &&
+             std::isfinite(n.start.c) && std::abs(n.start.a) <= 4 && std::abs(n.start.c) <= 16384,
+         "front end slide start");
+    need(std::isfinite(n.num) && std::isfinite(n.den) && n.num > 0 && n.den > 0 && n.num <= 16384 &&
+             n.den <= 16384,
+         "front end slide scale");
+    if (i == 0) {
+      const auto &rect = created[n.node].rect;
+      need(rect[n.axis + 2] - rect[n.axis] > 0, "front end slide lead");
+    }
+    fe.create_slide.nodes.push_back(n);
   }
   r.end();
   return fe;

@@ -46,7 +46,9 @@
 // (the second without a fly), or (RQ-125) for a create over the hall:
 //   FRONT_CREATE click=create path=P frames=F slot=1 focus=2 new=0 arrived=2 draws=N new=1 back=select slot=2
 //     cancel=select slot=2 ui=1
-// (on one line);
+// (on one line); then (RQ-126), for a package with a create slide, create
+// opened by ENTER on an empty slot and each frame of its slide 1/32 s apart:
+//   FRONT_CREATE_SLIDE screen=create frames=x,y,..;x,y,.. on=0
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
 // logo-fade half way into the first group's fade-in, with rect= the logo
@@ -324,6 +326,30 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       }
       std::cout << std::endl;
       list.Clear();
+      front->jump(Screen::select);
+    }
+    // RQ-126 (version 20): for a package with a create slide, ENTER on the
+    // empty slot in focus at rest (no character) opens create, then frames
+    // 1/32 s apart until the slide ends (at most 600): each frame's slid
+    // nodes' top-left in window pixels, the first the frame after the press,
+    // and whether the slide still runs after the last:
+    //   FRONT_CREATE_SLIDE screen=create frames=x,y,..;x,y,.. on=0
+    if (!front->create_slide_at(width, height).empty()) {
+      list.Clear();
+      const n3e::front::Context opened{"Local Realm", "", release.version, &list, 0};
+      double t = 200;
+      front->select_at(0);
+      front->draw(width, height, t, opened);
+      key(SDLK_RETURN);
+      std::cout << "FRONT_CREATE_SLIDE screen=" << (front->screen() == Screen::create ? "create" : "other")
+                << " frames=";
+      for (int frame = 0; frame < 600 && (frame == 0 || front->create_sliding()); ++frame) {
+        front->draw(width, height, t += 1.0 / 32, opened);
+        const char *sep = frame ? ";" : "";
+        for (const auto &at : front->create_slide_at(width, height))
+          std::cout << sep << at[0] << "," << at[1], sep = ",";
+      }
+      std::cout << " on=" << front->create_sliding() << std::endl;
       front->jump(Screen::select);
     }
     if (asked)

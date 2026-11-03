@@ -1008,6 +1008,22 @@ struct FrontAxis {
   float a = 0, c = 0;
 };
 struct FrontMove { uint32_t node = 0; FrontAxis x, y; };
+// Version 20 (RQ-126): create's slide, as 1298's in-select create slides its
+// panels in each time it opens (SetVisible 00606650, Tick 00606450,
+// KO-FINDINGS 9.15; render/front_slide.h). A distance d starts at 0 and each
+// frame grows by max(t rate (w - d) / w, floor), t the frame's seconds and w
+// the lead's (the first node's) extent on its axis. Each node moves on its
+// axis from `start` (a rule as a move's, at the placement's size) toward its
+// rest (where the moves put it) by trunc(num d / den), never past it; the
+// frame the lead reaches its rest the slide ends, every node staying where
+// that frame put it. No nodes: no slide.
+struct FrontSlideNode {
+  static constexpr uint32_t X = 0, Y = 1;
+  uint32_t node = 0, axis = X;
+  FrontAxis start;
+  float num = 1, den = 1;
+};
+struct FrontSlide { float rate = 0, floor = 0; std::vector<FrontSlideNode> nodes; };
 struct FrontEnd {
   // The layouts the moves are for: the five screens (FrontScreen), then the logo.
   static constexpr size_t kLogoLayout = size_t(FrontScreen::count);
@@ -1051,6 +1067,8 @@ struct FrontEnd {
   // window's own pixels as KO does.
   std::array<std::vector<FrontMove>, size_t(FrontScreen::count) + 1> moves;
   bool scale_to_window = false;
+  // Version 20 (RQ-126): create's slide (none: no nodes).
+  FrontSlide create_slide;
 };
 FrontEnd load_front_end(const Release &release);
 } // namespace n3e

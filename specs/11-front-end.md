@@ -82,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 19, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 20, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -244,7 +244,15 @@ replace the panels when the client has a Discord realm config.
   character stands there under its spot, turned by the slot's `create_yaw`
   (`005fd120`); Cancel and ESC return to the select at rest on the slot. The 1298
   recipe names `hall` and draws 1298's `co_characterCreate_us.uif`, its panels
-  where 1298's slides end (Q87); the 1097 choice keeps `screen`.
+  where 1298's slides clamp (Q87; RQ-126 slides them in); the 1097 choice keeps `screen`.
+- **Create's slide** (N3FE version 20, RQ-126). The package may slide create's
+  nodes in each time it opens (`content/front-end.md` item 13; the recipe's create
+  `slide`): a distance growing each frame by max(t · rate · (w − d) / w, floor), each
+  node moved from its start toward where its moves put it, the lead's arrival ending
+  it (`specs/KO-FINDINGS.md` §9.15: 1298's SetVisible `00606650` and Tick
+  `00606450`). The 1298 recipe slides its three panels in from the right, the left
+  and the bottom edges as 1298 does, ending where 1298's leave them; the 1097 choice
+  has none.
 - **The placement** (N3FE version 11, RQ-106, Q82). KO draws its front end on the
   screen's own pixels, never scaled, and places each layout's root and some of its
   nodes by the viewport's size each time the layout loads (`specs/KO-FINDINGS.md`
@@ -375,7 +383,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 19 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, no select bar actions, no message box Yes and No or exit question, no select ESC or its `none`, no select Back, no select arrow rule, or no create mode) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 20 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, no select bar actions, no message box Yes and No or exit question, no select ESC or its `none`, no select Back, no select arrow rule, no create mode, or no create slide) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas (1024 × 768) | KO's placements would cut the layouts off, so the UI scales down uniformly, centred, as with `ui_scale` `window` (RQ-106). No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -559,12 +567,19 @@ KO (`make live-ko`, needs `assets/ko`):
    plays the recipe's `ka_left_right` path to slot 2 behind it, the new character
    standing at slot 2 from the tick after the path's last frame; ESC there, or one
    frame into the flight, returns to the select at rest at slot 2 with the bar
-   shown; at rest its name entry is where 1298's `Group_name` slide ends, the new
+   shown; at rest its name entry is where 1298's `Group_name` slide clamps, the new
    character the one model drawn, the hall's terrain between its panels. The cook
    and loader (`tests/front_end.py`) take `select.create` and each slot's
    `create_yaw`, refuse a misspelt mode, a yaw past a turn, a `create_yaw` without
    `hall` and a `char_view` bound (or not bound) against the mode, and place the
-   in-select create's panels where 1298 leaves them at each size.
+   in-select create's panels where 1298 leaves them at each size. RQ-126: on the
+   1298 recipe's, ENTER on an empty slot opens create with its three panels sliding
+   in, frame by frame 1/32 s apart where 1298's Tick (`00606450`) puts them on the
+   pinned layout, ending on the frame it clears its flag; the chosen package's create
+   has no slide. The cook and loader (`tests/front_end.py`) take the create
+   `slide`, refuse it off create, a misspelt key or edge, a node twice or hidden, a
+   `with` of no other node or no travel and each bound, and run the loaded slide at
+   three sizes and four frame times as 1298's Tick does.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

@@ -864,10 +864,10 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=19, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=20, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
-         zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT):
+         zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0)):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -891,7 +891,8 @@ def blob(version=19, slots=1, screen_data=None, font_index=None, light=None, plu
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
     out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
     out += character(select_clips, plug=plug) + character(plug=plug)
-    return out + music + logo + messages + placement + extra
+    # Version 20 (RQ-126): create's slide, after the placement.
+    return out + music + logo + messages + placement + slide + extra
 
 
 # --- the logo screen (version 9, RQ-101) ---------------------------------------
@@ -1213,7 +1214,7 @@ BAR_PLACE_SPEC = {"place": {"bottom": 10}}
 # RQ-125 (KO-FINDINGS 9.15): 1298's in-select create at
 # co_characterCreate_us.uif's rects, its 291 x 705 root and its three panels,
 # and front-end-1298.json's placement of them: the root at the origin
-# (005fab40's SetPos(0, 0)), each panel where 1298's Tick (00606450) ends its
+# (005fab40's SetPos(0, 0)), each panel where 1298's Tick (00606450) clamps its
 # slide: Group_class 50 from the left, Group_race 50 from the right, Group_name
 # centred (Load 00603850's x), each bottom 30 above the window's.
 HALL_CREATE_PLACE_TREE = frame("root", 0, (0, 0, 291, 705), [
@@ -1231,11 +1232,12 @@ HALL_CREATE_BINDINGS = {"btn_create": "create_confirm", "btn_cancel": "back", "e
                         "text_desc": "class_desc"}
 
 
-def cook_placed(specs=PLACE_SPECS, trees=PLACE_TREES, bindings=PLACE_BINDINGS, over_hall=False):
+def cook_placed(specs=PLACE_SPECS, trees=PLACE_TREES, bindings=PLACE_BINDINGS, over_hall=False, slides=None):
     assets = Fixture(trees)
     textures, fonts, placements = fe.Textures(assets), {}, []
     data = [fe.screen(n, {"ui": n + ".uif", "bindings": dict(bindings[n]), **specs[n]}, assets, textures,
-                      fonts, placements=placements, **(UNVIEWED if over_hall and n == "create" else {}))
+                      fonts, placements=placements, slides=slides,
+                      **(UNVIEWED if over_hall and n == "create" else {}))
             for n in fe.SCREENS]
     return data, placements
 
@@ -1246,11 +1248,12 @@ def cook_placed_bar(specs=None):
                        {**PLACE_BINDINGS, "select": BAR_BINDINGS})
 
 
-def cook_placed_1298(specs=None):
+def cook_placed_1298(specs=None, slides=None):
     """The 1298 recipe's layouts: 1298's select bar and its in-select create."""
     specs = specs or {**PLACE_SPECS, "select": BAR_PLACE_SPEC, "create": HALL_CREATE_PLACE_SPEC}
     return cook_placed(specs, {**PLACE_TREES, "select.uif": BAR_PLACE_TREE, "create.uif": HALL_CREATE_PLACE_TREE},
-                       {**PLACE_BINDINGS, "select": BAR_BINDINGS, "create": HALL_CREATE_BINDINGS}, over_hall=True)
+                       {**PLACE_BINDINGS, "select": BAR_BINDINGS, "create": HALL_CREATE_BINDINGS}, over_hall=True,
+                       slides=slides)
 
 
 def ko_rects(width, height, bar=False, hall_create=False):
@@ -1286,7 +1289,7 @@ def ko_rects(width, height, bar=False, hall_create=False):
             ("btn_back", (645, 56)), ("btn_exit", (846, 56)), ("str_id", (431, 23)), ("str_lev", (158, 24)),
             ("str_job", (760, 25)), ("btn_left", (27, 23)), ("btn_right", (958, 23)))}} if bar else {}),
         # RQ-125: 1298's in-select create (005fab40: the root at (0, 0)), its
-        # panels where Load (00603850) and Tick (00606450) leave them:
+        # panels where Load (00603850) and Tick (00606450) clamp them:
         # Group_class at (50, H - 30 - h), Group_race at (W - w - 50,
         # H - 30 - h), Group_name at ((W - w) / 2, H - 30 - h), each child
         # carried with its panel.
@@ -1469,6 +1472,118 @@ assert hidden[3] == u(1) + u(0) + u(fe.LINEAR) + f([0.5, -339]) + u(fe.LINEAR) +
 print("PASS front-end placement cook: KO's placements at the canvas, the 1097 and 1298 recipes' the same "
       "but for the 1097 choice's copyright line and 1298's own select bar and in-select create, %d refusals"
       % len(placement_problems))
+# --- create's slide (version 20, RQ-126) ----------------------------------------
+
+# KO-FINDINGS 9.15: 1298's create slides its panels in each time it opens
+# (SetVisible 00606650 zeroes d; Tick 00606450 adds max(t 1300 (w - d) / w, 2)
+# a frame, w Group_race's width): Group_race from x = W (Load 00603850) to
+# W - w - 50, its arrival ending the slide; Group_class from x = -w_c by
+# trunc(d) to 50; Group_name from y = H by trunc((h + 30) d / (w_c + 50)) to
+# H - 30 - h. As front-end-1298.json says it.
+HALL_CREATE_SLIDE = {"rate": 1300, "floor": 2, "nodes": [
+    {"node": "Group_race", "from": "right"}, {"node": "Group_class", "from": "left"},
+    {"node": "Group_name", "from": "bottom", "with": "Group_class"}]}
+assert recipe_1298["screens"]["create"]["slide"] == HALL_CREATE_SLIDE, recipe_1298["screens"]["create"]
+assert "slide" not in recipe_1097["screens"]["create"], recipe_1097["screens"]["create"]
+HALL_SLIDE_SPECS = {**PLACE_SPECS, "select": BAR_PLACE_SPEC,
+                    "create": {**HALL_CREATE_PLACE_SPEC, "slide": HALL_CREATE_SLIDE}}
+hall_slides = []
+assert cook_placed_1298(HALL_SLIDE_SPECS, hall_slides)[1] == hall_placements
+# The lead Group_race (node 1) on x from W (LINEAR 1, 0); Group_class (13) on
+# x from -216 (its width); Group_name (15) on y from H, by 102 / 266: its
+# travel at the canvas (768 - 666) over Group_class's (50 + 216).
+HALL_SLIDE_RECORD = u(3) + f([1300, 2]) + u(1) + u(0) + u(fe.LINEAR) + f([1, 0]) + f([1, 1]) + \
+    u(13) + u(0) + u(fe.LINEAR) + f([0, -216]) + f([1, 1]) + u(15) + u(1) + u(fe.LINEAR) + f([1, 0]) + f([102, 266])
+assert hall_slides == [HALL_SLIDE_RECORD], hall_slides
+# No slide: a count of 0.
+plain_slides = []
+cook_placed_1298(slides=plain_slides)
+assert plain_slides == [u(0)], plain_slides
+
+
+def slid(**change):
+    return {**HALL_SLIDE_SPECS, "create": {**HALL_SLIDE_SPECS["create"], "slide": {**HALL_CREATE_SLIDE, **change}}}
+
+
+def slid_node(i, **change):
+    nodes = [dict(n) for n in HALL_CREATE_SLIDE["nodes"]]
+    nodes[i].update(change)
+    return slid(nodes=nodes)
+
+
+slide_problems = {
+    "a slide off create": {**HALL_SLIDE_SPECS, "message": {**PLACE_SPECS["message"], "slide": HALL_CREATE_SLIDE}},
+    "a slide that is not an object": {**HALL_SLIDE_SPECS, "create": {**HALL_CREATE_PLACE_SPEC, "slide": []}},
+    "a slide without its floor": {**HALL_SLIDE_SPECS, "create": {**HALL_CREATE_PLACE_SPEC, "slide": {
+        "rate": 1300, "nodes": HALL_CREATE_SLIDE["nodes"]}}},
+    "an unknown slide key": slid(speed=1),
+    "a rate of 0": slid(rate=0),
+    "a rate past its bound": slid(rate=100001),
+    "a rate that is not a number": slid(rate="1300"),
+    "a floor of 0": slid(floor=0),
+    # Under the float step just below 10^6 a float d can stop growing (d +
+    # floor rounding back to d) and the slide never ends.
+    "a floor under 1/16": slid(floor=0.0624),
+    "a floor past its bound": slid(floor=1025),
+    "a floor that is infinite": slid(floor=math.inf),
+    "no nodes": slid(nodes=[]),
+    "nine nodes": slid(nodes=[{"node": "Group_race", "from": "right"}] * 9),
+    "a node twice": slid(nodes=[{"node": "Group_race", "from": "right"}, {"node": "Group_race", "from": "left"}]),
+    "an unknown edge": slid_node(0, **{"from": "front"}),
+    "a node without its edge": slid(nodes=[{"node": "Group_race"}]),
+    "an unknown node key": slid_node(1, speed=2),
+    "a node the layout lacks": slid_node(1, node="Group_nation"),
+    "a with of itself": slid_node(2, **{"with": "Group_name"}),
+    "a with of a node not sliding": slid_node(2, **{"with": "edit_name"}),
+    "a with of no travel": {**HALL_SLIDE_SPECS, "create": {**HALL_CREATE_PLACE_SPEC, "moves": [
+        {"node": "Group_class", "x": -216, "bottom": 30}] + HALL_CREATE_PLACE_SPEC["moves"][1:],
+        "slide": HALL_CREATE_SLIDE}},
+    "a hidden node": {**HALL_SLIDE_SPECS, "create": {**HALL_SLIDE_SPECS["create"], "hidden": ["Group_class"]}},
+}
+for reason, specs in slide_problems.items():
+    try:
+        cook_placed_1298(specs, [])
+    except (ValueError, KeyError, TypeError) as error:
+        continue
+    raise AssertionError("slide cook accepted " + reason)
+print("PASS front-end slide cook: the 1298 recipe's create slide as 1298's Load and Tick move its panels, "
+      "none for the 1097 choice, %d refusals" % len(slide_problems))
+
+
+def ko_slide(width, height, dt):
+    """1298's Tick (00606450) at a window, from the open (SetVisible 00606650,
+    d = 0) to the frame it clears its flag, as the binary reads: d (a float,
+    +0xb8) += max(dt 1300 (w - d) / w, 2), w Group_race's width 214; Group_race
+    at max(W - trunc(d), W - w - 50), clearing the flag there; Group_class at
+    min(trunc(d) - w_c, 50), w_c 216; Group_name at max(H - trunc((h + 30) d /
+    (w_c + 50)), H - 30 - h), h 72; each keeping its other coordinate (Load
+    00603850's: Group_name's x (W - w) / 2, the others' y H - 30 - h). Each
+    frame's (race, class, name) top-lefts, the first the open's (Load's)."""
+    def f32(x):
+        return struct.unpack("<f", struct.pack("<f", x))[0]
+    race_y, class_y, name_x = height - 30 - 704, height - 30 - 702, (width - 363) // 2
+
+    def at(d):
+        race = max(width - math.trunc(d), width - 214 - 50)
+        return (race, race_y, min(math.trunc(d) - 216, 50), class_y, name_x,
+                max(height - math.trunc(102 * d / 266), height - 30 - 72)), race == width - 214 - 50
+    d, frames = 0.0, [at(0.0)[0]]
+    while True:
+        d = f32(d + max(dt * 1300 * (214 - d) / 214, 2.0))
+        place, done = at(d)
+        frames.append(place)
+        if done:
+            return frames
+
+
+# 1298's slide ends 1 or 2 px short of Group_class's 50 and 1 px below
+# Group_name's H - 30 - h at frame rates whose last steps are the 2 px floor:
+# the flag clears on the frame d reaches 264, Group_race's travel, while
+# Group_class's is 266.
+for dt, frames, final in ((1 / 30, 44, (760, 34, 48, 36, 330, 667)), (1 / 60, 58, (760, 34, 49, 36, 330, 667)),
+                          (1 / 144, 84, (760, 34, 48, 36, 330, 667)), (0.25, 1, (760, 34, 50, 36, 330, 666))):
+    run = ko_slide(1024, 768, dt)
+    assert (len(run) - 1, run[-1]) == (frames, final), (dt, len(run) - 1, run[-1])
 PLACEMENT_OK = u(0) + b"".join(placements) + u(0)
 SIZES = ((1024, 768), (1280, 1024), (1600, 1200), (1281, 1025), (800, 600))
 
@@ -1487,7 +1602,7 @@ PLACEMENT_CASES = {
     "ok-placed-scaled": blob(screen_data=placed_screens, placement=u(1) + PLACEMENT_OK[4:]),
     "ok-placed-bar": blob(screen_data=bar_placed_screens, placement=u(0) + b"".join(bar_placements) + u(0)),
     "ok-placed-1298": blob(screen_data=hall_placed_screens, placement=u(0) + b"".join(hall_placements) + u(0),
-                           create=1),
+                           create=1, slide=HALL_SLIDE_RECORD),
     "ok-placement-keep": blob(placement=moves_raw((1, (fe.KEEP, 0, 0), (fe.KEEP, 0, 0)))),
     "bad-placement-flags": blob(placement=u(2) + NO_PLACEMENT[4:]),
     "bad-placement-missing": blob(placement=b""),
@@ -1505,6 +1620,39 @@ PLACEMENT_CASES = {
     "ok-logo-moves": blob(music=ONE_TRACK, logo=LOGO_OK,
                           placement=moves_raw(logo=u(1) + u(0) + (u(fe.LINEAR) + f([0.5, -16])) +
                                               (u(fe.LINEAR) + f([0.5, -8])))),
+}
+
+
+# RQ-126 (version 20): create's slide, on the 1298 layouts; a record with
+# `change` (offset: bytes) patched in.
+def slide_raw(*patches, record=HALL_SLIDE_RECORD):
+    for at, data in patches:
+        record = record[:at] + data + record[at + len(data):]
+    return blob(screen_data=hall_placed_screens, placement=u(0) + b"".join(hall_placements) + u(0), create=1,
+                slide=record)
+
+
+SLIDE_NODE = 12  # the first node record's offset (after the count, rate and floor)
+SLIDE_CASES = {
+    "bad-version-19": blob(version=19),
+    "ok-slide-screen": blob(slide=u(1) + f([1300, 2]) + u(0) + u(0) + u(fe.LINEAR) + f([1, 0]) + f([1, 1])),
+    "bad-slide-missing": blob(placement=NO_PLACEMENT, slide=b""),
+    "bad-slide-truncated": slide_raw(record=HALL_SLIDE_RECORD[:-4]),
+    "bad-slide-nodes-9": slide_raw(record=u(9) + HALL_SLIDE_RECORD[4:]),
+    "bad-slide-rate": slide_raw((4, f([0]))),
+    "bad-slide-rate-high": slide_raw((4, f([100001]))),
+    "bad-slide-floor": slide_raw((8, f([0]))),
+    "bad-slide-floor-nan": slide_raw((8, f([NAN]))),
+    "bad-slide-floor-small": slide_raw((8, f([1e-5]))),
+    "bad-slide-floor-under": slide_raw((8, f([0.0624]))),
+    "ok-slide-floor-least": slide_raw((8, f([1 / 16]))),
+    "bad-slide-node": slide_raw((SLIDE_NODE, u(99))),
+    "bad-slide-node-twice": slide_raw((SLIDE_NODE + 28, u(1))),
+    "bad-slide-axis": slide_raw((SLIDE_NODE + 4, u(2))),
+    "bad-slide-start-keep": slide_raw((SLIDE_NODE + 8, u(fe.KEEP))),
+    "bad-slide-start-offset": slide_raw((SLIDE_NODE + 16, f([16385]))),
+    "bad-slide-num": slide_raw((SLIDE_NODE + 20, f([0]))),
+    "bad-slide-den-high": slide_raw((SLIDE_NODE + 24, f([16385]))),
 }
 
 
@@ -1614,6 +1762,8 @@ cases = {
     # RQ-106 (version 11): the placement.
     "bad-version-10": blob(version=10),
     **PLACEMENT_CASES,
+    # RQ-126 (version 20): create's slide.
+    **SLIDE_CASES,
     # RQ-108 (version 12): the action login_closed, on the login screen only.
     "bad-version-11": blob(version=11),
     "ok-login-closed": blob(screen_data=rights("login")),
@@ -1737,7 +1887,7 @@ try:
         (work / name / "front-end.bin").write_bytes(data)
         args += [name.split("-")[0], str(work / name)]
     run = subprocess.run([str(ROOT / "build/client/n3e-front-end-check"), *args], capture_output=True, text=True)
-    sys.stdout.write("".join(l for l in run.stdout.splitlines(True) if not l.startswith("placed ")))
+    sys.stdout.write("".join(l for l in run.stdout.splitlines(True) if not l.startswith(("placed ", "slide "))))
     assert run.returncode == 0, run.stdout + run.stderr
     # RQ-095: the zone's refusals, each for its own reason.
     for name, reason in (("bad-zone-totals", "front end zone totals"),
@@ -1784,7 +1934,8 @@ try:
     # hall, a char_view where the mode does not draw one (or none where it
     # does) and a yaw past a turn, each refused for its reason.
     create_lines = [l for l in run.stdout.splitlines() if l.startswith("create ")]
-    assert create_lines == ["create ok-placed-1298: 1 yaws -3.75", "create ok-create-hall: 1 yaws -3.75",
+    assert create_lines == ["create ok-placed-1298: 1 yaws -3.75", "create ok-slide-floor-least: 1 yaws -3.75",
+                            "create ok-create-hall: 1 yaws -3.75",
                             "create ok-create-hall-3: 1 yaws -3.71755147 -2.495821 -4.93928194"], create_lines
     for name, reason in (("bad-create-mode", "front end create mode"), ("bad-create-hall-view", "front end create view"),
                          ("bad-create-screen-no-view", "front end create view"),
@@ -1792,6 +1943,40 @@ try:
                          ("bad-version-18", "front end version")):
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
+    # RQ-126: the slide's refusals are the section's own; the 1298 recipe's
+    # slide, as the client runs it on the placed layout, moves the panels
+    # frame by frame as 1298's Tick does at each size and frame time, ending
+    # on the frame 1298 clears its flag, a test hook's rest at the moves.
+    for name in SLIDE_CASES:
+        if name.startswith("bad-") and name not in ("bad-slide-missing", "bad-slide-truncated", "bad-version-19"):
+            line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+            assert "front end slide" in line or "count" in line, (name, line)
+    line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-version-19:"))
+    assert "front end version" in line, line
+    slide_runs = 0
+    for m in re.finditer(r"^slide (\S+): size=(\d+)x(\d+) dt=(\S+) nodes=(\d+) frames=(\S+) rest=(\S+)$",
+                         run.stdout, re.M):
+        name, width, height, dt = m.group(1), int(m.group(2)), int(m.group(3)), float(m.group(4))
+        frames = [tuple(float(v) for v in frame.split(",")) for frame in m.group(6).split(";")]
+        rest = tuple(float(v) for v in m.group(7).split(","))
+        if name == "ok-slide-floor-least":
+            # The least floor still carries the lead past w to its rest.
+            assert frames[-1][0] == width - 264 and frames[-1] != frames[-2], m.group(0)[-200:]
+            continue
+        if name == "ok-slide-screen":
+            # The synthetic create's root from the window's right edge to its rest.
+            assert m.group(5) == "1" and frames[0][0] == width and frames[-1] == rest, m.group(0)[:200]
+            continue
+        assert name == "ok-placed-1298" and m.group(5) == "3", m.group(0)[:200]
+        dt = min((1 / 30, 1 / 60, 1 / 144, 0.25), key=lambda v: abs(v - dt))
+        want = ko_slide(width, height, dt)
+        assert frames == [tuple(map(float, frame)) for frame in want], (width, dt, frames[-3:], want[-3:])
+        assert rest == (width - 264, height - 734, 50, height - 732, (width - 363) // 2, height - 102), rest
+        slide_runs += 1
+    assert slide_runs == 12, slide_runs
+    print("PASS front-end slide: the 1298 recipe's create slide frame by frame as 1298's Tick (00606450) moves "
+          "its panels at 1024x768, 1280x1024 and 1600x1200 and 30, 60, 144 and 4 frames a second; %d refusals"
+          % sum(name.startswith("bad-") for name in SLIDE_CASES))
     exit_line = [l for l in run.stdout.splitlines() if l.startswith("message ok-exit-confirm: ")]
     assert exit_line == ["message ok-exit-confirm: %d title='' replaces=1 text='Enter a name. '"
                          % (len(fe.MESSAGES) - 1)], exit_line

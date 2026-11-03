@@ -22,10 +22,15 @@
 // RQ-111: the message box's styles, keys and answers (client/render/message_box.h)
 // as 1298's CUIMessageBox shows and answers an OK box and the yes/no exit.
 // RQ-116: a loaded package whose select ESC presses exit is printed.
+// RQ-126: a loaded package's create slide (client/render/front_slide.h), run
+// on its placed create layout at three window sizes and four frame times from
+// the open to the lead's arrival, each frame's node coordinates printed for
+// tests/front_end.py to check against 1298's Tick (00606450) as it reads.
 #include "assets/assets.h"
 #include "assets/front_place.h"
 #include "render/front_login.h"
 #include "render/front_logo.h"
+#include "render/front_slide.h"
 #include "render/message_box.h"
 #include "render/select_bar.h"
 #include "render/select_hall.h"
@@ -552,6 +557,44 @@ int main(int argc, char **argv) {
         for (const auto &slot : fe.slots) std::cout << " " << slot.create_yaw;
         std::cout << "\n";
       }
+      // RQ-126: slide NAME: size=WxH dt=T nodes=N frames=x,y,..;.. on=1..0
+      // (each frame's slid nodes' top-left, the last the frame the slide
+      // ended) and a frame of no time that moves nothing.
+      if (!fe.create_slide.nodes.empty())
+        for (const auto [w, h] : {std::pair{1024, 768}, {1280, 1024}, {1600, 1200}})
+          for (const double dt : {1.0 / 30, 1.0 / 60, 1.0 / 144, 0.25}) {
+            const auto rects = n3e::front_layout_rects(fe, size_t(n3e::FrontScreen::create), w, h);
+            n3e::front::SlideState state;
+            n3e::front::slide_open(state);
+            std::cout << std::setprecision(9) << "slide " << release.root.filename().string() << ": size=" << w
+                      << "x" << h << " dt=" << dt << " nodes=" << fe.create_slide.nodes.size() << " frames=";
+            const auto print = [&] {
+              const auto at = n3e::front::slide_coordinates(fe.create_slide, rects, {w, h}, state);
+              for (size_t k = 0; k < at.size(); ++k) {
+                const auto &n = fe.create_slide.nodes[k];
+                const auto &r = rects[n.node];
+                std::cout << (k ? "," : "") << (n.axis == 0 ? at[k] : r[0]) << "," << (n.axis == 1 ? at[k] : r[1]);
+              }
+            };
+            print();
+            int frames = 0;
+            while (state.on && frames < 10000) {
+              n3e::front::slide_tick(fe.create_slide, rects, {w, h}, state, dt);
+              std::cout << ";";
+              print();
+              ++frames;
+              if (frames == 1) {
+                // A frame of no time (the first ever, a test hook's redraw) moves nothing.
+                const auto before = state.d;
+                n3e::front::slide_tick(fe.create_slide, rects, {w, h}, state, 0);
+                if (state.d != before) error = "a slide frame of no time moved";
+              }
+            }
+            std::cout << " rest=";
+            n3e::front::slide_rest(state);
+            print();
+            std::cout << "\n";
+          }
       // RQ-106: placed NAME: layout=L size=WxH node=I rect=x0,y0,x1,y1
       if (release.root.filename().string().starts_with("ok-placed"))
         for (const auto [w, h] : {std::pair{1024, 768}, {1280, 1024}, {1600, 1200}, {1281, 1025}, {800, 600}}) {

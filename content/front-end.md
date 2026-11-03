@@ -17,9 +17,10 @@ bar's actions and two messages (version 13, RQ-109), the message box's
 Yes and No with the select's exit question (version 14, RQ-111), what ESC
 presses on the select (version 15, RQ-116), its `none`, 1298's (version 16,
 RQ-119), where the select's Back lands (version 17, RQ-112), whether the
-select arrow at the end of the row is hidden (version 18, RQ-113), and
+select arrow at the end of the row is hidden (version 18, RQ-113),
 whether create is a screen of its own or draws over the select hall, with the
-new character's turn at each slot (version 19, RQ-125).
+new character's turn at each slot (version 19, RQ-125), and create's slide,
+its panels sliding in each time it opens (version 20, RQ-126).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -33,7 +34,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 19, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 20, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -198,6 +199,27 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    pixels as the drawing; the 3D views (the intro, the hall, the create
    figure) keep their projection either way, the hall's centre rect a share
    of the window and the intro backdrop item 6's.
+13. Create's slide (version 20, RQ-126; `client/render/front_slide.h`;
+   `specs/KO-FINDINGS.md` §9.15, binary): a node count (≤8; 0: none), then
+   with nodes the rate (real, above 0, at most 100000) and the floor (real,
+   1/16 to 1024: at least the real step just below 10⁶, so d always grows
+   to the bound below), and each node: a node of the create layout (each
+   once), its axis (0 x, 1 y), its start rule (a kind, 1 linear or 2 half, and
+   a and c as item 12's) and two reals num and den (above 0, at most 16384).
+   Each time create opens a distance d starts at 0 (1298's SetVisible
+   `00606650`); each frame, before the frame draws, d grows by max(t · rate ·
+   (w − d) / w, floor), t the frame's seconds (none for a frame of no time) and
+   w the first node's (the lead's) extent on its axis, and is kept as a real
+   (1298's Tick `00606450`: rate 1300, floor 2, w `Group_race`'s width). Each
+   node, its subtree with it, then stands on its axis at its start rule's
+   coordinate (on the placement's S: the window's, or the canvas's when
+   scaled) moved toward its rest, where item 12's moves put it, by
+   trunc(num · d / den), never past it; its other coordinate is its rest's.
+   On the frame the lead reaches its rest the slide ends, every node staying
+   where that frame put it (1298 clears its flag on Group_race's arrival),
+   so a node whose travel the lead's outruns ends short of its rest; a d
+   past 10⁶ ends it with every node at rest. Hit tests take the nodes where
+   they draw.
 
 The client samples as KO sets its devices: UIF images with point sampling on whole
 screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
@@ -398,7 +420,10 @@ without nodes bound to both on it (version 14), a select ESC other than 0, 1 or
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
 file does not have, a rule of another kind or outside its bounds, a keep rule
 with a or c not 0, moves that do not leave the canvas rects where the file puts
-them, and every reference, count and bound above, truncation or trailing bytes.
+them, a slide (version 20) of a node outside the create layout or named twice,
+an axis other than 0 or 1, a keep start rule, a lead of no extent on its axis
+or a step or scale outside its bounds, and every reference, count and bound
+above, truncation or trailing bytes.
 
 ## Actions
 
@@ -652,7 +677,7 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   panels, `Group_race` (the race buttons, the description, Create and Cancel),
   `Group_class` (the class buttons and the stats) and `Group_name` (the name
   entry), drawn over the hall. `place` `origin` (`005fab40`'s SetPos(0, 0)),
-  each panel moved where 1298's Tick (`00606450`) ends its slide: `Group_class`
+  each panel moved to where 1298's Tick (`00606450`) clamps its slide: `Group_class`
   50 from the left, `Group_race` 50 from the right (`right`), `Group_name`
   centred (Load `00603850`'s x), each bottom 30 above the window's. Bound as
   its ReceiveMessage (`00604f90`) uses it: `btn_create` `create_confirm`,
@@ -663,12 +688,17 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   the warrior, rogue and mage images and `text_bonus`, as the 1097 recipe.
   The new character stands at the slot turned 213, 143 and 283 degrees at
   slots 0–2 (`create_yaw`; `005fd120`'s `0x406dec5d`, `0x401fbb88`,
-  `0x409e0e99` for Karus). Not 1298's (Q87): the panels stand where their
-  slides end from the first frame (1298 slides `Group_race` in from the right
-  and `Group_class` from the left at up to 1300 px a second and
-  `Group_name` up from the bottom edge, `00606450`); 1298 draws the new
-  character only once a race is clicked (`005fd120` from ReceiveMessage), the
-  realm's race and class being always chosen. The hall lights `ka_light_0/1` are the files both
+  `0x409e0e99` for Karus). The panels slide in each time create opens
+  (RQ-126, version 20, `slide`, §9.15, binary): `rate` 1300 and `floor` 2,
+  `Group_race` the lead from the right edge (Load `00603850`'s x = W),
+  `Group_class` from the left (x = −w) and `Group_name` from the bottom
+  (y = H) `with` `Group_class` (trunc((h + 30) d / (w_c + 50)), 102 / 266 on
+  the pinned layout), as 1298's Tick (`00606450`) moves them; the slide ends
+  on Group_race's arrival, which at frame times under about 0.2 s (its last
+  steps the 2 px floor, d ending in [264, 266)) leaves `Group_class` at 48 or
+  49 and `Group_name` 29 above the bottom edge, as 1298 leaves them. Not 1298's (Q87): 1298 draws the new character only once
+  a race is clicked (`005fd120` from ReceiveMessage), the realm's race and
+  class being always chosen. The hall lights `ka_light_0/1` are the files both
   clients name.
 - Select (RQ-109, version 13, `specs/KO-FINDINGS.md` §9.6, binary): 1298's own,
   `UI_US/co_CharacterSelect_us.uif`, a 1024 × 113 bar, every node drawn,
@@ -761,7 +791,13 @@ box and loading are 1264's.
   edge at (S >> 1) + c + k·S / the root's extent; and one of `y`: a number or
   `centre`, `bottom`: its bottom edge that far above the window's, or
   `above` [node, gap]: its bottom edge that far above that node's top) are
-  1264's placements, which the cook writes as item 12's rules. The recipe's
+  1264's placements, which the cook writes as item 12's rules. Create's
+  `slide` (version 20, item 13; create's only, none by default): `rate`,
+  `floor` and `nodes` in order, the first the lead, each a `node`, `from`
+  (`right`: x = W, `left`: x = −w, `bottom`: y = H, `top`: y = −h, its start
+  just past that window edge) and optionally `with` another of its nodes (num
+  and den its travel and that node's at the canvas, so the two arrive
+  together; num and den 1 without it); a node the layout hides is refused. The recipe's
   `ui_scale` (`native`, the default, or `window`: item 12's flags 1, the
   realm's scaling to the window before RQ-106) is RQ-103's realm-owner switch.
 - Login (`UI_US/co_login_us.uif`, centred on the bottom edge): as KO draws it, with

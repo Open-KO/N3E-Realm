@@ -23,9 +23,10 @@ buttons and its three info texts, with two messages (RQ-109), and (version
 select's exit asked yes or no as 1298 asks it (RQ-111), (version 15) what ESC
 presses on the select (RQ-116), (version 16) its `none`, 1298's (RQ-119),
 (version 17) where the select's Back lands (RQ-112), (version 18) whether
-an arrow at the end of the row is hidden (RQ-113) and (version 19) whether
+an arrow at the end of the row is hidden (RQ-113), (version 19) whether
 create is a screen of its own or draws over the select hall, with the new
-character's turn at each slot (RQ-125).
+character's turn at each slot (RQ-125), and (version 20) create's slide, its
+panels sliding in each time it opens (RQ-126).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -56,7 +57,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 19
+VERSION = 20
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -217,6 +218,26 @@ MAX_MOVES = 32
 MAX_MOVE_SCALE = 4.0
 MAX_MOVE_OFFSET = 16384.0
 MOVE_KEYS = {"node", "x", "right", "y", "bottom", "above"}
+# Create's slide (version 20, RQ-126; the recipe's create `slide`): 1298's
+# in-select create slides its panels in each time it opens (SetVisible
+# 00606650 zeroes the distance d; Tick 00606450 adds max(t 1300 (w - d) / w, 2)
+# a frame, w Group_race's width). `rate` and `floor` are that 1300 and 2;
+# `nodes` in order, the first the lead, whose arrival ends the slide (Group_race
+# at W - w - 50); each starts just past a window edge (`from`: Load 00603850's
+# (W, y), (-w, y), (x, H)) and moves toward where its moves put it by trunc(d),
+# or with `with` by trunc(d travel / that node's travel), its travel and that
+# node's at the canvas (Group_name's (h + 30) d / (w_c + 50)).
+MAX_SLIDE_NODES = 8
+MAX_SLIDE_RATE = 100000.0
+MAX_SLIDE_FLOOR = 1024.0
+# The least floor: the float step just below 10^6 (2^-4 for d in [2^19, 2^20)),
+# so a float d grows by at least it every frame up to the client's bound
+# (front_slide.h kSlideBound) and every slide ends.
+MIN_SLIDE_FLOOR = 1.0 / 16
+MAX_SLIDE_SCALE = 16384.0
+SLIDE_KEYS = {"rate", "floor", "nodes"}
+SLIDE_NODE_KEYS = {"node", "from", "with"}
+SLIDE_FROM = ("left", "right", "top", "bottom")
 # The recipe's `ui_scale` (version 11's flags): `native`, KO's (absent), or
 # `window`, the realm's own uniform scaling of the canvas to fit the window
 # (RQ-103's realm-owner option).
@@ -847,7 +868,63 @@ def shift(node, dx, dy):
         shift(c, dx, dy)
 
 
-def screen(name, spec, assets, textures, fonts, find=(), placements=None, required=None, refused=()):
+def slide_nodes(root, slide):
+    """Create's slide (version 20) on its tree, the moves applied at the
+    canvas: [(node, axis, start rule, (num, den))], empty for none. `from`
+    puts the node's start just past that window edge on its axis: `right`
+    (x = W), `left` (x = -w), `bottom` (y = H), `top` (y = -h); its rest is
+    where the moves put it. `with` names another of the slide's nodes: the
+    node then moves by trunc(d a / b), a its own travel and b that node's at
+    the canvas, so the two arrive together (1298's Group_name, whose
+    (h + 30) / (w_c + 50) is its travel over Group_class's); without it by
+    trunc(d)."""
+    if slide is None:
+        return []
+    if type(slide) is not dict or set(slide) != SLIDE_KEYS:
+        raise ValueError("front-end slide keys")
+    for key, least, bound in (("rate", 0.0, MAX_SLIDE_RATE), ("floor", MIN_SLIDE_FLOOR, MAX_SLIDE_FLOOR)):
+        value = slide[key]
+        if type(value) not in (int, float) or not math.isfinite(value) or not \
+                (least < value if key == "rate" else least <= value) or value > bound:
+            raise ValueError("front-end slide %s" % key)
+    listed = slide["nodes"]
+    if type(listed) is not list or not 1 <= len(listed) <= MAX_SLIDE_NODES:
+        raise ValueError("front-end slide nodes")
+    picked = []
+    for entry in listed:
+        if type(entry) is not dict or set(entry) - SLIDE_NODE_KEYS or not {"node", "from"} <= set(entry) or \
+                entry["from"] not in SLIDE_FROM:
+            raise ValueError("front-end slide node keys")
+        node = resolve(root, entry["node"])
+        if any(node is other for other, _ in picked):
+            raise ValueError("front-end slide node %r twice" % entry["node"])
+        x0, y0, x1, y1 = node["rect"]
+        axis_index = 0 if entry["from"] in ("left", "right") else 1
+        start = {"right": axis(LINEAR, 1.0), "left": axis(LINEAR, 0.0, -float(x1 - x0)),
+                 "bottom": axis(LINEAR, 1.0), "top": axis(LINEAR, 0.0, -float(y1 - y0))}[entry["from"]]
+        picked.append((node, (axis_index, start)))
+    lead = picked[0][0]["rect"]
+    if lead[picked[0][1][0] + 2] - lead[picked[0][1][0]] <= 0:
+        raise ValueError("front-end slide lead of no extent")
+
+    def travel(node, axis_index, start):
+        return abs(node["rect"][axis_index] - axis_at(start, CANVAS[axis_index]))
+    out = []
+    for entry, (node, (axis_index, start)) in zip(listed, picked):
+        scale = (1.0, 1.0)
+        if "with" in entry:
+            other = resolve(root, entry["with"])
+            match = [(o, a) for o, a in picked if o is other and o is not node]
+            if not match:
+                raise ValueError("front-end slide with %r: not another of its nodes" % entry["with"])
+            scale = (float(travel(node, axis_index, start)), float(travel(other, *match[0][1])))
+            if not all(0 < v <= MAX_SLIDE_SCALE for v in scale):
+                raise ValueError("front-end slide with %r: a travel of 0 or past the bound" % entry["with"])
+        out.append((node, axis_index, start, scale))
+    return out
+
+
+def screen(name, spec, assets, textures, fonts, find=(), placements=None, required=None, refused=(), slides=None):
     """One screen's nodes in draw order, on the canvas. CN3UIBase::Load adds
     each child at the front and Render walks the list backwards, so a parent
     draws before its children and the children in file order; a button draws
@@ -859,7 +936,8 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
     the section writes them: a count and each drawn node's index and rules.
     `required` replaces the screen's REQUIRED actions and `refused` names
     actions it may not bind (version 19: a create over the hall, no
-    `char_view`)."""
+    `char_view`). `slides`: a list create's slide (version 20, item 13) is
+    appended to, as the section writes it; another screen may not name one."""
     tree, ui = split(assets, spec["ui"])
     root = ko_hud.parse(tree.get(ui))
     # Every address resolves on KO's tree as read, before anything moves or is added.
@@ -877,6 +955,9 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
         bindings[id(node)] = extra["action"]
     placed = moves(root, spec)
     apply_moves(placed)
+    if "slide" in spec and name != "create":
+        raise ValueError("front-end slide: create's only")
+    slid = slide_nodes(root, spec.get("slide"))
     nodes, seen = [], set()
 
     def font(size, flags):
@@ -960,6 +1041,15 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
         drawn = [(found[id(n)], x, y) for n, x, y in placed if id(n) in found]
         placements.append(u(len(drawn)) + b"".join(u(i) + u(x[0]) + f(x[1:]) + u(y[0]) + f(y[1:])
                                                    for i, x, y in drawn))
+    if slides is not None and name == "create":
+        if any(id(n) not in found for n, *_ in slid):
+            raise ValueError("front-end slide: a node it names is not drawn")
+        record = u(len(slid))
+        if slid:
+            record += f([spec["slide"]["rate"], spec["slide"]["floor"]])
+        record += b"".join(u(found[id(n)]) + u(axis_index) + u(start[0]) + f(start[1:]) + f(scale)
+                           for n, axis_index, start, scale in slid)
+        slides.append(record)
     if not find:
         return data
     if any(w not in found for w in wanted):
@@ -1786,13 +1876,13 @@ def write(assets, out, config, work):
     if set(config["screens"]) != set(SCREENS):
         raise ValueError("front-end screens")
     textures, fonts = Textures(assets), {}
-    placements = []
+    placements, slides = [], []
     # Version 19 (RQ-125): a create over the hall draws its new character in
     # the hall, so its layout binds no char_view.
     over_hall = create_mode(config["select"]) == "hall"
     unviewed = dict(required=REQUIRED["create"] - {"char_view"}, refused={"char_view"}) if over_hall else {}
     screens = b"".join(screen(n, config["screens"][n], assets, textures, fonts, placements=placements,
-                              **(unviewed if n == "create" else {}))
+                              slides=slides, **(unviewed if n == "create" else {}))
                        for n in SCREENS)
     # Version 9 (RQ-101): the logo screen, or none; its textures and fonts
     # join the tables before they are written.
@@ -1829,7 +1919,9 @@ def write(assets, out, config, work):
     tracks, played = music(assets, config.get("music"))
     # Version 10 (RQ-102): each message's title and wording.
     message_section, message_report = messages_section(config, assets)
-    data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section + message_section + placement_section
+    # Version 20 (RQ-126): create's slide, after the placement.
+    data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section + message_section + \
+        placement_section + b"".join(slides)
     if len(data) > MAX_FILE:
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)

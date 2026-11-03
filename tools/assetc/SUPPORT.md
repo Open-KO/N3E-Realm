@@ -207,6 +207,9 @@ does the 1097 recipe, as 1264's select draws both.
 N3FE version 19 (RQ-125) adds where create draws (`select.create`: `screen`, the
 default, or `hall`, 1298's in-select create over the hall, with each slot's
 `create_yaw`, §9.15) and the move key `right`; the 1298 recipe names `hall` and
-draws `co_characterCreate_us.uif`, its panels where 1298's slides end.
+draws `co_characterCreate_us.uif`, its panels where 1298's slides clamp.
+N3FE version 20 (RQ-126) adds create's slide (the create screen's `slide`: `rate`,
+`floor` and `nodes`, each `from` an edge and optionally `with` another, §9.15); the
+1298 recipe slides its three panels in as 1298's Tick (`00606450`) does.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

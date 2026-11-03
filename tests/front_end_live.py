@@ -95,12 +95,18 @@ from the player's own KO data.
      skips, the new character standing there once the camera is; ESC there,
      or one frame into the flight, returns to the select at rest on that
      slot with the bar shown; at rest its name entry is where Group_name's
-     slide ends ((W - w) / 2, H - 30 - h), the new character the one model
-     drawn, the hall's terrain between the panels.
+     slide clamps ((W - w) / 2, H - 30 - h), the new character the one model
+     drawn, the hall's terrain between the panels;
+   - the 1298 recipe's create slide (RQ-126, KO-FINDINGS 9.15): ENTER on an
+     empty slot opens create with its three panels sliding in from the right,
+     the left and the bottom edge, frame by frame (1/32 s apart) where 1298's
+     Tick (00606450) puts them on the pinned layout's rects, ending on the
+     frame it clears its flag; the chosen package has no slide.
 
 No server or stack.
 """
 import json
+import math
 import os
 import re
 import struct
@@ -194,6 +200,28 @@ assert len(cooked[0]) <= 64 << 20, len(cooked[0])
 loaded = subprocess.run(["build/client/n3e-front-end-check", "ok", str(out)], capture_output=True, text=True)
 assert "PASS front-end loader: 1 loaded, 0 refused" in loaded.stdout, \
     "the client loader refuses the 1298 recipe's front end: %s%s" % (loaded.stdout, loaded.stderr)
+# RQ-126 (KO-FINDINGS 9.15): 1298's create slide on the pinned layout's rects,
+# as its Tick (00606450) reads, from SetVisible's d = 0 (00606650) to the frame
+# it clears its flag: each frame's (Group_race, Group_class, Group_name)
+# top-lefts, after the frame's step. d is a float (+0xb8).
+def ko_create_slide(tree, width, height, dt):
+    def f32(x):
+        return struct.unpack("<f", struct.pack("<f", x))[0]
+
+    def size(ident):
+        r = find(tree, ident)["rect"]
+        return r[2] - r[0], r[3] - r[1]
+    (rw, rh), (cw, ch), (nw, nh) = size("Group_race"), size("Group_class"), size("Group_name")
+    d, frames = 0.0, []
+    while True:
+        d = f32(d + max(dt * 1300 * (rw - d) / rw, 2.0))
+        race = max(width - math.trunc(d), width - rw - 50)
+        frames.append((race, height - 30 - rh, min(math.trunc(d) - cw, 50), height - 30 - ch,
+                       int((width - nw) / 2), max(height - math.trunc((nh + 30) * d / (cw + 50)), height - 30 - nh)))
+        if race == width - rw - 50:
+            return frames
+
+
 print(f"PASS front-end cook 1298 recipe (not offered): twice identical, {len(cooked[0])} bytes, upc_ka_tu with "
       f"no plug, {len(camera_paths)} camera paths, no hall and the zone {zone['name']} ({zone['meshes']} meshes, "
       f"{zone['blended_meshes']} blended) under its fog, the client loads it")
@@ -376,6 +404,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
                          env={**os.environ, "N3E_TEST_FRONT_END": str(B / size)})
     (B / f"client-{size}.log").write_text(run.stdout + run.stderr)
     assert run.returncode == 0 and "FRONT_SHOTS done" in run.stdout, (size, run.stdout[-2000:], run.stderr[-2000:])
+    # RQ-126: the chosen package's create (1264's, a screen of its own) has no slide.
+    assert "FRONT_CREATE_SLIDE" not in run.stdout, size
     shots = {}
     origins = {}
     for m in re.finditer(r"^FRONT_SHOT name=(\S+) size=(\d+)x(\d+) path=(\S+) rect=(\S*) drawn=(\S*) "
@@ -641,7 +671,7 @@ CREATE_FLY = (f"click=create path={fly_index} frames={fly_frames:.6g} slot=1 foc
               f"draws={fly_draws + 1} new=1 back=select slot=2 cancel=select slot=2 ui=1")
 # RQ-125: 1298's in-select create, co_characterCreate_us.uif (row 2's, as
 # 005fab40 loads it), its root at the origin and its panels where its Tick
-# (00606450) ends their slides: Group_class at (50, H - 30 - h), Group_race at
+# (00606450) clamps their slides: Group_class at (50, H - 30 - h), Group_race at
 # (W - w - 50, H - 30 - h), Group_name centred at H - 30 - h.
 create_tree = ko_hud.parse(pinned.get(recipe_1298["screens"]["create"]["ui"]))
 assert recipe_1298["screens"]["create"]["ui"] == "UI_US/co_characterCreate_us.uif", recipe_1298["screens"]["create"]
@@ -703,7 +733,7 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     flight = re.search(r"^FRONT_CREATE (.*)$", run.stdout, re.M)
     assert flight and flight.group(1) == CREATE_FLY, (size, flight and flight.group(1), CREATE_FLY)
     # RQ-125: the create shot (no character, slot 0 in focus) over the hall:
-    # the name entry where Group_name's slide ends, the new character standing
+    # the name entry where Group_name's slide clamps, the new character standing
     # in the hall alone (no hall character with none listed), and the hall
     # drawn between the panels (the zone's terrain, not the black clear).
     created = re.search(r"^FRONT_SHOT name=create size=\S+ path=(\S+) rect=(\S+) drawn=(\S*) origin=", run.stdout, re.M)
@@ -721,11 +751,19 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     between = region(Path(created.group(1)), (50 + class_w + 4, height // 2, width - race_w - 54, ny0 - 4))
     lit = sum(p != b"\0\0\0" for p in between)
     assert lit > len(between) // 2, (size, lit, len(between))
+    # RQ-126: create's slide, frame by frame as 1298's Tick moves the panels.
+    slid = re.search(r"^FRONT_CREATE_SLIDE screen=(\S+) frames=(\S+) on=(\d)$", run.stdout, re.M)
+    assert slid and slid.group(1) == "create" and slid.group(3) == "0", (size, slid and slid.group(0)[:200])
+    slide_frames = [tuple(map(int, frame.split(","))) for frame in slid.group(2).split(";")]
+    want_slide = ko_create_slide(create_tree, width, height, 1 / 32)
+    assert slide_frames == want_slide, (size, slide_frames[-3:], want_slide[-3:])
     print(f"PASS front-end captures 1298 recipe {size}: 1298's select bar at ({x0}, {y0}), unscaled, its ten "
           f"bound nodes where 1298's Load puts them, its info texts filled for a character and empty without; "
           f"its Exit asks yes or no in its centred box at ({bx}, {by}), ESC and No closing it, ENTER and Yes leaving the game; "
           f"ESC on the select does nothing; Back lands on the realm list; Create from an occupied slot opens "
           f"1298's in-select create over the hall at once, the camera flying behind it to the first empty slot "
           f"on ka_left_right ({fly_frames:.6g} frames, not skipped), the new character standing there on the "
-          f"arrival; Cancel returns to the select at rest on that slot")
+          f"arrival; Cancel returns to the select at rest on that slot; its panels slide in as 1298's Tick "
+          f"moves them ({len(slide_frames)} frames at 32 a second, Group_class ending at "
+          f"{slide_frames[-1][2]}, Group_name at {slide_frames[-1][5]})")
 print("PASS KO front end graphical")

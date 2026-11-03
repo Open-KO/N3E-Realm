@@ -13,6 +13,7 @@
 #include "render/animation.h"
 #include "render/front_logo.h"
 #include "render/front_login.h"
+#include "render/front_slide.h"
 #include "render/message_box.h"
 #include "render/scene_clock.h"
 #include "render/select_bar.h"
@@ -358,6 +359,19 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   FrontTurn front_turn() const { return turn_shown; }
   // RQ-125 (version 19): whether create draws over the hall (a test hook).
   bool create_over_hall() const { return over_hall(); }
+  // RQ-126 (version 20): each node of create's slide's top-left in window
+  // pixels as the last frame left it, and whether the slide is still under
+  // way (a test hook; empty without a slide).
+  std::vector<std::array<int, 2>> create_slide_at(int width, int height) {
+    std::vector<std::array<int, 2>> at;
+    const auto [s, ox, oy] = view(width, height);
+    for (const auto &n : fe.create_slide.nodes) {
+      const auto r = rect(FrontScreen::create, n.node);
+      at.push_back({int(std::lround(ox + r[0] * s)), int(std::lround(oy + r[1] * s))});
+    }
+    return at;
+  }
+  bool create_sliding() const { return create_slide.on; }
   const std::string &message_text() const { static const std::string none; return message ? message->text : none; }
   const std::string &message_title() const { static const std::string none; return message ? message->title : none; }
   // The server answered CreateCharacter: a longer list is a success (the
@@ -405,6 +419,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     create_flying = false;
     waiting = line_hidden = false;
     slide = realm_height;
+    slide_rest(create_slide);
+    update_slide();
     reset_hall();
     face(0);
   }
@@ -589,12 +605,19 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     if (state == Screen::select && create_flying && path_camera.ended()) {
       at_slot = focus;
       create_flying = false;
-      state = Screen::create;
-      name.clear();
+      open_create();
     }
     // RQ-125 (version 19): a create over the hall draws the hall behind it,
     // as 1298's Render (005fb1c0) draws it in every state.
     if (state == Screen::select || in_hall_create()) hall(width, height, dt, now);
+    // RQ-126 (version 20): create's slide, a step a frame while create shows
+    // (1298's UI manager ticks the create window, 00606450, after the click
+    // that shows it and before the frame renders; message box or none).
+    if (state == Screen::create && create_slide.on) {
+      place(width, height);
+      slide_tick(fe.create_slide, placed[size_t(FrontScreen::create)], slide_extent(), create_slide, dt);
+      update_slide();
+    }
     // IsAnimEnd: the start clip has played once, after its blend (1097:
     // 0043ed20 reads the loop count, which 00445bb0 counts only past the
     // clip's end, and the frame stays on the start during the blend).
@@ -640,6 +663,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::array<float, 2> pointer{-1, -1};
   FrontAction pressed = FrontAction::none;
   float realm_height = 0, slide = 0;
+  // RQ-126 (version 20): create's slide, and each create node's shift from
+  // where the moves put it (empty at rest).
+  SlideState create_slide;
+  std::vector<std::array<float, 2>> slide_shift;
   bool waiting = false;  // RQ-108: a login under way (login_waiting)
   bool line_hidden = false;  // RQ-123: a Back's login and list (login_line_hidden)
   // The select camera: the slot it is at and the slot in focus, which is the
@@ -733,6 +760,41 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     placed_size = {width, height};
     scaled = front_scaled(fe, width, height);
     for (size_t at = 0; at < placed.size(); ++at) placed[at] = front_layout_rects(fe, at, width, height);
+    update_slide();
+  }
+  // RQ-126 (version 20): create's slide. Opening create starts it at 0 (1298's
+  // SetVisible 00606650); each node and its subtree are shifted on the node's
+  // axis from where the moves put them to where the slide has it.
+  void open_create() {
+    state = Screen::create;
+    name.clear();
+    // No slide (the 1097 choice): create stays at rest, as before version 20.
+    if (fe.create_slide.nodes.empty()) slide_rest(create_slide);
+    else slide_open(create_slide);
+    update_slide();
+  }
+  std::array<int, 2> slide_extent() const {
+    return scaled ? std::array<int, 2>{int(fe.canvas_width), int(fe.canvas_height)} : placed_size;
+  }
+  void update_slide() {
+    slide_shift.clear();
+    const auto &slide = fe.create_slide;
+    const auto &rects = placed[size_t(FrontScreen::create)];
+    if (slide.nodes.empty() || create_slide.rest || rects.empty()) return;
+    const auto at = slide_coordinates(slide, rects, slide_extent(), create_slide);
+    const auto &nodes = fe.screens[size_t(FrontScreen::create)];
+    slide_shift.assign(nodes.size(), {0.f, 0.f});
+    std::vector<char> inside(nodes.size());
+    for (size_t k = 0; k < slide.nodes.size(); ++k) {
+      const auto &n = slide.nodes[k];
+      const float delta = float(at[k] - rects[n.node][n.axis]);
+      std::fill(inside.begin(), inside.end(), 0);
+      inside[n.node] = 1;
+      for (size_t j = n.node; j < nodes.size(); ++j) {
+        if (j > n.node) inside[j] = inside[nodes[j].parent];
+        if (inside[j]) slide_shift[j][n.axis] += delta;
+      }
+    }
   }
   // The transform from the placed rects to window pixels: the scale and the
   // canvas's offset when scaled, none otherwise.
@@ -845,6 +907,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       const float dy = slide - realm_height;
       r[1] += dy, r[3] += dy;
     }
+    if (screen == FrontScreen::create && i < slide_shift.size()) {
+      r[0] += slide_shift[i][0], r[2] += slide_shift[i][0];
+      r[1] += slide_shift[i][1], r[3] += slide_shift[i][1];
+    }
     return r;
   }
   bool in_realm_group(size_t i) const {
@@ -893,10 +959,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         seats.start(focus, fe.slots[focus].spot.theta);
         out.command = Command::select;
         out.character = list->characters(focus).id();
-      } else {
-        state = Screen::create;
-        name.clear();
-      }
+      } else
+        open_create();
       return out;
     }
     return {};
@@ -1019,8 +1083,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         } else
           face(slot);
       }
-      state = Screen::create;
-      name.clear();
+      open_create();
       break;
     }
     // btn_delete: for a character in focus at rest (state 5), KO's

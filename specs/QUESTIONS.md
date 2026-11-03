@@ -1206,3 +1206,11 @@ stands from the camera's arrival, since the realm's race and class are always
 chosen (1298 draws it only after a race click); a Cancel during the flight puts the
 camera on the slot at once. The 1097 choice keeps `screen`, 1264's create being a
 procedure of its own.
+**Create slide played (RQ-126, KO-FINDINGS §9.15):** N3FE version 20 carries
+create's slide (item 13): the 1298 recipe's panels slide in each time create opens,
+`Group_race` from the right edge, `Group_class` from the left and `Group_name` from
+the bottom, stepped each frame by the frame's seconds as 1298's Tick (`00606450`)
+steps by its frame time. Read further, 1298's slide ends on Group_race's arrival,
+which leaves `Group_class` at 48 or 49 and `Group_name` 29 above the bottom edge at
+any frame time under about 0.2 s, not at RQ-125's 50 and 30; the realm's ends there
+too. The new character and the Cancel mid-flight stay as above (RQ-127).

@@ -43,6 +43,15 @@
         {"node": "Group_race", "right": 50, "bottom": 30},
         {"node": "Group_name", "x": "centre", "bottom": 30}
       ],
+      "slide": {
+        "rate": 1300,
+        "floor": 2,
+        "nodes": [
+          {"node": "Group_race", "from": "right"},
+          {"node": "Group_class", "from": "left"},
+          {"node": "Group_name", "from": "bottom", "with": "Group_class"}
+        ]
+      },
       "bindings": {
         "btn_create": "create_confirm",
         "btn_cancel": "back",

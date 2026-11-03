@@ -1214,3 +1214,20 @@ steps by its frame time. Read further, 1298's slide ends on Group_race's arrival
 which leaves `Group_class` at 48 or 49 and `Group_name` 29 above the bottom edge at
 any frame time under about 0.2 s, not at RQ-125's 50 and 30; the realm's ends there
 too. The new character and the Cancel mid-flight stay as above (RQ-127).
+**Race click and Cancel mid-flight read (RQ-127, KO-FINDINGS §9.15):** 1298's Create
+(`005fffd0`) is the source's MsgSendCharacterCreate: it refuses an empty name (row
+1905), no race (1908), no class (1904), bonus points left (1913) or a forbidden letter
+(1906), each titled row 1901 (`00600750`), and otherwise sends `WIZ_NEW_CHAR`. Its
+Cancel leaves the camera alone, so after a Cancel mid-flight the path plays on to
+the empty slot with the bar shown, while the select rests on the slot the flight left
+(that slot's spot, front clip and info texts) until ESC puts it on the destination or
+an arrow turns from it. Options for the race click: (a) keep the realm's race and
+class chosen from the open, the new character from the camera's arrival; (b) a
+format change for 1298's: race and class off at the open, no character until the
+Tuarek is clicked, a Create before the clicks saying rows 1908 or 1904. **Default
+taken:** (a), as Q52 (the maintainer's) shows race and class fixed on every create the
+realm draws and hides the bonus points 1298 also waits on; (b) is the maintainer's
+to choose (a look-and-feel difference, not offered). The Cancel mid-flight keeps the
+realm's (the camera put on the slot at once); playing 1298's is proposed as its own
+item. The 1097 choice is unchanged (1264's create, by the source, also starts with no
+race; Q52 covers it).

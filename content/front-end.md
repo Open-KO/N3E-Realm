@@ -334,7 +334,8 @@ address mode); the font atlases and the moon linear.
   such path (or in the rotate mode) the camera is put on the slot at once.
   `back` and ESC on create return to the select at rest on that slot, a
   flight still under way put on its last frame (1298's Cancel, `005ffb90`,
-  sets state 5 and shows the bar at once). The recipe names it
+  sets state 5 and shows the bar at once; its camera flies on, the select at
+  rest on the slot the flight left: §9.15, RQ-127, not played). The recipe names it
   (`select.create`: `screen`, the default, or `hall`) and, with `hall`, each
   slot's `create_yaw` in degrees (−360 to 360); a slot's `create_yaw` with
   `screen` is refused.
@@ -696,9 +697,14 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   the pinned layout), as 1298's Tick (`00606450`) moves them; the slide ends
   on Group_race's arrival, which at frame times under about 0.2 s (its last
   steps the 2 px floor, d ending in [264, 266)) leaves `Group_class` at 48 or
-  49 and `Group_name` 29 above the bottom edge, as 1298 leaves them. Not 1298's (Q87): 1298 draws the new character only once
-  a race is clicked (`005fd120` from ReceiveMessage), the realm's race and
-  class being always chosen. The hall lights `ka_light_0/1` are the files both
+  49 and `Group_name` 29 above the bottom edge, as 1298 leaves them. Not 1298's (Q87, RQ-127): 1298 draws the new character only
+  once a race is clicked (`005fd120` from ReceiveMessage) and its Create
+  (`005fffd0`) refuses one with no race or class (rows 1908, 1904 under 1901);
+  the recipe's race and class stand chosen from the open, as every realm
+  create's (Q52), the new character from the camera's arrival. After a Cancel
+  mid-flight 1298's camera flies on to the empty slot (`005ffb90` leaves it
+  alone), the select at rest on the slot it left; the recipe's is put on the
+  slot at once. The hall lights `ka_light_0/1` are the files both
   clients name.
 - Select (RQ-109, version 13, `specs/KO-FINDINGS.md` §9.6, binary): 1298's own,
   `UI_US/co_CharacterSelect_us.uif`, a 1024 × 113 bar, every node drawn,

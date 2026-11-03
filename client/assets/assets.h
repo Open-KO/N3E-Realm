@@ -934,6 +934,12 @@ enum class FrontSelectEscape : uint32_t { back, exit, none };
 // asks for the server list and hides the bar: 005f68e0, 005bd9b0, KO-FINDINGS
 // 9.12): the bar hidden from the click, through the connection, to the list.
 enum class FrontSelectBack : uint32_t { login, realms };
+// Version 18 (RQ-113): the select arrow at the end of the row. hide, the
+// realm's: the arrow with no neighbour to turn to is hidden; draw, KO's: no
+// code in 1298, 1264 or 1097 hides an arrow (their arrow fields are read only
+// to place, compare and click them, KO-FINDINGS 9.6, 9.13), so both draw and
+// a click at the end of the row does nothing.
+enum class FrontSelectArrows : uint32_t { hide, draw };
 // One recorded path (an .n3camera's eye keys and at keys, engine space): from
 // one slot to another, or (from kEntry) the entry path to slot 0.
 struct FrontPath {
@@ -1010,6 +1016,7 @@ struct FrontEnd {
   FrontClipMode front_clip = FrontClipMode::hover;  // version 6
   FrontSelectEscape select_escape = FrontSelectEscape::back;  // version 15 (16: none)
   FrontSelectBack select_back = FrontSelectBack::login;      // version 17
+  FrontSelectArrows select_arrows = FrontSelectArrows::hide;  // version 18
   FrontTurnMode turn = FrontTurnMode::rotate;       // version 7
   std::vector<FrontPath> paths;                     // version 7: the path mode's
   std::vector<FrontMesh> hall;                      // version 7: may be empty

@@ -8,6 +8,9 @@
 //   FRONT_SHOT name=N size=WxH path=P rect=x0,y0,x1,y1 drawn=intro|hall|create:x0,y0,x1,y1;... origin=X,Y,S
 // then the select's buttons where the select placed them (RQ-106):
 //   FRONT_PLACED select_prev=x0,y0,x1,y1 select_next=... back=... exit=...
+// then (RQ-113) whether prev and next draw at rest with the row's left end in
+// focus and with its right end (the package's select.arrows), each 0 or 1:
+//   FRONT_ARROWS left=P,N right=P,N
 // then (RQ-109), for a select that binds 1298's bar (front-end-1298.json), its
 // other buttons and its info texts where the select placed them, and a select
 // of no character (the shot select-0, its info texts empty):
@@ -110,6 +113,16 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     if (r) std::cout << int((*r)[0]) << "," << int((*r)[1]) << "," << int((*r)[2]) << "," << int((*r)[3]);
   }
   std::cout << std::endl;
+  // RQ-113 (KO-FINDINGS 9.6, 9.13): whether prev and next draw with the
+  // left end of the row in focus and with the right end, each 0 or 1.
+  std::cout << "FRONT_ARROWS";
+  for (const auto &[label, at] : {std::pair{"left", 0}, std::pair{"right", 2}}) {
+    front->select_at(at);
+    std::cout << " " << label << "=" << front->action_shown(A::select_prev) << ","
+              << front->action_shown(A::select_next);
+  }
+  std::cout << std::endl;
+  front->jump(Screen::select);
   if (front->action_rect(A::char_name, width, height)) {
     std::cout << "FRONT_SELECT_BAR";
     for (const auto &[label, action] :

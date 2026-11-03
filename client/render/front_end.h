@@ -404,6 +404,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     reset_hall();
     face(0);
   }
+  // RQ-113: the select at rest with the slot `at` places from the left of the
+  // row in focus (a test hook; the row's ends are 0 and the slot count - 1).
+  void select_at(int at) {
+    jump(Screen::select);
+    const auto order = slot_order();
+    face(order[size_t(std::clamp(at, 0, int(order.size()) - 1))]);
+  }
   // The logo screen `t` seconds in (a test hook; nothing without one).
   void logo_at(double t) {
     if (!fe.logo) return;
@@ -777,11 +784,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
                                    line_hidden);
       // RQ-111: the message box's buttons by its style (SetBoxStyle 00527a40).
       if (screen == FrontScreen::message && message) on = on && box_shows(nodes[i].action, box_style(message->kind));
-      if (nodes[i].kind == FrontNode::BUTTON && on) {
-        // Prev and next only where there is a neighbour to turn to.
+      if (nodes[i].kind == FrontNode::BUTTON && on &&
+          (nodes[i].action == FrontAction::select_prev || nodes[i].action == FrontAction::select_next)) {
+        // RQ-113 (version 18): prev and next only where there is a neighbour
+        // to turn to (the realm's), or both always (KO's), as the package says.
         const auto order = slot_order();
-        if (nodes[i].action == FrontAction::select_prev) on = focus != order.front();
-        if (nodes[i].action == FrontAction::select_next) on = focus != order.back();
+        on = select_arrow_shows(fe.select_arrows == FrontSelectArrows::hide,
+                                nodes[i].action == FrontAction::select_next, focus, order.front(), order.back());
       }
       shown[i] = on;
     }

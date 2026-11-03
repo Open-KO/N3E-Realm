@@ -25,4 +25,14 @@ inline int select_create_slot(int focus, int shown, int slots) {
 // focus, the hall at rest (no turn, no start under way).
 inline bool select_delete_posts(int focus, int shown, bool at_rest) { return at_rest && focus < shown; }
 
+// RQ-113 (N3FE version 18, specs/KO-FINDINGS.md §9.6, §9.13): whether the
+// select's prev (`next` false) or next arrow draws with `focus` in focus, the
+// row running from slot `first` to slot `last` (left to right). The realm's
+// rule (`hide_at_end`) hides the arrow with no neighbour to turn to; KO's
+// draws both, since no code in 1298, 1264 or 1097 hides one, and a click at
+// the end of the row does nothing (DoJobLeft, DojobRight).
+inline bool select_arrow_shows(bool hide_at_end, bool next, int focus, int first, int last) {
+  return !hide_at_end || focus != (next ? last : first);
+}
+
 }  // namespace n3e::front

@@ -798,7 +798,8 @@ for a character at rest. Not 1298's (Q87): Exit leaves at once, with no yes/no b
 list; the arrows hide at the ends of the row, as every realm select's do. The 1097
 choice changes by the version word only. *RQ-111 (§9.7): Exit now asks, as 1298's
 does.* *RQ-112 (§9.12): Back now lands on the realm list, the bar hidden from the
-click, as 1298's does.*
+click, as 1298's does.* *RQ-113 (§9.13): both arrows now draw at the ends of the row, as
+1298's do (`select.arrows` `draw`).*
 
 ### 9.7 1298's message box and its Exit question (RQ-111, 2026-11-02)
 
@@ -1065,6 +1066,38 @@ ProcActiveSet `005f7f30`), and Init's branch on `+0x35` (`005bde80`) calls `005b
 sends `0xf5`, calls `Group_LogIn`'s (`+0xd8`) SetVisible (`+0x3c`) with 0 and sets the
 UI's `+0x12c`, with no call to `005c2820` in Init (binary).*
 
+### 9.13 No KO select hides an arrow at the end of the row (RQ-113, 2026-11-03)
+
+§9.6 found 1298's bar never hiding an arrow; the realm hid the arrow with no
+neighbour for every layout, a rule of its own since M4c with no KO reading behind it.
+1264's and 1097's own rules were read statically here: §9.1's 1264 image
+(`ko1264-unpacked.exe`, sha256 `61e9a086…99e136471`) and §8.1's 1097 dump
+(`ko1097-unpacked.exe`, sha256 `82abb582…ea8febaf`), with `objdump` of each `.text`
+and a PE reader for the vtables and strings (output under `build/`, not committed). Not
+run (the static reading answers it; 1298 is never run). The source agrees: its
+`CUICharacterSelect` touches `m_pBtnLeft` and `m_pBtnRight` only in the constructor,
+Release, Load (`SetPos`), ReceiveMessage's compares and OnKeyPress's clicks, and
+`CGameProcCharacterSelect` touches the UI whole (`UICharacterSelect.cpp`,
+`GameProcCharacterSelect.cpp`, source).
+
+| Observation | Where | Label |
+|---|---|---|
+| **1264: the arrows are found by name in Load alone.** The only references to the strings `bt_left` (`0066a840`) and `bt_right` (`0066a834`) in the image are Load's (`0044492b`–`004449d8`), which keep them at `+0xb0` and `+0xb4` | 1264 `004448f0`; strings `0066a840`, `0066a834` | binary |
+| **1264: its arrow fields are read only to place, compare and click them.** In the class's code (`00444400`–`00445800`: the constructor `00444800`, Release `004448c0`, Load, ReceiveMessage `00444e60`, the info texts `00445160` and `004453f0`, OnKeyPress `004454e0`; vtable `00648f14`) `+0xb0` and `+0xb4` are written by the constructor and Release, set by Load, read by Load for GetPos and SetPos (vtable `+0x1c`, `00444be5`–`00444cdf`), compared by ReceiveMessage (`00444ec9`, `00444ee1`) and passed by OnKeyPress to ReceiveMessage as a click (`0044551f`, `00445532`); nothing calls SetVisible on either | 1264 `00444800`, `004448c0`, `004448f0`, `00444e60`, `004454e0` | binary |
+| **1264: the select procedure touches its UI whole.** It keeps the UI at `+0x2c0` (allocated `0xc4` bytes, made by `00444800` at `0043f6f0`) and only deletes it (vtable `+0x4`), inits, loads and places it (`+0x5c`, `+0x8`, `+0x1c`), focuses it (`00532640`), renders it (`+0x58`, `0044054c`) and fills or clears its info texts (`00445160` at `00443e94`, `004453f0` at `00443f36`) | 1264 `0043f6f0`–`0043f744`, `004401f6`, `0044054c`, `00443e8e`, `00443f30` | binary |
+| **1264: an arrow at its own edge does nothing.** DoJobLeft (`00442e60`) and DojobRight (`00442ed0`) set no state, no destination and play no sound when the camera rests at their edge (`+0x2c4` 1 and 2 in this image) | 1264 `00442e60`, `00442ed0` | binary |
+| **1097: the same.** `bt_left` (`005a244c`) and `bt_right` (`005a2440`) are referenced only by Load (`0043faf0`, `0043fb2b`–`0043fbd8`), which keeps them at `+0xa8` and `+0xac`; in the class's code (`0043f000`–`00441000`, vtable `0058cd9c`) those fields are written by the constructor (`0043fa20`) and Release (`0043fad0`), read by Load for GetPos and SetPos (`0043fd64`–`0043fe13`), compared by the message handler (`0043ff69`, `0043ff81`) and clicked by the key handler (`004406cf`, `004406e2`); the select procedure keeps the UI at `+0x2c0` (made at `0043ab20`) and only deletes, loads, places, focuses and renders it (`+0x50`, `0043b9be`) and fills its info texts (`004402a0`, `004405a0`). At their own edge DoJobLeft and DojobRight change nothing (§8.2) | 1097 `0043fa20`, `0043fad0`, `0043faf0`, `0043ff00`, `00440690`, `0043ab20`, `0043b9be`; strings `005a244c`, `005a2440` | binary |
+
+So no KO select hides an arrow: 1097, 1264 and 1298 all draw both at the ends of the
+row, where a click does nothing. The realm's rule is its own.
+
+**Decides (RQ-113):** N3FE version 18 carries the end-of-row arrow rule
+(`select.arrows`): `hide` (the realm's, the default), the arrow with no neighbour to
+turn to hidden; or `draw`, KO's, both drawn at every slot, a click at the end of the
+row doing nothing. The 1298 recipe (not offered) names `draw`. The 1097 choice keeps
+`hide`: 1264's select draws both too (above), a look-and-feel difference to the
+offered front end for the maintainer, proposed as its own item.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -1085,7 +1118,7 @@ notes.
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |
 | Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. §9.2 (RQ-085): the 1097 choice's layouts are the 1264 install's, its message box and loading 1264's. |
 | Q85 | §9.4 (RQ-108): 1264 shows the login's copyright line, at `((W − w) / 2, H − h − 20)`, only while its login bar is hidden: from a login press until a failed answer, and with the server list after a success; the 1097 choice does the same (N3FE version 12's `login_closed`), the bar hidden while the Discord flow runs. |
-| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. §9.7 (RQ-111): 1298's Exit box is `El_MessageBox_us.uif` with Yes and No (labelled OK and Cancel), ENTER Yes and ESC No, Yes quitting; the 1298 recipe asks so (N3FE version 14). §9.8 (RQ-115): 1264's select Exit (`bt_exit`, `00444e60`) asks the same, row 1502 yes or no in its `El_MessageBox_us.uif`; the 1097 choice asks so too. RQ-116: 1264's select presses `bt_exit` for ESC (`004454e0`), and the 1097 choice's ESC asks so (N3FE version 15, `select.escape`). §9.9 (RQ-117): 1298's select ESC presses no button (`00607810` → `005faad0`): it skips a path and at rest does nothing; RQ-119: the 1298 recipe's ESC does the same (N3FE version 16, `select.escape` `none`), the maintainer's choice. §9.12 (RQ-112): 1298's Back sets its login procedure's `+0x21`, whose Init connects, asks for the server list and hides the bar (`005f68e0`), 1264's the same (`+0x35`, `005bd9b0`, its line hidden too); the realm's Back, with a stored session, already reaches the realm list through the session's login; the 1298 recipe hides the bar from the click (N3FE version 17, `select.back` `realms`), and the 1097 choice keeps the realm's; RQ-123: the 1097 choice names `realms` too, its line hidden with the bar after a Back, as 1264's. |
+| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. §9.7 (RQ-111): 1298's Exit box is `El_MessageBox_us.uif` with Yes and No (labelled OK and Cancel), ENTER Yes and ESC No, Yes quitting; the 1298 recipe asks so (N3FE version 14). §9.8 (RQ-115): 1264's select Exit (`bt_exit`, `00444e60`) asks the same, row 1502 yes or no in its `El_MessageBox_us.uif`; the 1097 choice asks so too. RQ-116: 1264's select presses `bt_exit` for ESC (`004454e0`), and the 1097 choice's ESC asks so (N3FE version 15, `select.escape`). §9.9 (RQ-117): 1298's select ESC presses no button (`00607810` → `005faad0`): it skips a path and at rest does nothing; RQ-119: the 1298 recipe's ESC does the same (N3FE version 16, `select.escape` `none`), the maintainer's choice. §9.12 (RQ-112): 1298's Back sets its login procedure's `+0x21`, whose Init connects, asks for the server list and hides the bar (`005f68e0`), 1264's the same (`+0x35`, `005bd9b0`, its line hidden too); the realm's Back, with a stored session, already reaches the realm list through the session's login; the 1298 recipe hides the bar from the click (N3FE version 17, `select.back` `realms`), and the 1097 choice keeps the realm's; RQ-123: the 1097 choice names `realms` too, its line hidden with the bar after a Back, as 1264's. §9.13 (RQ-113): no KO select hides an arrow (1298, 1264 and 1097 draw both at the ends of the row); the 1298 recipe draws both (N3FE version 18, `select.arrows` `draw`), and the 1097 choice keeps the realm's `hide`. |
 | Q86 | §9.5 (RQ-110): 1298's login draws no copyright line (its login is the intro layout, no `Text_Rights`) and hides its bar from a press until a failed answer; the 1298 recipe hides the line and, like every layout now, its bar while a login is under way. |
 | Q82 | §9.2 (RQ-101): 1264's logo procedure runs first, once a process: three groups fading in, holding and fading out on black over 12 s, `Snd\bless.wav` from 1 s faded out over 4 s from the third, any key skipping to the login, the cursor hidden; the 1097 choice shows it (N3FE version 9). §9.3 (RQ-106): KO draws every front-end layout unscaled, placed by the screen's size (the login on the bottom edge, the server list at the top-left, the select's buttons on the bottom edge, create, loading, the message box and the logo centred), the 3D scenes filling the screen; the realm does the same (N3FE version 11). |
 | Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. §9.2 (RQ-102): 1264 titles its login answer's and its create failures; the 1097 choice gives the realm's matching messages KO's title and wording (N3FE version 10) and leaves the rest untitled. |

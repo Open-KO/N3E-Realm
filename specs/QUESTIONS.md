@@ -1165,3 +1165,13 @@ realm list after it, until the list is left (1264's `bt_back` stores `+0x35` at
 SetVisibleLogInUIs). No format change: the 1298 recipe has no line. Without a stored
 session (or once the flow leaves that login otherwise) the bar returns and a later
 login press shows the line, as any login does.
+**Arrows read (RQ-113, KO-FINDINGS §9.13):** no KO select hides an arrow: 1264's
+(`004448f0` places `bt_left` and `bt_right`, `00444e60` compares them, `004454e0` clicks
+them, the procedure touches the UI whole) and 1097's (`0043faf0`, `0043ff00`,
+`00440690`) draw both at the ends of the row, as 1298's do (§9.6), and a click there
+does nothing. N3FE version 18 makes the rule package data (`select.arrows`: `hide`,
+the realm's and the default, or `draw`, KO's); the 1298 recipe (not offered) names
+`draw`. **Default taken:** the 1097 choice keeps `hide` until the maintainer chooses,
+as RQ-116 was chosen (a look-and-feel difference to the offered front end); naming
+`draw` there, as 1264 draws them, is proposed as its own item. Create from an
+occupied slot stays as above.

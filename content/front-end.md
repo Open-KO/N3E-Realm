@@ -16,7 +16,8 @@ only while the login group is not (version 12, RQ-108, Q85), 1298's select
 bar's actions and two messages (version 13, RQ-109), the message box's
 Yes and No with the select's exit question (version 14, RQ-111), what ESC
 presses on the select (version 15, RQ-116), its `none`, 1298's (version 16,
-RQ-119), and where the select's Back lands (version 17, RQ-112).
+RQ-119), where the select's Back lands (version 17, RQ-112), and whether the
+select arrow at the end of the row is hidden (version 18, RQ-113).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -30,7 +31,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 17, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 18, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -62,7 +63,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 7. The select scene: camera, lights, global ambient, the slots (count equal to
    the character slots), the spot's growth rate (version 4: theta per second,
    above 0 and at most 100), the front-clip mode (version 6: 0 hover, 1 loop;
-   below), the select's ESC (version 15: 0 back, 1 exit; version 16: 2 none; below), where the select's Back lands (version 17: 0 login, 1 realms; below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
+   below), the select's ESC (version 15: 0 back, 1 exit; version 16: 2 none; below), where the select's Back lands (version 17: 0 login, 1 realms; below), the end-of-row arrow (version 18: 0 hide, 1 draw; below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
    (0 in the rotate mode, 1–8 in the path mode) and the paths, the hall (part
    count ≤64, each a mesh; version 7: it may be 0), the zone (version 8: a
    mesh count, 0–256, 0 when the hall has parts, each a zone mesh; below), the
@@ -281,6 +282,16 @@ address mode); the font atlases and the moon linear.
   refusal, a logout), the hold ends and a later login press shows the line as
   for any login (`client/render/front_login.h` `BackHold`). The recipe names
   it (`select.back`: `login`, the default, or `realms`).
+- The select arrow at the end of the row (version 18, RQ-113;
+  `client/render/select_bar.h` `select_arrow_shows`). The row runs left to right
+  1, 0, 2 (the slots there are). 0, hide (the realm's): with the row's left end
+  in focus the node bound to `select_prev` is hidden, with its right end the one
+  bound to `select_next` (with one slot, both). 1, draw (KO's,
+  `specs/KO-FINDINGS.md` §9.6, §9.13, binary: no code in 1298, 1264 or 1097 hides
+  an arrow; their arrow fields are read only to place, compare and click them):
+  both draw at every slot. Either way a press at the end of the row does nothing
+  (DoJobLeft, DojobRight). The recipe names it (`select.arrows`: `hide`, the
+  default, or `draw`).
 - Turn mode (version 7, RQ-087): how the camera goes from slot to slot.
   - 0, rotate (1097, `0043e4e0`; the slot above): the eye turns about `at`.
     No paths; the select UI shows throughout.
@@ -592,6 +603,10 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   (`00607160`) sets its login procedure's `+0x21` and the login's Init
   (`005f68e0`) then connects, asks for the server list (`0xf5`) and hides
   `Group_LogIn` (Q87).
+- `select.arrows` `draw` (RQ-113, `specs/KO-FINDINGS.md` §9.6, binary): both
+  arrows draw at every slot, as no code in 1298 hides one (its bar's arrow
+  fields are read only by ReceiveMessage `00607160`'s compares); a press at the
+  end of the row does nothing (Q87).
 - Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
   create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF
@@ -609,9 +624,10 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   row 7675 ("Cannot create additional characters.") and `delete_disabled`
   with row 1501 ("Character deletion has been disabled currently") of the
   pinned tree's `Data/Texts_us.tbl`, untitled, as 1298 posts them. Not 1298's
-  (QUESTIONS Q87): Back returns to the login (1298's to the server list), an
-  arrow with no neighbour is hidden (1298 draws both), and Create from an
-  occupied slot puts the camera on the empty slot (1298 flies it there). Exit
+  (QUESTIONS Q87): Back returns to the login (1298's to the server list), and
+  Create from an occupied slot puts the camera on the empty slot (1298 flies it
+  there). Both arrows draw at the ends of the row, as 1298's do (RQ-113,
+  `select.arrows` `draw`). Exit
   asks, as 1298's does (below).
 - Message box (RQ-111, version 14, `specs/KO-FINDINGS.md` §9.7, binary): 1298's
   own, the one its box manager (`005282a0`) loads for every message, the pinned
@@ -735,7 +751,10 @@ box and loading are 1264's.
   as 1264's lands on its server list (RQ-112, §9.12, binary: `bt_back` sets the
   login procedure's `+0x35` at `00445145`, whose Init `005bd9b0` connects, asks
   for the list and hides `Group_LogIn` alone), the maintainer's choice
-  (2026-11-03, "Match 1264", RQ-123).
+  (2026-11-03, "Match 1264", RQ-123). The arrow with no neighbour to turn to is hidden
+  (`select.arrows` absent: the realm's `hide`), though 1264's select draws both
+  (RQ-113, §9.13, binary: `004448f0`, `00444e60` and `004454e0` only place,
+  compare and click them), a difference left to the maintainer.
 - Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest fixed
   on, every other race, class, face, hair and stat arrow fixed disabled, the
   bonus points and stat highlights hidden (Q52).

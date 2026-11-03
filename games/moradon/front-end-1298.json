@@ -132,6 +132,7 @@
     "turn": "path",
     "escape": "none",
     "back": "realms",
+    "arrows": "draw",
     "zone": 10001,
     "fog": true,
     "paths": [

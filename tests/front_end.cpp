@@ -463,6 +463,25 @@ int main(int argc, char **argv) {
                  "all are taken; its delete box only for a character at rest\n";
   }
   {
+    // RQ-113 (KO-FINDINGS 9.6, 9.13): the realm's rule hides the arrow with
+    // no neighbour; KO's (1298, 1264, 1097) draws both at every slot. The row
+    // left to right is 1, 0, 2 (and 1, 0 or 0 with fewer slots).
+    struct Want { bool hide, next; int focus, first, last; bool shows; };
+    for (const auto &w : {Want{true, false, 1, 1, 2, false}, Want{true, true, 1, 1, 2, true},
+                          Want{true, false, 0, 1, 2, true}, Want{true, true, 0, 1, 2, true},
+                          Want{true, false, 2, 1, 2, true}, Want{true, true, 2, 1, 2, false},
+                          Want{true, false, 0, 0, 0, false}, Want{true, true, 0, 0, 0, false},
+                          Want{false, false, 1, 1, 2, true}, Want{false, true, 2, 1, 2, true},
+                          Want{false, false, 0, 0, 0, true}, Want{false, true, 0, 0, 0, true}}) {
+      if (n3e::front::select_arrow_shows(w.hide, w.next, w.focus, w.first, w.last) != w.shows) {
+        std::cerr << "FAIL select arrows: " << (w.next ? "next" : "prev") << " at slot " << w.focus << " of "
+                  << w.first << ".." << w.last << (w.hide ? " (hide)" : " (draw)") << "\n";
+        return 1;
+      }
+    }
+    std::cout << "PASS select arrows: the realm's rule hides the arrow at the end of the row, KO's draws both\n";
+  }
+  {
     // RQ-111 (KO-FINDINGS 9.7, 1298 00527a40, 00527c60, 00526d00): exit_confirm
     // is the one yes/no box, Yes and No shown and OK hidden; every other
     // message an OK box. In a yes/no box ENTER presses Yes and ESC No; in an
@@ -523,6 +542,9 @@ int main(int argc, char **argv) {
       // RQ-112: a select whose Back lands on the realm list, not the login.
       if (fe.select_back != n3e::FrontSelectBack::login)
         std::cout << "back " << release.root.filename().string() << ": " << uint32_t(fe.select_back) << "\n";
+      // RQ-113: a select whose arrows both draw at the end of the row.
+      if (fe.select_arrows != n3e::FrontSelectArrows::hide)
+        std::cout << "arrows " << release.root.filename().string() << ": " << uint32_t(fe.select_arrows) << "\n";
       // RQ-106: placed NAME: layout=L size=WxH node=I rect=x0,y0,x1,y1
       if (release.root.filename().string().starts_with("ok-placed"))
         for (const auto [w, h] : {std::pair{1024, 768}, {1280, 1024}, {1600, 1200}, {1281, 1025}, {800, 600}}) {

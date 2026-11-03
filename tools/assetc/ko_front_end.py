@@ -22,7 +22,8 @@ buttons and its three info texts, with two messages (RQ-109), and (version
 14) the message box's yes and no buttons, with the message exit_confirm, the
 select's exit asked yes or no as 1298 asks it (RQ-111), (version 15) what ESC
 presses on the select (RQ-116), (version 16) its `none`, 1298's (RQ-119),
-and (version 17) where the select's Back lands (RQ-112).
+(version 17) where the select's Back lands (RQ-112) and (version 18) whether
+an arrow at the end of the row is hidden (RQ-113).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -53,7 +54,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 17
+VERSION = 18
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -100,6 +101,14 @@ ESCAPE = {"back": 0, "exit": 1, "none": 2}
 # login_closed line with it (1264's Init never calls SetVisibleLogInUIs,
 # 005c2820; RQ-123) (specs/KO-FINDINGS.md 9.12).
 BACK = {"login": 0, "realms": 1}
+# The select arrow at the end of the row (version 18, `select.arrows`,
+# RQ-113): `hide`, the realm's (the default), the arrow with no neighbour to
+# turn to hidden; or `draw`, KO's: no code in 1298 (its bar's arrow fields
+# are read only by ReceiveMessage 00607160's compares), 1264 (004448f0 places
+# them, 00444e60 compares them, 004454e0 clicks them) or 1097 (0043faf0,
+# 0043ff00, 00440690) hides an arrow, so both stay drawn and a click at the
+# end of the row does nothing (specs/KO-FINDINGS.md 9.6, 9.13).
+ARROWS = {"hide": 0, "draw": 1}
 # A path's bounds (the client's): paths per package, keys per set, keys a second.
 MAX_PATHS = 8
 MAX_PATH_KEYS = 4096
@@ -1316,7 +1325,8 @@ def select_scene(assets, textures, config, work, report=None):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
     slots (position, yaw, the eye where the camera's turn to the slot ends
     and its spot light), the spot's growth rate, the front-clip mode, what
-    ESC presses (version 15; 16: `none`), where Back lands (version 17), the turn mode and its paths (version 7), the hall, the zone and the fog
+    ESC presses (version 15; 16: `none`), where Back lands (version 17), the
+    end-of-row arrow (version 18), the turn mode and its paths (version 7), the hall, the zone and the fog
     (version 8), the character with its clips and plugs. `report` receives
     the zone's provenance."""
     camera = config["camera"]
@@ -1334,6 +1344,9 @@ def select_scene(assets, textures, config, work, report=None):
     back = config.get("back", "login")
     if type(back) is not str or back not in BACK:
         raise ValueError("front-end select.back: one of %s" % ", ".join(BACK))
+    arrows = config.get("arrows", "hide")
+    if type(arrows) is not str or arrows not in ARROWS:
+        raise ValueError("front-end select.arrows: one of %s" % ", ".join(ARROWS))
     if turn == "path":
         if any("turn_end" in slot for slot in config["slots"]):
             raise ValueError("front-end select.turn path: a slot's turn ends with its path, no turn_end")
@@ -1371,7 +1384,7 @@ def select_scene(assets, textures, config, work, report=None):
     out = (camera_record(camera) + lights(assets, config["lights"], config.get("light_manager")) +
            f(vector(config["ambient"], 3)))
     out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND]) + u(FRONT_CLIP[mode])
-    out += u(ESCAPE[escape]) + u(BACK[back])
+    out += u(ESCAPE[escape]) + u(BACK[back]) + u(ARROWS[arrows])
     out += u(TURN[turn]) + path_records
     out += hall(assets, textures, config.get("hall"))
     # Version 8 (RQ-095): the zone the hall draws (1298's karus_intro) and the

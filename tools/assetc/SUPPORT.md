@@ -200,5 +200,8 @@ N3FE version 15 (RQ-116) adds what ESC presses on the select (`select.escape`:
 procedure's `+0x21`, whose Init connects, asks for the server list and hides the
 bar, §9.12); the 1298 recipe names `realms`, and (RQ-123) so does the 1097 recipe,
 as 1264's Back does the same with `+0x35`, its copyright line hidden too.
+N3FE version 18 (RQ-113) adds whether the select arrow at the end of the row
+is hidden (`select.arrows`: `hide`, the default, or `draw`, as no KO select
+hides an arrow, §9.6, §9.13); the 1298 recipe names `draw`.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

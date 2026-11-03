@@ -466,6 +466,20 @@ for back in ("Login", "servers", "server_list", "realm", 0, 1, None):
     raise AssertionError(("cooked back", back))
 assert fe.BACK == {"login": 0, "realms": 1}, fe.BACK
 
+# RQ-113: select.arrows names the end-of-row arrow rule, `hide` (the realm's,
+# the default) or `draw` (KO's: no code in 1298, 1264 or 1097 hides an arrow,
+# specs/KO-FINDINGS.md 9.6, 9.13), and is refused misspelt, before any KO file
+# is read.
+for arrows in ("Hide", "show", "both", "always", 0, 1, True, None):
+    config = dict(SELECT, front_clip="loop", turn="rotate", arrows=arrows)
+    try:
+        fe.select_scene(Fixture({}), fe.Textures(Fixture({})), config, pathlib.Path("/nonexistent"))
+    except ValueError as error:
+        assert str(error) == "front-end select.arrows: one of hide, draw", error
+        continue
+    raise AssertionError(("cooked arrows", arrows))
+assert fe.ARROWS == {"hide": 0, "draw": 1}, fe.ARROWS
+
 
 def n3camera(eye, at, rate=30.0, up_keys=0, at_kind=0, tail=b""):
     """A synthetic .n3camera as CN3Camera::Load reads it (1298: 00439540 after
@@ -805,9 +819,9 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=17, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=18, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
-         spot_rate=0.6, front_clip=0, escape=0, back=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
+         spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
          logo=u(0), messages=u(0), placement=NO_PLACEMENT):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
@@ -823,6 +837,7 @@ def blob(version=17, slots=1, screen_data=None, font_index=None, light=None, plu
     out += (f([0, -1, 2, 0, 0, 0, 7]) + fe.light_record(spot)) * (slots if slot_count is None else slot_count)
     out += f([spot_rate]) + (b"" if front_clip is None else u(front_clip)) + (b"" if escape is None else u(escape))
     out += b"" if back is None else u(back)
+    out += b"" if arrows is None else u(arrows)
     if paths is None:
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
     out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
@@ -1298,6 +1313,12 @@ assert recipe_1298["select"]["escape"] == "none", recipe_1298["select"]
 # (005bd9b0) hides Group_LogIn alone, its line hidden too.
 assert recipe_1298["select"]["back"] == "realms", recipe_1298["select"]
 assert recipe_1097["select"]["back"] == "realms", recipe_1097["select"]
+# RQ-113 (KO-FINDINGS 9.6): 1298 never hides an arrow, so the 1298 recipe
+# draws both; the 1097 choice keeps the realm's rule, hiding the arrow with no
+# neighbour, though 1264's own select draws both too (9.13), a difference left
+# to the maintainer.
+assert recipe_1298["select"]["arrows"] == "draw", recipe_1298["select"]
+assert "arrows" not in recipe_1097["select"], recipe_1097["select"]
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
     "a bottom placement of another key": {**PLACE_SPECS, "message": {"place": {"bottom": 10, "x": 1}}},
@@ -1492,6 +1513,11 @@ cases = {
     "ok-select-back-realms": blob(back=1),
     "bad-select-back": blob(back=2),
     "bad-select-back-missing": blob(back=None),
+    # RQ-113 (version 18): the end-of-row arrow, 0 hidden or 1 drawn.
+    "bad-version-17": blob(version=17),
+    "ok-select-arrows-draw": blob(arrows=1),
+    "bad-select-arrows": blob(arrows=2),
+    "bad-select-arrows-missing": blob(arrows=None),
     "ok-select-bar": blob(screen_data=bar_screens),
     "ok-select-bar-name": blob(screen_data=bar(("str_id",))),
     "bad-select-bar-off-select": blob(screen_data=bar_off_select()),
@@ -1611,6 +1637,12 @@ try:
     assert backs == ["back ok-select-back-realms: 1"], backs
     line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-select-back:"))
     assert "front end select back" in line, line
+    # RQ-113: the arrow at the end of the row is hidden unless the package
+    # says draw; a value past draw refused for that reason.
+    arrow_lines = [l for l in run.stdout.splitlines() if l.startswith("arrows ")]
+    assert arrow_lines == ["arrows ok-select-arrows-draw: 1"], arrow_lines
+    line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-select-arrows:"))
+    assert "front end select arrows" in line, line
     exit_line = [l for l in run.stdout.splitlines() if l.startswith("message ok-exit-confirm: ")]
     assert exit_line == ["message ok-exit-confirm: %d title='' replaces=1 text='Enter a name. '"
                          % (len(fe.MESSAGES) - 1)], exit_line

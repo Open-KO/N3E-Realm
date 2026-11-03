@@ -76,7 +76,9 @@ from the player's own KO data.
    - the select's ESC (RQ-116, KO-FINDINGS 9.8): the chosen package's asks
      the exit question, as 1264's select OnKeyPress (004454e0) presses
      bt_exit for DIK_ESCAPE; the 1298 recipe's does nothing (RQ-119,
-     KO-FINDINGS 9.9: 1298's bar OnKeyPress 00607810 presses no button).
+     KO-FINDINGS 9.9: 1298's bar OnKeyPress 00607810 presses no button);
+     while a start clip plays (RQ-121, KO-FINDINGS 9.10), ESC and a click on
+     Exit do nothing in either, as KO's select takes no input then.
 
 No server or stack.
 """
@@ -270,6 +272,11 @@ def differing(a_path, b_path, inside):
 # Yes leave, the hidden OK does nothing.
 EXIT_ASKS = ("asks=1 shown=0,1,1 plain=1,0,0 esc=closed:none enter=closed:exit "
              "keypad=closed:exit no=closed:none yes=closed:exit ok=open:none")
+# RQ-121 (KO-FINDINGS 9.10): ESC and a click on Exit do nothing while the start
+# clip plays: 1264's and 1097's select take no input from the select request
+# until the main procedure (CharacterSelect 00443570, 0043ea30), nor 1298's
+# (005fe7c0).
+START_IGNORES = " started=1 start_esc=none start_exit=none"
 
 
 def check_exit(size, stdout, box_tree, width, height, plain, question, yes, escape):
@@ -279,7 +286,7 @@ def check_exit(size, stdout, box_tree, width, height, plain, question, yes, esca
     names (`yes`), Yes and No drawn where the OK box (`plain`) draws OK and
     the text in the message rect. Returns the box's origin."""
     exits = re.search(r"^FRONT_EXIT (.*)$", stdout, re.M)
-    want = EXIT_ASKS + " select_esc=" + escape
+    want = EXIT_ASKS + " select_esc=" + escape + START_IGNORES
     assert exits and exits.group(1) == want, (size, exits and exits.group(1), want)
     root = box_tree["rect"]
     bx, by = (width - (root[2] - root[0])) >> 1, (height - (root[3] - root[1])) >> 1

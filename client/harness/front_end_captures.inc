@@ -29,6 +29,9 @@
 //     keypad=... no=... yes=... ok=open:none
 // and (RQ-116) what ESC on the select at rest does, appended to that line:
 // select_esc=asks|back|exit|none
+// and (RQ-121) whether ENTER on one character starts it, and what ESC and a
+// click on Exit do while its start clip plays:
+// started=0|1 start_esc=asks|back|exit|none start_exit=asks|back|exit|none
 // (the shot message-exit is the select with that box, rect= Yes's);
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
@@ -194,13 +197,24 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     }
     // RQ-116: ESC on the select at rest: asks (the exit question, 1264's
     // OnKeyPress 004454e0 pressing bt_exit), back, exit or none.
+    auto did = [&](const n3e::front::Output &out) {
+      return front->message_kind() == n3e::FrontMessage::exit_confirm ? "asks"
+             : out.command == n3e::front::Command::back               ? "back"
+             : out.command == n3e::front::Command::exit               ? "exit"
+                                                                      : "none";
+    };
     front->jump(Screen::select);
-    const auto escaped = key(SDLK_ESCAPE);
-    std::cout << " select_esc="
-              << (front->message_kind() == n3e::FrontMessage::exit_confirm ? "asks"
-                  : escaped.command == n3e::front::Command::back           ? "back"
-                  : escaped.command == n3e::front::Command::exit           ? "exit"
-                                                                           : "none");
+    std::cout << " select_esc=" << did(key(SDLK_ESCAPE));
+    // RQ-121 (KO-FINDINGS 9.10): with one character, ENTER starts it
+    // (started=1: the select request), then ESC and a click on Exit while its
+    // start clip plays: none, as 1264's and 1097's select take no input then.
+    list.Clear();
+    list.add_characters()->set_id(1);
+    front->jump(Screen::select);
+    const bool started = key(SDLK_RETURN).command == n3e::front::Command::select;
+    std::cout << " started=" << started << " start_esc=" << did(key(SDLK_ESCAPE));
+    std::cout << " start_exit=" << did(click(A::exit));
+    list.Clear();
     front->jump(Screen::select);
     std::cout << std::endl;
     if (asked)

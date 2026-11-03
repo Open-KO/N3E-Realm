@@ -666,6 +666,17 @@ but for the mode field.
 
 ### Q72 — The select start: on the press, or on the server's answer as 1097
 
+*RQ-120 correction (KO-FINDINGS §9.10, binary):* from the select request until the
+main procedure KO's select takes no input. 1097's and 1264's request (`0043f7d0`,
+`004443d0`) and CharacterSelect (`0043ea30`, `00443570`) clear the UI manager's flag
+that the select's key and message handlers test, and nothing sets it again but a
+failed select or the procedure change, so during the start clip no arrow, ESC or
+button reaches the select (1298's, `005ff690` and `005fe7c0`, the same: RQ-121); only
+the tick's own ENTER skips the clip. RQ-077's arrows from state 3 (below) therefore do
+not happen. *RQ-121 (the maintainer, 2026-11-03: "Match KO: ignore them"):* the realm's
+select ESC and Exit button, which still asked the exit question then, do nothing while
+the start clip plays.
+
 1097 (KO-FINDINGS §8.1, binary) sends the select request on ENTER or the click and
 starts `selected` only when the server's answer says yes (`0043db30` → `0043ea30`),
 and only if the camera is at rest then (state 2). Its click is taken outside the turn,
@@ -688,17 +699,12 @@ The visible start (blend, clip, spot, loading after the clip) is 1097's either w
 
 **Decided (maintainer, 2026-11-01):** (a), the start on the press, at rest only.
 
-*Part of that decision (RQ-077, KO-FINDINGS §8.2, binary):* 1097's arrows also
-start a turn from state 3, while the start clip plays. DoJobLeft and DojobRight
-(`0043e310`, `0043e380`) return early only in state 1. Elsewhere they set state 1,
-turn the camera and play the rotate sound. The realm ignores the arrows from the
-start until loading, as it ignores a second start.
-*RQ-120 (KO-FINDINGS §9.10, binary):* no arrow reaches them then. 1097's
-CharacterSelect (`0043ea30`) and 1264's (`00443570`) clear the UI manager's flag that
-the select's key and message handlers test, and nothing sets it again until the main
-procedure, so during the start clip KO's select takes no arrow, ESC or button; only
-the tick's own ENTER skips the clip. The realm's ESC (with `exit`) and Exit button
-still ask the exit question then: a known difference, proposed as its own item.
+*Part of that decision (RQ-077, KO-FINDINGS §8.2, binary; corrected by RQ-120,
+above):* DoJobLeft and DojobRight (`0043e310`, `0043e380`) return early only in state
+1, so they would start a turn from state 3, while the start clip plays, but no arrow
+reaches them then. Elsewhere they set state 1, turn the camera and play the rotate
+sound. The realm ignores the arrows from the start until loading, as it ignores a
+second start.
 
 ### Q73 — Where the realm owner chooses the front end's client, and who refuses
 

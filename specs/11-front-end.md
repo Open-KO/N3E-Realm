@@ -191,10 +191,10 @@ replace the panels when the client has a Discord realm config.
 - **The select's ESC** (N3FE version 15, RQ-116; version 16, RQ-119). What ESC
   presses on the select: `back` (the realm's, the default), `exit`, as a click on
   it, so it asks the exit question where the package names `exit_confirm`, or
-  (version 16) `none`, nothing. It does so in every select state but one: in the
-  path mode ESC while a path plays skips it instead, whatever the package says.
-  So in the rotate mode it presses too while the camera turns, and in both modes
-  while the start clip plays, where `back` does nothing and `exit` asks. 1264's
+  (version 16) `none`, nothing. It does so in every select state but two: in the
+  path mode ESC while a path plays skips it instead, whatever the package says,
+  and in both modes ESC does nothing while the start clip plays (RQ-121). So in
+  the rotate mode it presses too while the camera turns. 1264's
   select presses `bt_exit` for ESC (OnKeyPress `004454e0`, `specs/KO-FINDINGS.md`
   §9.8), and the maintainer chose that for the 1097 choice (2026-11-02): its
   recipe names `exit` (`select.escape`), and its Back stays on its button. 1298's
@@ -202,9 +202,11 @@ replace the panels when the client has a Discord realm config.
   path, so at rest ESC does nothing), and the maintainer chose that for the 1298
   recipe (2026-11-02, RQ-119): it names `none` (Q87). 1264's and 1097's selects
   take no input from the select request until the main procedure (RQ-120, §9.10:
-  CharacterSelect clears the UI flag their OnKeyPress and ReceiveMessage test), so
-  KO asks nothing while the start clip plays; the realm's `exit` and Exit button
-  asking then is a known difference.
+  the request and CharacterSelect clear the UI flag their OnKeyPress and
+  ReceiveMessage test), nor does 1298's, so KO asks nothing while the start clip
+  plays; the maintainer chose to match it (2026-11-03, RQ-121): then neither ESC
+  nor a click on Exit does anything, whatever the package says (its `exit_confirm`
+  included), as the arrows, Create, Back and a second start already do nothing.
 - **The placement** (N3FE version 11, RQ-106, Q82). KO draws its front end on the
   screen's own pixels, never scaled, and places each layout's root and some of its
   nodes by the viewport's size each time the layout loads (`specs/KO-FINDINGS.md`
@@ -292,7 +294,7 @@ prev/next; on the select ESC is the package's choice, below).
 | logo | only with a logo section, first, once a process (1264's WinMain); each group alone in turn on black, fading in, holding and fading out; the system cursor hidden with the flag; its track from the delay, faded out from its fade group | the last group's end, or a key pressed while it shows with the skip flag (not a click) → login, whose own track starts at once and whose first frame starts the realm connection. A reset connection leaves it playing; a message waits for the login. |
 | login | intro scene looping; login bar; while a login is under way (from the press, or a stored session's login, to the answer) the bar hidden and the package's `login_closed` node shown instead, when the layout binds one (KO's copyright line, RQ-108, Q85; RQ-110: the 1298 recipe binds none, 1298's login having no line, so it shows neither) | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms; a failure shows the bar again. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. Started with `--logout` (spec 02, RQ-068), the client first ends the stored session; a press meanwhile is held until the realm answers. The KO screens have no logout of their own (Q61, Q74). |
 | realms | intro; the server group with the realm's name from `realm.json`; the `login_closed` node (RQ-108) | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
-| select | hall; up to 3 characters with the realm's player model and default looks, each standing on clip 0's first frame; the one in front, at rest, plays clip 0 (`pre_select`) once while the pointer is in `DoProcPreselect`'s centre rect and holds its last frame, and clip 2 (`dummy`, clip 0's first frame) otherwise, each change blending over the clip's own blend time from the frame reached, the new clip held on its first frame meanwhile; the front slot's spot widens at the package's rate while the pointer is there, narrows when it leaves and is off at 0; the info text (char_info) shows only while the pointer is there. This is the 1097 client's hall for this asset set (KO-FINDINGS §8.1, Q71), not 1298's | At rest only (not while the camera turns or the start clip plays): ENTER or a click on the character in front (`PtInRect` on the centre rect) → `SelectCharacter`, the spot at its full theta, its clip 1 blended in over the package's start blend (Moradon: 1097's 0.6 s) on its first frame and played to the end (`IsAnimEnd`, after the blend), → loading; a refusal returns it to the hover or rest clip; ENTER on an empty slot → create. `back` → login (drops the connection), also while the camera turns in the rotate mode (the path mode hides it then) but not while the start clip plays. Prev/next (the arrow buttons, LEFT, RIGHT) turns the camera one slot, the short way about `at` at 1.2 rad/s, to where 1097's check ends the turn (left to right: 1, 0, 2; nothing at the end of the row or while it turns; KO-FINDINGS §8.2); while it turns nothing is ticked and the spot is off. ESC, in every state (not only at rest) but in the path mode while a path plays, which it skips: presses `back`, `exit` or nothing, as the package says (RQ-116: `exit` for the 1097 choice, as 1264's select presses `bt_exit` for ESC; RQ-119: nothing for the 1298 recipe, as 1298's presses neither, RQ-117), so while the start clip plays `back` does nothing and `exit` asks (1264's and 1097's select take no input then, RQ-120; a known difference). |
+| select | hall; up to 3 characters with the realm's player model and default looks, each standing on clip 0's first frame; the one in front, at rest, plays clip 0 (`pre_select`) once while the pointer is in `DoProcPreselect`'s centre rect and holds its last frame, and clip 2 (`dummy`, clip 0's first frame) otherwise, each change blending over the clip's own blend time from the frame reached, the new clip held on its first frame meanwhile; the front slot's spot widens at the package's rate while the pointer is there, narrows when it leaves and is off at 0; the info text (char_info) shows only while the pointer is there. This is the 1097 client's hall for this asset set (KO-FINDINGS §8.1, Q71), not 1298's | At rest only (not while the camera turns or the start clip plays): ENTER or a click on the character in front (`PtInRect` on the centre rect) → `SelectCharacter`, the spot at its full theta, its clip 1 blended in over the package's start blend (Moradon: 1097's 0.6 s) on its first frame and played to the end (`IsAnimEnd`, after the blend), → loading; a refusal returns it to the hover or rest clip; ENTER on an empty slot → create. `back` → login (drops the connection), also while the camera turns in the rotate mode (the path mode hides it then) but not while the start clip plays. Prev/next (the arrow buttons, LEFT, RIGHT) turns the camera one slot, the short way about `at` at 1.2 rad/s, to where 1097's check ends the turn (left to right: 1, 0, 2; nothing at the end of the row or while it turns; KO-FINDINGS §8.2); while it turns nothing is ticked and the spot is off. ESC presses `back`, `exit` or nothing, as the package says (RQ-116: `exit` for the 1097 choice, as 1264's select presses `bt_exit` for ESC; RQ-119: nothing for the 1298 recipe, as 1298's presses neither, RQ-117), in every state (not only at rest) but two: in the path mode while a path plays it skips the path, and while the start clip plays it does nothing, nor does a click on Exit (RQ-121: KO's select takes no input then, RQ-120). |
 | create | KO's create screen; the create model breathing in `char_view` (standing, no weapon); name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording, under the package's title for it (RQ-102); `back` → select. |
 | loading | the loading art; `progress` by real stages: the package and its textures (loaded at start, 2/3), the first `World` (1); `version` shows the client version | the first `World` → in game after the bar shows full. |
 
@@ -507,7 +509,8 @@ KO (`make live-ko`, needs `assets/ko`):
    chosen package's (1097) Exit asks the same in 1264's box, checked the same
    way. RQ-116: ESC on the chosen package's select, pressed with the camera
    still and no character starting, asks the same question; RQ-119: on the 1298
-   recipe's, pressed so, it does nothing.
+   recipe's, pressed so, it does nothing. RQ-121: on each, with a character whose
+   start clip ENTER has started, ESC and a click on Exit do nothing.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

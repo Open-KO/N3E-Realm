@@ -846,9 +846,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // `exit` ESC asks the exit question; RQ-119 (version 16): 1298's presses
     // no button (its bar's OnKeyPress 00607810 calls 005faad0, which only
     // skips a playing path, as the key handler does before this), so with
-    // `none` it does nothing; otherwise it is the realm's back.
+    // `none` it does nothing; otherwise it is the realm's back. RQ-121
+    // (KO-FINDINGS 9.10): nothing while the start clip plays, as 1264's and
+    // 1097's select take no key from the request (004443d0, 0043f7d0) and
+    // the answer (CharacterSelect 00443570, 0043ea30) until the main
+    // procedure; only the tick's ENTER skips the clip there.
     if (state == Screen::select) {
-      if (fe.select_escape == FrontSelectEscape::none) return {};
+      if (fe.select_escape == FrontSelectEscape::none || choosing >= 0) return {};
       return act(fe.select_escape == FrontSelectEscape::exit ? FrontAction::exit : FrontAction::back);
     }
     return act(FrontAction::exit);
@@ -864,7 +868,12 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // BEHAVIOR_EXIT) and leaves only on Yes; a package that names
     // exit_confirm asks so on the select. Elsewhere, and without it, exit
     // leaves at once (1298's login Cancel quits at once, by the source).
+    // RQ-121 (KO-FINDINGS 9.10): on the select, nothing while the start clip
+    // plays: 1264's (00444e60), 1097's (0043ff00) and 1298's (00607160)
+    // ReceiveMessage do nothing with the UI flag their select request and
+    // CharacterSelect clear.
     case FrontAction::exit:
+      if (state == Screen::select && choosing >= 0) break;
       if (state == Screen::select && fe.messages[size_t(FrontMessage::exit_confirm)].named)
         show_message(FrontMessage::exit_confirm, "Exit the game?");
       else

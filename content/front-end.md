@@ -239,11 +239,12 @@ address mode); the font atlases and the moon linear.
 
   While the camera turns the spot is off and keeps its theta, in both modes.
 - The select's ESC (version 15, RQ-116; `client/render/front_end.h`): what ESC
-  presses on the select, in every select state but one: in the path mode ESC
-  while a path plays still skips it (below), whatever this says. So in the
-  rotate mode it presses while the camera turns too, and in both modes while
-  the start clip plays, where `back` does nothing and `exit` asks. 0, back (the
-  realm's): the select's `back`.
+  presses on the select, in every select state but two: in the path mode ESC
+  while a path plays still skips it (below), and in both modes ESC, like a
+  click on the select's `exit`, does nothing while the start clip plays
+  (RQ-121: KO's select takes no input then, `specs/KO-FINDINGS.md` §9.10),
+  whatever this says. So in the rotate mode it presses while the camera turns
+  too. 0, back (the realm's): the select's `back`.
   1, exit (1264's: its select's OnKeyPress, `004454e0`, sends `DIK_ESCAPE` to
   ReceiveMessage as a click on `bt_exit`, `specs/KO-FINDINGS.md` §9.8): the
   select's `exit`, as a click on it, so a package that names `exit_confirm`

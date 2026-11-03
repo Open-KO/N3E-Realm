@@ -16,8 +16,10 @@ only while the login group is not (version 12, RQ-108, Q85), 1298's select
 bar's actions and two messages (version 13, RQ-109), the message box's
 Yes and No with the select's exit question (version 14, RQ-111), what ESC
 presses on the select (version 15, RQ-116), its `none`, 1298's (version 16,
-RQ-119), where the select's Back lands (version 17, RQ-112), and whether the
-select arrow at the end of the row is hidden (version 18, RQ-113).
+RQ-119), where the select's Back lands (version 17, RQ-112), whether the
+select arrow at the end of the row is hidden (version 18, RQ-113), and
+whether create is a screen of its own or draws over the select hall, with the
+new character's turn at each slot (version 19, RQ-125).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -31,7 +33,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 18, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 19, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -63,7 +65,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 7. The select scene: camera, lights, global ambient, the slots (count equal to
    the character slots), the spot's growth rate (version 4: theta per second,
    above 0 and at most 100), the front-clip mode (version 6: 0 hover, 1 loop;
-   below), the select's ESC (version 15: 0 back, 1 exit; version 16: 2 none; below), where the select's Back lands (version 17: 0 login, 1 realms; below), the end-of-row arrow (version 18: 0 hide, 1 draw; below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
+   below), the select's ESC (version 15: 0 back, 1 exit; version 16: 2 none; below), where the select's Back lands (version 17: 0 login, 1 realms; below), the end-of-row arrow (version 18: 0 hide, 1 draw; below), where create draws (version 19: 0 screen, 1 hall, then with 1 each slot's create yaw, a real; below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
    (0 in the rotate mode, 1–8 in the path mode) and the paths, the hall (part
    count ≤64, each a mesh; version 7: it may be 0), the zone (version 8: a
    mesh count, 0–256, 0 when the hall has parts, each a zone mesh; below), the
@@ -292,6 +294,28 @@ address mode); the font atlases and the moon linear.
   both draw at every slot. Either way a press at the end of the row does nothing
   (DoJobLeft, DojobRight). The recipe names it (`select.arrows`: `hide`, the
   default, or `draw`).
+- Where create draws (version 19, RQ-125; `specs/KO-FINDINGS.md` §9.15,
+  binary). 0, screen (the realm's): create is a screen of its own, drawn on the
+  black clear, the new character in the node bound to `char_view`. 1, hall
+  (1298's): create is a window of the select (1298's `+0x388`, which
+  `005fab40` loads), drawn over the hall, which draws behind it as on the
+  select (Render `005fb1c0` draws the hall in every state), the zone's blend
+  meshes after it; its layout binds no `char_view`. Then each slot's create
+  yaw (radians about +y, engine space as the slot's yaw, at most a turn either
+  way): once the camera is on the slot in focus (1298's state 7), the new
+  character, the create model breathing, stands at that slot's position turned
+  by it, under the select's lights and the slot's spot (`005fd120` places
+  1298's at the camera's slot). `select_create` opens create with the click,
+  and from an occupied slot in the path mode the camera flies to the empty
+  slot behind it (`005ff920` shows `+0x388` before the camera moves; neither
+  ENTER nor ESC skips the flight; ENTER is create's, ESC its Cancel); with no
+  such path (or in the rotate mode) the camera is put on the slot at once.
+  `back` and ESC on create return to the select at rest on that slot, a
+  flight still under way put on its last frame (1298's Cancel, `005ffb90`,
+  sets state 5 and shows the bar at once). The recipe names it
+  (`select.create`: `screen`, the default, or `hall`) and, with `hall`, each
+  slot's `create_yaw` in degrees (−360 to 360); a slot's `create_yaw` with
+  `screen` is refused.
 - Turn mode (version 7, RQ-087): how the camera goes from slot to slot.
   - 0, rotate (1097, `0043e4e0`; the slot above): the eye turns about `at`.
     No paths; the select UI shows throughout.
@@ -355,7 +379,8 @@ The loader refuses an unknown action, a screen missing one of its required
 actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
 `realm_connect`; select: `select_prev`, `select_next`, `back`, `exit` and an
 info text, `char_info` or (version 13) any of `char_name`, `char_level` and
-`char_class`; create: `create_confirm`, `back`, `name_field`, `char_view`;
+`char_class`; create: `create_confirm`, `back`, `name_field` and (version 19)
+`char_view` unless create draws over the hall, where it is refused;
 loading: `progress`; message: `message`, `ok`), an action bound twice in a
 screen, an unknown turn mode, paths in the rotate mode, a path outside the slots
 or from a slot to itself, an entry path not to slot 0, a from and to pair twice,
@@ -397,7 +422,9 @@ focus when it is empty, else for the first empty slot, else shows the message
 mode (RQ-114) by the package's path from the slot in focus, when it has one,
 the select UI hidden and ENTER and ESC not skipping it (1298's state 6), and
 create opens on the tick after the path's last frame; otherwise (the rotate
-mode, or no such path) it is put on the slot and create opens at once; `select_delete` shows the message
+mode, or no such path) it is put on the slot and create opens at once. A
+create over the hall (version 19, below) opens with the click instead, the
+camera flying behind it; `select_delete` shows the message
 `delete_disabled` for a character in focus at rest, and does nothing else. The
 texts `char_name`, `char_level` and `char_class` are the character in focus's
 name, level (decimal) and the `class_name` string while the hall is at rest
@@ -615,8 +642,33 @@ recipe's, as "Moradon" below says, or missing, and marked here:
 - Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
   create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF
-  intro), and the login, create and loading layouts (the pinned tree's
-  `UI_US`, as today). The hall lights `ka_light_0/1` are the files both
+  intro), and the login and loading layouts (the pinned tree's `UI_US`, as
+  today).
+- Create (RQ-125, version 19, `select.create` `hall`, `specs/KO-FINDINGS.md`
+  §9.15, binary): 1298's in-select create, the select's window `+0x388`,
+  which `005fab40` loads from row 2's 121st string of the pinned tree's
+  `Data/UIs_us.tbl` (`+0x794` of its map node, the bar's 120th beside it),
+  `UI_US/co_characterCreate_us.uif`: three
+  panels, `Group_race` (the race buttons, the description, Create and Cancel),
+  `Group_class` (the class buttons and the stats) and `Group_name` (the name
+  entry), drawn over the hall. `place` `origin` (`005fab40`'s SetPos(0, 0)),
+  each panel moved where 1298's Tick (`00606450`) ends its slide: `Group_class`
+  50 from the left, `Group_race` 50 from the right (`right`), `Group_name`
+  centred (Load `00603850`'s x), each bottom 30 above the window's. Bound as
+  its ReceiveMessage (`00604f90`) uses it: `btn_create` `create_confirm`,
+  `btn_cancel` `back`, `edit_name` `name_field`, `text_desc` `class_desc`;
+  states as the 1097 recipe's create (the Tuarek and the priest on, the
+  others, face, hair and the stat arrows disabled); hidden: El Morad's three
+  race buttons (Load shows Karus's and hides El Morad's for a Karus player),
+  the warrior, rogue and mage images and `text_bonus`, as the 1097 recipe.
+  The new character stands at the slot turned 213, 143 and 283 degrees at
+  slots 0–2 (`create_yaw`; `005fd120`'s `0x406dec5d`, `0x401fbb88`,
+  `0x409e0e99` for Karus). Not 1298's (Q87): the panels stand where their
+  slides end from the first frame (1298 slides `Group_race` in from the right
+  and `Group_class` from the left at up to 1300 px a second and
+  `Group_name` up from the bottom edge, `00606450`); 1298 draws the new
+  character only once a race is clicked (`005fd120` from ReceiveMessage), the
+  realm's race and class being always chosen. The hall lights `ka_light_0/1` are the files both
   clients name.
 - Select (RQ-109, version 13, `specs/KO-FINDINGS.md` §9.6, binary): 1298's own,
   `UI_US/co_CharacterSelect_us.uif`, a 1024 × 113 bar, every node drawn,
@@ -628,11 +680,10 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   `char_level`, `str_job` `char_class`. `messages` words `create_full` with
   row 7675 ("Cannot create additional characters.") and `delete_disabled`
   with row 1501 ("Character deletion has been disabled currently") of the
-  pinned tree's `Data/Texts_us.tbl`, untitled, as 1298 posts them. Not 1298's
-  (QUESTIONS Q87): Create from an occupied slot opens create when the camera
-  has flown to the empty slot (RQ-114: 1298 shows its in-select create at
-  once, the camera flying behind it; the realm's create is a screen of its
-  own). Back lands on the realm list (RQ-112, `select.back` `realms`, above).
+  pinned tree's `Data/Texts_us.tbl`, untitled, as 1298 posts them. Create
+  from an occupied slot opens 1298's in-select create at once over the hall,
+  the camera flying to the empty slot behind it (RQ-114, RQ-125: `005ff920`;
+  "Create", above). Back lands on the realm list (RQ-112, `select.back` `realms`, above).
   Both arrows draw at the ends of the row, as 1298's do (RQ-113,
   `select.arrows` `draw`). Exit asks, as 1298's does (below).
 - Message box (RQ-111, version 14, `specs/KO-FINDINGS.md` §9.7, binary): 1298's

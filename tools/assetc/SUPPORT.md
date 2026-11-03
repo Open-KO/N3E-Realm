@@ -204,5 +204,9 @@ N3FE version 18 (RQ-113) adds whether the select arrow at the end of the row
 is hidden (`select.arrows`: `hide`, the default, or `draw`, as no KO select
 hides an arrow, §9.6, §9.13); the 1298 recipe names `draw`, and (RQ-124) so
 does the 1097 recipe, as 1264's select draws both.
+N3FE version 19 (RQ-125) adds where create draws (`select.create`: `screen`, the
+default, or `hall`, 1298's in-select create over the hall, with each slot's
+`create_yaw`, §9.15) and the move key `right`; the 1298 recipe names `hall` and
+draws `co_characterCreate_us.uif`, its panels where 1298's slides end.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

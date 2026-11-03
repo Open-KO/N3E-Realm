@@ -87,7 +87,16 @@ from the player's own KO data.
      Back sets its login procedure's +0x21 (00607160, Init 005f68e0) and
      1264's +0x35 (00445145, Init 005bd9b0; RQ-123, the maintainer's choice);
      after it the chosen package's login and realm list draw no copyright
-     line, as 1264's Init hides Group_LogIn alone.
+     line, as 1264's Init hides Group_LogIn alone;
+   - the 1298 recipe's create (RQ-114, RQ-125, KO-FINDINGS 9.14, 9.15): Create
+     from an occupied slot opens 1298's in-select create
+     (co_characterCreate_us.uif) at once over the hall, the camera flying to
+     the first empty slot behind it on ka_left_right, which neither key
+     skips, the new character standing there once the camera is; ESC there,
+     or one frame into the flight, returns to the select at rest on that
+     slot with the bar shown; at rest its name entry is where Group_name's
+     slide ends ((W - w) / 2, H - 30 - h), the new character the one model
+     drawn, the hall's terrain between the panels.
 
 No server or stack.
 """
@@ -600,10 +609,15 @@ def repack(base, front_end, into):
 package_1298 = repack(package, front_end_1298, B / "package-1298")
 # RQ-114 (KO-FINDINGS 9.6, 9.14): btn_create from slot 1 with slots 0 and 1
 # taken flies the camera to slot 2 by 1298's path 6 (005ff920, 005fa670),
-# ka_left_right, the bar hidden, which neither ENTER nor ESC skips; create opens
-# on the arrival, a tick after the path's last frame (005fe5b0 case 6). The
-# capture's frames are 0.25 s apart: the first after the click takes two steps
-# of 7.5 frames (the load's and the tick's), each later one one.
+# ka_left_right, which neither ENTER nor ESC skips; the camera is on the slot
+# a tick after the path's last frame (005fe5b0 case 6). RQ-125 (KO-FINDINGS
+# 9.15): create is a window of 1298's select (+0x388), shown with the click
+# over the hall while the camera flies behind it (005ff920, Render 005fb1c0);
+# the new character stands at the slot once the camera is there (state 7);
+# ESC there, and one frame into the flight, returns to the select at rest on
+# slot 2 with the bar shown (Cancel 005ffb90). The capture's frames are 0.25 s
+# apart: the first after the click takes two steps of 7.5 frames (the load's
+# and the tick's), each later one one.
 fly_index = next(i for i, p in enumerate(recipe_1298["select"]["paths"]) if p.get("from") == 1 and p["to"] == 2)
 assert recipe_1298["select"]["paths"][fly_index]["path"].endswith("ka_left_right_camera.n3camera"), fly_index
 assert any(p.get("from") == 2 and p["to"] == 1 and p["path"].endswith("ka_right_left_camera.n3camera")
@@ -623,8 +637,14 @@ fly_frames = max(f32(f32(len(keys) * rate) * f32(1 / 30)) for keys, rate in ((fl
 fly_draws, frame = 1, f32(f32(0 + 7.5) + 7.5)
 while frame != fly_frames:
     frame, fly_draws = min(fly_frames, f32(frame + 7.5)), fly_draws + 1
-CREATE_FLY = (f"click=select path={fly_index} frames={fly_frames:.6g} ui=0 slot=1 focus=2 arrived=create "
-              f"draws={fly_draws + 1} back=select slot=2")
+CREATE_FLY = (f"click=create path={fly_index} frames={fly_frames:.6g} slot=1 focus=2 new=0 arrived=2 "
+              f"draws={fly_draws + 1} new=1 back=select slot=2 cancel=select slot=2 ui=1")
+# RQ-125: 1298's in-select create, co_characterCreate_us.uif (row 2's, as
+# 005fab40 loads it), its root at the origin and its panels where its Tick
+# (00606450) ends their slides: Group_class at (50, H - 30 - h), Group_race at
+# (W - w - 50, H - 30 - h), Group_name centred at H - 30 - h.
+create_tree = ko_hud.parse(pinned.get(recipe_1298["screens"]["create"]["ui"]))
+assert recipe_1298["screens"]["create"]["ui"] == "UI_US/co_characterCreate_us.uif", recipe_1298["screens"]["create"]
 bar_tree = ko_hud.parse(pinned.get(recipe_1298["screens"]["select"]["ui"]))
 bar_w = bar_tree["rect"][2] - bar_tree["rect"][0]
 bar_h = bar_tree["rect"][3] - bar_tree["rect"][1]
@@ -682,10 +702,30 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
                         tuple(map(int, shots["message-exit"][1].split(","))), "none", "realms")
     flight = re.search(r"^FRONT_CREATE (.*)$", run.stdout, re.M)
     assert flight and flight.group(1) == CREATE_FLY, (size, flight and flight.group(1), CREATE_FLY)
+    # RQ-125: the create shot (no character, slot 0 in focus) over the hall:
+    # the name entry where Group_name's slide ends, the new character standing
+    # in the hall alone (no hall character with none listed), and the hall
+    # drawn between the panels (the zone's terrain, not the black clear).
+    created = re.search(r"^FRONT_SHOT name=create size=\S+ path=(\S+) rect=(\S+) drawn=(\S*) origin=", run.stdout, re.M)
+    assert created, size
+    group_name, edit = find(create_tree, "Group_name"), find(create_tree, "edit_name")
+    nx0, ny0 = (width - (group_name["rect"][2] - group_name["rect"][0])) // 2, \
+        height - 30 - (group_name["rect"][3] - group_name["rect"][1])
+    want_edit = (nx0 + edit["rect"][0] - group_name["rect"][0], ny0 + edit["rect"][1] - group_name["rect"][1],
+                 nx0 + edit["rect"][2] - group_name["rect"][0], ny0 + edit["rect"][3] - group_name["rect"][1])
+    assert tuple(map(int, created.group(2).split(","))) == want_edit, (size, created.group(2), want_edit)
+    kinds = [d.split(":")[0] for d in created.group(3).split(";") if d]
+    assert kinds == ["create"], (size, created.group(3))
+    race_w = find(create_tree, "Group_race")["rect"][2] - find(create_tree, "Group_race")["rect"][0]
+    class_w = find(create_tree, "Group_class")["rect"][2] - find(create_tree, "Group_class")["rect"][0]
+    between = region(Path(created.group(1)), (50 + class_w + 4, height // 2, width - race_w - 54, ny0 - 4))
+    lit = sum(p != b"\0\0\0" for p in between)
+    assert lit > len(between) // 2, (size, lit, len(between))
     print(f"PASS front-end captures 1298 recipe {size}: 1298's select bar at ({x0}, {y0}), unscaled, its ten "
           f"bound nodes where 1298's Load puts them, its info texts filled for a character and empty without; "
           f"its Exit asks yes or no in its centred box at ({bx}, {by}), ESC and No closing it, ENTER and Yes leaving the game; "
-          f"ESC on the select does nothing; Back lands on the realm list; Create from an occupied slot flies "
-          f"the camera to the first empty one on ka_left_right ({fly_frames:.6g} frames, the bar hidden, not "
-          f"skipped) and opens create on the arrival")
+          f"ESC on the select does nothing; Back lands on the realm list; Create from an occupied slot opens "
+          f"1298's in-select create over the hall at once, the camera flying behind it to the first empty slot "
+          f"on ka_left_right ({fly_frames:.6g} frames, not skipped), the new character standing there on the "
+          f"arrival; Cancel returns to the select at rest on that slot")
 print("PASS KO front end graphical")

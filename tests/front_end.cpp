@@ -545,6 +545,13 @@ int main(int argc, char **argv) {
       // RQ-113: a select whose arrows both draw at the end of the row.
       if (fe.select_arrows != n3e::FrontSelectArrows::hide)
         std::cout << "arrows " << release.root.filename().string() << ": " << uint32_t(fe.select_arrows) << "\n";
+      // RQ-125: a create over the hall, and each slot's create yaw.
+      if (fe.create_mode != n3e::FrontCreateMode::screen) {
+        std::cout << std::setprecision(9) << "create " << release.root.filename().string() << ": "
+                  << uint32_t(fe.create_mode) << " yaws";
+        for (const auto &slot : fe.slots) std::cout << " " << slot.create_yaw;
+        std::cout << "\n";
+      }
       // RQ-106: placed NAME: layout=L size=WxH node=I rect=x0,y0,x1,y1
       if (release.root.filename().string().starts_with("ok-placed"))
         for (const auto [w, h] : {std::pair{1024, 768}, {1280, 1024}, {1600, 1200}, {1281, 1025}, {800, 600}}) {

@@ -480,6 +480,51 @@ for arrows in ("Hide", "show", "both", "always", 0, 1, True, None):
     raise AssertionError(("cooked arrows", arrows))
 assert fe.ARROWS == {"hide": 0, "draw": 1}, fe.ARROWS
 
+# RQ-125: select.create names where create draws, `screen` (the realm's, the
+# default) or `hall` (1298's: a window of the select over the hall,
+# specs/KO-FINDINGS.md 9.15), and is refused misspelt; over the hall every
+# slot names the new character's turn there (create_yaw, degrees), and a
+# create_yaw without it is refused, all before any KO file is read.
+for create in ("Hall", "select", "over", 0, 1, True, None):
+    config = dict(SELECT, front_clip="loop", turn="rotate", create=create)
+    try:
+        fe.select_scene(Fixture({}), fe.Textures(Fixture({})), config, pathlib.Path("/nonexistent"))
+    except ValueError as error:
+        assert str(error) == "front-end select.create: one of screen, hall", error
+        continue
+    raise AssertionError(("cooked create", create))
+assert fe.CREATE == {"screen": 0, "hall": 1}, fe.CREATE
+YAWED = [dict(SELECT["slots"][0], create_yaw=yaw) for yaw in (213,)]
+for config, reason in ((dict(SELECT, create="hall"), "degrees, -360 to 360"),
+                       (dict(SELECT, create="hall", slots=[dict(YAWED[0], create_yaw=361)]), "degrees, -360 to 360"),
+                       (dict(SELECT, create="hall", slots=[dict(YAWED[0], create_yaw="213")]), "degrees, -360 to 360"),
+                       (dict(SELECT, create="hall", slots=[dict(YAWED[0], create_yaw=math.inf)]), "degrees, -360 to 360"),
+                       (dict(SELECT, slots=YAWED), "only with select.create hall"),
+                       (dict(SELECT, create="screen", slots=YAWED), "only with select.create hall")):
+    try:
+        fe.select_scene(Fixture({}), fe.Textures(Fixture({})), dict(config, front_clip="loop", turn="rotate"),
+                        pathlib.Path("/nonexistent"))
+    except ValueError as error:
+        assert str(error) == "front-end select.slots create_yaw: " + reason, (config, error)
+        continue
+    raise AssertionError(("cooked create_yaw", config))
+# Over the hall the create layout binds no char_view (the new character
+# stands in the hall); a screen of its own binds it.
+UNVIEWED = dict(required=fe.REQUIRED["create"] - {"char_view"}, refused={"char_view"})
+viewless = {k: v for k, v in BINDINGS["create"].items() if v != "char_view"}
+hall_create = fe.screen("create", spec("create", bindings=viewless), Fixture(trees), fe.Textures(Fixture(trees)), {},
+                        **UNVIEWED)
+assert struct.unpack_from("<I", hall_create)[0] == counts[2], hall_create[:4]
+for bindings, kw, reason in ((BINDINGS["create"], UNVIEWED, "front-end create: binds ['char_view']"),
+                             (viewless, {}, "front-end create: unbound ['char_view']")):
+    try:
+        fe.screen("create", spec("create", bindings=bindings), Fixture(trees), fe.Textures(Fixture(trees)), {}, **kw)
+    except ValueError as error:
+        assert str(error) == reason, error
+        continue
+    raise AssertionError(("cooked create", bindings, kw))
+print("PASS front-end cook: where create draws, its new character's turn at each slot, and its char_view")
+
 
 def n3camera(eye, at, rate=30.0, up_keys=0, at_kind=0, tail=b""):
     """A synthetic .n3camera as CN3Camera::Load reads it (1298: 00439540 after
@@ -819,10 +864,10 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=18, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=19, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
-         spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
-         logo=u(0), messages=u(0), placement=NO_PLACEMENT):
+         spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
+         zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -838,6 +883,10 @@ def blob(version=18, slots=1, screen_data=None, font_index=None, light=None, plu
     out += f([spot_rate]) + (b"" if front_clip is None else u(front_clip)) + (b"" if escape is None else u(escape))
     out += b"" if back is None else u(back)
     out += b"" if arrows is None else u(arrows)
+    # Version 19 (RQ-125): where create draws, and over the hall each slot's
+    # create yaw.
+    if create is not None:
+        out += u(create) + f(create_yaws if create_yaws is not None else [-3.75] * slots if create == 1 else [])
     if paths is None:
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
     out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
@@ -1161,13 +1210,33 @@ BAR_PLACE_TREE = frame("root", 0, (0, 0, 1024, 113), [
     frame("str_lev", 6, (158, 24, 184, 40)), frame("str_job", 6, (760, 25, 918, 41)),
     frame("btn_left", 1, (27, 23, 64, 41)), frame("btn_right", 1, (958, 23, 995, 41))])[1]
 BAR_PLACE_SPEC = {"place": {"bottom": 10}}
+# RQ-125 (KO-FINDINGS 9.15): 1298's in-select create at
+# co_characterCreate_us.uif's rects, its 291 x 705 root and its three panels,
+# and front-end-1298.json's placement of them: the root at the origin
+# (005fab40's SetPos(0, 0)), each panel where 1298's Tick (00606450) ends its
+# slide: Group_class 50 from the left, Group_race 50 from the right, Group_name
+# centred (Load 00603850's x), each bottom 30 above the window's.
+HALL_CREATE_PLACE_TREE = frame("root", 0, (0, 0, 291, 705), [
+    frame("Group_race", 0, (0, 1, 214, 705), [frame("text_desc", 6, (33, 268, 178, 554)),
+                                              frame("btn_create", 1, (34, 567, 183, 601)),
+                                              frame("btn_cancel", 1, (34, 606, 183, 640))]),
+    frame("Group_class", 0, (-1, 0, 215, 702), [frame("str_01", 6, (32, 320, 89, 342))]),
+    frame("Group_name", 0, (0, 0, 363, 72), [
+        node(8, "edit_name", [node(4, texture="", rect=(121, 21, 315, 48)), node(6, rect=(121, 21, 315, 48))],
+             rect=(121, 21, 315, 48))])])[1]
+HALL_CREATE_PLACE_SPEC = {"place": "origin", "moves": [{"node": "Group_class", "x": 50, "bottom": 30},
+                                                       {"node": "Group_race", "right": 50, "bottom": 30},
+                                                       {"node": "Group_name", "x": "centre", "bottom": 30}]}
+HALL_CREATE_BINDINGS = {"btn_create": "create_confirm", "btn_cancel": "back", "edit_name": "name_field",
+                        "text_desc": "class_desc"}
 
 
-def cook_placed(specs=PLACE_SPECS, trees=PLACE_TREES, bindings=PLACE_BINDINGS):
+def cook_placed(specs=PLACE_SPECS, trees=PLACE_TREES, bindings=PLACE_BINDINGS, over_hall=False):
     assets = Fixture(trees)
     textures, fonts, placements = fe.Textures(assets), {}, []
     data = [fe.screen(n, {"ui": n + ".uif", "bindings": dict(bindings[n]), **specs[n]}, assets, textures,
-                      fonts, placements=placements) for n in fe.SCREENS]
+                      fonts, placements=placements, **(UNVIEWED if over_hall and n == "create" else {}))
+            for n in fe.SCREENS]
     return data, placements
 
 
@@ -1177,7 +1246,14 @@ def cook_placed_bar(specs=None):
                        {**PLACE_BINDINGS, "select": BAR_BINDINGS})
 
 
-def ko_rects(width, height, bar=False):
+def cook_placed_1298(specs=None):
+    """The 1298 recipe's layouts: 1298's select bar and its in-select create."""
+    specs = specs or {**PLACE_SPECS, "select": BAR_PLACE_SPEC, "create": HALL_CREATE_PLACE_SPEC}
+    return cook_placed(specs, {**PLACE_TREES, "select.uif": BAR_PLACE_TREE, "create.uif": HALL_CREATE_PLACE_TREE},
+                       {**PLACE_BINDINGS, "select": BAR_BINDINGS, "create": HALL_CREATE_BINDINGS}, over_hall=True)
+
+
+def ko_rects(width, height, bar=False, hall_create=False):
     """KO's own placements of the layouts above at a viewport, written from the
     binaries (KO-FINDINGS 9.3), each node's top-left: 1264's login Init
     (005bde22: ((W - w) >> 1, H - h)), its server list tick (005c25b0:
@@ -1209,6 +1285,17 @@ def ko_rects(width, height, bar=False):
             ("root", (0, 0)), ("btn_create", (28, 57)), ("btn_start", (233, 57)), ("btn_delete", (435, 56)),
             ("btn_back", (645, 56)), ("btn_exit", (846, 56)), ("str_id", (431, 23)), ("str_lev", (158, 24)),
             ("str_job", (760, 25)), ("btn_left", (27, 23)), ("btn_right", (958, 23)))}} if bar else {}),
+        # RQ-125: 1298's in-select create (005fab40: the root at (0, 0)), its
+        # panels where Load (00603850) and Tick (00606450) leave them:
+        # Group_class at (50, H - 30 - h), Group_race at (W - w - 50,
+        # H - 30 - h), Group_name at ((W - w) / 2, H - 30 - h), each child
+        # carried with its panel.
+        **({"create": {"root": (0, 0), "Group_class": (50, height - 30 - 702),
+                       "str_01": (50 + 33, height - 30 - 702 + 320),
+                       "Group_race": (width - 214 - 50, height - 30 - 704),
+                       "btn_create": (width - 214 - 50 + 34, height - 30 - 704 + 566),
+                       "Group_name": ((width - 363) // 2, height - 30 - 72),
+                       "edit_name": ((width - 363) // 2 + 121, height - 30 - 72 + 21)}} if hall_create else {}),
     }
 
 
@@ -1247,6 +1334,17 @@ assert bar_placements[:1] + bar_placements[2:] == placements[:1] + placements[2:
 BAR_PLACED_NODES = placed_nodes(bar_placed_screens)
 for ident, xy in ko_rects(1024, 768, bar=True)["select"].items():
     assert BAR_PLACED_NODES["select"][ident][1][:2] == xy, (ident, BAR_PLACED_NODES["select"][ident], xy)
+# RQ-125: the in-select create's moves at the canvas, the root's and its
+# three panels' (Group_race's right edge by LINEAR 1, -(214 + 50)).
+hall_placed_screens, hall_placements = cook_placed_1298()
+assert hall_placements[2] == u(4) + u(0) + (u(fe.LINEAR) + f([0, 0])) * 2 + b"".join(
+    u(i) + x + u(fe.LINEAR) + f([1, -30 - h]) for i, x, h in (
+        (13, u(fe.LINEAR) + f([0, 50]), 702), (1, u(fe.LINEAR) + f([1, -264]), 704),
+        (15, u(fe.LINEAR) + f([0.5, -181.5]), 72))), hall_placements[2]
+assert hall_placements[:2] + hall_placements[3:] == bar_placements[:2] + bar_placements[3:]
+HALL_PLACED_NODES = placed_nodes(hall_placed_screens)
+for ident, xy in ko_rects(1024, 768, hall_create=True)["create"].items():
+    assert HALL_PLACED_NODES["create"][ident][1][:2] == xy, (ident, HALL_PLACED_NODES["create"][ident], xy)
 # Both Moradon recipes place their layouts as PLACE_SPECS does, so the loader's
 # checks below (KO's placements at 1024x768, 1280x1024, 1600x1200 and
 # 1281x1025) hold for each, but for the copyright line, which only the 1097
@@ -1257,7 +1355,7 @@ for ident, xy in ko_rects(1024, 768, bar=True)["select"].items():
 # would keep the 1024-wide x on a wider window.
 PLACE_SPECS_1298 = {**PLACE_SPECS, "login": {"place": "bottom",
                                              "moves": [{"node": "Group_ServerList", "x": 0, "y": 0}]},
-                    "select": BAR_PLACE_SPEC}
+                    "select": BAR_PLACE_SPEC, "create": HALL_CREATE_PLACE_SPEC}
 for recipe, want in (("front-end.json", PLACE_SPECS), ("front-end-1298.json", PLACE_SPECS_1298)):
     recipe_screens = json.loads((ROOT / "games/moradon" / recipe).read_text())["screens"]
     specs = {n: {k: v for k, v in recipe_screens[n].items() if k in ("place", "moves")} for n in fe.SCREENS}
@@ -1265,7 +1363,7 @@ for recipe, want in (("front-end.json", PLACE_SPECS), ("front-end-1298.json", PL
     if recipe == "front-end.json":
         assert cook_placed(specs)[1][1:] == placements[1:], recipe
     else:
-        assert cook_placed_bar(specs)[1][1:] == bar_placements[1:], recipe
+        assert cook_placed_1298(specs)[1][1:] == hall_placements[1:], recipe
 # The 1298 recipe binds 1298's bar as its ReceiveMessage (00607160) and info
 # fill (006074c0) use it, its delete button included, and draws all of it.
 select_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text())["screens"]["select"]
@@ -1319,6 +1417,19 @@ assert recipe_1097["select"]["back"] == "realms", recipe_1097["select"]
 # bt_left and bt_right (004448f0, 00444e60, 004454e0; 9.13).
 assert recipe_1298["select"]["arrows"] == "draw", recipe_1298["select"]
 assert recipe_1097["select"]["arrows"] == "draw", recipe_1097["select"]
+# RQ-125 (KO-FINDINGS 9.15): 1298's create is a window of its select (+0x388:
+# 005fab40 loads row 2's co_characterCreate_us.uif), over the hall, so the 1298
+# recipe draws it there with no char_view; the new character turned at slots
+# 0-2 as 005fd120 turns it for Karus (0x406dec5d, 0x401fbb88, 0x409e0e99: 213,
+# 143 and 283 degrees), the bits the client reads. 1264's create is a screen
+# of its own (KO-FINDINGS 9.1), and the 1097 choice keeps it.
+assert recipe_1298["select"]["create"] == "hall", recipe_1298["select"]
+assert [struct.unpack("<I", struct.pack("<f", math.radians(slot["create_yaw"])))[0]
+        for slot in recipe_1298["select"]["slots"]] == [0x406dec5d, 0x401fbb88, 0x409e0e99], recipe_1298["select"]
+assert recipe_1298["screens"]["create"]["ui"] == "UI_US/co_characterCreate_us.uif", recipe_1298["screens"]["create"]
+assert "char_view" not in recipe_1298["screens"]["create"]["bindings"].values(), recipe_1298["screens"]["create"]
+assert recipe_1097["select"].get("create", "screen") == "screen", recipe_1097["select"]
+assert all("create_yaw" not in slot for slot in recipe_1097["select"]["slots"]), recipe_1097["select"]
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
     "a bottom placement of another key": {**PLACE_SPECS, "message": {"place": {"bottom": 10, "x": 1}}},
@@ -1326,6 +1437,10 @@ placement_problems = {
     "an unknown move key": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "z": 1}]}},
     "two y rules": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "y": 1,
                                                                              "bottom": 2}]}},
+    "two x rules": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "x": 1,
+                                                                             "right": 2}]}},
+    "a right of no number": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok",
+                                                                                      "right": "centre"}]}},
     "a middle y": {**PLACE_SPECS, "message": {"place": "centre", "moves": [{"node": "btn_ok", "y": {"middle": 1}}]}},
     "a middle without its offset": {**PLACE_SPECS, "message": {"place": "centre", "moves": [
         {"node": "btn_ok", "x": {"ratio": 1}}]}},
@@ -1352,7 +1467,8 @@ for reason, specs in placement_problems.items():
 hidden = cook_placed({**PLACE_SPECS, "loading": {**PLACE_SPECS["loading"], "hidden": ["Text_Version"]}})[1]
 assert hidden[3] == u(1) + u(0) + u(fe.LINEAR) + f([0.5, -339]) + u(fe.LINEAR) + f([0.5, -216.5]), hidden[3]
 print("PASS front-end placement cook: KO's placements at the canvas, the 1097 and 1298 recipes' the same "
-      "but for the 1097 choice's copyright line and 1298's own select bar, %d refusals" % len(placement_problems))
+      "but for the 1097 choice's copyright line and 1298's own select bar and in-select create, %d refusals"
+      % len(placement_problems))
 PLACEMENT_OK = u(0) + b"".join(placements) + u(0)
 SIZES = ((1024, 768), (1280, 1024), (1600, 1200), (1281, 1025), (800, 600))
 
@@ -1370,6 +1486,8 @@ PLACEMENT_CASES = {
     "ok-placed": blob(screen_data=placed_screens, placement=PLACEMENT_OK),
     "ok-placed-scaled": blob(screen_data=placed_screens, placement=u(1) + PLACEMENT_OK[4:]),
     "ok-placed-bar": blob(screen_data=bar_placed_screens, placement=u(0) + b"".join(bar_placements) + u(0)),
+    "ok-placed-1298": blob(screen_data=hall_placed_screens, placement=u(0) + b"".join(hall_placements) + u(0),
+                           create=1),
     "ok-placement-keep": blob(placement=moves_raw((1, (fe.KEEP, 0, 0), (fe.KEEP, 0, 0)))),
     "bad-placement-flags": blob(placement=u(2) + NO_PLACEMENT[4:]),
     "bad-placement-missing": blob(placement=b""),
@@ -1388,6 +1506,11 @@ PLACEMENT_CASES = {
                           placement=moves_raw(logo=u(1) + u(0) + (u(fe.LINEAR) + f([0.5, -16])) +
                                               (u(fe.LINEAR) + f([0.5, -8])))),
 }
+
+
+# RQ-125: the synthetic screens with a create that binds no char_view (a
+# create over the hall).
+VIEWLESS_SCREENS = screens[:2] + [hall_create] + screens[3:]
 
 
 # KO's login bar has no status line: a login screen without `notice` cooks
@@ -1518,6 +1641,20 @@ cases = {
     "ok-select-arrows-draw": blob(arrows=1),
     "bad-select-arrows": blob(arrows=2),
     "bad-select-arrows-missing": blob(arrows=None),
+    # RQ-125 (version 19): where create draws, 0 its own screen (char_view
+    # bound) or 1 over the hall (none), then over the hall each slot's create
+    # yaw, finite and within a turn.
+    "bad-version-18": blob(version=18),
+    "ok-create-hall": blob(create=1, screen_data=VIEWLESS_SCREENS),
+    "ok-create-hall-3": blob(slots=3, create=1, create_yaws=[-3.71755147, -2.49582100, -4.93928194],
+                             screen_data=VIEWLESS_SCREENS),
+    "bad-create-mode": blob(create=2),
+    "bad-create-missing": blob(create=None),
+    "bad-create-hall-view": blob(create=1),
+    "bad-create-screen-no-view": blob(screen_data=VIEWLESS_SCREENS),
+    "bad-create-yaw": blob(create=1, create_yaws=[7.0], screen_data=VIEWLESS_SCREENS),
+    "bad-create-yaw-nan": blob(create=1, create_yaws=[NAN], screen_data=VIEWLESS_SCREENS),
+    "bad-create-yaws-missing": blob(create=1, create_yaws=[], screen_data=VIEWLESS_SCREENS),
     "ok-select-bar": blob(screen_data=bar_screens),
     "ok-select-bar-name": blob(screen_data=bar(("str_id",))),
     "bad-select-bar-off-select": blob(screen_data=bar_off_select()),
@@ -1643,6 +1780,18 @@ try:
     assert arrow_lines == ["arrows ok-select-arrows-draw: 1"], arrow_lines
     line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-select-arrows:"))
     assert "front end select arrows" in line, line
+    # RQ-125: create over the hall with each slot's create yaw; a mode past
+    # hall, a char_view where the mode does not draw one (or none where it
+    # does) and a yaw past a turn, each refused for its reason.
+    create_lines = [l for l in run.stdout.splitlines() if l.startswith("create ")]
+    assert create_lines == ["create ok-placed-1298: 1 yaws -3.75", "create ok-create-hall: 1 yaws -3.75",
+                            "create ok-create-hall-3: 1 yaws -3.71755147 -2.495821 -4.93928194"], create_lines
+    for name, reason in (("bad-create-mode", "front end create mode"), ("bad-create-hall-view", "front end create view"),
+                         ("bad-create-screen-no-view", "front end create view"),
+                         ("bad-create-yaw", "front end create yaw"), ("bad-create-yaw-nan", "finite"),
+                         ("bad-version-18", "front end version")):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
     exit_line = [l for l in run.stdout.splitlines() if l.startswith("message ok-exit-confirm: ")]
     assert exit_line == ["message ok-exit-confirm: %d title='' replaces=1 text='Enter a name. '"
                          % (len(fe.MESSAGES) - 1)], exit_line
@@ -1698,8 +1847,18 @@ try:
                 assert got[:2] == ko and got[2] - got[0] == rect[2] - rect[0], (ident, width, got, ko)
                 bar_checked += 1
     assert bar_checked == 4 * len(ko_rects(1024, 768, bar=True)["select"]), bar_checked
+    # RQ-125: 1298's in-select create where 1298's Load and Tick leave it.
+    for width, height in SIZES:
+        if width < 1024:
+            continue
+        for ident, (index, rect) in HALL_PLACED_NODES["create"].items():
+            got = placed[("ok-placed-1298", 2, width, height, index)]
+            ko = ko_rects(width, height, hall_create=True)["create"].get(ident)
+            if ko is not None:
+                assert got[:2] == ko and got[2] - got[0] == rect[2] - rect[0], (ident, width, got, ko)
+                bar_checked += 1
     print("PASS front-end placement: %d nodes where KO's code puts them at 1024x768, 1280x1024, 1600x1200 and "
-          "1281x1025, the canvas scaled at 800x600 and with the scale flag; 1298's select bar's %d nodes "
-          "where 1298 puts them" % (checked, bar_checked))
+          "1281x1025, the canvas scaled at 800x600 and with the scale flag; 1298's select bar's and in-select "
+          "create's %d nodes where 1298 puts them" % (checked, bar_checked))
 finally:
     shutil.rmtree(work)

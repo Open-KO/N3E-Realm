@@ -43,7 +43,10 @@
 // occupied slot (the block's own comment below):
 //   FRONT_CREATE click=select path=P frames=F ui=0 slot=1 focus=2 arrived=create draws=N back=select slot=2
 //   FRONT_CREATE click=create back=select slot=S
-// (the second without a fly);
+// (the second without a fly), or (RQ-125) for a create over the hall:
+//   FRONT_CREATE click=create path=P frames=F slot=1 focus=2 new=0 arrived=2 draws=N new=1 back=select slot=2
+//     cancel=select slot=2 ui=1
+// (on one line);
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
 // logo-fade half way into the first group's fade-in, with rect= the logo
@@ -266,6 +269,30 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
         return front->screen() == Screen::create ? "create" : front->screen() == Screen::select ? "select" : "other";
       };
       std::cout << "FRONT_CREATE click=" << shown_screen();
+      // RQ-125 (version 19): over the hall create opens with the click and
+      // the camera flies behind it: after a frame the path and its last frame,
+      // the slot the camera is at and the one in focus, and whether the new
+      // character stands in the hall (new=0 while the camera flies); then
+      // frames 0.25 s apart until the camera is on the slot (at most 60): the
+      // slot, how many frames that took since the click, and new=1 there.
+      const auto stands = [&] {
+        for (const auto &d : front->drawn())
+          if (d.which == 2) return 1;
+        return 0;
+      };
+      const bool over_hall = front->screen() == Screen::create && front->create_over_hall();
+      bool flew = false;
+      if (over_hall) {
+        front->draw(width, height, t += .25, flight);
+        const auto turn = front->front_turn();
+        std::cout << " path=" << turn.path << " frames=" << turn.frames << " slot=" << turn.slot
+                  << " focus=" << turn.focus << " new=" << stands();
+        flew = turn.slot != turn.focus;
+        int frames = 1;
+        while (front->front_turn().slot != front->front_turn().focus && frames < 60)
+          front->draw(width, height, t += .25, flight), ++frames;
+        if (flew) std::cout << " arrived=" << front->front_turn().slot << " draws=" << frames << " new=" << stands();
+      }
       if (front->screen() == Screen::select) {
         front->draw(width, height, t += .25, flight);
         const auto turn = front->front_turn();
@@ -281,6 +308,19 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
         key(SDLK_ESCAPE);
         front->draw(width, height, t += .25, flight);
         std::cout << " back=" << shown_screen() << " slot=" << front->front_turn().slot;
+      }
+      // RQ-125: over the hall, ESC one frame into the flight: the select at
+      // rest on the slot the camera flew to, its UI shown (1298's Cancel,
+      // 005ffb90, sets state 5 and shows the bar at once).
+      if (flew) {
+        front->select_at(0);
+        front->draw(width, height, t += .25, flight);
+        click(A::select_create);
+        front->draw(width, height, t += .25, flight);
+        key(SDLK_ESCAPE);
+        front->draw(width, height, t += .25, flight);
+        std::cout << " cancel=" << shown_screen() << " slot=" << front->front_turn().slot
+                  << " ui=" << front->front_turn().ui;
       }
       std::cout << std::endl;
       list.Clear();

@@ -1193,3 +1193,16 @@ showing create over the hall while the camera flies, as 1298's in-select create
 in state 7), would make the create a state of the select and is proposed as its own
 item. 1264's select has no Create button, so the 1097 choice is unchanged. All four
 of RQ-109's differences now have a decision or a default.
+**Create over the hall (RQ-125, KO-FINDINGS §9.15):** 1298's create is the select's
+window `+0x388` (`005fab40`: row 2's `co_characterCreate_us.uif`), three panels that
+slide in from the sides and the bottom (`00606450`) over the hall, the new character
+standing at the camera's slot, turned 213°, 143° or 283°, once a race is chosen
+(`005fd120`). N3FE version 19 makes it package data (`select.create`: `screen`, the
+realm's and the default, or `hall`, with each slot's `create_yaw`); the 1298 recipe
+names `hall` and draws that layout, so its create opens with the click and the
+camera flies behind it. **Defaults taken:** the panels stand where their slides end
+from the first frame (the slide is proposed as its own item); the new character
+stands from the camera's arrival, since the realm's race and class are always
+chosen (1298 draws it only after a race click); a Cancel during the flight puts the
+camera on the slot at once. The 1097 choice keeps `screen`, 1264's create being a
+procedure of its own.

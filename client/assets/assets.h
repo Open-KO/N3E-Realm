@@ -903,7 +903,9 @@ struct FrontScene {
   std::vector<float> blends;              // version 4: each clip's blend time (seconds)
   std::vector<FrontPlug> plugs;
 };
-struct FrontSlot { V position{}; float yaw = 0; V eye{}; FrontLight spot; };
+// create_yaw (version 19, RQ-125): the new character's turn at the slot when
+// create draws over the hall (1298: 005fd120), the slot's yaw otherwise.
+struct FrontSlot { V position{}; float yaw = 0; V eye{}; FrontLight spot; float create_yaw = 0; };
 // Version 6 (RQ-086): what the select hall's character in front plays at rest.
 // hover, 1097's (DoProcPreselect 0043f280): the front clip once while the
 // pointer is in the centre rect, the rest clip otherwise; only it is ticked;
@@ -940,6 +942,14 @@ enum class FrontSelectBack : uint32_t { login, realms };
 // to place, compare and click them, KO-FINDINGS 9.6, 9.13), so both draw and
 // a click at the end of the row does nothing.
 enum class FrontSelectArrows : uint32_t { hide, draw };
+// Version 19 (RQ-125): where create draws. screen, the realm's: a screen of
+// its own on black, the new character in the layout's char_view. hall, 1298's
+// (KO-FINDINGS 9.15): its create is a window of the select (005fab40,
+// 005ff920), drawn over the hall Render 005fb1c0 draws in every state; it
+// opens with the click, the camera flying to the slot behind it, and once the
+// camera is on the slot (state 7) the new character stands there, turned by
+// the slot's create_yaw (005fd120). Its layout binds no char_view.
+enum class FrontCreateMode : uint32_t { screen, hall };
 // One recorded path (an .n3camera's eye keys and at keys, engine space): from
 // one slot to another, or (from kEntry) the entry path to slot 0.
 struct FrontPath {
@@ -1017,6 +1027,7 @@ struct FrontEnd {
   FrontSelectEscape select_escape = FrontSelectEscape::back;  // version 15 (16: none)
   FrontSelectBack select_back = FrontSelectBack::login;      // version 17
   FrontSelectArrows select_arrows = FrontSelectArrows::hide;  // version 18
+  FrontCreateMode create_mode = FrontCreateMode::screen;      // version 19
   FrontTurnMode turn = FrontTurnMode::rotate;       // version 7
   std::vector<FrontPath> paths;                     // version 7: the path mode's
   std::vector<FrontMesh> hall;                      // version 7: may be empty

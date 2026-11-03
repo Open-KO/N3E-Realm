@@ -2676,7 +2676,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 18, "front end version");
+  need(r.u() == 19, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2715,7 +2715,8 @@ FrontEnd load_front_end(const Release &release) {
       {FrontAction::login, FrontAction::exit, FrontAction::login_group, FrontAction::realm_group,
        FrontAction::realm_list, FrontAction::realm_connect},
       {FrontAction::select_prev, FrontAction::select_next, FrontAction::back, FrontAction::exit},
-      {FrontAction::create_confirm, FrontAction::back, FrontAction::name_field, FrontAction::char_view},
+      // char_view: the create screen's own (version 19: not over the hall), below.
+      {FrontAction::create_confirm, FrontAction::back, FrontAction::name_field},
       {FrontAction::progress},
       {FrontAction::message, FrontAction::ok},
   }};
@@ -2766,8 +2767,10 @@ FrontEnd load_front_end(const Release &release) {
     return bound;
   };
   std::set<FrontAction> message_bound;
+  bool create_view = false;
   for (size_t screen = 0; screen < fe.screens.size(); ++screen) {
     const auto bound = read_nodes(fe.screens[screen]);
+    if (screen == size_t(FrontScreen::create)) create_view = bound.contains(FrontAction::char_view);
     // Version 14 (RQ-111): yes and no are the message box's only (KO's
     // CUIMessageBox Btn_Yes and Btn_No, shown for an MB_YESNO box).
     need(screen == size_t(FrontScreen::message) ||
@@ -2921,6 +2924,17 @@ FrontEnd load_front_end(const Release &release) {
   const auto arrows = r.u();
   need(arrows <= uint32_t(FrontSelectArrows::draw), "front end select arrows");
   fe.select_arrows = FrontSelectArrows(arrows);
+  // Version 19 (RQ-125): where create draws, 0 its own screen (its layout
+  // binds char_view) or 1 over the hall (none), and over the hall each slot's
+  // create yaw (radians, engine space).
+  const auto create = r.u();
+  need(create <= uint32_t(FrontCreateMode::hall), "front end create mode");
+  fe.create_mode = FrontCreateMode(create);
+  need(create_view == (fe.create_mode == FrontCreateMode::screen), "front end create view");
+  for (auto &slot : fe.slots) {
+    slot.create_yaw = fe.create_mode == FrontCreateMode::hall ? r.f() : slot.yaw;
+    need(std::isfinite(slot.create_yaw) && std::abs(slot.create_yaw) <= 6.2832f, "front end create yaw");
+  }
   // Version 7 (RQ-087): the turn mode, 0 rotate or 1 path, and the path
   // mode's camera paths (none in the rotate mode): each from a slot (or
   // kEntry) to another, then its eye keys and its at keys, each set a rate

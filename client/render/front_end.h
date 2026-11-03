@@ -356,6 +356,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // client checks the hover, its blends, the spot and the info text.
   FrontPose front_pose() const { return front_shown; }
   FrontTurn front_turn() const { return turn_shown; }
+  // RQ-125 (version 19): whether create draws over the hall (a test hook).
+  bool create_over_hall() const { return over_hall(); }
   const std::string &message_text() const { static const std::string none; return message ? message->text : none; }
   const std::string &message_title() const { static const std::string none; return message ? message->title : none; }
   // The server answered CreateCharacter: a longer list is a success (the
@@ -590,7 +592,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       state = Screen::create;
       name.clear();
     }
-    if (state == Screen::select) hall(width, height, dt);
+    // RQ-125 (version 19): a create over the hall draws the hall behind it,
+    // as 1298's Render (005fb1c0) draws it in every state.
+    if (state == Screen::select || in_hall_create()) hall(width, height, dt, now);
     // IsAnimEnd: the start clip has played once, after its blend (1097:
     // 0043ed20 reads the loop count, which 00445bb0 counts only past the
     // clip's end, and the frame stays on the start during the blend).
@@ -603,7 +607,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       logo_ui();
     else
       ui(layout(), context, now);
-    if (state == Screen::create) {
+    if (state == Screen::create && !in_hall_create()) {
       flush();
       character_view(width, height, now);
       begin_ui(width, height);
@@ -611,8 +615,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     if (message) ui(FrontScreen::message, context, now);
     flush();
     // The zone's alpha parts after the UI, only while the select is the
-    // screen (not on the frame the start clip's end turns it to loading).
-    if (hall_camera && state == Screen::select) zone_alpha(hall_camera->first, hall_camera->second);
+    // screen (not on the frame the start clip's end turns it to loading), or
+    // a create over it (1298: Render's alpha flush after every window).
+    if (hall_camera && (state == Screen::select || in_hall_create()))
+      zone_alpha(hall_camera->first, hall_camera->second);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
@@ -755,6 +761,23 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     return select_turn(c.eye, c.at, fe.slots[size_t(slot)].eye);
   }
   bool paths() const { return fe.turn == FrontTurnMode::path; }
+  // RQ-125 (version 19): create is a window of the select, drawn over the
+  // hall (1298's +0x388, co_characterCreate_us.uif; KO-FINDINGS 9.15).
+  bool over_hall() const { return fe.create_mode == FrontCreateMode::hall; }
+  bool in_hall_create() const { return state == Screen::create && over_hall(); }
+  // Create's Cancel (and ESC): back to the select. Over the hall the camera
+  // that still flies to the slot is put on it, the select at rest there with
+  // its UI shown (1298's Cancel 005ffb90 sets state 5 and shows the bar at
+  // once; what its camera does after a Cancel mid-flight was not read).
+  void leave_create() {
+    const bool flying = over_hall() && turning();
+    enter_select();
+    if (flying) {
+      if (paths()) path_camera.finish();
+      at_slot = focus;
+      if (!paths()) angle = slot_angle(focus);
+    }
+  }
   // The path from slot `from` (FrontPath::kEntry: the entry path) to `to`;
   // load_front_end checked those the arrows and the entry take are there.
   const FrontPath *path_to(uint32_t from, uint32_t to) const {
@@ -880,7 +903,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   }
   Output escape() {
     if (state == Screen::create) {
-      enter_select();
+      leave_create();
       return {};
     }
     // RQ-116 (version 15): 1264's select presses bt_exit for ESC (OnKeyPress
@@ -956,7 +979,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // The select's Back drops the connection (the viewer's reset); where it
     // then lands is the package's (back_lands, RQ-112).
     case FrontAction::back:
-      if (state == Screen::create) enter_select();
+      if (state == Screen::create) leave_create();
       else if (state == Screen::select && choosing < 0) out.command = Command::back;
       break;
     // Version 13 (RQ-109, specs/KO-FINDINGS.md 9.6): 1298's select bar
@@ -974,6 +997,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // over the hall; the realm's create is a screen of its own, which draws
     // no hall, so it would hide the fly; Q87). The rotate mode, or a package
     // without that path, puts the camera on the slot and opens create.
+    // RQ-125 (version 19): a create over the hall opens with the click, as
+    // 1298's does (005ff920 shows +0x388 before the camera moves), and the
+    // camera flies behind it (005fe5b0 case 6).
     case FrontAction::select_create: {
       if (state != Screen::select || choosing >= 0 || turning()) break;
       const int slot = select_create_slot(focus, characters_shown(), int(fe.slots.size()));
@@ -986,10 +1012,12 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         if (fly) {
           path_camera.start(*fly);
           focus = slot;
-          create_flying = true;
-          break;
-        }
-        face(slot);
+          if (!over_hall()) {
+            create_flying = true;
+            break;
+          }
+        } else
+          face(slot);
       }
       state = Screen::create;
       name.clear();
@@ -1242,7 +1270,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // after the one that reached the path's last frame (005fe5b0 tests the
   // frame before 005faf10 ticks the camera), and that tick is still a turning
   // one. An ENTER or ESC skip puts it there after this tick's characters.
-  void hall(int width, int height, double dt) {
+  // RQ-125 (version 19): under a create over the hall, once the camera is
+  // on the slot (1298's state 7), the new character stands there, turned by
+  // the slot's create yaw, breathing, under the hall's lights and the slot's
+  // spot (Render 005fb1c0 draws the player's character in state 7; 005fd120
+  // puts it at the camera's slot). 1298 draws it once a race is chosen; the
+  // realm's race and class are always chosen.
+  void hall(int width, int height, double dt, double now) {
     const bool rest = !turning();
     if (paths()) {
       if (!rest && path_camera.ended()) at_slot = focus;
@@ -1291,6 +1325,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     for (int i = 0; i < characters_shown(); ++i) {
       const auto &slot = fe.slots[i];
       draw_character(1, posed(seats.players.at(size_t(i))), vp, detail::translate_yaw(slot.position, slot.yaw));
+    }
+    if (in_hall_create() && !turning()) {
+      const auto &slot = fe.slots[size_t(focus)];
+      draw_character(2, pose(2, 0, now, true), vp, detail::translate_yaw(slot.position, slot.create_yaw));
     }
   }
   // Create: the player's own model breathing in `char_view`, as KO's

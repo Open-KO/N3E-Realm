@@ -36,13 +36,17 @@
       }
     },
     "create": {
-      "ui": "UI_US/Ka_CharacterCreate_us.uif",
-      "place": "centre",
+      "ui": "UI_US/co_characterCreate_us.uif",
+      "place": "origin",
+      "moves": [
+        {"node": "Group_class", "x": 50, "bottom": 30},
+        {"node": "Group_race", "right": 50, "bottom": 30},
+        {"node": "Group_name", "x": "centre", "bottom": 30}
+      ],
       "bindings": {
         "btn_create": "create_confirm",
         "btn_cancel": "back",
         "edit_name": "name_field",
-        "area_character": "char_view",
         "text_desc": "class_desc"
       },
       "states": {
@@ -70,8 +74,8 @@
         "btn_map_right": "disabled"
       },
       "hidden": [
-        "img_warrior", "img_rogue", "img_mage",
-        "img_str", "img_sta", "img_dex", "img_int", "img_map", "text_bonus"
+        "btn_race_el_ba", "btn_race_el_rm", "btn_race_el_rf",
+        "img_warrior", "img_rogue", "img_mage", "text_bonus"
       ]
     },
     "loading": {
@@ -133,6 +137,7 @@
     "escape": "none",
     "back": "realms",
     "arrows": "draw",
+    "create": "hall",
     "zone": 10001,
     "fog": true,
     "paths": [
@@ -145,9 +150,11 @@
       {"from": 2, "to": 1, "path": "ChrSelect/Data/ka_right_left_camera.n3camera"}
     ],
     "slots": [
-      {"position": [128, 0, 91], "yaw": 180, "spot": [128, 2, 85.5], "spot_target": [128, 0, 91]},
-      {"position": [108.7, 0.2, 62.9], "yaw": 110.000005, "spot": [112.7, 1.7, 58.9], "spot_target": [108.7, 0.2, 62.9]},
-      {"position": [141.3, 0.3, 68.5], "yaw": 245, "spot": [137.3, 1.8, 64.5], "spot_target": [141.3, 0.3, 68.5]}
+      {"position": [128, 0, 91], "yaw": 180, "spot": [128, 2, 85.5], "spot_target": [128, 0, 91], "create_yaw": 213.00001},
+      {"position": [108.7, 0.2, 62.9], "yaw": 110.000005, "spot": [112.7, 1.7, 58.9], "spot_target": [108.7, 0.2, 62.9],
+       "create_yaw": 143.00001},
+      {"position": [141.3, 0.3, 68.5], "yaw": 245, "spot": [137.3, 1.8, 64.5], "spot_target": [141.3, 0.3, 68.5],
+       "create_yaw": 283}
     ],
     "character": {
       "race": 2,

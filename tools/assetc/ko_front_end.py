@@ -22,8 +22,10 @@ buttons and its three info texts, with two messages (RQ-109), and (version
 14) the message box's yes and no buttons, with the message exit_confirm, the
 select's exit asked yes or no as 1298 asks it (RQ-111), (version 15) what ESC
 presses on the select (RQ-116), (version 16) its `none`, 1298's (RQ-119),
-(version 17) where the select's Back lands (RQ-112) and (version 18) whether
-an arrow at the end of the row is hidden (RQ-113).
+(version 17) where the select's Back lands (RQ-112), (version 18) whether
+an arrow at the end of the row is hidden (RQ-113) and (version 19) whether
+create is a screen of its own or draws over the select hall, with the new
+character's turn at each slot (RQ-125).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -54,7 +56,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 18
+VERSION = 19
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -109,6 +111,16 @@ BACK = {"login": 0, "realms": 1}
 # 0043ff00, 00440690) hides an arrow, so both stay drawn and a click at the
 # end of the row does nothing (specs/KO-FINDINGS.md 9.6, 9.13).
 ARROWS = {"hide": 0, "draw": 1}
+# Where create draws (version 19, `select.create`, RQ-125): `screen`, the
+# realm's (the default), a screen of its own on black with the new character
+# in the layout's `char_view`; or `hall`, 1298's: its create is a window of
+# the select (005fab40 makes it, row 2's co_characterCreate_us.uif;
+# 005ff920 shows it at the click), Render 005fb1c0 draws the hall behind it
+# in every state, and in state 7, once the camera is on the slot, the new
+# character stands there, turned by the slot's `create_yaw` (005fd120: at
+# the camera's slot, 213, 143 and 283 degrees for Karus). A create over the
+# hall binds no `char_view` (specs/KO-FINDINGS.md 9.15).
+CREATE = {"screen": 0, "hall": 1}
 # A path's bounds (the client's): paths per package, keys per set, keys a second.
 MAX_PATHS = 8
 MAX_PATH_KEYS = 4096
@@ -204,7 +216,7 @@ KEEP, LINEAR, HALF = 0, 1, 2
 MAX_MOVES = 32
 MAX_MOVE_SCALE = 4.0
 MAX_MOVE_OFFSET = 16384.0
-MOVE_KEYS = {"node", "x", "y", "bottom", "above"}
+MOVE_KEYS = {"node", "x", "right", "y", "bottom", "above"}
 # The recipe's `ui_scale` (version 11's flags): `native`, KO's (absent), or
 # `window`, the realm's own uniform scaling of the canvas to fit the window
 # (RQ-103's realm-owner option).
@@ -750,7 +762,9 @@ def move_axis(value, size, root_size):
 
 def moves(root, spec):
     """A screen's moves in order, (node, x rule, y rule): the root's `place`,
-    then the recipe's `moves`. A move's `y` is a number or `centre`, or
+    then the recipe's `moves`. A move's `x` is as move_axis says, or `right`
+    (its right edge that far left of the window's: 1298's in-select create's
+    Group_race at W - w - 50, its Tick 00606450). A move's `y` is a number or `centre`, or
     `bottom` (its bottom edge that far above the window's) or `above` [node,
     gap] (its bottom edge that far above that node's top, a node an earlier
     move places on y; CUICharacterSelect, CUILoading, OpenServerList); an axis
@@ -763,11 +777,14 @@ def moves(root, spec):
         raise ValueError("front-end moves")
     for m in listed:
         if type(m) is not dict or "node" not in m or set(m) - MOVE_KEYS or \
-                sum(k in m for k in ("y", "bottom", "above")) > 1:
+                sum(k in m for k in ("y", "bottom", "above")) > 1 or sum(k in m for k in ("x", "right")) > 1:
             raise ValueError("front-end move keys")
         node = resolve(root, m["node"])
         nx0, ny0, nx1, ny1 = node["rect"]
-        x = move_axis(m["x"], nx1 - nx0, x1 - x0) if "x" in m else axis(KEEP)
+        if "right" in m:
+            x = axis(LINEAR, 1.0, -offset(m["right"]) - (nx1 - nx0))
+        else:
+            x = move_axis(m["x"], nx1 - nx0, x1 - x0) if "x" in m else axis(KEEP)
         if "y" in m:
             if type(m["y"]) is dict:
                 raise ValueError("front-end move middle")
@@ -830,7 +847,7 @@ def shift(node, dx, dy):
         shift(c, dx, dy)
 
 
-def screen(name, spec, assets, textures, fonts, find=(), placements=None):
+def screen(name, spec, assets, textures, fonts, find=(), placements=None, required=None, refused=()):
     """One screen's nodes in draw order, on the canvas. CN3UIBase::Load adds
     each child at the front and Render walks the list backwards, so a parent
     draws before its children and the children in file order; a button draws
@@ -839,7 +856,10 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None):
     (CN3UIImage::Render). `find`: addresses whose node indices are returned
     too, as (data, indices); one that is hidden or draws nothing refuses.
     `placements`: a list the screen's moves (version 11) are appended to, as
-    the section writes them: a count and each drawn node's index and rules."""
+    the section writes them: a count and each drawn node's index and rules.
+    `required` replaces the screen's REQUIRED actions and `refused` names
+    actions it may not bind (version 19: a create over the hall, no
+    `char_view`)."""
     tree, ui = split(assets, spec["ui"])
     root = ko_hud.parse(tree.get(ui))
     # Every address resolves on KO's tree as read, before anything moves or is added.
@@ -927,7 +947,9 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None):
 
     found = {}
     emit(root, None, 15, 0)
-    missing = REQUIRED.get(name, set()) - seen
+    missing = (REQUIRED.get(name, set()) if required is None else set(required)) - seen
+    if set(refused) & seen:
+        raise ValueError("front-end %s: binds %s" % (name, sorted(set(refused) & seen)))
     if name == "select" and not INFO_TEXTS & seen:
         missing = missing | {"char_info"}
     if missing:
@@ -1326,7 +1348,8 @@ def select_scene(assets, textures, config, work, report=None):
     slots (position, yaw, the eye where the camera's turn to the slot ends
     and its spot light), the spot's growth rate, the front-clip mode, what
     ESC presses (version 15; 16: `none`), where Back lands (version 17), the
-    end-of-row arrow (version 18), the turn mode and its paths (version 7), the hall, the zone and the fog
+    end-of-row arrow (version 18), where create draws and, over the hall,
+    the new character's turn at each slot (version 19), the turn mode and its paths (version 7), the hall, the zone and the fog
     (version 8), the character with its clips and plugs. `report` receives
     the zone's provenance."""
     camera = config["camera"]
@@ -1347,6 +1370,17 @@ def select_scene(assets, textures, config, work, report=None):
     arrows = config.get("arrows", "hide")
     if type(arrows) is not str or arrows not in ARROWS:
         raise ValueError("front-end select.arrows: one of %s" % ", ".join(ARROWS))
+    create = create_mode(config)
+    create_yaws = []
+    for slot in config["slots"]:
+        if create != "hall":
+            if "create_yaw" in slot:
+                raise ValueError("front-end select.slots create_yaw: only with select.create hall")
+            continue
+        yaw = slot.get("create_yaw")
+        if type(yaw) not in (int, float) or not math.isfinite(yaw) or abs(yaw) > 360:
+            raise ValueError("front-end select.slots create_yaw: degrees, -360 to 360")
+        create_yaws.append(-math.radians(yaw))
     if turn == "path":
         if any("turn_end" in slot for slot in config["slots"]):
             raise ValueError("front-end select.turn path: a slot's turn ends with its path, no turn_end")
@@ -1385,6 +1419,7 @@ def select_scene(assets, textures, config, work, report=None):
            f(vector(config["ambient"], 3)))
     out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND]) + u(FRONT_CLIP[mode])
     out += u(ESCAPE[escape]) + u(BACK[back]) + u(ARROWS[arrows])
+    out += u(CREATE[create]) + f(create_yaws)
     out += u(TURN[turn]) + path_records
     out += hall(assets, textures, config.get("hall"))
     # Version 8 (RQ-095): the zone the hall draws (1298's karus_intro) and the
@@ -1394,6 +1429,14 @@ def select_scene(assets, textures, config, work, report=None):
     out += model(tree, joint, definition, look["clips"], work / "select",
                  own_blends={START_CLIP: config["start_blend"]})
     return out + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
+
+
+def create_mode(config):
+    """The select's `create` (version 19): `screen` or `hall`."""
+    create = config.get("create", "screen")
+    if type(create) is not str or create not in CREATE:
+        raise ValueError("front-end select.create: one of %s" % ", ".join(CREATE))
+    return create
 
 
 def character_tree(assets, look):
@@ -1744,7 +1787,12 @@ def write(assets, out, config, work):
         raise ValueError("front-end screens")
     textures, fonts = Textures(assets), {}
     placements = []
-    screens = b"".join(screen(n, config["screens"][n], assets, textures, fonts, placements=placements)
+    # Version 19 (RQ-125): a create over the hall draws its new character in
+    # the hall, so its layout binds no char_view.
+    over_hall = create_mode(config["select"]) == "hall"
+    unviewed = dict(required=REQUIRED["create"] - {"char_view"}, refused={"char_view"}) if over_hall else {}
+    screens = b"".join(screen(n, config["screens"][n], assets, textures, fonts, placements=placements,
+                              **(unviewed if n == "create" else {}))
                        for n in SCREENS)
     # Version 9 (RQ-101): the logo screen, or none; its textures and fonts
     # join the tables before they are written.

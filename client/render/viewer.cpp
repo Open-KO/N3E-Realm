@@ -1201,9 +1201,11 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     // connection is up, so a press while connecting still logs in.
     bool front_login = false;
     // RQ-112: a select Back that lands on the realm list (the package's
-    // select.back realms): held from the click until the new connection's
-    // flow has started, the login bar hidden meanwhile.
-    bool front_back = false;
+    // select.back realms): the login bar held hidden from the click until the
+    // new connection's flow has started; RQ-123: the login_closed line hidden
+    // from the click through that login and on the realm list after it
+    // (render/front_login.h).
+    n3e::front::BackHold front_back;
     uint64_t front_alerts = 0;
     double front_hold = 0;
     uint64_t front_refusals = 0;
@@ -1700,7 +1702,8 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
       automated_login = automated_select = false;
 #endif
       front_progress = 0;
-      front_entering = front_chose = front_connected = front_login = front_back = false;
+      front_entering = front_chose = front_connected = front_login = false;
+      front_back.reset();
       front_hold = 0;
       front_refusals = 0;
     };
@@ -1822,11 +1825,12 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           // realm list (front->logged_in). RQ-112 (KO-FINDINGS 9.12): a package
           // whose Back lands on the realm list holds a login from the click,
           // the bar hidden through the connection, as 1298's login Init with
-          // +0x21 (005f68e0) hides it as it connects and asks for the list.
+          // +0x21 (005f68e0) hides it as it connects and asks for the list;
+          // RQ-123: 1264's (+0x35, 005bd9b0) hides its copyright line too.
           case n3e::front::Command::back:
             reset_connection();
             front->reset();
-            front_back = front->back_lands() == n3e::FrontSelectBack::realms;
+            front_back.back(front->back_lands() == n3e::FrontSelectBack::realms);
             break;
           default: break;
           }
@@ -2439,18 +2443,26 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             front_login = false;
             front->show_message(n3e::FrontMessage::connect_failed, why);
           }
-          // RQ-112: a Back to the realm list holds until the new connection's
-          // flow has started: to a stored session's login, which keeps the bar
-          // hidden below until its answer, or, without one, to idle, where the
-          // bar shows again. A connection that fails meanwhile shows its
-          // failure, as a held login press's does.
-          if (front_back && world.connected && discord_flow->phase() != n3e::login::Flow::Phase::start)
-            front_back = false;
-          if (front_back && !world.connected && world.status != "Connecting") {
-            std::string why = world.status;
-            if (const auto bar = why.find(" | F12"); bar != std::string::npos) why.resize(bar);
-            front_back = false;
-            front->show_message(n3e::FrontMessage::connect_failed, why);
+          // RQ-112: a Back to the realm list holds the bar until the new
+          // connection's flow has started: to a stored session's login, which
+          // keeps the bar hidden below until its answer, or, without one, to
+          // idle, where the bar shows again. A connection that fails meanwhile
+          // shows its failure, as a held login press's does. RQ-123: the line
+          // stays hidden through the session's login and on the realm list,
+          // until the list is left or the flow leaves that login otherwise.
+          {
+            using Phase = n3e::login::Flow::Phase;
+            const auto phase = discord_flow->phase();
+            const auto screen = front->screen();
+            const n3e::front::BackHold::Frame frame{
+                world.connected, !world.connected && world.status != "Connecting", phase != Phase::start,
+                phase == Phase::session || phase == Phase::done,
+                screen == n3e::front::Screen::login || screen == n3e::front::Screen::realms};
+            if (front_back.update(frame) == n3e::front::BackHold::Step::failed) {
+              std::string why = world.status;
+              if (const auto bar = why.find(" | F12"); bar != std::string::npos) why.resize(bar);
+              front->show_message(n3e::FrontMessage::connect_failed, why);
+            }
           }
           if (front_connected && !world.connected) {
             const std::string why = world.disconnect.empty() ? "Disconnected from server" : world.disconnect;
@@ -2476,11 +2488,13 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           // the browser step and its code, to the answer; a failure (back to
           // idle) or a reset connection ends it. 1298 hides its bar the same
           // way and has no line (RQ-110, 005f74c0; front_login.h). RQ-112: a
-          // Back to the realm list holds it hidden from the click (front_back).
+          // Back to the realm list holds it hidden from the click (front_back);
+          // RQ-123: and its line, 1264's Back never calling SetVisibleLogInUIs.
           using Phase = n3e::login::Flow::Phase;
           const auto phase = discord_flow->phase();
-          front->login_waiting(front_login || front_back || phase == Phase::session || phase == Phase::browser ||
-                               phase == Phase::code || phase == Phase::done);
+          front->login_waiting(front_login || front_back.bar_hidden() || phase == Phase::session ||
+                               phase == Phase::browser || phase == Phase::code || phase == Phase::done);
+          front->login_line_hidden(front_back.line_hidden());
         }
         // PQ-406 (D-209): a new chat, whisper, rest or admin refusal takes the
         // HUD's message line, as the client's own notices do; PQ-407 (D-210):

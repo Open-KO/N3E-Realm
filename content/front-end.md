@@ -271,11 +271,16 @@ address mode); the font atlases and the moon linear.
   `005bd9b0`): the bar hidden from the click, through the connection, to the
   stored session's answer and the realm list; it shows again when there is no
   stored session to log in with, and a connection that fails shows the
-  `connect_failed` message over it, as after a login press. A layout's
-  `login_closed` node shows while the bar is hidden, as for any login (1264
-  shows its line neither then nor on its list after a Back: SetVisibleLogInUIs
-  is not called). The recipe names it (`select.back`: `login`, the default, or
-  `realms`).
+  `connect_failed` message over it, as after a login press. RQ-123: a
+  layout's `login_closed` node is hidden too, from the click through the
+  stored session's login and on the realm list after it, until the list is
+  left for the select (1264's Back, its store at `00445145`, reaches its server
+  list through an Init, `005bd9b0`, that hides `Group_LogIn` alone and never
+  calls SetVisibleLogInUIs, `005c2820`, the only code that shows the line);
+  without a stored session, or once the flow leaves that login otherwise (a
+  refusal, a logout), the hold ends and a later login press shows the line as
+  for any login (`client/render/front_login.h` `BackHold`). The recipe names
+  it (`select.back`: `login`, the default, or `realms`).
 - Turn mode (version 7, RQ-087): how the camera goes from slot to slot.
   - 0, rotate (1097, `0043e4e0`; the slot above): the eye turns about `at`.
     No paths; the select UI shows throughout.
@@ -725,11 +730,12 @@ box and loading are 1264's.
   or ESC closes the box. ESC on the select asks the same (`select.escape`
   `exit`; RQ-116, §9.8, binary: OnKeyPress `004454e0` presses `bt_exit` for
   `DIK_ESCAPE`, as a click), the maintainer's choice (2026-11-02) over the
-  realm's ESC there, Back, which stays on `bt_back`. Back lands as the realm's
-  does (`select.back` absent, `login`); 1264's lands on its server list with
-  neither its bar nor its line (RQ-112, §9.12, binary: `bt_back` sets the login
-  procedure's `+0x35`, whose Init `005bd9b0` connects, asks for the list and
-  hides `Group_LogIn` alone), a difference left to the maintainer.
+  realm's ESC there, Back, which stays on `bt_back`. Back lands on the realm
+  list with neither the bar nor the copyright line (`select.back` `realms`),
+  as 1264's lands on its server list (RQ-112, §9.12, binary: `bt_back` sets the
+  login procedure's `+0x35` at `00445145`, whose Init `005bd9b0` connects, asks
+  for the list and hides `Group_LogIn` alone), the maintainer's choice
+  (2026-11-03, "Match 1264", RQ-123).
 - Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest fixed
   on, every other race, class, face, hair and stat arrow fixed disabled, the
   bonus points and stat highlights hidden (Q52).

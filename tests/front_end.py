@@ -1293,10 +1293,11 @@ assert recipe_1097["select"]["escape"] == "exit", recipe_1097["select"]
 assert recipe_1298["select"]["escape"] == "none", recipe_1298["select"]
 # RQ-112 (KO-FINDINGS 9.12): 1298's Back lands on its server list (00607160
 # sets the login procedure's +0x21; Init 005f68e0), so the 1298 recipe's lands
-# on the realm list; the 1097 choice keeps the realm's, the login (1264's lands
-# on its server list too, a difference left to the maintainer).
+# on the realm list. RQ-123 (the maintainer, 2026-11-03: "Match 1264"): so does
+# the 1097 choice's, as 1264's bt_back sets +0x35 (00445145) and its Init
+# (005bd9b0) hides Group_LogIn alone, its line hidden too.
 assert recipe_1298["select"]["back"] == "realms", recipe_1298["select"]
-assert "back" not in recipe_1097["select"], recipe_1097["select"]
+assert recipe_1097["select"]["back"] == "realms", recipe_1097["select"]
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
     "a bottom placement of another key": {**PLACE_SPECS, "message": {"place": {"bottom": 10, "x": 1}}},

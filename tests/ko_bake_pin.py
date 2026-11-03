@@ -402,9 +402,15 @@ CLIENT = Path("assets/ko")
 # word), provenance.json, recipe.json and the release index change. Default
 # features 2cc5cb96... -> bc4de9d6...; classic 58c8f7c8... -> 3e4d5253...; 1097
 # e45142d5... -> f6853ecc.... The plain cooks and the homelands keep their pins.
+# RQ-123 (KO-FINDINGS 9.12) changed them again: the 1097 recipe's select.back
+# is realms (1264's bt_back sets +0x35, 00445145). Against RQ-112's cooks only
+# front-end.bin (53,803,172 bytes, one byte differs: that word), recipe.json and
+# the release index change. Default features bc4de9d6... -> aa15d780...;
+# classic 3e4d5253... -> c14a2a14...; 1097 f6853ecc... -> e20d4349.... The plain
+# cooks and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "bc4de9d6c79dddf226dc148d40ae5bf539e11e39d0d229c6d627a99c6bd55342"),
+    "features": (["--features"], "aa15d780b0dd08e8a5edb66f86ecbb2278cd6fc00b81a997b1143ddb6f8cb38c"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -425,13 +431,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "3e4d5253296b5cd723589c8089c71a25f9f85a4dc595a5417158b898f4c1c253"),
+    "features": (["--features"], "c14a2a14afa1bf83cb338ec2d5e1e15b8d72c154aa8de39785b3b184afcf0ac2"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "f6853eccda5ee74908d0ddb34cc57445022a48e1834cfa3afb1b2217ce932065"),
+    "features": (["--features"], "e20d4349cd1cdf25f27099070673890a0596131041f7c0d34b8ab4c209a7a9f9"),
 }
 
 

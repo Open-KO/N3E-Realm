@@ -16,7 +16,9 @@
 // odd size and one smaller than the canvas (client/assets/front_place.h), for
 // tests/front_end.py to check against KO's own placements. RQ-108: the login
 // screen's state-bound nodes in each of the realm's login states
-// (client/render/front_login.h), as 1264's SetVisibleLogInUIs shows them.
+// (client/render/front_login.h), as 1264's SetVisibleLogInUIs shows them;
+// RQ-123: after a Back to the realm list without the line, and the viewer's
+// Back hold (BackHold) through a session's login, a failure, a drop, a logout.
 // RQ-111: the message box's styles, keys and answers (client/render/message_box.h)
 // as 1298's CUIMessageBox shows and answers an OK box and the yes/no exit.
 // RQ-116: a loaded package whose select ESC presses exit is printed.
@@ -300,6 +302,74 @@ std::string logo_check() {
   return "";
 }
 
+// RQ-112, RQ-123 (KO-FINDINGS 9.12): the viewer's hold for a select Back that
+// lands on the realm list (client/render/front_login.h BackHold), frame by
+// frame: what each step leaves of the bar and the line held hidden, and
+// whether it reports the connection's failure. Empty when every case holds.
+std::string back_hold_check() {
+  using H = n3e::front::BackHold;
+  using F = H::Frame;
+  // connected, failed, started, session, listed
+  const F connecting{false, false, false, false, true}, up{true, false, false, false, true},
+      session{true, false, true, true, true}, done = session, idle{true, false, true, false, true},
+      failed{false, true, false, false, true}, select{true, false, true, true, false};
+  struct Step { F frame; bool bar, line, failure; };
+  struct Case { const char *name; bool realms; std::vector<Step> steps; bool reset_after; };
+  const std::vector<Case> cases{
+      // The login's Back (the realm's): nothing held.
+      {"login", false, {{connecting, false, false, false}, {session, false, false, false}}, false},
+      // A stored session: the bar to the flow's start, the line on to the
+      // list and until it is left for the select.
+      {"session", true,
+       {{connecting, true, true, false}, {up, true, true, false}, {session, false, true, false},
+        {done, false, true, false}, {done, false, true, false}, {select, false, false, false},
+        {done, false, false, false}},
+       false},
+      // No stored session: the flow idles, the bar returns and the line too
+      // ends (a later login press shows it, as 1264's SetVisibleLogInUIs).
+      {"no session", true, {{connecting, true, true, false}, {idle, false, false, false}}, false},
+      // A refused session: its login, then idle.
+      {"refused", true, {{up, true, true, false}, {session, false, true, false}, {idle, false, false, false}}, false},
+      // A logout's answer (Flow::Phase::logout): the flow has started, not on
+      // a session's login.
+      {"logout", true, {{connecting, true, true, false}, {idle, false, false, false}}, false},
+      // A connection that fails while the bar is held: reported once, both end.
+      {"failure", true, {{connecting, true, true, false}, {failed, false, false, true}, {failed, false, false, false}},
+       false},
+      // A failure after the flow started is the viewer's drop, not the hold's.
+      {"late failure", true, {{session, false, true, false}, {failed, false, true, false}}, false},
+      // A drop (the viewer's reset_connection): both end.
+      {"drop", true, {{session, false, true, false}}, true},
+      {"drop while connecting", true, {{connecting, true, true, false}}, true},
+  };
+  for (const auto &c : cases) {
+    H hold;
+    hold.back(c.realms);
+    if (hold.bar_hidden() != c.realms || hold.line_hidden() != c.realms) return std::string(c.name) + ": the click";
+    for (size_t i = 0; i < c.steps.size(); ++i) {
+      const auto &s = c.steps[i];
+      const bool failure = hold.update(s.frame) == H::Step::failed;
+      if (hold.bar_hidden() != s.bar || hold.line_hidden() != s.line || failure != s.failure)
+        return std::string(c.name) + ": step " + std::to_string(i) + ": bar " + std::to_string(hold.bar_hidden()) +
+               " line " + std::to_string(hold.line_hidden()) + " failure " + std::to_string(failure);
+    }
+    if (c.reset_after) {
+      hold.reset();
+      if (hold.bar_hidden() || hold.line_hidden()) return std::string(c.name) + ": the reset";
+      if (hold.update(connecting) != H::Step::none || hold.bar_hidden() || hold.line_hidden())
+        return std::string(c.name) + ": after the reset";
+    }
+  }
+  // A second Back after a list re-arms it.
+  H hold;
+  hold.back(true);
+  hold.update(session);
+  hold.update(select);
+  hold.back(true);
+  if (!hold.bar_hidden() || !hold.line_hidden()) return "a second Back";
+  return {};
+}
+
 int main(int argc, char **argv) {
   if (const auto e = logo_check(); !e.empty()) {
     std::cerr << "FAIL logo screen: " << e << "\n";
@@ -336,18 +406,23 @@ int main(int argc, char **argv) {
     // (9.5, 1298 005f74c0): the bar hides while a login is under way whether
     // the layout has a login_closed node or not; the 1298 recipe hides its
     // line, so it then shows neither.
+    // RQ-123 (9.12, 1264 005bd9b0): after a Back to the realm list, its
+    // login and the list show no line (the bar and the list as ever).
     using A = n3e::FrontAction;
-    struct Want { const char *state; bool login, realms, waiting, bar, list, line; };
-    for (const auto &w : {Want{"idle", true, false, false, true, false, false},
-                          Want{"waiting", true, false, true, false, false, true},
-                          Want{"realm list", false, true, false, false, true, true},
-                          Want{"realm list, waiting", false, true, true, false, true, true},
-                          Want{"select", false, false, false, false, false, false},
-                          Want{"select, waiting", false, false, true, false, false, false}}) {
-      const bool bar = n3e::front::login_state_shows(A::login_group, w.login, w.realms, w.waiting),
-                 list = n3e::front::login_state_shows(A::realm_group, w.login, w.realms, w.waiting),
-                 line = n3e::front::login_state_shows(A::login_closed, w.login, w.realms, w.waiting),
-                 other = n3e::front::login_state_shows(A::login, w.login, w.realms, w.waiting);
+    struct Want { const char *state; bool login, realms, waiting, back, bar, list, line; };
+    for (const auto &w : {Want{"idle", true, false, false, false, true, false, false},
+                          Want{"waiting", true, false, true, false, false, false, true},
+                          Want{"realm list", false, true, false, false, false, true, true},
+                          Want{"realm list, waiting", false, true, true, false, false, true, true},
+                          Want{"select", false, false, false, false, false, false, false},
+                          Want{"select, waiting", false, false, true, false, false, false, false},
+                          Want{"back, waiting", true, false, true, true, false, false, false},
+                          Want{"back, realm list", false, true, true, true, false, true, false},
+                          Want{"back, idle", true, false, false, true, true, false, false}}) {
+      const bool bar = n3e::front::login_state_shows(A::login_group, w.login, w.realms, w.waiting, w.back),
+                 list = n3e::front::login_state_shows(A::realm_group, w.login, w.realms, w.waiting, w.back),
+                 line = n3e::front::login_state_shows(A::login_closed, w.login, w.realms, w.waiting, w.back),
+                 other = n3e::front::login_state_shows(A::login, w.login, w.realms, w.waiting, w.back);
       if (bar != w.bar || list != w.list || line != w.line || !other) {
         std::cerr << "FAIL login states: " << w.state << ": bar " << bar << " list " << list << " line " << line
                   << " other " << other << "\n";
@@ -355,8 +430,14 @@ int main(int argc, char **argv) {
       }
     }
     std::cout << "PASS login states: the bar at rest and hidden while a login is under way, KO's line instead "
-                 "then and on the realm list\n";
+                 "then and on the realm list, neither after a Back to the realm list\n";
   }
+  if (const auto e = back_hold_check(); !e.empty()) {
+    std::cerr << "FAIL back hold: " << e << "\n";
+    return 1;
+  }
+  std::cout << "PASS back hold: a Back to the realm list hides the bar until the flow starts and the line through "
+               "the session's login and the list; a failure, a drop, a logout or no session ends it\n";
   {
     // RQ-109 (KO-FINDINGS 9.6, 1298 005ff920, 00607160): btn_create takes the
     // slot in focus when it is empty, else the first empty one, else none

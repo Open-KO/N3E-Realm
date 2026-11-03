@@ -295,6 +295,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // the login group from a login press until its answer and shows the node
   // bound to login_closed meanwhile (render/front_login.h).
   void login_waiting(bool on) { waiting = on; }
+  // RQ-123 (KO-FINDINGS 9.12): a Back's login and the realm list after it
+  // (the viewer's BackHold, each frame): the node bound to login_closed stays
+  // hidden, as 1264's Back reaches its list without SetVisibleLogInUIs.
+  void login_line_hidden(bool on) { line_hidden = on; }
   // Whether the current layout's node bound to `action` draws in this state,
   // the message box's for its own actions (a test hook; false without one).
   bool action_shown(FrontAction action) const {
@@ -316,7 +320,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // screen plays on: KO 1264 connects only from its login, after it.
   void reset() {
     if (state != Screen::logo) state = Screen::login;
-    waiting = false;  // the connection, and any login on it, is gone
+    waiting = line_hidden = false;  // the connection, and any login on it, is gone
     choosing = -1;
     pending_create = false;
   }
@@ -343,7 +347,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // the package says: the login (the realm's) or, through a login the viewer
   // holds from the click with the bar hidden, the realm list (1298's Back sets
   // its login procedure's +0x21, whose Init connects, asks for the server list
-  // and hides the bar, 005f68e0).
+  // and hides the bar, 005f68e0; 1264's +0x35, 005bd9b0, its line hidden too,
+  // RQ-123: render/front_login.h BackHold).
   FrontSelectBack back_lands() const { return fe.select_back; }
   bool creating() const { return pending_create; }
   // The character in front as the last select frame showed it; the test
@@ -394,7 +399,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     message.reset();
     choosing = -1;
     pending_create = false;
-    waiting = false;
+    waiting = line_hidden = false;
     slide = realm_height;
     reset_hall();
     face(0);
@@ -607,6 +612,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   FrontAction pressed = FrontAction::none;
   float realm_height = 0, slide = 0;
   bool waiting = false;  // RQ-108: a login under way (login_waiting)
+  bool line_hidden = false;  // RQ-123: a Back's login and list (login_line_hidden)
   // The select camera: the slot it is at and the slot in focus, which is the
   // one it turns to from the press on (1097: CGameProcCharacterSelect's
   // positions +0x2c4 and +0x2c8, the selected index 006e04d0), and its turn
@@ -765,8 +771,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     for (size_t i = 0; i < nodes.size(); ++i) {
       bool on = i == 0 || shown[nodes[i].parent];
       // The login group, the realm group and (RQ-108) the node KO shows while
-      // the login group is hidden, each in its states only.
-      on = on && login_state_shows(nodes[i].action, state == Screen::login, state == Screen::realms, waiting);
+      // the login group is hidden, each in its states only (RQ-123: the
+      // last not after a Back to the realm list).
+      on = on && login_state_shows(nodes[i].action, state == Screen::login, state == Screen::realms, waiting,
+                                   line_hidden);
       // RQ-111: the message box's buttons by its style (SetBoxStyle 00527a40).
       if (screen == FrontScreen::message && message) on = on && box_shows(nodes[i].action, box_style(message->kind));
       if (nodes[i].kind == FrontNode::BUTTON && on) {

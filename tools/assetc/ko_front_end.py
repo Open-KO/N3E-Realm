@@ -92,10 +92,13 @@ ESCAPE = {"back": 0, "exit": 1, "none": 2}
 # way Back drops the connection and returns to the login, which connects again
 # and logs in with a stored session as at start: `login`, the realm's (the
 # default), the login bar shown until that login starts; or `realms`, 1298's
-# (and 1264's): its Back (00607160; 1264 00444e60) sets the login procedure's
+# (and 1264's): its Back (1298's bar ReceiveMessage 00607160, the store at
+# 00607447; 1264's bt_back, the store at 00445145) sets the login procedure's
 # byte +0x21 (1264 +0x35), whose Init connects, asks for the server list and
 # hides the bar (005f68e0; 1264 005bd9b0), so the bar stays hidden from the
-# click, through the connection, to the realm list (specs/KO-FINDINGS.md 9.12).
+# click, through the connection, to the realm list, and a layout's
+# login_closed line with it (1264's Init never calls SetVisibleLogInUIs,
+# 005c2820; RQ-123) (specs/KO-FINDINGS.md 9.12).
 BACK = {"login": 0, "realms": 1}
 # A path's bounds (the client's): paths per package, keys per set, keys a second.
 MAX_PATHS = 8

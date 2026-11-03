@@ -1157,3 +1157,11 @@ and hiding its line through a Back's login and on the list after it, as 1264 doe
 proposed as its own item. Without a stored session the realm's Back waits on the login
 for a Discord login whatever the package says (KO keeps the account in memory). The
 arrows and Create from an occupied slot stay as above.
+**1097 Back decided (RQ-123, the maintainer, 2026-11-03: "Match 1264"):** the 1097
+choice names `select.back` `realms`, and `realms` hides a layout's `login_closed`
+line with the bar, from the click through the stored session's login and on the
+realm list after it, until the list is left (1264's `bt_back` stores `+0x35` at
+`00445145`; its Init `005bd9b0` hides `Group_LogIn` alone and never calls
+SetVisibleLogInUIs). No format change: the 1298 recipe has no line. Without a stored
+session (or once the flow leaves that login otherwise) the bar returns and a later
+login press shows the line, as any login does.

@@ -80,10 +80,11 @@ from the player's own KO data.
      while a start clip plays (RQ-121, KO-FINDINGS 9.10), ESC and a click on
      Exit do nothing in either, as KO's select takes no input then;
    - the select's Back (RQ-112, KO-FINDINGS 9.12): a click on it at rest is
-     the Back command in either; the 1298 recipe's lands on the realm list,
-     as 1298's Back sets its login procedure's +0x21 (00607160, Init
-     005f68e0), the chosen package's on the login (the realm's; 1264's lands
-     on its server list too, a known difference left to the maintainer).
+     the Back command in either, and both land on the realm list, as 1298's
+     Back sets its login procedure's +0x21 (00607160, Init 005f68e0) and
+     1264's +0x35 (00445145, Init 005bd9b0; RQ-123, the maintainer's choice);
+     after it the chosen package's login and realm list draw no copyright
+     line, as 1264's Init hides Group_LogIn alone.
 
 No server or stack.
 """
@@ -409,14 +410,18 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     realm_name = inside
 
     # RQ-108: the copyright line instead of the bar while a login is under way
-    # and on the realm list, where 1264 puts it.
+    # and on the realm list, where 1264 puts it; RQ-123: neither the bar nor
+    # the line through a Back's login and on the list after it (1264's Init
+    # 005bd9b0 hides Group_LogIn alone, never calling SetVisibleLogInUIs).
     states = re.search(r"^FRONT_LOGIN (.*)$", run.stdout, re.M)
-    assert states and states.group(1) == "idle=1,0,0 waiting=0,0,1 realms=0,1,1", (size, states and states.group(1))
+    assert states and states.group(1) == "idle=1,0,0 waiting=0,0,1 realms=0,1,1 back=0,0,0 back_realms=0,1,0", \
+        (size, states and states.group(1))
     # RQ-115 (KO-FINDINGS 9.8): the chosen package's select Exit asks as
     # 1264's bt_exit does (00444e60), in 1264's El_MessageBox_us.uif; RQ-116:
-    # its ESC asks the same, as 1264's OnKeyPress (004454e0) presses bt_exit.
+    # its ESC asks the same, as 1264's OnKeyPress (004454e0) presses bt_exit;
+    # RQ-123: its Back lands on the realm list, as 1264's (00445145).
     exit_box = check_exit(size, run.stdout, LAYOUTS["message"], width, height, shots["message"][0],
-                          shots["message-exit"][0], shots["message-exit"][1], "asks", "login")
+                          shots["message-exit"][0], shots["message-exit"][1], "asks", "realms")
     waiting, line, _ = shots["login-waiting"]
     login = LAYOUTS["login"]
     root_x, root_y = (width - (login["rect"][2] - login["rect"][0])) >> 1, height - (login["rect"][3] - login["rect"][1])
@@ -534,11 +539,11 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     print(f"PASS front-end captures {size}: every screen unscaled where 1264 places it, "
           f"intro box {shots['login'][2][0][1]}, "
           f"realm name {realm_name} px in the list, the copyright line at {line[:2]} ({white} white px) "
-          f"instead of the bar while a login waits and on the realm list, 1-3 characters in the hall, create stands "
+          f"instead of the bar while a login waits and on the realm list (neither after a Back), 1-3 characters in the hall, create stands "
           f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}, the logo's three "
           f"groups (faded {ratio:.2f}), music {frames} PCM frames, restarted, looped and played once; "
           f"the select's Exit and ESC ask yes or no in its box at {exit_box}, ESC and No closing it, ENTER and Yes "
-          f"leaving")
+          f"leaving; Back lands on the realm list")
 
 # RQ-109 (KO-FINDINGS 9.6): the 1298 recipe's select is 1298's own bar,
 # co_CharacterSelect_us.uif, placed as its Load (00606c10) places it, its

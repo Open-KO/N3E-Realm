@@ -15,8 +15,9 @@
 //     char_name=... char_level=... char_class=...
 // then (RQ-108) whether the login layout's login group, realm group and
 // login_closed node draw at rest, with a login under way and on the realm
-// list, each 0 or 1:
-//   FRONT_LOGIN idle=G,R,C waiting=G,R,C realms=G,R,C
+// list, each 0 or 1, and (RQ-123) the same with a login under way and on the
+// realm list after a Back that lands there (the line hidden, BackHold):
+//   FRONT_LOGIN idle=G,R,C waiting=G,R,C realms=G,R,C back=G,R,C back_realms=G,R,C
 // (the shot login-waiting is the login with a login under way, rect= the
 // login_closed node's).
 // then (RQ-111) the select's exit: whether a click on it asks (a package that
@@ -123,11 +124,13 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     shot("select-0", Screen::select, 0, "Local Realm", 0, A::char_name, "");
   }
   std::cout << "FRONT_LOGIN";
-  for (const auto &[label, screen, waiting] :
-       {std::tuple{"idle", Screen::login, false}, std::tuple{"waiting", Screen::login, true},
-        std::tuple{"realms", Screen::realms, false}}) {
+  for (const auto &[label, screen, waiting, back] :
+       {std::tuple{"idle", Screen::login, false, false}, std::tuple{"waiting", Screen::login, true, false},
+        std::tuple{"realms", Screen::realms, false, false}, std::tuple{"back", Screen::login, true, true},
+        std::tuple{"back_realms", Screen::realms, true, true}}) {
     front->jump(screen);
     front->login_waiting(waiting);
+    front->login_line_hidden(back);
     std::cout << " " << label << "=" << front->action_shown(A::login_group) << ","
               << front->action_shown(A::realm_group) << "," << front->action_shown(A::login_closed);
   }
@@ -219,7 +222,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     list.Clear();
     front->jump(Screen::select);
     // RQ-112 (KO-FINDINGS 9.12): a click on Back at rest, and where the
-    // package says it lands: login, or realms (1298's, through a login held
+    // package says it lands: login, or realms (1298's and 1264's, through a login held
     // with the bar hidden from the click).
     std::cout << " back=" << did(click(A::back)) << ":"
               << (front->back_lands() == n3e::FrontSelectBack::realms ? "realms" : "login");

@@ -198,6 +198,7 @@ N3FE version 15 (RQ-116) adds what ESC presses on the select (`select.escape`:
 1298 recipe names it. N3FE version 17 (RQ-112) adds where the select's Back lands
 (`select.back`: `login`, the default, or `realms`, as 1298's Back sets its login
 procedure's `+0x21`, whose Init connects, asks for the server list and hides the
-bar, §9.12); the 1298 recipe names `realms`.
+bar, §9.12); the 1298 recipe names `realms`, and (RQ-123) so does the 1097 recipe,
+as 1264's Back does the same with `+0x35`, its copyright line hidden too.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

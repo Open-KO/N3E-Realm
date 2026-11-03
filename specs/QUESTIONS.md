@@ -1180,3 +1180,16 @@ the 1097 choice names `select.arrows` `draw`: both arrows draw at every slot, an
 press at the end of the row does nothing, as 1264's select (`004448f0`, `00444e60`,
 `004454e0` only place, compare and click `bt_left` and `bt_right`; KO-FINDINGS §9.13).
 No format change. The realm's `hide` stays the default for a recipe that names none.
+**Create read and played (RQ-114, KO-FINDINGS §9.14):** 1298's `005ff920` takes the
+path by the camera's slot and the first empty one (2–5 the turns', 6 `ka_left_right`
+from slot 1 to 2, 7 `ka_right_left` from 2 to 1), shows its in-select create at once
+and arrives a tick after the path's last frame (`005fe5b0` case 6); neither ENTER nor
+ESC skips it. The 1298 recipe now cooks paths 6 and 7 (no format change), and the
+path mode's Create from an occupied slot plays the fly with the bar hidden, unskipped.
+**Default taken:** the realm's create screen opens on the arrival rather than with
+the click, since it is a screen of its own that draws no hall and would hide the fly;
+showing create over the hall while the camera flies, as 1298's in-select create
+(Render `005fb1c0` draws the hall in every state and the new character at the slot
+in state 7), would make the create a state of the select and is proposed as its own
+item. 1264's select has no Create button, so the 1097 choice is unchanged. All four
+of RQ-109's differences now have a decision or a default.

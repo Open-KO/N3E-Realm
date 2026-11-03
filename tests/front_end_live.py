@@ -598,6 +598,33 @@ def repack(base, front_end, into):
 
 
 package_1298 = repack(package, front_end_1298, B / "package-1298")
+# RQ-114 (KO-FINDINGS 9.6, 9.14): btn_create from slot 1 with slots 0 and 1
+# taken flies the camera to slot 2 by 1298's path 6 (005ff920, 005fa670),
+# ka_left_right, the bar hidden, which neither ENTER nor ESC skips; create opens
+# on the arrival, a tick after the path's last frame (005fe5b0 case 6). The
+# capture's frames are 0.25 s apart: the first after the click takes two steps
+# of 7.5 frames (the load's and the tick's), each later one one.
+fly_index = next(i for i, p in enumerate(recipe_1298["select"]["paths"]) if p.get("from") == 1 and p["to"] == 2)
+assert recipe_1298["select"]["paths"][fly_index]["path"].endswith("ka_left_right_camera.n3camera"), fly_index
+assert any(p.get("from") == 2 and p["to"] == 1 and p["path"].endswith("ka_right_left_camera.n3camera")
+           for p in recipe_1298["select"]["paths"]), recipe_1298["select"]["paths"]
+fly_rate, fly_eye, fly_at_rate, fly_at = ko_front_end.camera_path(pinned, recipe_1298["select"]["paths"][fly_index]["path"])
+
+
+def f32(x):
+    return struct.unpack("<f", struct.pack("<f", x))[0]
+
+
+# The path's last frame as the client works it out in floats (select_path.h
+# path_frames, 1298's 0043b480: count x rate x 1/30), then the draws: the
+# first after the click two steps, one each later, until a draw starts on the
+# last frame.
+fly_frames = max(f32(f32(len(keys) * rate) * f32(1 / 30)) for keys, rate in ((fly_eye, fly_rate), (fly_at, fly_at_rate)))
+fly_draws, frame = 1, f32(f32(0 + 7.5) + 7.5)
+while frame != fly_frames:
+    frame, fly_draws = min(fly_frames, f32(frame + 7.5)), fly_draws + 1
+CREATE_FLY = (f"click=select path={fly_index} frames={fly_frames:.6g} ui=0 slot=1 focus=2 arrived=create "
+              f"draws={fly_draws + 1} back=select slot=2")
 bar_tree = ko_hud.parse(pinned.get(recipe_1298["screens"]["select"]["ui"]))
 bar_w = bar_tree["rect"][2] - bar_tree["rect"][0]
 bar_h = bar_tree["rect"][3] - bar_tree["rect"][1]
@@ -653,8 +680,12 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     assert {"message", "message-exit"} <= set(shots), (size, sorted(shots))
     bx, by = check_exit(size, run.stdout, box_tree, width, height, shots["message"][0], shots["message-exit"][0],
                         tuple(map(int, shots["message-exit"][1].split(","))), "none", "realms")
+    flight = re.search(r"^FRONT_CREATE (.*)$", run.stdout, re.M)
+    assert flight and flight.group(1) == CREATE_FLY, (size, flight and flight.group(1), CREATE_FLY)
     print(f"PASS front-end captures 1298 recipe {size}: 1298's select bar at ({x0}, {y0}), unscaled, its ten "
           f"bound nodes where 1298's Load puts them, its info texts filled for a character and empty without; "
           f"its Exit asks yes or no in its centred box at ({bx}, {by}), ESC and No closing it, ENTER and Yes leaving the game; "
-          f"ESC on the select does nothing; Back lands on the realm list")
+          f"ESC on the select does nothing; Back lands on the realm list; Create from an occupied slot flies "
+          f"the camera to the first empty one on ka_left_right ({fly_frames:.6g} frames, the bar hidden, not "
+          f"skipped) and opens create on the arrival")
 print("PASS KO front end graphical")

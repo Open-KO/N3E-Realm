@@ -140,7 +140,9 @@
       {"from": 0, "to": 1, "path": "ChrSelect/Data/ka_center_left_camera.n3camera"},
       {"from": 0, "to": 2, "path": "ChrSelect/Data/ka_center_right_camera.n3camera"},
       {"from": 1, "to": 0, "path": "ChrSelect/Data/ka_left_center_camera.n3camera"},
-      {"from": 2, "to": 0, "path": "ChrSelect/Data/ka_right_center_camera.n3camera"}
+      {"from": 2, "to": 0, "path": "ChrSelect/Data/ka_right_center_camera.n3camera"},
+      {"from": 1, "to": 2, "path": "ChrSelect/Data/ka_left_right_camera.n3camera"},
+      {"from": 2, "to": 1, "path": "ChrSelect/Data/ka_right_left_camera.n3camera"}
     ],
     "slots": [
       {"position": [128, 0, 91], "yaw": 180, "spot": [128, 2, 85.5], "spot_target": [128, 0, 91]},

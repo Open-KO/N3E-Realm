@@ -39,6 +39,11 @@
 // and (RQ-112) what a click on Back at rest does and where the package says
 // it lands: back=asks|back|exit|none:login|realms
 // (the shot message-exit is the select with that box, rect= Yes's);
+// then (RQ-114), for a select that binds btn_create, a click on it from an
+// occupied slot (the block's own comment below):
+//   FRONT_CREATE click=select path=P frames=F ui=0 slot=1 focus=2 arrived=create draws=N back=select slot=2
+//   FRONT_CREATE click=create back=select slot=S
+// (the second without a fly);
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
 // logo-fade half way into the first group's fade-in, with rect= the logo
@@ -241,6 +246,46 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
               << (front->back_lands() == n3e::FrontSelectBack::realms ? "realms" : "login");
     front->jump(Screen::select);
     std::cout << std::endl;
+    // RQ-114 (KO-FINDINGS 9.6): for a select that binds btn_create, a click on
+    // it with slots 0 and 1 taken and slot 1, the row's left end, in focus;
+    // the screen right after; in the path mode, after a frame, the path
+    // playing (its index in the package), its last frame, whether the select
+    // UI shows and the slot the camera is at and the one in focus; then
+    // ENTER and ESC, and frames 0.25 s apart until the screen is no longer
+    // the select (at most 60): the screen and how many frames that took
+    // since the click; then ESC on create and a frame: the camera's slot.
+    if (front->action_rect(A::select_create, width, height)) {
+      list.Clear();
+      for (int i = 0; i < 2; ++i) list.add_characters()->set_id(i + 1);
+      const n3e::front::Context flight{"Local Realm", "", release.version, &list, 0};
+      double t = 100;
+      front->select_at(0);
+      front->draw(width, height, t, flight);
+      click(A::select_create);
+      const auto shown_screen = [&] {
+        return front->screen() == Screen::create ? "create" : front->screen() == Screen::select ? "select" : "other";
+      };
+      std::cout << "FRONT_CREATE click=" << shown_screen();
+      if (front->screen() == Screen::select) {
+        front->draw(width, height, t += .25, flight);
+        const auto turn = front->front_turn();
+        std::cout << " path=" << turn.path << " frames=" << turn.frames << " ui=" << turn.ui << " slot=" << turn.slot
+                  << " focus=" << turn.focus;
+        key(SDLK_RETURN);
+        key(SDLK_ESCAPE);
+        int frames = 1;
+        while (front->screen() == Screen::select && frames < 60) front->draw(width, height, t += .25, flight), ++frames;
+        std::cout << " arrived=" << shown_screen() << " draws=" << frames;
+      }
+      if (front->screen() == Screen::create) {
+        key(SDLK_ESCAPE);
+        front->draw(width, height, t += .25, flight);
+        std::cout << " back=" << shown_screen() << " slot=" << front->front_turn().slot;
+      }
+      std::cout << std::endl;
+      list.Clear();
+      front->jump(Screen::select);
+    }
     if (asked)
       shot("message-exit", Screen::select, 1, "Local Realm", 0, A::yes, "Exit the game?", -1,
            n3e::FrontMessage::exit_confirm);

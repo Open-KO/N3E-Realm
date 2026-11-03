@@ -323,6 +323,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     waiting = line_hidden = false;  // the connection, and any login on it, is gone
     choosing = -1;
     pending_create = false;
+    create_flying = false;
   }
   // KO's message box. During the logo screen it waits for the login (Q82):
   // 1264 connects and logs in only from its login procedure, so nothing it
@@ -399,6 +400,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     message.reset();
     choosing = -1;
     pending_create = false;
+    create_flying = false;
     waiting = line_hidden = false;
     slide = realm_height;
     reset_hall();
@@ -508,6 +510,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       const auto key = e.key.key;
       const bool enter = key == SDLK_RETURN || key == SDLK_KP_ENTER;
       if (key == SDLK_BACKSPACE && state == Screen::create && !name.empty()) name.pop_back();
+      // RQ-114: neither skips btn_create's fly (state 6: ENTER skips in
+      // states 1 and 2 only, the tick's ESC in every state but 6 and 7), and
+      // nothing else takes them while it plays.
+      if ((enter || key == SDLK_ESCAPE) && create_flying) return out;
       // The path mode (1298): ENTER (005fe280) and ESC (the tick 005faf10,
       // the input's +0x270) while the camera moves put it on its path's last
       // frame and arrive (state 5, the UI shown); the click does nothing then.
@@ -574,6 +580,16 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const bool scene = state == Screen::login || state == Screen::realms;
     const double scene_time = scene_clock.tick(scene, now, scene ? music().get() : nullptr, heard);
     if (scene) intro(width, height, scene_time);
+    // RQ-114: btn_create's fly has arrived (1298: 005fe5b0 case 6, on the
+    // tick after the one that reached the path's last frame, sets state 7
+    // and the slot): the realm's create screen opens, the camera left on the
+    // path's last frame behind it.
+    if (state == Screen::select && create_flying && path_camera.ended()) {
+      at_slot = focus;
+      create_flying = false;
+      state = Screen::create;
+      name.clear();
+    }
     if (state == Screen::select) hall(width, height, dt);
     // IsAnimEnd: the start clip has played once, after its blend (1097:
     // 0043ed20 reads the loop count, which 00445bb0 counts only past the
@@ -630,6 +646,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // or ESC that skips to its last frame on the next tick.
   PathCamera path_camera;
   bool skip = false;
+  // RQ-114: btn_create's fly to the first empty slot is playing; create
+  // opens when it arrives.
+  bool create_flying = false;
   // RQ-101: seconds since the logo screen started, and its last frame; its
   // first frame's and the last focus gain's SDL times (0: none yet); a
   // message waiting for the login.
@@ -947,10 +966,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (state == Screen::select) return primary();
       break;
     // btn_create (005ff920, render/select_bar.h): create in the slot in
-    // focus when it is empty, else in the first empty slot (the camera on
-    // it), else KO's "Cannot create additional characters." (row 7675). The
-    // realm's create is a screen of its own, so the camera is put on the slot
-    // rather than flown there.
+    // focus when it is empty, else in the first empty slot, else KO's
+    // "Cannot create additional characters." (row 7675). RQ-114: the path
+    // mode flies the camera there by the path from the slot (005fa670 2-7:
+    // the turns' four, 6 left-right and 7 right-left), the bar hidden, and
+    // create opens on the arrival (1298 shows its in-select create at once,
+    // over the hall; the realm's create is a screen of its own, which draws
+    // no hall, so it would hide the fly; Q87). The rotate mode, or a package
+    // without that path, puts the camera on the slot and opens create.
     case FrontAction::select_create: {
       if (state != Screen::select || choosing >= 0 || turning()) break;
       const int slot = select_create_slot(focus, characters_shown(), int(fe.slots.size()));
@@ -958,7 +981,16 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         show_message(FrontMessage::create_full, "No more characters can be made in this realm.");
         break;
       }
-      if (slot != focus) face(slot);
+      if (slot != focus) {
+        const auto *fly = paths() ? path_to(uint32_t(focus), uint32_t(slot)) : nullptr;
+        if (fly) {
+          path_camera.start(*fly);
+          focus = slot;
+          create_flying = true;
+          break;
+        }
+        face(slot);
+      }
       state = Screen::create;
       name.clear();
       break;

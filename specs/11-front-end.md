@@ -477,7 +477,9 @@ CPU (`make test`):
    a select with no info text and a bar action off the select; the loader takes the
    bar and refuses version 12, a bar action off the select and a select with no
    info text, and puts the bar's nodes where 1298 puts them at each size; Create
-   takes the slot in focus or the first empty one, or none, and Delete's box shows
+   takes the slot in focus or the first empty one, or none (RQ-114: in the path
+   mode the camera flies there by the package's path, create opening on the
+   arrival), and Delete's box shows
    only for a character at rest (`client/render/select_bar.h`, `tests/front_end.cpp`);
    the 1298 recipe binds its bar as 1298 does.
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
@@ -541,7 +543,11 @@ KO (`make live-ko`, needs `assets/ko`):
    click on Back at rest is the Back command on each, and each lands on the
    realm list (RQ-123: the chosen package's as 1264's does); the chosen
    package's login and realm list after a Back show neither the bar nor the
-   copyright line.
+   copyright line. RQ-114: on the 1298 recipe's, a click on Create with slots 0
+   and 1 taken and slot 1 in focus keeps the select, plays the recipe's
+   `ka_left_right` path to slot 2 with the bar hidden, which ENTER and ESC do not
+   skip, and opens create on the tick after its last frame; ESC there returns to
+   the select with the camera at slot 2.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

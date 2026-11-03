@@ -392,8 +392,12 @@ is where create draws the character.
 `client/render/select_bar.h`), select screen only: `select_start` is the
 start ENTER and the centre click make (the character in focus, or create for
 an empty slot; at rest only); `select_create` opens create for the slot in
-focus when it is empty, else for the first empty slot (the camera put on it),
-else shows the message `create_full`; `select_delete` shows the message
+focus when it is empty, else for the first empty slot, else shows the message
+`create_full`. For the first empty slot the camera goes there: in the path
+mode (RQ-114) by the package's path from the slot in focus, when it has one,
+the select UI hidden and ENTER and ESC not skipping it (1298's state 6), and
+create opens on the tick after the path's last frame; otherwise (the rotate
+mode, or no such path) it is put on the slot and create opens at once; `select_delete` shows the message
 `delete_disabled` for a character in focus at rest, and does nothing else. The
 texts `char_name`, `char_level` and `char_class` are the character in focus's
 name, level (decimal) and the `class_name` string while the hall is at rest
@@ -549,10 +553,11 @@ recipe's, as "Moradon" below says, or missing, and marked here:
 - `turn` `path` (`005fa670`, `005fe5b0`): `ChrSelect/Data/ka_lording_camera.n3camera`
   flies the camera in to the centre slot in 6 s as the hall opens;
   `ka_center_left`, `ka_center_right`, `ka_left_center` and `ka_right_center`
-  turn it between the centre and the side slots in 4 s each (1298's paths 2–5;
-  `ka_left_right` and `ka_right_left` are only 1298's in-select create's move,
-  `005ff920`, and are not cooked). The select UI is hidden while a path plays;
-  ENTER or ESC skip to its end.
+  turn it between the centre and the side slots in 4 s each (1298's paths 2–5);
+  `ka_left_right` and `ka_right_left` (paths 6 and 7, 3 s each) take it from
+  side slot to side slot, only for Create from an occupied slot (`005ff920`;
+  RQ-114, `specs/KO-FINDINGS.md` §9.14). The select UI is hidden while a path
+  plays; ENTER or ESC skip a turn's or the entry's to its end, not Create's.
 - Slots, spots and camera (`005fb4f0`, `005f98c0`, `005fb1c0`): the characters at
   (128, 0, 91), (108.7, 0.2, 62.9) and (141.3, 0.3, 68.5) turned 180°, 110° and
   245°; each spot 2 m above and behind its character, pointing at it, phi 1.5; the
@@ -624,11 +629,12 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   row 7675 ("Cannot create additional characters.") and `delete_disabled`
   with row 1501 ("Character deletion has been disabled currently") of the
   pinned tree's `Data/Texts_us.tbl`, untitled, as 1298 posts them. Not 1298's
-  (QUESTIONS Q87): Back returns to the login (1298's to the server list), and
-  Create from an occupied slot puts the camera on the empty slot (1298 flies it
-  there). Both arrows draw at the ends of the row, as 1298's do (RQ-113,
-  `select.arrows` `draw`). Exit
-  asks, as 1298's does (below).
+  (QUESTIONS Q87): Create from an occupied slot opens create when the camera
+  has flown to the empty slot (RQ-114: 1298 shows its in-select create at
+  once, the camera flying behind it; the realm's create is a screen of its
+  own). Back lands on the realm list (RQ-112, `select.back` `realms`, above).
+  Both arrows draw at the ends of the row, as 1298's do (RQ-113,
+  `select.arrows` `draw`). Exit asks, as 1298's does (below).
 - Message box (RQ-111, version 14, `specs/KO-FINDINGS.md` §9.7, binary): 1298's
   own, the one its box manager (`005282a0`) loads for every message, the pinned
   tree's `UI_US/el_messagebox_us.uif` (row 2, column 26 of its

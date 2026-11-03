@@ -270,7 +270,9 @@ return early only in state 1. In state 3, while the start clip plays
 (`0043ed20`), they set state 1 and start a turn (binary, `0043e310`,
 `0043e380`). The realm ignores the arrows from the press of ENTER or the click
 until loading, as it ignores a second start (Q72, decided: the start on the
-press, at rest only).
+press, at rest only). *RQ-120 (§9.10): no input reaches them then: 1097's
+CharacterSelect (`0043ea30`) clears the UI flag that its select's key and message
+handlers test, so its arrows start no turn during the start clip either.*
 
 RQ-077 read the turn's sound and the front-end buttons' sounds (binary, the same
 image and project, output under `build/ghidra/rq077/`, not committed; the
@@ -920,6 +922,49 @@ rest. The 1298 recipe names it; Back and Exit stay on their buttons. While the s
 clip plays it does nothing too, as the realm's `back` does then. No new reading: §9.9's
 static reading of the 1298 binary is its evidence (not run; Wine is approved for 1097
 and 1264 only).
+*RQ-120 (§9.10): 1264's binary clears the flag as §9.9 supposed, and 1097's too: from
+the select request until the main procedure, neither select takes ESC, the arrows or
+a button, so the 1097 choice's `exit` asking then is a known difference.*
+
+### 9.10 1264's select takes no input once a character is chosen (RQ-120, 2026-11-03)
+
+Read statically in §9.1's 1264 image (`ko1264-unpacked.exe`, sha256
+`61e9a086…99e136471`, Ghidra project `build/ghidra/rq096`, `-readOnly -noanalysis`,
+`AuditReference.java` `recover` and `decompile`; the functions the project has not
+marked recovered in memory only; output under `build/ghidra/rq120/`, not committed),
+with `objdump` for the flag's writers and a PE reader for the select procedure's
+vtable; and in §8.1's 1097 dump (`ko1097-unpacked.exe`, sha256 `82abb582…ea8febaf`)
+with `objdump` alone. Not run (no Wine): the static reading answers it. The source
+agrees where named.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The UI flag is the UI manager's operation switch.** `007ad09c` is the UI manager (the source's `s_pUIMgr`), and its byte `+0xb4`, which the select's OnKeyPress (`004454e0`) and ReceiveMessage (`00444e60`) test (§9.8) and the select tick (`00440120`) tests with `+0xbc` before it takes the centre click, is the source's `m_bEnableOperation` (`EnableOperation()`, `EnableOperationSet()`), which the source's `CUICharacterSelect::OnKeyPress` and `ReceiveMessage` test | 1264 `004454e0`, `00444e60`, `00440120`; source `UIManager.h`, `UICharacterSelect.cpp` | binary; source |
+| **Its writers.** Every byte store to `+0xb4` within six instructions of a load of `007ad09c`: the select's Init (`0043f530`, slot 7 of its vtable `00648e84`; 0, after creating sound 2501 at `0043f5d4`), the all-character answer in its ProcessPacket (`004443f0`, slot 2; 1, for `0x0c` after `00444060`), MsgSend_CharacterSelect (`004443d0`, slot 6; 0), CharacterSelect (`00443570`; 0), CharacterSelectFailed (`004436a0`; 1), create's send (`0043a340`; 0) and answer (`0043aa10`), a send at `005bb730` (0; the source's nation select, not read further) and ProcActiveSet (`005f7f30`; 1). They are the source's `EnableOperationSet` calls one for one | 1264 `0043a7f6`, `0043aaa7`, `0043aab3`, `0043f5eb`, `00443654`–`0044368e`, `004437c2`, `004443da`, `0044445d`, `005bb756`, `005f7f4a`; source `GameProcCharacterSelect.cpp`, `GameProcCharacterCreate.cpp`, `GameProcNationSelect.cpp`, `GameProcedure.cpp` | binary; source |
+| **ENTER clears it as it sends.** CharacterSelectOrCreate (`00444520`, ENTER from OnKeyPress; the tick runs the same body inline for the centre click) closes any box (`005f7fe0(-1)`), activates create for an empty slot (`005f7f30(007ad0b8)`), else fills the request and calls the procedure's slot 6, `004443d0`: the base's send (`005f90d0`), then the flag 0. The source's `MsgSend_CharacterSelect` (`EnableOperationSet(false)`) | 1264 `00444520`, `004443d0`, `00440120`; vtable `00648e84` | binary; source |
+| **The answer keeps it clear and starts the clip.** The select answer (slot 5, `00442690`: the base's `005f9440`) calls CharacterSelect (`00443570`) on success: from state 2 with a character in the slot it sets state 3, clip 1 with 0.6 s (`0x3f19999a`, as 1097's `0043ea30`) and the spot; on every path it sets `+0x2d9` (the source's `m_bReceivedCharacterSelect`) and the flag 0. On failure `004436a0` posts a box (`005f7f80`) and sets the flag 1 | 1264 `00442690`, `00443570`, `004436a0` | binary |
+| **Nothing sets it again in the select.** State 3's tick (`00443810`, from `00443020`) plays the clip until its loop count (`+0x1e0` or `+0x208`) reaches 1, then releases the BGM (`004347a0(007ad084)`) and activates the main procedure (`005f7f30(007ad0c0)`); ProcActiveSet sets the flag 1 and calls `0050cba0` (the source's `MessageBoxClose(-1)`, not read) as it changes the procedure | 1264 `00443810`, `00443020`, `005f7f30` | binary |
+| **So no select input reaches it meanwhile.** The key pass (`005f97a0`, the procedure's slot 10, called by the base tick `005f7990` with 1) gives a shown box the keys first and otherwise the focused UI (the manager's `+0xb8`), each through OnKeyPress (vtable `+0x60`), over the input's key-press words from `+0x26c` (so ESC's is `+0x270`, as in 1298, §9.9); nothing else takes a key it leaves. With the flag clear the select's OnKeyPress returns 0 for every key and its ReceiveMessage does nothing, so from the request until the main procedure ESC asks nothing, the arrows turn nothing, Exit, Back, Delete and the arrow buttons do nothing and the centre click is not taken | 1264 `005f97a0`, `005f7990`, `004454e0`, `00444e60` | binary |
+| **The one key that works then is the tick's ENTER.** After the key pass, with no UI key taken (`005f9a10`: `007ad12e` and `007ad12f` clear) and the input's `+0x2dc` (ENTER) pressed, the tick calls `004426d0` (the source's ProcessOnReturn), which once the answer has come (`+0x2d9`) and outside a turn (state not 1) releases the BGM and goes to the main procedure with "Loading data...": a second ENTER skips the clip, as 1097's `0043db70` does (§8.1) | 1264 `00440120`, `005f9a10`, `004426d0`; source `GameProcCharacterSelect.cpp` `Tick` | binary; source |
+| **1097 is the same.** Its UI manager's flag is `006e0474 + 0xac`: the select's key handler (`00440690`) and message handler (`0043ff00`, `0043ff37`–`0043ff43`) return 0 with it clear; its CharacterSelect (`0043ea30`) clears it on each of its three paths after setting `+0x2d9` (`0043eb1c`, `0043eb35`, `0043eb4d`), its send (`0043f7d0`) after calling the base's (`00546b30`), as 1264's do; its failure sets it (`0043eccd`) and ProcActiveSet (`00545afa`). Its key handler's table (`0044070c`, bytes from `00440720`) sends ESC to a click on its child `+0xb0` (not named here), ENTER and keypad ENTER to `0043f860`, LEFT to `+0xa8` and RIGHT to `+0xac`. So 1097's arrows cannot start a turn while the start clip plays: DoJobLeft and DojobRight would (§8.2), but their only direct callers (`0043ff77`, `0043ff8f`; 1264's `00442e60` and `00442ed0` likewise only `00444ed7`, `00444eef`) are the message handlers, which the flag stops | 1097 `00440690`, `0043ff00`, `0043ea30`, `0043f7d0`, `0043eccd`, `00545afa`; `objdump` of both images | binary |
+
+**The realm (`client/render/front_end.h`).** The realm starts the clip on the press
+(Q72), so its start clip spans KO's request, answer and clip. While it plays
+(`choosing` set) the arrows, Create, Back and a second start already do nothing, as
+KO's. ESC (`escape()`) and a click on Exit (`act(FrontAction::exit)`) do not check it:
+with the 1097 choice's `select.escape` `exit` and its `exit_confirm`, either asks row
+1502 then, and Yes quits during world entry; with the 1298 recipe's `none` ESC does
+nothing but its bar's Exit still asks (whether 1298 clears its flag `00818994 + 0xb4`
+then was not read).
+
+**Decides (RQ-120):** 1264 (and 1097) take no select input from the select request
+until the main procedure: ESC, the arrows and every select button do nothing while
+the start clip plays, which the later source's `EnableOperationSet(false)` in
+`MsgSend_CharacterSelect` and `CharacterSelect` says too. The realm's ESC and Exit
+asking then is a known difference, unchanged here: making them do nothing is a
+look-and-feel change to the offered front end, proposed as its own item for the
+maintainer. The 1097 reading also qualifies §8.2's arrows from state 3. The tick's
+second-ENTER skip (Q72, option (b)) stays as Q72 decided.
 
 ## Not re-derived here
 
@@ -946,4 +991,4 @@ notes.
 | Q82 | §9.2 (RQ-101): 1264's logo procedure runs first, once a process: three groups fading in, holding and fading out on black over 12 s, `Snd\bless.wav` from 1 s faded out over 4 s from the third, any key skipping to the login, the cursor hidden; the 1097 choice shows it (N3FE version 9). §9.3 (RQ-106): KO draws every front-end layout unscaled, placed by the screen's size (the login on the bottom edge, the server list at the top-left, the select's buttons on the bottom edge, create, loading, the message box and the logo centred), the 3D scenes filling the screen; the realm does the same (N3FE version 11). |
 | Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. §9.2 (RQ-102): 1264 titles its login answer's and its create failures; the 1097 choice gives the realm's matching messages KO's title and wording (N3FE version 10) and leaves the rest untitled. |
 | Q75 | §9.1 (RQ-096): 1264's login tick keeps 1097's timer (`007ac9d0`, written only by the tick), so in both a return to the login is silent until it passes 21.66 s. RQ-096 made the realm do the same; RQ-105 (maintainer) starts the track at once on every entry instead and keeps the carried clock off by default. |
-| Q72 | §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077): 1097's arrows also start a turn from state 3, during the start clip; the realm ignores them then. |
+| Q72 | §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077): 1097's arrows also start a turn from state 3, during the start clip; the realm ignores them then. §9.10 (RQ-120): 1097 and 1264 clear the UI flag from the select request until the main procedure, so no arrow, ESC or button reaches the select during the clip; the realm's ESC and Exit still ask then (a known difference, proposed as its own item). |

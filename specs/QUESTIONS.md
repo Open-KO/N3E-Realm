@@ -1175,3 +1175,8 @@ the realm's and the default, or `draw`, KO's); the 1298 recipe (not offered) nam
 as RQ-116 was chosen (a look-and-feel difference to the offered front end); naming
 `draw` there, as 1264 draws them, is proposed as its own item. Create from an
 occupied slot stays as above.
+**1097 arrows decided (RQ-124, the maintainer, 2026-11-03: "Draw both, as 1264"):**
+the 1097 choice names `select.arrows` `draw`: both arrows draw at every slot, and a
+press at the end of the row does nothing, as 1264's select (`004448f0`, `00444e60`,
+`004454e0` only place, compare and click `bt_left` and `bt_right`; KO-FINDINGS §9.13).
+No format change. The realm's `hide` stays the default for a recipe that names none.

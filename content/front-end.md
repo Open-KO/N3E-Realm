@@ -751,10 +751,11 @@ box and loading are 1264's.
   as 1264's lands on its server list (RQ-112, §9.12, binary: `bt_back` sets the
   login procedure's `+0x35` at `00445145`, whose Init `005bd9b0` connects, asks
   for the list and hides `Group_LogIn` alone), the maintainer's choice
-  (2026-11-03, "Match 1264", RQ-123). The arrow with no neighbour to turn to is hidden
-  (`select.arrows` absent: the realm's `hide`), though 1264's select draws both
-  (RQ-113, §9.13, binary: `004448f0`, `00444e60` and `004454e0` only place,
-  compare and click them), a difference left to the maintainer.
+  (2026-11-03, "Match 1264", RQ-123). Both arrows draw at the ends of the row
+  (`select.arrows` `draw`), where a press does nothing, as 1264's select draws
+  both (RQ-113, §9.13, binary: `004448f0`, `00444e60` and `004454e0` only place,
+  compare and click them), the maintainer's choice (2026-11-03, "Draw both, as
+  1264", RQ-124).
 - Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest fixed
   on, every other race, class, face, hair and stat arrow fixed disabled, the
   bonus points and stat highlights hidden (Q52).

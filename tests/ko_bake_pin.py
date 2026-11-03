@@ -415,9 +415,15 @@ CLIENT = Path("assets/ko")
 # version word changes; the release index follows. Default
 # features aa15d780... -> b05598b2...; classic c14a2a14... -> eccd3ff2...; 1097
 # e20d4349... -> 45398707.... The plain cooks and the homelands keep their pins.
+# RQ-124 (KO-FINDINGS 9.13) changed them again: the 1097 recipe's select.arrows
+# is draw (the maintainer, 2026-11-03: "Draw both, as 1264"). Against RQ-113's
+# cooks only front-end.bin (53,803,176 bytes, one byte differs: that word),
+# provenance.json, recipe.json and the release index change. Default features
+# b05598b2... -> a0c725e5...; classic eccd3ff2... -> 5d717e87...; 1097
+# 45398707... -> 68509480.... The plain cooks and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "b05598b2281c72dd906d209aaea2c808aa7ca875d04aec41e905c6e5b7c86637"),
+    "features": (["--features"], "a0c725e56228a0202b58df3349e58c80f2a43d1771712046f82d5033e8b823ef"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -438,13 +444,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "eccd3ff20a53e6c93e6035a08e8d2b11795e4fc1e79ead4b70522ec012740e19"),
+    "features": (["--features"], "5d717e878a042c27800d4a671f79afca9cec9c720f9ad2c1f4784ecb3fe5d825"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "4539870714baa1ba646013a845f00873736878cc1329a69f2e16321d2014975b"),
+    "features": (["--features"], "68509480f23715f95412d2dd0b471605227e5b55e21f4bb93cfd3842c9ea8d03"),
 }
 
 

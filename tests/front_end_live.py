@@ -32,8 +32,8 @@ from the player's own KO data.
      and the line, and from the realm list only within the server group;
    - select: 1, 2 and 3 characters drawn, each box non-empty and inside the view;
    - the select arrows at the ends of the row (RQ-113, KO-FINDINGS 9.13): the
-     chosen package hides the arrow with no neighbour (select.arrows hide), the
-     1298 recipe draws both, as no KO select hides one;
+     chosen package and the 1298 recipe draw both (select.arrows draw), as no
+     KO select hides one (RQ-124: the 1097 choice as 1264's);
    - create: the create model stands (KO's InitChr model breathing, not the hall's
      seated clip): its box is clearly taller than wide; and the stone background
      shows no seams (KO's UI point sampling on whole pixels): no column of a band
@@ -419,11 +419,12 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     states = re.search(r"^FRONT_LOGIN (.*)$", run.stdout, re.M)
     assert states and states.group(1) == "idle=1,0,0 waiting=0,0,1 realms=0,1,1 back=0,0,0 back_realms=0,1,0", \
         (size, states and states.group(1))
-    # RQ-113: the chosen package keeps the realm's arrow rule (select.arrows
-    # hide): the arrow with no neighbour is hidden at each end of the row,
-    # though 1264's own select draws both (KO-FINDINGS 9.13).
+    # RQ-124 (the maintainer, 2026-11-03: "Draw both, as 1264"): the chosen
+    # package draws both arrows at each end of the row (select.arrows draw), as
+    # 1264's select never hides one (004448f0, 00444e60, 004454e0; KO-FINDINGS
+    # 9.13).
     arrows = re.search(r"^FRONT_ARROWS (.*)$", run.stdout, re.M)
-    assert arrows and arrows.group(1) == "left=0,1 right=1,0", (size, arrows and arrows.group(1))
+    assert arrows and arrows.group(1) == "left=1,1 right=1,1", (size, arrows and arrows.group(1))
     # RQ-115 (KO-FINDINGS 9.8): the chosen package's select Exit asks as
     # 1264's bt_exit does (00444e60), in 1264's El_MessageBox_us.uif; RQ-116:
     # its ESC asks the same, as 1264's OnKeyPress (004454e0) presses bt_exit;

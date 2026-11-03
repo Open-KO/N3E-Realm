@@ -1314,11 +1314,11 @@ assert recipe_1298["select"]["escape"] == "none", recipe_1298["select"]
 assert recipe_1298["select"]["back"] == "realms", recipe_1298["select"]
 assert recipe_1097["select"]["back"] == "realms", recipe_1097["select"]
 # RQ-113 (KO-FINDINGS 9.6): 1298 never hides an arrow, so the 1298 recipe
-# draws both; the 1097 choice keeps the realm's rule, hiding the arrow with no
-# neighbour, though 1264's own select draws both too (9.13), a difference left
-# to the maintainer.
+# draws both. RQ-124 (the maintainer, 2026-11-03: "Draw both, as 1264"): so
+# does the 1097 choice, as 1264's select only places, compares and clicks
+# bt_left and bt_right (004448f0, 00444e60, 004454e0; 9.13).
 assert recipe_1298["select"]["arrows"] == "draw", recipe_1298["select"]
-assert "arrows" not in recipe_1097["select"], recipe_1097["select"]
+assert recipe_1097["select"]["arrows"] == "draw", recipe_1097["select"]
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
     "a bottom placement of another key": {**PLACE_SPECS, "message": {"place": {"bottom": 10, "x": 1}}},

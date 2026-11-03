@@ -2676,7 +2676,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 14, "front end version");
+  need(r.u() == 15, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2908,6 +2908,11 @@ FrontEnd load_front_end(const Release &release) {
   const auto mode = r.u();
   need(mode <= uint32_t(FrontClipMode::loop), "front end front-clip mode");
   fe.front_clip = FrontClipMode(mode);
+  // Version 15 (RQ-116): what ESC presses on the select at rest, 0 back or
+  // 1 exit.
+  const auto escape = r.u();
+  need(escape <= uint32_t(FrontSelectEscape::exit), "front end select escape");
+  fe.select_escape = FrontSelectEscape(escape);
   // Version 7 (RQ-087): the turn mode, 0 rotate or 1 path, and the path
   // mode's camera paths (none in the rotate mode): each from a slot (or
   // kEntry) to another, then its eye keys and its at keys, each set a rate

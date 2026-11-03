@@ -51,7 +51,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 14
+VERSION = 15
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -77,6 +77,11 @@ FRONT_CLIP = {"hover": 0, "loop": 1}
 # names for the turn (`select.paths`), and an entry path into slot 0 as the
 # hall opens.
 TURN = {"rotate": 0, "path": 1}
+# What ESC presses on the select at rest (version 15, `select.escape`, RQ-116):
+# `back`, the realm's (the default), or `exit`, 1264's: its select's OnKeyPress
+# (004454e0) sends DIK_ESCAPE to ReceiveMessage as a click on bt_exit, so ESC
+# asks the exit question as the Exit button does (specs/KO-FINDINGS.md 9.8).
+ESCAPE = {"back": 0, "exit": 1}
 # A path's bounds (the client's): paths per package, keys per set, keys a second.
 MAX_PATHS = 8
 MAX_PATH_KEYS = 4096
@@ -1292,8 +1297,8 @@ def turn_paths(assets, config, slots):
 def select_scene(assets, textures, config, work, report=None):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
     slots (position, yaw, the eye where the camera's turn to the slot ends
-    and its spot light), the spot's growth rate, the front-clip mode, the
-    turn mode and its paths (version 7), the hall, the zone and the fog
+    and its spot light), the spot's growth rate, the front-clip mode, what
+    ESC presses (version 15), the turn mode and its paths (version 7), the hall, the zone and the fog
     (version 8), the character with its clips and plugs. `report` receives
     the zone's provenance."""
     camera = config["camera"]
@@ -1305,6 +1310,9 @@ def select_scene(assets, textures, config, work, report=None):
     turn = config.get("turn")
     if type(turn) is not str or turn not in TURN:
         raise ValueError("front-end select.turn: one of %s" % ", ".join(TURN))
+    escape = config.get("escape", "back")
+    if type(escape) is not str or escape not in ESCAPE:
+        raise ValueError("front-end select.escape: one of %s" % ", ".join(ESCAPE))
     if turn == "path":
         if any("turn_end" in slot for slot in config["slots"]):
             raise ValueError("front-end select.turn path: a slot's turn ends with its path, no turn_end")
@@ -1342,6 +1350,7 @@ def select_scene(assets, textures, config, work, report=None):
     out = (camera_record(camera) + lights(assets, config["lights"], config.get("light_manager")) +
            f(vector(config["ambient"], 3)))
     out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND]) + u(FRONT_CLIP[mode])
+    out += u(ESCAPE[escape])
     out += u(TURN[turn]) + path_records
     out += hall(assets, textures, config.get("hall"))
     # Version 8 (RQ-095): the zone the hall draws (1298's karus_intro) and the

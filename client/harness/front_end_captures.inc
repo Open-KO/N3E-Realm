@@ -27,6 +27,8 @@
 //   FRONT_EXIT asks=0 command=exit
 //   FRONT_EXIT asks=1 shown=O,Y,N plain=O,Y,N esc=closed:none enter=closed:exit
 //     keypad=... no=... yes=... ok=open:none
+// and (RQ-116) what ESC on the select at rest does, appended to that line:
+// select_esc=asks|back|exit|none
 // (the shot message-exit is the select with that box, rect= Yes's);
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
@@ -190,6 +192,16 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       answer("yes", [&] { return click(A::yes); });
       answer("ok", [&] { return click(A::ok); });
     }
+    // RQ-116: ESC on the select at rest: asks (the exit question, 1264's
+    // OnKeyPress 004454e0 pressing bt_exit), back, exit or none.
+    front->jump(Screen::select);
+    const auto escaped = key(SDLK_ESCAPE);
+    std::cout << " select_esc="
+              << (front->message_kind() == n3e::FrontMessage::exit_confirm ? "asks"
+                  : escaped.command == n3e::front::Command::back           ? "back"
+                  : escaped.command == n3e::front::Command::exit           ? "exit"
+                                                                           : "none");
+    front->jump(Screen::select);
     std::cout << std::endl;
     if (asked)
       shot("message-exit", Screen::select, 1, "Local Realm", 0, A::yes, "Exit the game?", -1,

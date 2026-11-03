@@ -82,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 13, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 15, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -188,6 +188,13 @@ replace the panels when the client has a Discord realm config.
   (KO-FINDINGS §9.7, §9.8); without it, and on the login, Exit leaves at once.
   The 1298 recipe names it with the pinned tree's row 1502, the 1097 recipe
   with the 1264 install's (RQ-115).
+- **The select's ESC** (N3FE version 15, RQ-116). What ESC presses on the select
+  at rest: `back` (the realm's, the default) or `exit`, as a click on it, so it
+  asks the exit question where the package names `exit_confirm`. 1264's select
+  presses `bt_exit` for ESC (OnKeyPress `004454e0`, `specs/KO-FINDINGS.md` §9.8),
+  and the maintainer chose that for the 1097 choice (2026-11-02): its recipe
+  names `exit` (`select.escape`), and its Back stays on its button. The 1298
+  recipe keeps `back`. In the path mode ESC while a path plays still skips it.
 - **The placement** (N3FE version 11, RQ-106, Q82). KO draws its front end on the
   screen's own pixels, never scaled, and places each layout's root and some of its
   nodes by the viewport's size each time the layout loads (`specs/KO-FINDINGS.md`
@@ -268,14 +275,14 @@ client applies no moves and scales the canvas uniformly to fit the window, centr
 Hit tests and the cursor use the pixels the UI is drawn on. The system cursor
 stays. Mouse clicks and hover drive the button states; keyboard
 works too (ENTER = the screen's primary action, ESC = back/cancel, arrows =
-prev/next).
+prev/next; on the select ESC is the package's choice, below).
 
 | State | Shows | Leaves on |
 |---|---|---|
 | logo | only with a logo section, first, once a process (1264's WinMain); each group alone in turn on black, fading in, holding and fading out; the system cursor hidden with the flag; its track from the delay, faded out from its fade group | the last group's end, or a key pressed while it shows with the skip flag (not a click) → login, whose own track starts at once and whose first frame starts the realm connection. A reset connection leaves it playing; a message waits for the login. |
 | login | intro scene looping; login bar; while a login is under way (from the press, or a stored session's login, to the answer) the bar hidden and the package's `login_closed` node shown instead, when the layout binds one (KO's copyright line, RQ-108, Q85; RQ-110: the 1298 recipe binds none, 1298's login having no line, so it shows neither) | `login` (the Login button or ENTER) → the flow (spec 02, unchanged) → `LoginResult` → realms; a failure shows the bar again. A press while the client is still connecting is held and starts the flow once connected. A stored session skips the browser as today. Started with `--logout` (spec 02, RQ-068), the client first ends the stored session; a press meanwhile is held until the realm answers. The KO screens have no logout of their own (Q61, Q74). |
 | realms | intro; the server group with the realm's name from `realm.json`; the `login_closed` node (RQ-108) | `realm_connect` → select. The connection and login already exist; this is KO's step, kept (Q54). |
-| select | hall; up to 3 characters with the realm's player model and default looks, each standing on clip 0's first frame; the one in front, at rest, plays clip 0 (`pre_select`) once while the pointer is in `DoProcPreselect`'s centre rect and holds its last frame, and clip 2 (`dummy`, clip 0's first frame) otherwise, each change blending over the clip's own blend time from the frame reached, the new clip held on its first frame meanwhile; the front slot's spot widens at the package's rate while the pointer is there, narrows when it leaves and is off at 0; the info text (char_info) shows only while the pointer is there. This is the 1097 client's hall for this asset set (KO-FINDINGS §8.1, Q71), not 1298's | At rest only (not while the camera turns or the start clip plays): ENTER or a click on the character in front (`PtInRect` on the centre rect) → `SelectCharacter`, the spot at its full theta, its clip 1 blended in over the package's start blend (Moradon: 1097's 0.6 s) on its first frame and played to the end (`IsAnimEnd`, after the blend), → loading; a refusal returns it to the hover or rest clip; ENTER on an empty slot → create; `back` → login (drops the connection). Prev/next (the arrow buttons, LEFT, RIGHT) turns the camera one slot, the short way about `at` at 1.2 rad/s, to where 1097's check ends the turn (left to right: 1, 0, 2; nothing at the end of the row or while it turns; KO-FINDINGS §8.2); while it turns nothing is ticked and the spot is off. |
+| select | hall; up to 3 characters with the realm's player model and default looks, each standing on clip 0's first frame; the one in front, at rest, plays clip 0 (`pre_select`) once while the pointer is in `DoProcPreselect`'s centre rect and holds its last frame, and clip 2 (`dummy`, clip 0's first frame) otherwise, each change blending over the clip's own blend time from the frame reached, the new clip held on its first frame meanwhile; the front slot's spot widens at the package's rate while the pointer is there, narrows when it leaves and is off at 0; the info text (char_info) shows only while the pointer is there. This is the 1097 client's hall for this asset set (KO-FINDINGS §8.1, Q71), not 1298's | At rest only (not while the camera turns or the start clip plays): ENTER or a click on the character in front (`PtInRect` on the centre rect) → `SelectCharacter`, the spot at its full theta, its clip 1 blended in over the package's start blend (Moradon: 1097's 0.6 s) on its first frame and played to the end (`IsAnimEnd`, after the blend), → loading; a refusal returns it to the hover or rest clip; ENTER on an empty slot → create; `back` → login (drops the connection); ESC presses `back`, or `exit` where the package says so (RQ-116: the 1097 choice, as 1264's select presses `bt_exit` for ESC). Prev/next (the arrow buttons, LEFT, RIGHT) turns the camera one slot, the short way about `at` at 1.2 rad/s, to where 1097's check ends the turn (left to right: 1, 0, 2; nothing at the end of the row or while it turns; KO-FINDINGS §8.2); while it turns nothing is ticked and the spot is off. |
 | create | KO's create screen; the create model breathing in `char_view` (standing, no weapon); name field; race and class shown, fixed (Q52) | `create_confirm` → `CreateCharacter` → `Characters` → select, the new character in front; a refusal in the message box in the server's wording, under the package's title for it (RQ-102); `back` → select. |
 | loading | the loading art; `progress` by real stages: the package and its textures (loaded at start, 2/3), the first `World` (1); `version` shows the client version | the first `World` → in game after the bar shows full. |
 
@@ -488,7 +495,8 @@ KO (`make live-ko`, needs `assets/ko`):
    frame drawing Yes and No where an OK box draws OK; ESC and No close it, ENTER,
    the keypad's ENTER and Yes leave, the hidden OK does nothing. RQ-115: the
    chosen package's (1097) Exit asks the same in 1264's box, checked the same
-   way.
+   way. RQ-116: ESC on the chosen package's select at rest asks the same
+   question; on the 1298 recipe's it is Back.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

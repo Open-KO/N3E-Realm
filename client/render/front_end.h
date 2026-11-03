@@ -841,7 +841,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       enter_select();
       return {};
     }
-    if (state == Screen::select) return act(FrontAction::back);
+    // RQ-116 (version 15): 1264's select presses bt_exit for ESC (OnKeyPress
+    // 004454e0 -> ReceiveMessage 00444e60, as a click), so with the package's
+    // `exit` ESC asks the exit question; otherwise it is the realm's back.
+    if (state == Screen::select)
+      return act(fe.select_escape == FrontSelectEscape::exit ? FrontAction::exit : FrontAction::back);
     return act(FrontAction::exit);
   }
   Output act(FrontAction action) {

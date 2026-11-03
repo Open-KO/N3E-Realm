@@ -1110,3 +1110,8 @@ its `El_MessageBox_us.uif`, whose Yes quits and No closes as 1298's do; so the 1
 choice now names `exit_confirm` with the 1264 install's row 1502 and binds that box's
 `btn_yes` and `btn_no`, and its Exit asks too. 1264's ESC on the select also presses
 Exit (the realm's ESC there is Back), which is proposed as its own item.
+**ESC decided (RQ-116, the maintainer, 2026-11-02: "Ask to exit, as 1264"):** 1264's
+select OnKeyPress (`004454e0`) presses `bt_exit` for ESC, so N3FE version 15 lets a
+package say what ESC presses on the select (`select.escape`: `back`, the default, or
+`exit`); the 1097 choice names `exit` and its ESC asks the exit question, Back staying
+on its button. The 1298 recipe keeps `back` (1298's select keys not read).

@@ -920,11 +920,11 @@ impl Release {
 }
 
 /// front-end.bin's header (spec 11, content/front-end.md): the N3FE version
-/// this server's client reads (14 since RQ-111: the message box's yes and no
-/// and the select's exit question, after RQ-109's select bar actions) and the
+/// this server's client reads (15 since RQ-116: what ESC presses on the
+/// select, after RQ-111's yes/no box and the select's exit question) and the
 /// character slot count, 1 to 3.
 fn front_end_slots(mut p: Reader) -> Result<u32> {
-    if p.take(4)? != b"N3FE" || p.u()? != 14 {
+    if p.take(4)? != b"N3FE" || p.u()? != 15 {
         return Err(bad("front end magic/version"));
     }
     let slots = p.u()?;
@@ -945,9 +945,9 @@ mod front_end_tests {
         Reader::from_bytes(b)
     }
     #[test]
-    fn reads_the_slot_count_of_version_14() {
+    fn reads_the_slot_count_of_version_15() {
         for slots in 1..=3 {
-            assert_eq!(front_end_slots(header(b"N3FE", 14, slots)).unwrap(), slots);
+            assert_eq!(front_end_slots(header(b"N3FE", 15, slots)).unwrap(), slots);
         }
     }
     #[test]
@@ -993,17 +993,21 @@ mod front_end_tests {
             "version 13 (no yes/no box)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 15, 3)).is_err(),
-            "version 15"
+            front_end_slots(header(b"N3FE", 14, 3)).is_err(),
+            "version 14 (no select escape)"
         );
-        assert!(front_end_slots(header(b"N3FX", 14, 3)).is_err(), "magic");
-        assert!(front_end_slots(header(b"N3FE", 14, 0)).is_err(), "no slots");
         assert!(
-            front_end_slots(header(b"N3FE", 14, 4)).is_err(),
+            front_end_slots(header(b"N3FE", 16, 3)).is_err(),
+            "version 16"
+        );
+        assert!(front_end_slots(header(b"N3FX", 15, 3)).is_err(), "magic");
+        assert!(front_end_slots(header(b"N3FE", 15, 0)).is_err(), "no slots");
+        assert!(
+            front_end_slots(header(b"N3FE", 15, 4)).is_err(),
             "four slots"
         );
         assert!(
-            front_end_slots(Reader::from_bytes(b"N3FE\x0e\0\0".to_vec())).is_err(),
+            front_end_slots(Reader::from_bytes(b"N3FE\x0f\0\0".to_vec())).is_err(),
             "truncated"
         );
     }

@@ -19,6 +19,7 @@
 // (client/render/front_login.h), as 1264's SetVisibleLogInUIs shows them.
 // RQ-111: the message box's styles, keys and answers (client/render/message_box.h)
 // as 1298's CUIMessageBox shows and answers an OK box and the yes/no exit.
+// RQ-116: a loaded package whose select ESC presses exit is printed.
 #include "assets/assets.h"
 #include "assets/front_place.h"
 #include "render/front_login.h"
@@ -435,6 +436,9 @@ int main(int argc, char **argv) {
         if (const auto &m = fe.messages[k]; m.named)
           std::cout << "message " << release.root.filename().string() << ": " << k << " title='" << m.title
                     << "' replaces=" << m.replaces << " text='" << m.text << "'\n";
+      // RQ-116: a select whose ESC presses exit, not back.
+      if (fe.select_escape != n3e::FrontSelectEscape::back)
+        std::cout << "escape " << release.root.filename().string() << ": " << uint32_t(fe.select_escape) << "\n";
       // RQ-106: placed NAME: layout=L size=WxH node=I rect=x0,y0,x1,y1
       if (release.root.filename().string().starts_with("ok-placed"))
         for (const auto [w, h] : {std::pair{1024, 768}, {1280, 1024}, {1600, 1200}, {1281, 1025}, {800, 600}}) {

@@ -13,8 +13,9 @@ Online"), each message box message's title and wording (version 10,
 RQ-102, Q81), where each layout's nodes go on a window of its own size
 (version 11, RQ-106, Q82), the action `login_closed`, a login node drawn
 only while the login group is not (version 12, RQ-108, Q85), 1298's select
-bar's actions and two messages (version 13, RQ-109), and the message box's
-Yes and No with the select's exit question (version 14, RQ-111).
+bar's actions and two messages (version 13, RQ-109), the message box's
+Yes and No with the select's exit question (version 14, RQ-111), and what ESC
+presses on the select (version 15, RQ-116).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -28,7 +29,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 14, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 15, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -60,7 +61,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 7. The select scene: camera, lights, global ambient, the slots (count equal to
    the character slots), the spot's growth rate (version 4: theta per second,
    above 0 and at most 100), the front-clip mode (version 6: 0 hover, 1 loop;
-   below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
+   below), the select's ESC (version 15: 0 back, 1 exit; below), the turn mode (version 7: 0 rotate, 1 path; below) and a path count
    (0 in the rotate mode, 1–8 in the path mode) and the paths, the hall (part
    count ≤64, each a mesh; version 7: it may be 0), the zone (version 8: a
    mesh count, 0–256, 0 when the hall has parts, each a zone mesh; below), the
@@ -236,6 +237,15 @@ address mode); the font atlases and the moon linear.
     hidden. The centre rect only takes the click.
 
   While the camera turns the spot is off and keeps its theta, in both modes.
+- The select's ESC (version 15, RQ-116; `client/render/front_end.h`): what ESC
+  presses on the select, the camera at rest (in the path mode ESC while a path
+  plays still skips it, below). 0, back (the realm's): the select's `back`.
+  1, exit (1264's: its select's OnKeyPress, `004454e0`, sends `DIK_ESCAPE` to
+  ReceiveMessage as a click on `bt_exit`, `specs/KO-FINDINGS.md` §9.8): the
+  select's `exit`, as a click on it, so a package that names `exit_confirm`
+  asks the exit question and one that does not leaves at once. The node bound
+  to `back` keeps its click either way. The recipe names it
+  (`select.escape`: `back`, the default, or `exit`).
 - Turn mode (version 7, RQ-087): how the camera goes from slot to slot.
   - 0, rotate (1097, `0043e4e0`; the slot above): the eye turns about `at`.
     No paths; the select UI shows throughout.
@@ -311,7 +321,8 @@ flag other than 0 or 1 or a text that does not replace, a node bound to
 `select_start`, `select_create`, `select_delete`, `char_name`, `char_level` or
 `char_class` on a screen other than the select (version 13), a node bound to
 `yes` or `no` on a screen other than the message box, or `exit_confirm` named
-without nodes bound to both on it (version 14), placement flags
+without nodes bound to both on it (version 14), a select ESC other than 0 or 1
+(version 15), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
 file does not have, a rule of another kind or outside its bounds, a keep rule
 with a or c not 0, moves that do not leave the canvas rects where the file puts
@@ -353,7 +364,8 @@ presses it. Every press closes the box; Yes on `exit_confirm` also leaves the
 game (`BEHAVIOR_EXIT`, `00526d00`). A package that names `exit_confirm` (section
 11) makes the select's `exit` ask in that box instead of leaving at once (1298's
 select bar's `btn_exit`, `00607160`; 1264's `bt_exit`, `00444e60`, RQ-115, which
-asks in the same box, `0050bfb0`, `0050c1d0`, `0050b510`); the login's `exit` and a package that does
+asks in the same box, `0050bfb0`, `0050c1d0`, `0050b510`), and so ESC on the
+select where the package's select ESC is exit (version 15); the login's `exit` and a package that does
 not name it leave at once. The client's own wording for it is "Exit the game?".
 
 On the login screen (RQ-108, Q85, RQ-110, `client/render/front_login.h`) a
@@ -533,6 +545,8 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   mip chains made by the client (KO's DXT files carry their own), fog per
   pixel.
 - No turn sound: 1298 plays none (`select.turn_sound` absent).
+- No `select.escape`: ESC on the select at rest is the realm's back (RQ-116;
+  1298's own select key handling was not read).
 - Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
   create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF
@@ -668,7 +682,10 @@ box and loading are 1264's.
   1264's `bt_exit` does (RQ-115, `specs/KO-FINDINGS.md` §9.8, binary:
   ReceiveMessage `00444e60` posts row 1502 untitled, `MB_YESNO`,
   `BEHAVIOR_EXIT`): Yes (KO labels it "O  K") or ENTER leaves, No ("Cancel")
-  or ESC closes the box.
+  or ESC closes the box. ESC on the select asks the same (`select.escape`
+  `exit`; RQ-116, §9.8, binary: OnKeyPress `004454e0` presses `bt_exit` for
+  `DIK_ESCAPE`, as a click), the maintainer's choice (2026-11-02) over the
+  realm's ESC there, Back, which stays on `bt_back`.
 - Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest fixed
   on, every other race, class, face, hair and stat arrow fixed disabled, the
   bonus points and stat highlights hidden (Q52).

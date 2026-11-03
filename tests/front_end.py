@@ -305,6 +305,14 @@ problems = {
     # RQ-111 (version 14): yes and no are the message box's only.
     "yes off the message box": dict(specs={**{n: spec(n) for n in fe.SCREENS},
                                            "login": spec("login", bindings={**BINDINGS["login"], "notice": "yes"})}),
+    # RQ-130 (version 21): the race and class choices are create's only, each
+    # a button with no fixed state.
+    "create choice off create": dict(specs={**{n: spec(n) for n in fe.SCREENS},
+                                            "login": spec("login", bindings={**BINDINGS["login"],
+                                                                             "notice": "create_race"})}),
+    "create choice on a text": dict(specs={**{n: spec(n) for n in fe.SCREENS},
+                                           "create": spec("create", bindings={**BINDINGS["create"],
+                                                                              "text_desc": "create_class"})}),
     "edit with two strings": dict(trees={**trees, "create.uif": node(0, "root", [
         button("btn_create"), button("btn_cancel"), node(8, "edit_name", [text(""), text("")]),
         node(9, "area_character")])[1]}),
@@ -349,6 +357,68 @@ assert struct.unpack_from("<I", bar_screens[1])[0] == 1 + 7 * 6 + 3, struct.unpa
 for info in (("str_id",), ("str_lev",), ("str_job",)):
     bar(info)
 print("PASS front-end cook: 1298's select bar, its info texts in place of char_info")
+
+# RQ-130 (version 21, KO-FINDINGS 9.15): 1298's create's race and class
+# buttons (00604f90), bound to create_race and create_class: each a button
+# with no fixed state, which a create that binds it waits for.
+CHOICE_BINDINGS = {**BINDINGS["create"], "btn_race_ka_tu": "create_race", "btn_class_priest": "create_class"}
+
+
+def choice_tree():
+    return node(0, "root", [button("btn_create"), button("btn_cancel"),
+                            node(8, "edit_name", [node(4, texture=""), text("")]), node(9, "area_character"),
+                            text("text_desc"), button("btn_race_ka_tu"), button("btn_class_priest")])[1]
+
+
+def choice_screens(**create):
+    return cook_screens(trees={**trees, "create.uif": choice_tree()},
+                        specs={**{n: spec(n) for n in fe.SCREENS},
+                               "create": spec("create", bindings=dict(CHOICE_BINDINGS), **create)})[0]
+
+
+def node_records(data):
+    """Each cooked node's (id, action, flags), in order."""
+    out, at = [], 4
+    for _ in range(struct.unpack_from("<I", data)[0]):
+        length = struct.unpack_from("<I", data, at + 24)[0]
+        ident = data[at + 28:at + 28 + length].decode()
+        action, flags = struct.unpack_from("<2I", data, at + 28 + length)
+        out.append((ident, action, flags))
+        at = fe.node_end(data, at)
+    return out
+
+
+CHOICE = choice_screens()
+chosen = {i: (a, f) for i, a, f in node_records(CHOICE[2]) if i.startswith(("btn_race", "btn_class"))}
+assert chosen == {"btn_race_ka_tu": (fe.ACTIONS.index("create_race"), 0),
+                  "btn_class_priest": (fe.ACTIONS.index("create_class"), 0)}, chosen
+assert fe.ACTIONS[-2:] == ("create_race", "create_class") and fe.ONLY_ON["create_race"] == "create", fe.ACTIONS
+for state in ("on", "disabled"):
+    for button_id in ("btn_race_ka_tu", "btn_class_priest"):
+        try:
+            choice_screens(states={button_id: state})
+        except ValueError as error:
+            assert "a button with no fixed state" in str(error), error
+            continue
+        raise AssertionError(("cooked a create choice with a fixed state", button_id, state))
+# The 1298 recipe binds its Tuarek and priest buttons so, neither fixed on any
+# more (RQ-125's states), and words the two refusals with 1298's rows
+# (00600750: code 7 row 1908, code 9 row 1904, each under row 1901); the 1097
+# choice binds neither (Q52: chosen from the open).
+create_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text())["screens"]["create"]
+assert create_1298["bindings"]["btn_race_ka_tu"] == "create_race" and \
+    create_1298["bindings"]["btn_class_priest"] == "create_class", create_1298["bindings"]
+assert not {"btn_race_ka_tu", "btn_class_priest"} & set(create_1298["states"]), create_1298["states"]
+messages_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text())["messages"]
+assert messages_1298["create_no_race"] == {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
+                                           "text": {"table": "Data/Texts_us.tbl", "row": 1908}}, messages_1298
+assert messages_1298["create_no_class"] == {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
+                                            "text": {"table": "Data/Texts_us.tbl", "row": 1904}}, messages_1298
+create_1097 = json.loads((ROOT / "games/moradon/front-end.json").read_text())
+assert not {"create_race", "create_class"} & set(create_1097["screens"]["create"]["bindings"].values())
+assert not {"create_no_race", "create_no_class"} & set(create_1097.get("messages", {})), create_1097.get("messages")
+print("PASS front-end cook: create's race and class buttons, the 1298 recipe's waiting for both and wording "
+      "their refusals with 1298's rows, the 1097 choice's chosen from the open")
 
 
 # RQ-084: a layout from another input (`<name>:<path>`) reads its textures from
@@ -864,7 +934,7 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=20, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=21, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0)):
@@ -1033,8 +1103,12 @@ for reason, kw in message_problems.items():
 # RQ-111: exit_confirm with the box's yes and no bound, last in MESSAGES order.
 QUESTION_BINDINGS = {"bindings": {**TITLED["bindings"], "btn_yes": "yes", "btn_no": "no"}}
 EXIT_CONFIRM, _ = messages({"exit_confirm": {"text": row(2)}}, bindings=QUESTION_BINDINGS)
-assert fe.MESSAGES[-1] == "exit_confirm" and \
-    EXIT_CONFIRM == u(1) + u(len(fe.MESSAGES) - 1) + string("") + u(1) + string("Enter a name. "), EXIT_CONFIRM
+EXIT_INDEX = fe.MESSAGES.index("exit_confirm")
+assert EXIT_INDEX == 10 and \
+    EXIT_CONFIRM == u(1) + u(EXIT_INDEX) + string("") + u(1) + string("Enter a name. "), EXIT_CONFIRM
+# RQ-130 (version 21): create's two refusals follow it, the engine's
+# FrontMessage order (client/assets/assets.h).
+assert fe.MESSAGES[11:] == ("create_no_race", "create_no_class"), fe.MESSAGES
 # The recipe's tables are paths the choice's prefix check sees (RQ-084).
 assert ("messages.login.title.table", "installer-1264:Data/Texts_us.tbl") in fe.recipe_paths(
     {"messages": {"login": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1}}}})
@@ -1712,8 +1786,40 @@ def no_info():
         fe.INFO_TEXTS.update(saved)
 
 
+# RQ-130 (version 21): create's race and class choices; node `ident` of
+# screen `index` with its action or flags patched (unchecked).
+def patch_node(screen_data, index, ident, action=None, flags=None):
+    data = bytearray(screen_data[index])
+    at = 4
+    for _ in range(struct.unpack_from("<I", data)[0]):
+        length = struct.unpack_from("<I", data, at + 24)[0]
+        if data[at + 28:at + 28 + length] == ident.encode():
+            if action is not None:
+                struct.pack_into("<I", data, at + 28 + length, action)
+            if flags is not None:
+                struct.pack_into("<I", data, at + 32 + length, flags)
+            return screen_data[:index] + [bytes(data)] + screen_data[index + 1:]
+        at = fe.node_end(bytes(data), at)
+    raise AssertionError("no node " + ident)
+
+
+CHOICE_CASES = {
+    "bad-version-20": blob(version=20),
+    "ok-create-choice": blob(screen_data=CHOICE),
+    "ok-create-choice-race-only": blob(screen_data=patch_node(CHOICE, 2, "btn_class_priest", action=0)),
+    "bad-create-choice-on": blob(screen_data=patch_node(CHOICE, 2, "btn_race_ka_tu", flags=1)),
+    "bad-create-choice-disabled": blob(screen_data=patch_node(CHOICE, 2, "btn_class_priest", flags=2)),
+    "bad-create-choice-text": blob(screen_data=patch_node(CHOICE, 2, "text_desc",
+                                                          action=fe.ACTIONS.index("create_class"))),
+    "bad-create-choice-off-create": blob(screen_data=patch_node(bar_screens, 1, "btn_delete",
+                                                                action=fe.ACTIONS.index("create_race"))),
+    "bad-create-choice-twice": blob(screen_data=patch_node(CHOICE, 2, "btn_class_priest",
+                                                           action=fe.ACTIONS.index("create_race"))),
+}
 cases = {
     "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
+    # RQ-130 (version 21): create's race and class choices.
+    **CHOICE_CASES,
     "ok-valid": valid,
     "ok-three-slots": blob(slots=3),
     "ok-plug": blob(plug=0),
@@ -1907,6 +2013,17 @@ try:
     assert "front end screen action unbound" in line, line
     # RQ-111: yes or no off the message box, and exit_confirm without both,
     # each for its own reason.
+    # RQ-130: create's race and class choices, each refusal for its reason.
+    for name, reason in (("bad-version-20", "front end version"),
+                         ("bad-create-choice-on", "front end create choice"),
+                         ("bad-create-choice-disabled", "front end create choice"),
+                         ("bad-create-choice-text", "front end create choice"),
+                         ("bad-create-choice-off-create", "front end create choice off create"),
+                         ("bad-create-choice-twice", "front end action bound twice")):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    for name in ("ok-create-choice", "ok-create-choice-race-only"):
+        assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
     for name, reason in (("bad-yes-off-message", "yes/no off the message box"),
                          ("bad-exit-confirm-no-buttons", "exit_confirm without yes and no"),
                          ("bad-exit-confirm-no-no", "exit_confirm without yes and no")):
@@ -1979,7 +2096,7 @@ try:
           % sum(name.startswith("bad-") for name in SLIDE_CASES))
     exit_line = [l for l in run.stdout.splitlines() if l.startswith("message ok-exit-confirm: ")]
     assert exit_line == ["message ok-exit-confirm: %d title='' replaces=1 text='Enter a name. '"
-                         % (len(fe.MESSAGES) - 1)], exit_line
+                         % EXIT_INDEX], exit_line
     # RQ-102: the loaded messages, by FrontMessage index; the message refusals
     # are the section's own.
     worded = [l for l in run.stdout.splitlines() if l.startswith("message ok-messages: ")]

@@ -92,16 +92,24 @@ from the player's own KO data.
      from an occupied slot opens 1298's in-select create
      (co_characterCreate_us.uif) at once over the hall, the camera flying to
      the first empty slot behind it on ka_left_right, which neither key
-     skips, the new character standing there once the camera is; ESC there,
+     skips, the new character standing there once the camera is and
+     (RQ-130) the race is clicked; ESC there,
      or one frame into the flight, returns to the select at rest on that
      slot with the bar shown; at rest its name entry is where Group_name's
-     slide clamps ((W - w) / 2, H - 30 - h), the new character the one model
-     drawn, the hall's terrain between the panels;
+     slide clamps ((W - w) / 2, H - 30 - h), no new character before a race
+     click (RQ-130), the hall's terrain between the panels;
    - the 1298 recipe's create slide (RQ-126, KO-FINDINGS 9.15): ENTER on an
      empty slot opens create with its three panels sliding in from the right,
      the left and the bottom edge, frame by frame (1/32 s apart) where 1298's
      Tick (00606450) puts them on the pinned layout's rects, ending on the
-     frame it clears its flag; the chosen package has no slide.
+     frame it clears its flag; the chosen package has no slide;
+   - the 1298 recipe's race and class (RQ-130, KO-FINDINGS 9.15, Q87 (b)):
+     create opens with neither chosen and no new character; Create says row
+     1908 (no race) or 1904 (no class) under row 1901, as 1298's 005fffd0
+     and 00600750 do, a race click unchoosing the class (00604f90); the new
+     character stands once the race is clicked, at the slot the camera was
+     on for that click (005fd120), and a chosen button draws down; with both
+     clicked Create sends. The chosen package's create waits for neither.
 
 No server or stack.
 """
@@ -183,6 +191,15 @@ for i in range(2):
     out = Path(tempfile.mkdtemp(prefix="front-end-1298-recipe-", dir=B))
     report = ko_front_end.cook(pinned, out, Path("games/moradon/front-end-1298.json"), out / "work")
     cooked.append((out / "front-end.bin").read_bytes())
+# RQ-130 (KO-FINDINGS 9.15): the recipe words create's two refusals with
+# 1298's rows (00600750: code 7 row 1908, code 9 row 1904, each under 1901),
+# as the cook read them from the pinned tree's table.
+assert recipe_1298["messages"]["create_no_race"] == {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
+                                                     "text": {"table": "Data/Texts_us.tbl", "row": 1908}}
+assert recipe_1298["messages"]["create_no_class"] == {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
+                                                      "text": {"table": "Data/Texts_us.tbl", "row": 1904}}
+choice_boxes = [f"{k}|{report['messages'][k]['title']}|{report['messages'][k]['text']}"
+                for k in ("create_no_race", "create_no_class")]
 assert cooked[0] == cooked[1], "the 1298 recipe's cook is not deterministic"
 front_end_1298 = out / "front-end.bin"
 assert cooked[0][4:8] == ko_front_end.VERSION.to_bytes(4, "little"), cooked[0][:8]
@@ -406,6 +423,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     assert run.returncode == 0 and "FRONT_SHOTS done" in run.stdout, (size, run.stdout[-2000:], run.stderr[-2000:])
     # RQ-126: the chosen package's create (1264's, a screen of its own) has no slide.
     assert "FRONT_CREATE_SLIDE" not in run.stdout, size
+    # RQ-130: and its race and class stand chosen from the open (Q52).
+    assert "FRONT_CREATE_CHOICE" not in run.stdout, size
     shots = {}
     origins = {}
     for m in re.finditer(r"^FRONT_SHOT name=(\S+) size=(\d+)x(\d+) path=(\S+) rect=(\S*) drawn=(\S*) "
@@ -667,8 +686,19 @@ fly_frames = max(f32(f32(len(keys) * rate) * f32(1 / 30)) for keys, rate in ((fl
 fly_draws, frame = 1, f32(f32(0 + 7.5) + 7.5)
 while frame != fly_frames:
     frame, fly_draws = min(fly_frames, f32(frame + 7.5)), fly_draws + 1
+# RQ-130 (KO-FINDINGS 9.15): no new character on the arrival until the race
+# is clicked, then at the slot the camera is on, its button drawn down (state
+# 1); the race clicked one frame into a flight stands at slot 1, the slot the
+# flight left (005fd120 by +0x38c), once the camera is on slot 2.
 CREATE_FLY = (f"click=create path={fly_index} frames={fly_frames:.6g} slot=1 focus=2 new=0 arrived=2 "
-              f"draws={fly_draws + 1} new=1 back=select slot=2 cancel=select slot=2 ui=1")
+              f"draws={fly_draws + 1} new=0 race=1 new=1 figure=2 back=select slot=2 cancel=select slot=2 ui=1 "
+              f"flown=1 new=1")
+# RQ-130: create opened at rest: no character and both buttons normal; Create
+# says create_name (empty), then create_no_race (a class clicked first too),
+# then, a race click having unchosen the class, create_no_class; with both
+# clicked it sends. A chosen button draws down under the pointer.
+CREATE_CHOICE = ("open=0,0,0 empty=create_name norace=create_no_race class=1,0 classfirst=create_no_race "
+                 "race=1,0,1 noclass=create_no_class both=1,1,1 create=none sent=1")
 # RQ-125: 1298's in-select create, co_characterCreate_us.uif (row 2's, as
 # 005fab40 loads it), its root at the origin and its panels where its Tick
 # (00606450) clamps their slides: Group_class at (50, H - 30 - h), Group_race at
@@ -733,9 +763,9 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     flight = re.search(r"^FRONT_CREATE (.*)$", run.stdout, re.M)
     assert flight and flight.group(1) == CREATE_FLY, (size, flight and flight.group(1), CREATE_FLY)
     # RQ-125: the create shot (no character, slot 0 in focus) over the hall:
-    # the name entry where Group_name's slide clamps, the new character standing
-    # in the hall alone (no hall character with none listed), and the hall
-    # drawn between the panels (the zone's terrain, not the black clear).
+    # the name entry where Group_name's slide clamps, no character drawn (none
+    # listed, and RQ-130: no race clicked yet), and the hall drawn between the
+    # panels (the zone's terrain, not the black clear).
     created = re.search(r"^FRONT_SHOT name=create size=\S+ path=(\S+) rect=(\S+) drawn=(\S*) origin=", run.stdout, re.M)
     assert created, size
     group_name, edit = find(create_tree, "Group_name"), find(create_tree, "edit_name")
@@ -744,8 +774,9 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     want_edit = (nx0 + edit["rect"][0] - group_name["rect"][0], ny0 + edit["rect"][1] - group_name["rect"][1],
                  nx0 + edit["rect"][2] - group_name["rect"][0], ny0 + edit["rect"][3] - group_name["rect"][1])
     assert tuple(map(int, created.group(2).split(","))) == want_edit, (size, created.group(2), want_edit)
+    # RQ-130: 1298's create opens with no race chosen, so no new character.
     kinds = [d.split(":")[0] for d in created.group(3).split(";") if d]
-    assert kinds == ["create"], (size, created.group(3))
+    assert kinds == [], (size, created.group(3))
     race_w = find(create_tree, "Group_race")["rect"][2] - find(create_tree, "Group_race")["rect"][0]
     class_w = find(create_tree, "Group_class")["rect"][2] - find(create_tree, "Group_class")["rect"][0]
     between = region(Path(created.group(1)), (50 + class_w + 4, height // 2, width - race_w - 54, ny0 - 4))
@@ -757,13 +788,20 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     slide_frames = [tuple(map(int, frame.split(","))) for frame in slid.group(2).split(";")]
     want_slide = ko_create_slide(create_tree, width, height, 1 / 32)
     assert slide_frames == want_slide, (size, slide_frames[-3:], want_slide[-3:])
+    # RQ-130: the race and class wait for their clicks; the refusals in 1298's words.
+    choice = re.search(r"^FRONT_CREATE_CHOICE (.*)$", run.stdout, re.M)
+    assert choice and choice.group(1) == CREATE_CHOICE, (size, choice and choice.group(1), CREATE_CHOICE)
+    boxes = re.findall(r"^FRONT_CREATE_MESSAGE (.*)$", run.stdout, re.M)
+    assert boxes == [choice_boxes[0], choice_boxes[0], choice_boxes[1]], (size, boxes, choice_boxes)
     print(f"PASS front-end captures 1298 recipe {size}: 1298's select bar at ({x0}, {y0}), unscaled, its ten "
           f"bound nodes where 1298's Load puts them, its info texts filled for a character and empty without; "
           f"its Exit asks yes or no in its centred box at ({bx}, {by}), ESC and No closing it, ENTER and Yes leaving the game; "
           f"ESC on the select does nothing; Back lands on the realm list; Create from an occupied slot opens "
           f"1298's in-select create over the hall at once, the camera flying behind it to the first empty slot "
           f"on ka_left_right ({fly_frames:.6g} frames, not skipped), the new character standing there on the "
-          f"arrival; Cancel returns to the select at rest on that slot; its panels slide in as 1298's Tick "
+          f"camera's arrival and the "
+          f"race click; Cancel returns to the select at rest on that slot; its panels slide in as 1298's Tick "
           f"moves them ({len(slide_frames)} frames at 32 a second, Group_class ending at "
-          f"{slide_frames[-1][2]}, Group_name at {slide_frames[-1][5]})")
+          f"{slide_frames[-1][2]}, Group_name at {slide_frames[-1][5]}); it waits for its race and class, "
+          f"Create saying rows 1908 and 1904 under 1901 until both are clicked")
 print("PASS KO front end graphical")

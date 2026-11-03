@@ -11,6 +11,7 @@
 #include "platform/gl.h"
 #include "platform/gl_load.h"
 #include "render/animation.h"
+#include "render/create_choice.h"
 #include "render/front_logo.h"
 #include "render/front_login.h"
 #include "render/front_slide.h"
@@ -372,6 +373,20 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     return at;
   }
   bool create_sliding() const { return create_slide.on; }
+  // RQ-130 (version 21): whether create waits for a race click, and the slot
+  // the new character stands at over the hall (-1: none stands, no race
+  // chosen) (test hooks).
+  bool create_waits() const { return choice.waits_race || choice.waits_class; }
+  int create_figure() const { return choice.stands() ? choice.stands_at(focus) : -1; }
+  // The state the current layout's button bound to `action` draws in (0
+  // normal, 1 down, 2 on, 3 disabled), or -1 (a test hook).
+  int action_state(FrontAction action) const {
+    const auto screen = layout();
+    const auto &nodes = fe.screens[size_t(screen)];
+    for (size_t i = 0; i < nodes.size(); ++i)
+      if (nodes[i].action == action && nodes[i].kind == FrontNode::BUTTON) return button_state(screen, i);
+    return -1;
+  }
   const std::string &message_text() const { static const std::string none; return message ? message->text : none; }
   const std::string &message_title() const { static const std::string none; return message ? message->title : none; }
   // The server answered CreateCharacter: a longer list is a success (the
@@ -421,6 +436,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     slide = realm_height;
     slide_rest(create_slide);
     update_slide();
+    open_choice();
     reset_hall();
     face(0);
   }
@@ -630,7 +646,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       logo_ui();
     else
       ui(layout(), context, now);
-    if (state == Screen::create && !in_hall_create()) {
+    if (state == Screen::create && !in_hall_create() && choice.stands()) {
       flush();
       character_view(width, height, now);
       begin_ui(width, height);
@@ -667,6 +683,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // where the moves put it (empty at rest).
   SlideState create_slide;
   std::vector<std::array<float, 2>> slide_shift;
+  // RQ-130 (version 21): create's race and class, when the package waits for them.
+  CreateChoice choice;
   bool waiting = false;  // RQ-108: a login under way (login_waiting)
   bool line_hidden = false;  // RQ-123: a Back's login and list (login_line_hidden)
   // The select camera: the slot it is at and the slot in focus, which is the
@@ -768,10 +786,19 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   void open_create() {
     state = Screen::create;
     name.clear();
+    open_choice();
     // No slide (the 1097 choice): create stays at rest, as before version 20.
     if (fe.create_slide.nodes.empty()) slide_rest(create_slide);
     else slide_open(create_slide);
     update_slide();
+  }
+  // RQ-130 (version 21): each open starts with nothing chosen that the
+  // package's create waits for (1298's Init 005fab40 and Cancel 005ffb90).
+  void open_choice() {
+    bool race = false, klass = false;
+    for (const auto &n : fe.screens[size_t(FrontScreen::create)])
+      race = race || n.action == FrontAction::create_race, klass = klass || n.action == FrontAction::create_class;
+    choice.open(race, klass);
   }
   std::array<int, 2> slide_extent() const {
     return scaled ? std::array<int, 2>{int(fe.canvas_width), int(fe.canvas_height)} : placed_size;
@@ -936,6 +963,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   int button_state(FrontScreen screen, size_t i) const {
     const auto &n = fe.screens[size_t(screen)][i];
     if (n.flags & FrontNode::FIXED_DISABLED) return 3;
+    // RQ-130: a chosen race or class draws down, under the pointer too
+    // (006060f0 and 006062d0 set UI_STATE_BUTTON_DOWN).
+    if (choice.down(n.action)) return 1;
     const bool over = n.action != FrontAction::none && hit(screen, pointer) == n.action;
     if (over && pressed == n.action) return 1;
     if (over || (n.flags & FrontNode::FIXED_ON)) return 2;
@@ -1094,10 +1124,25 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
           select_delete_posts(focus, characters_shown(), choosing < 0 && !turning()))
         show_message(FrontMessage::delete_disabled, "Characters cannot be deleted in this realm.");
       break;
+    // RQ-130 (version 21, KO-FINDINGS 9.15): 1298's race and class buttons
+    // (ReceiveMessage 00604f90): a race click chooses the race and unchooses
+    // the class; the click that builds the new character puts it at the slot
+    // the camera is at (005fd120 by +0x38c: the slot a flight left).
+    case FrontAction::create_race:
+      if (state == Screen::create && !pending_create) choice.click_race(at_slot);
+      break;
+    case FrontAction::create_class:
+      if (state == Screen::create && !pending_create) choice.click_class(at_slot);
+      break;
     case FrontAction::create_confirm:
       if (state == Screen::create && !pending_create) {
         if (name.empty()) {
           show_message(FrontMessage::create_name, "Enter a name: 1 to 24 letters, digits, _ or -.");
+          break;
+        }
+        // RQ-130: then no race, then no class (005fffd0's codes 7 and 9).
+        if (const auto refused = choice.refusal()) {
+          show_message(*refused, *refused == FrontMessage::create_no_race ? "Choose a race." : "Choose a class.");
           break;
         }
         pending_create = true;
@@ -1337,8 +1382,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // on the slot (1298's state 7), the new character stands there, turned by
   // the slot's create yaw, breathing, under the hall's lights and the slot's
   // spot (Render 005fb1c0 draws the player's character in state 7; 005fd120
-  // puts it at the camera's slot). 1298 draws it once a race is chosen; the
-  // realm's race and class are always chosen.
+  // puts it at the camera's slot). RQ-130 (version 21): a create that waits
+  // for its race draws it once the race is clicked, at the slot the camera
+  // was at for that click (render/create_choice.h).
   void hall(int width, int height, double dt, double now) {
     const bool rest = !turning();
     if (paths()) {
@@ -1389,8 +1435,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       const auto &slot = fe.slots[i];
       draw_character(1, posed(seats.players.at(size_t(i))), vp, detail::translate_yaw(slot.position, slot.yaw));
     }
-    if (in_hall_create() && !turning()) {
-      const auto &slot = fe.slots[size_t(focus)];
+    if (in_hall_create() && !turning() && choice.stands()) {
+      const auto &slot = fe.slots[size_t(choice.stands_at(focus))];
       draw_character(2, pose(2, 0, now, true), vp, detail::translate_yaw(slot.position, slot.create_yaw));
     }
   }

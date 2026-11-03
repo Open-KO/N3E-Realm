@@ -82,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 20, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 21, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -253,6 +253,20 @@ replace the panels when the client has a Discord realm config.
   `00606450`). The 1298 recipe slides its three panels in from the right, the left
   and the bottom edges as 1298 does, ending where 1298's leave them; the 1097 choice
   has none.
+- **Create's race and class** (N3FE version 21, RQ-130, Q87 option (b), the
+  maintainer's 2026-11-03). The package may bind create's race button
+  (`create_race`) and class button (`create_class`), each a button with no fixed
+  state (`content/front-end.md`, "Actions"); a create that binds one waits for its
+  click, as 1298's in-select create does (`specs/KO-FINDINGS.md` §9.15). Each open
+  has neither chosen; a race click chooses the race and unchooses the class, a class
+  click the class; a chosen button draws down; the new character draws only once
+  the race is chosen, over the hall at the slot the camera was on at that click;
+  Create refuses no race (`create_no_race`) and then no class (`create_no_class`)
+  after the empty name, each in the message box. The choice gates only the client's
+  Create: the server still makes the character it makes and validates the create
+  as before (Q52). The 1298 recipe binds the Tuarek and the priest, the messages
+  1298's rows 1908 and 1904 under 1901; the 1097 choice binds neither, its race and
+  class chosen from the open as before.
 - **The placement** (N3FE version 11, RQ-106, Q82). KO draws its front end on the
   screen's own pixels, never scaled, and places each layout's root and some of its
   nodes by the viewport's size each time the layout loads (`specs/KO-FINDINGS.md`
@@ -383,7 +397,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 20 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, no select bar actions, no message box Yes and No or exit question, no select ESC or its `none`, no select Back, no select arrow rule, no create mode, or no create slide) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 21 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, no select bar actions, no message box Yes and No or exit question, no select ESC or its `none`, no select Back, no select arrow rule, no create mode, no create slide, or no create choices) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas (1024 × 768) | KO's placements would cut the layouts off, so the UI scales down uniformly, centred, as with `ui_scale` `window` (RQ-106). No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -579,7 +593,18 @@ KO (`make live-ko`, needs `assets/ko`):
    has no slide. The cook and loader (`tests/front_end.py`) take the create
    `slide`, refuse it off create, a misspelt key or edge, a node twice or hidden, a
    `with` of no other node or no travel and each bound, and run the loaded slide at
-   three sizes and four frame times as 1298's Tick does.
+   three sizes and four frame times as 1298's Tick does. RQ-130: on the 1298
+   recipe's, create opens over the hall with no new character until the Tuarek is
+   clicked, which then stands at the slot; a Tuarek clicked one frame into the
+   flight stands at the slot the flight left; ENTER on an empty slot opens create
+   with neither button down, Create there with a name says `create_no_race`, a
+   priest click alone still says it, the Tuarek's click unchooses the priest and
+   Create says `create_no_class`, and with both down Create sends the create; each
+   message box holds the recipe's rows. The chosen package's create waits for
+   nothing. The cook and loader (`tests/front_end.py`) take `create_race` and
+   `create_class` on create's buttons and refuse them off create, on a node other
+   than a button, on a fixed-on or fixed-disabled button, bound twice, and a
+   version 20 package.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

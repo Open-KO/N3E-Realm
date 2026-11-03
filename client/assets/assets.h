@@ -845,12 +845,15 @@ inline constexpr size_t kFrontEndFile = 64 * 1024 * 1024;
 // answer, and the realm list; render/front_end.h View::visible). Version 13
 // (RQ-109): 1298's select bar, select screen only: its start, create and
 // delete buttons and its three info texts (the character's name, level and
-// class), which a select layout may bind in place of char_info.
+// class), which a select layout may bind in place of char_info. Version 21
+// (RQ-130): create's race and class buttons, create screen only, each a
+// button with no fixed state: a create that binds one waits for its click
+// (1298's in-select create, KO-FINDINGS 9.15; render/create_choice.h).
 enum class FrontAction : uint32_t {
   none, login, exit, login_group, realm_group, realm_list, realm_connect, notice, select_prev,
   select_next, back, char_info, create_confirm, name_field, char_view, class_desc, progress,
   version, info, message, ok, title, login_closed, select_start, select_create, select_delete,
-  char_name, char_level, char_class, yes, no, count
+  char_name, char_level, char_class, yes, no, create_race, create_class, count
 };
 enum class FrontScreen : uint32_t { login, select, create, loading, message, count };
 enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };
@@ -989,6 +992,8 @@ enum class FrontMessage : uint32_t {
   create_full,        // version 13: create with no empty slot (1298's btn_create)
   delete_disabled,    // version 13: delete, which the realm does not offer (1298's btn_delete)
   exit_confirm,       // version 14: the select's exit asks first, Yes or No (1298's btn_exit)
+  create_no_race,     // version 21: create before its race is clicked (1298's 005fffd0, code 7)
+  create_no_class,    // version 21: create before its class is clicked (1298's 005fffd0, code 9)
   count
 };
 struct FrontMessageText {

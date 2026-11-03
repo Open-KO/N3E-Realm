@@ -2676,7 +2676,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 20, "front end version");
+  need(r.u() == 21, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2741,6 +2741,11 @@ FrontEnd load_front_end(const Release &release) {
       n.flags = r.u();
       n.mask = r.u();
       need(n.flags <= 7 && n.mask >= 1 && n.mask <= 15, "front end node state");
+      // Version 21 (RQ-130): create's race and class choices are buttons the
+      // player clicks, so neither fixed on nor fixed disabled.
+      need((n.action != FrontAction::create_race && n.action != FrontAction::create_class) ||
+               (n.kind == FrontNode::BUTTON && !(n.flags & (FrontNode::FIXED_ON | FrontNode::FIXED_DISABLED))),
+           "front end create choice");
       if (n.kind == FrontNode::IMAGE) {
         n.texture = r.u();
         n.uv = r.floats<4>();
@@ -2791,6 +2796,10 @@ FrontEnd load_front_end(const Release &release) {
       need(bound.contains(FrontAction::char_info) || bound.contains(FrontAction::char_name) ||
                bound.contains(FrontAction::char_level) || bound.contains(FrontAction::char_class),
            "front end screen action unbound");
+    // Version 21 (RQ-130): the race and class choices are create's only.
+    if (screen != size_t(FrontScreen::create))
+      for (auto action : {FrontAction::create_race, FrontAction::create_class})
+        need(!bound.contains(action), "front end create choice off create");
   }
   for (auto &s : fe.strings) s = ascii(text(1024));
   // D3DLIGHT9's range is unclamped (the intro's point lights carry 1e6 and
@@ -3086,7 +3095,8 @@ FrontEnd load_front_end(const Release &release) {
   // (at most one per FrontMessage) and each: its FrontMessage (once), its
   // title, whether its text replaces the client's wording (0 or 1), and that
   // text (empty unless it replaces), each at most 1024 ASCII bytes.
-  // Version 14 adds exit_confirm, the select's yes/no question (RQ-111).
+  // Version 14 adds exit_confirm, the select's yes/no question (RQ-111);
+  // version 21 create_no_race and create_no_class (RQ-130).
   const auto messages = r.count(uint32_t(FrontMessage::count), 0);
   std::set<uint32_t> worded;
   for (uint32_t i = 0; i < messages; ++i) {

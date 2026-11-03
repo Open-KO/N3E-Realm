@@ -19,8 +19,10 @@ presses on the select (version 15, RQ-116), its `none`, 1298's (version 16,
 RQ-119), where the select's Back lands (version 17, RQ-112), whether the
 select arrow at the end of the row is hidden (version 18, RQ-113),
 whether create is a screen of its own or draws over the select hall, with the
-new character's turn at each slot (version 19, RQ-125), and create's slide,
-its panels sliding in each time it opens (version 20, RQ-126).
+new character's turn at each slot (version 19, RQ-125), create's slide,
+its panels sliding in each time it opens (version 20, RQ-126), and create's
+race and class buttons, which a create that binds them waits for, with two
+messages (version 21, RQ-130).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -34,7 +36,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 20, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 21, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -148,7 +150,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    when the screen ends, as 1264 connects from its login; a message raised
    while it shows (the latest) waits for the login. A reset connection leaves
    the screen playing.
-11. The messages (version 10, RQ-102, Q81): a count (0–11, at most one per
+11. The messages (version 10, RQ-102, Q81): a count (0–13, at most one per
    message) and each: the message (an index of the closed set below, each
    once), its title (≤1024 ASCII bytes, may be empty), whether its text
    replaces the client's own wording (0 or 1) and that text (≤1024 ASCII
@@ -164,7 +166,10 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    with every slot taken: 1298's `btn_create`) and 9 `delete_disabled` (delete,
    which the realm does not offer: 1298's `btn_delete`), and (version 14,
    RQ-111) 10 `exit_confirm` (the select's exit, asked yes or no: 1298's
-   `btn_exit`, 1264's `bt_exit`; named, it makes the select ask, "Actions" below). The client shows a message in the message box
+   `btn_exit`, 1264's `bt_exit`; named, it makes the select ask, "Actions" below),
+   and (version 21, RQ-130) 11 `create_no_race` (create before its race is
+   clicked: 1298's `005fffd0` code 7) and 12 `create_no_class` (before its
+   class is: code 9). The client shows a message in the message box
    with the package's title in the node bound to `title` (empty for a message
    the package does not name) and the package's text where it replaces, its
    own wording otherwise. The cook writes the recipe's `messages` (below): a
@@ -327,7 +332,9 @@ address mode); the font atlases and the moon linear.
   way): once the camera is on the slot in focus (1298's state 7), the new
   character, the create model breathing, stands at that slot's position turned
   by it, under the select's lights and the slot's spot (`005fd120` places
-  1298's at the camera's slot). `select_create` opens create with the click,
+  1298's at the camera's slot); a create that waits for its race (version 21,
+  "Actions") draws it only once the race is clicked, at the slot the camera
+  was on for that click. `select_create` opens create with the click,
   and from an occupied slot in the path mode the camera flies to the empty
   slot behind it (`005ff920` shows `+0x388` before the camera moves; neither
   ENTER nor ESC skips the flight; ENTER is create's, ESC its Cancel); with no
@@ -415,7 +422,9 @@ flag other than 0 or 1 or a text that does not replace, a node bound to
 `select_start`, `select_create`, `select_delete`, `char_name`, `char_level` or
 `char_class` on a screen other than the select (version 13), a node bound to
 `yes` or `no` on a screen other than the message box, or `exit_confirm` named
-without nodes bound to both on it (version 14), a select ESC other than 0, 1 or
+without nodes bound to both on it (version 14), a node bound to `create_race`
+or `create_class` on a screen other than create, or one that is not a button
+or is fixed on or fixed disabled (version 21), a select ESC other than 0, 1 or
 2 (version 15; 2 since version 16), a select Back other than 0 or 1 (version
 17), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
@@ -433,7 +442,8 @@ The closed set, by index: none, `login`, `exit`, `login_group`, `realm_group`,
 `char_info`, `create_confirm`, `name_field`, `char_view`, `class_desc`,
 `progress`, `version`, `info`, `message`, `ok`, `title` (version 10), `login_closed`
 (version 12), `select_start`, `select_create`, `select_delete`, `char_name`,
-`char_level`, `char_class` (version 13), `yes`, `no` (version 14). A group bound to `login_group` or
+`char_level`, `char_class` (version 13), `yes`, `no` (version 14), `create_race`,
+`create_class` (version 21). A group bound to `login_group` or
 `realm_group` is shown in its state only; `realm_list` lists the realm from
 `realm.json`; `notice`, `char_info`, `class_desc`, `version`, `info`,
 `message` and `title` (the message's title, item 11) are texts the client fills; `name_field` is the name entry; `char_view`
@@ -456,6 +466,31 @@ texts `char_name`, `char_level` and `char_class` are the character in focus's
 name, level (decimal) and the `class_name` string while the hall is at rest
 (the loop front-clip mode: always at rest; hover: while the pointer is on the
 character, as `char_info`), and empty for an empty slot or otherwise.
+
+Create's race and class (version 21, RQ-130, `specs/KO-FINDINGS.md` §9.15,
+`client/render/create_choice.h`), create screen only, each on a button with no
+fixed state: a create that binds `create_race` waits for its race, and one that
+binds `create_class` for its class (1298's in-select create). Each time create
+opens, neither is chosen (1298's Init `005fab40` and Cancel `005ffb90` set the
+race and class to −1; a create the realm accepts returns to the select, so the
+next open starts again). A click on the `create_race` button chooses the race
+and unchooses the class (ReceiveMessage `00604f90` sets the class to −1 on
+every race click); a click on `create_class` chooses the class, with or
+without a race. A chosen button draws in its down state, under the pointer too
+(`006060f0` and `006062d0` set `UI_STATE_BUTTON_DOWN`). The new character, over
+the hall or in `char_view`, draws only once the race is chosen; over the hall it
+stands at the slot the camera was on at the click that chose the race, or at a
+later class click that chose the class (`005fd120`, which builds it on a click
+that changes either value, puts it by the camera's slot `+0x38c`: a race clicked
+while the camera flies stands at the slot the flight left). `create_confirm`
+then refuses, in `005fffd0`'s order, an empty name (`create_name`), no race
+(`create_no_race`) and no class (`create_no_class`), each in the message box;
+otherwise it sends the create. The client's own wording for the two is "Choose
+a race." and "Choose a class.". The choice gates only the client's Create: the
+create the server receives names no race or class, and the server makes the
+character it makes (Q52). A create that binds neither keeps race and class
+chosen from the open and the new character at the slot in focus, as before
+version 21.
 
 The message box's styles (version 14, RQ-111, `specs/KO-FINDINGS.md` §9.7,
 `client/render/message_box.h`), message screen only: every message shows in an
@@ -682,9 +717,11 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   50 from the left, `Group_race` 50 from the right (`right`), `Group_name`
   centred (Load `00603850`'s x), each bottom 30 above the window's. Bound as
   its ReceiveMessage (`00604f90`) uses it: `btn_create` `create_confirm`,
-  `btn_cancel` `back`, `edit_name` `name_field`, `text_desc` `class_desc`;
-  states as the 1097 recipe's create (the Tuarek and the priest on, the
-  others, face, hair and the stat arrows disabled); hidden: El Morad's three
+  `btn_cancel` `back`, `edit_name` `name_field`, `text_desc` `class_desc`,
+  and (RQ-130, version 21) `btn_race_ka_tu` `create_race` and
+  `btn_class_priest` `create_class`; states as the 1097 recipe's create (the
+  other races and classes, face, hair and the stat arrows disabled), but the
+  Tuarek and the priest wait for their clicks; hidden: El Morad's three
   race buttons (Load shows Karus's and hides El Morad's for a Karus player),
   the warrior, rogue and mage images and `text_bonus`, as the 1097 recipe.
   The new character stands at the slot turned 213, 143 and 283 degrees at
@@ -697,11 +734,17 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   the pinned layout), as 1298's Tick (`00606450`) moves them; the slide ends
   on Group_race's arrival, which at frame times under about 0.2 s (its last
   steps the 2 px floor, d ending in [264, 266)) leaves `Group_class` at 48 or
-  49 and `Group_name` 29 above the bottom edge, as 1298 leaves them. Not 1298's (Q87, RQ-127): 1298 draws the new character only
-  once a race is clicked (`005fd120` from ReceiveMessage) and its Create
-  (`005fffd0`) refuses one with no race or class (rows 1908, 1904 under 1901);
-  the recipe's race and class stand chosen from the open, as every realm
-  create's (Q52), the new character from the camera's arrival. After a Cancel
+  49 and `Group_name` 29 above the bottom edge, as 1298 leaves them. Race and
+  class wait for their clicks (RQ-130, Q87 option (b), the maintainer's
+  2026-11-03: "Match 1298: wait for a race"; §9.15, binary): create opens with
+  neither chosen and no new character, which stands once the Tuarek is clicked,
+  at the slot the camera was on for that click (`005fd120`); a Tuarek click
+  unchooses the priest; a chosen button draws down; Create says
+  `create_no_race`, row 1908, or `create_no_class`, row 1904, each titled row
+  1901, as `005fffd0` and `00600750` post codes 7 and 9 (`messages`). Not yet
+  1298's: after a race click 1298 also hides the class buttons the race cannot
+  take and shows their `img_*` images (`006060f0`), which the recipe hides,
+  drawing those buttons fixed disabled (RQ-130, proposed). After a Cancel
   mid-flight 1298's camera flies on to the empty slot (`005ffb90` leaves it
   alone), the select at rest on the slot it left; the recipe's is put on the
   slot at once. The hall lights `ka_light_0/1` are the files both

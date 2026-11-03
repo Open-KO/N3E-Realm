@@ -25,8 +25,10 @@ presses on the select (RQ-116), (version 16) its `none`, 1298's (RQ-119),
 (version 17) where the select's Back lands (RQ-112), (version 18) whether
 an arrow at the end of the row is hidden (RQ-113), (version 19) whether
 create is a screen of its own or draws over the select hall, with the new
-character's turn at each slot (RQ-125), and (version 20) create's slide, its
-panels sliding in each time it opens (RQ-126).
+character's turn at each slot (RQ-125), (version 20) create's slide, its
+panels sliding in each time it opens (RQ-126), and (version 21) create's race
+and class buttons, which a create that binds them waits for, with two
+messages (RQ-130).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -57,7 +59,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 20
+VERSION = 21
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -144,7 +146,7 @@ ACTIONS = ("", "login", "exit", "login_group", "realm_group", "realm_list", "rea
            "select_prev", "select_next", "back", "char_info", "create_confirm", "name_field", "char_view",
            "class_desc", "progress", "version", "info", "message", "ok", "title", "login_closed",
            "select_start", "select_create", "select_delete", "char_name", "char_level", "char_class",
-           "yes", "no")
+           "yes", "no", "create_race", "create_class")
 # Version 13 (RQ-109, specs/KO-FINDINGS.md 9.6): 1298's select bar
 # (co_CharacterSelect_us.uif, its ReceiveMessage 00607160): `select_start`
 # (btn_start, 005ff870: the centre click's start), `select_create` (btn_create,
@@ -157,8 +159,15 @@ SELECT_ONLY = ("select_start", "select_create", "select_delete", "char_name", "c
 # Btn_No (1298's CUIMessageBox, shown for an MB_YESNO box by SetBoxStyle
 # 00527a40), which the client shows for the yes/no message exit_confirm only.
 MESSAGE_ONLY = ("yes", "no")
+# Version 21 (RQ-130, specs/KO-FINDINGS.md 9.15): create's race and class
+# buttons (1298's ReceiveMessage 00604f90): a create that binds one opens with
+# it not chosen and waits for its click, Create refusing until then
+# (005fffd0's codes 7 and 9: create_no_race, create_no_class). Each is a
+# button with no fixed state.
+CREATE_CHOICES = ("create_race", "create_class")
 # Actions bound on one screen only (the others never draw or use them).
-ONLY_ON = {"login_closed": "login", **{a: "select" for a in SELECT_ONLY}, **{a: "message" for a in MESSAGE_ONLY}}
+ONLY_ON = {"login_closed": "login", **{a: "select" for a in SELECT_ONLY}, **{a: "message" for a in MESSAGE_ONLY},
+           **{a: "create" for a in CREATE_CHOICES}}
 # The select's info text: 1097's and 1264's one text00 (char_info), or any of
 # 1298's three (version 13); a select layout binds at least one.
 INFO_TEXTS = {"char_info", "char_name", "char_level", "char_class"}
@@ -248,7 +257,8 @@ UI_SCALE = {"native": 0, "window": 1}
 # message screen's node bound to `title`) and a `text` replacing the client's
 # own wording, each a string or a KO text-table row ({"table", "row"}).
 MESSAGES = ("connect_failed", "disconnected", "login", "login_blocked", "login_unavailable", "create_name",
-            "create_refused", "select_refused", "create_full", "delete_disabled", "exit_confirm")
+            "create_refused", "select_refused", "create_full", "delete_disabled", "exit_confirm",
+            "create_no_race", "create_no_class")
 # A KO text table's columns (Data/Texts_us.tbl: the row id and its text; the
 # 1264 and 1298 clients' tables have these types).
 TEXT_TYPES = [6, 7]
@@ -985,6 +995,8 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
             if states[id(n)] not in STATES:
                 raise ValueError("front-end state %r" % states[id(n)])
             flags |= STATES[states[id(n)]]
+        if action in CREATE_CHOICES and (kind != "button" or id(n) in states):
+            raise ValueError("front-end %s: a button with no fixed state" % action)
         record = u(KINDS[kind]) + u(0xFFFFFFFF if parent is None else parent) + f(n["rect"]) + \
             string(n["id"][:64]) + u(ACTIONS.index(action)) + u(flags) + u(mask)
         if kind == "image" and not n["texture"]:

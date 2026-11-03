@@ -211,5 +211,9 @@ draws `co_characterCreate_us.uif`, its panels where 1298's slides clamp.
 N3FE version 20 (RQ-126) adds create's slide (the create screen's `slide`: `rate`,
 `floor` and `nodes`, each `from` an edge and optionally `with` another, §9.15); the
 1298 recipe slides its three panels in as 1298's Tick (`00606450`) does.
+N3FE version 21 (RQ-130) adds create's race and class (`create_race` and
+`create_class`, create's buttons with no fixed state, and the messages
+`create_no_race` and `create_no_class`, §9.15); the 1298 recipe binds the Tuarek
+and the priest, so its create waits for their clicks as 1298's does (Q87 (b)).
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

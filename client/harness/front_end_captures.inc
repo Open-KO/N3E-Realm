@@ -46,9 +46,23 @@
 // (the second without a fly), or (RQ-125) for a create over the hall:
 //   FRONT_CREATE click=create path=P frames=F slot=1 focus=2 new=0 arrived=2 draws=N new=1 back=select slot=2
 //     cancel=select slot=2 ui=1
-// (on one line); then (RQ-126), for a package with a create slide, create
-// opened by ENTER on an empty slot and each frame of its slide 1/32 s apart:
+// (on one line; RQ-130: for a create that waits for its race, new=0 on the
+// arrival, then ` race=S new=1 figure=2` after a click on the race button,
+// S its draw state, and after cancel= ` flown=F new=1`: the slot the new
+// character stands at when the race is clicked one frame into a flight, and
+// whether it stands once the camera is on the slot); then (RQ-126), for a
+// package with a create slide, create opened by ENTER on an empty slot and
+// each frame of its slide 1/32 s apart:
 //   FRONT_CREATE_SLIDE screen=create frames=x,y,..;x,y,.. on=0
+// then (RQ-130), for a create that waits for its race, create opened by ENTER
+// on an empty slot at rest, then Create (ENTER) and the race and class
+// buttons pressed as a player does: whether the new character stands and the
+// race and class buttons' draw states (0 normal, 1 down, 2 on, 3 disabled),
+// and the message each Create shows (none: the create was sent):
+//   FRONT_CREATE_CHOICE open=N,R,C empty=M norace=M class=C,N classfirst=M race=R,C,N noclass=M both=R,C,N
+//     create=M sent=0|1
+// (on one line) and the box of each refusal it words:
+//   FRONT_CREATE_MESSAGE M|title|text
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
 // logo-fade half way into the first group's fade-in, with rect= the logo
@@ -294,6 +308,14 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
         while (front->front_turn().slot != front->front_turn().focus && frames < 60)
           front->draw(width, height, t += .25, flight), ++frames;
         if (flew) std::cout << " arrived=" << front->front_turn().slot << " draws=" << frames << " new=" << stands();
+        // RQ-130: a create that waits for its race draws its new character
+        // once the race is clicked, at the slot the camera is on.
+        if (front->create_waits()) {
+          click(A::create_race);
+          front->draw(width, height, t += .25, flight);
+          std::cout << " race=" << front->action_state(A::create_race) << " new=" << stands()
+                    << " figure=" << front->create_figure();
+        }
       }
       if (front->screen() == Screen::select) {
         front->draw(width, height, t += .25, flight);
@@ -323,6 +345,23 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
         front->draw(width, height, t += .25, flight);
         std::cout << " cancel=" << shown_screen() << " slot=" << front->front_turn().slot
                   << " ui=" << front->front_turn().ui;
+        // RQ-130: the race clicked one frame into the flight: the new
+        // character stands at the slot the flight left (005fd120 by the
+        // camera's slot +0x38c), drawn once the camera is on the empty slot.
+        if (front->create_waits()) {
+          front->select_at(0);
+          front->draw(width, height, t += .25, flight);
+          click(A::select_create);
+          front->draw(width, height, t += .25, flight);
+          click(A::create_race);
+          int frames = 0;
+          while (front->front_turn().slot != front->front_turn().focus && frames < 60)
+            front->draw(width, height, t += .25, flight), ++frames;
+          front->draw(width, height, t += .25, flight);
+          std::cout << " flown=" << front->create_figure() << " new=" << stands();
+          key(SDLK_ESCAPE);
+          front->draw(width, height, t += .25, flight);
+        }
       }
       std::cout << std::endl;
       list.Clear();
@@ -350,6 +389,73 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
           std::cout << sep << at[0] << "," << at[1], sep = ",";
       }
       std::cout << " on=" << front->create_sliding() << std::endl;
+      front->jump(Screen::select);
+    }
+    // RQ-130 (version 21, KO-FINDINGS 9.15): for a create that waits for its
+    // race, as 1298's in-select create: opened by ENTER on the empty slot in
+    // focus at rest, Create refuses an empty name, then no race (a class
+    // clicked first included), then no class (a race click unchooses it), and
+    // sends once both are clicked (005fffd0).
+    if (front->create_waits()) {
+      list.Clear();
+      const n3e::front::Context opened{"Local Realm", "", release.version, &list, 0};
+      double t = 300;
+      front->select_at(0);
+      front->draw(width, height, t, opened);
+      key(SDLK_RETURN);
+      // The pointer off every button (the fly's race click left it on the
+      // race button, which would draw it on).
+      SDL_Event away{};
+      away.type = SDL_EVENT_MOUSE_MOTION;
+      front->event(away, 0, 0, width, height);
+      const auto stands = [&] {
+        for (const auto &d : front->drawn())
+          if (d.which == 2) return 1;
+        return 0;
+      };
+      const auto frame = [&] { front->draw(width, height, t += .25, opened); };
+      std::vector<std::string> boxes;
+      // Create (ENTER): the message it shows, closed again, or none.
+      const auto create = [&](bool &sent) {
+        const auto out = key(SDLK_RETURN);
+        sent = out.command == n3e::front::Command::create;
+        if (!front->showing_message()) return std::string("none");
+        const auto kind = *front->message_kind();
+        const std::string name = kind == n3e::FrontMessage::create_name       ? "create_name"
+                                 : kind == n3e::FrontMessage::create_no_race  ? "create_no_race"
+                                 : kind == n3e::FrontMessage::create_no_class ? "create_no_class"
+                                                                              : "other";
+        if (kind != n3e::FrontMessage::create_name)
+          boxes.push_back(name + "|" + front->message_title() + "|" + front->message_text());
+        key(SDLK_ESCAPE);
+        return name;
+      };
+      bool sent = false;
+      frame();
+      std::cout << "FRONT_CREATE_CHOICE open=" << stands() << "," << front->action_state(A::create_race) << ","
+                << front->action_state(A::create_class);
+      std::cout << " empty=" << create(sent);
+      SDL_Event typed{};
+      typed.type = SDL_EVENT_TEXT_INPUT;
+      typed.text.text = "Shot";
+      front->event(typed, 0, 0, width, height);
+      std::cout << " norace=" << create(sent);
+      click(A::create_class);
+      frame();
+      std::cout << " class=" << front->action_state(A::create_class) << "," << stands();
+      std::cout << " classfirst=" << create(sent);
+      click(A::create_race);
+      frame();
+      std::cout << " race=" << front->action_state(A::create_race) << "," << front->action_state(A::create_class)
+                << "," << stands();
+      std::cout << " noclass=" << create(sent);
+      click(A::create_class);
+      frame();
+      std::cout << " both=" << front->action_state(A::create_race) << "," << front->action_state(A::create_class)
+                << "," << stands();
+      const auto last = create(sent);
+      std::cout << " create=" << last << " sent=" << sent << std::endl;
+      for (const auto &b : boxes) std::cout << "FRONT_CREATE_MESSAGE " << b << std::endl;
       front->jump(Screen::select);
     }
     if (asked)

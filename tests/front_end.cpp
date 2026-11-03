@@ -26,8 +26,12 @@
 // on its placed create layout at three window sizes and four frame times from
 // the open to the lead's arrival, each frame's node coordinates printed for
 // tests/front_end.py to check against 1298's Tick (00606450) as it reads.
+// RQ-130: create's race and class choices (client/render/create_choice.h) as
+// 1298's in-select create takes its race and class clicks (00604f90, 005fd120)
+// and refuses its Create (005fffd0), and a create that binds neither.
 #include "assets/assets.h"
 #include "assets/front_place.h"
+#include "render/create_choice.h"
 #include "render/front_login.h"
 #include "render/front_logo.h"
 #include "render/front_slide.h"
@@ -485,6 +489,53 @@ int main(int argc, char **argv) {
       }
     }
     std::cout << "PASS select arrows: the realm's rule hides the arrow at the end of the row, KO's draws both\n";
+  }
+  {
+    // RQ-130 (KO-FINDINGS 9.15): 1298's create opens with no race and no
+    // class (005fab40, 005ffb90); a race click chooses the race and unchooses
+    // the class (00604f90 sets +0x494 to -1 on every race click), a class
+    // click the class, with or without a race; the click that changes a value
+    // builds the new character at the camera's slot (005fd120, +0x38c),
+    // nothing without a race; Create refuses no race, then no class
+    // (005fffd0's codes 7, 9). A create that binds neither keeps both chosen,
+    // the character at the slot in focus.
+    using A = n3e::FrontAction;
+    using M = n3e::FrontMessage;
+    n3e::front::CreateChoice c;
+    std::string fail;
+    auto want = [&](const char *step, bool stands, int at, std::optional<M> refusal, bool race_down, bool class_down) {
+      if (c.stands() != stands || (stands && c.stands_at(2) != at) || c.refusal() != refusal ||
+          c.down(A::create_race) != race_down || c.down(A::create_class) != class_down)
+        fail = fail.empty() ? step : fail;
+    };
+    c.open(true, true);
+    want("open", false, -1, M::create_no_race, false, false);
+    c.click_class(1);  // a class first: chosen, no character (no race to build)
+    want("class first", false, -1, M::create_no_race, false, true);
+    c.click_race(1);   // the race in flight from slot 1: built there; the class unchosen
+    want("race", true, 1, M::create_no_class, true, false);
+    c.click_race(2);   // the same race again: the class unchosen, not built again
+    want("race again", true, 1, M::create_no_class, true, false);
+    c.click_class(2);  // the class: built again at the camera's slot
+    want("class", true, 2, std::nullopt, true, true);
+    c.click_class(0);  // the same class: not built again
+    want("class again", true, 2, std::nullopt, true, true);
+    c.open(true, true);  // a reopen (Cancel, or a create the server took)
+    want("reopen", false, -1, M::create_no_race, false, false);
+    c.open(true, false);  // a race button and no class button
+    c.click_race(0);
+    want("race only", true, 0, std::nullopt, true, false);
+    c.open(false, false);  // the 1097 choice: chosen from the open, at the slot in focus
+    want("chosen", true, 2, std::nullopt, false, false);
+    c.click_race(1), c.click_class(1);
+    want("chosen, clicked", true, 2, std::nullopt, false, false);
+    if (!fail.empty()) {
+      std::cerr << "FAIL create choice: " << fail << "\n";
+      return 1;
+    }
+    std::cout << "PASS create choice: 1298's create waits for its race (the class unchosen by each race click), "
+                 "builds the character at the camera's slot on the click that changes a value, refuses no race "
+                 "then no class; a create that binds neither keeps both chosen\n";
   }
   {
     // RQ-111 (KO-FINDINGS 9.7, 1298 00527a40, 00527c60, 00526d00): exit_confirm

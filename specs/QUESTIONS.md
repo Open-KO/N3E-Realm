@@ -1231,3 +1231,17 @@ to choose (a look-and-feel difference, not offered). The Cancel mid-flight keeps
 realm's (the camera put on the slot at once); playing 1298's is proposed as its own
 item. The 1097 choice is unchanged (1264's create, by the source, also starts with no
 race; Q52 covers it).
+**Race click decided (RQ-130, KO-FINDINGS §9.15):** the maintainer took (b)
+(2026-11-03, "Match 1298: wait for a race"). N3FE version 21 adds `create_race` and
+`create_class` (create's buttons, no fixed state) and the messages `create_no_race`
+and `create_no_class`; the 1298 recipe binds the Tuarek and the priest and words the
+two by rows 1908 and 1904 under 1901. Its create opens with neither chosen and no new
+character; a Tuarek click chooses it, unchooses the priest (`00604f90`) and stands the
+character at the camera's slot (`005fd120`; mid-flight, the slot the flight left); a
+chosen button draws down (`006060f0`, `006062d0`); Create refuses as `005fffd0`. The
+server still makes the character it makes and the create names no race or class
+(Q52). The 1097 choice binds neither and is unchanged. Still the realm's, proposed:
+the class buttons a race cannot take, which 1298 hides for their `img_*` after the
+race click (the recipe draws them fixed disabled); the stat texts; and the realm's
+fixed `on`, which draws the button's on image where KO's chosen button draws its
+down image (the 1097 choice's create too).

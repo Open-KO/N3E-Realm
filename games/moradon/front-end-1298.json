@@ -56,11 +56,11 @@
         "btn_create": "create_confirm",
         "btn_cancel": "back",
         "edit_name": "name_field",
-        "text_desc": "class_desc"
+        "text_desc": "class_desc",
+        "btn_race_ka_tu": "create_race",
+        "btn_class_priest": "create_class"
       },
       "states": {
-        "btn_race_ka_tu": "on",
-        "btn_class_priest": "on",
         "btn_race_ka_at": "disabled",
         "btn_race_ka_wt": "disabled",
         "btn_race_ka_pt": "disabled",
@@ -107,7 +107,11 @@
   "messages": {
     "create_full": {"text": {"table": "Data/Texts_us.tbl", "row": 7675}},
     "delete_disabled": {"text": {"table": "Data/Texts_us.tbl", "row": 1501}},
-    "exit_confirm": {"text": {"table": "Data/Texts_us.tbl", "row": 1502}}
+    "exit_confirm": {"text": {"table": "Data/Texts_us.tbl", "row": 1502}},
+    "create_no_race": {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
+                       "text": {"table": "Data/Texts_us.tbl", "row": 1908}},
+    "create_no_class": {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
+                        "text": {"table": "Data/Texts_us.tbl", "row": 1904}}
   },
   "strings": {
     "select_info": "Level: {level}\nSpecialty: {class}\nID: {name}",

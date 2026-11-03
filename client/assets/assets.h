@@ -850,7 +850,7 @@ enum class FrontAction : uint32_t {
   none, login, exit, login_group, realm_group, realm_list, realm_connect, notice, select_prev,
   select_next, back, char_info, create_confirm, name_field, char_view, class_desc, progress,
   version, info, message, ok, title, login_closed, select_start, select_create, select_delete,
-  char_name, char_level, char_class, count
+  char_name, char_level, char_class, yes, no, count
 };
 enum class FrontScreen : uint32_t { login, select, create, loading, message, count };
 enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };
@@ -955,11 +955,13 @@ enum class FrontMessage : uint32_t {
   select_refused,     // the realm refused a select
   create_full,        // version 13: create with no empty slot (1298's btn_create)
   delete_disabled,    // version 13: delete, which the realm does not offer (1298's btn_delete)
+  exit_confirm,       // version 14: the select's exit asks first, Yes or No (1298's btn_exit)
   count
 };
 struct FrontMessageText {
   std::string title, text;
   bool replaces = false;  // `text` replaces the client's wording
+  bool named = false;     // the package names this message (version 14: exit_confirm makes the select ask)
 };
 // Version 11 (RQ-106, Q82): a move puts a node's top-left, its subtree with
 // it, where KO's UI code places it on a window (render/front_place.h). On an

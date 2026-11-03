@@ -1098,3 +1098,12 @@ other selects do, not what 1298 does:
 cannot yet say otherwise; each 1298 behaviour is a client change (a yes/no message
 box, a Back that opens the realm list, an arrow rule per layout, the two uncooked
 paths) and is proposed as its own item.
+**Exit decided (RQ-111, KO-FINDINGS §9.7):** N3FE version 14 carries a yes/no box: a
+package that names the message `exit_confirm` makes the select's Exit ask in the
+message box with its `yes` and `no` buttons (ENTER Yes, ESC No; Yes leaves). The 1298
+recipe draws 1298's own box, `El_MessageBox_us.uif`, and asks row 1502 untitled, as
+1298 does; its Yes and No are KO's buttons as KO labels them, "O  K" and "Cancel"
+(Q61). The 1097 choice names no `exit_confirm`, so its Exit still leaves at once;
+whether 1264's select Exit (the screens the 1097 choice draws) asks too was not read
+(the source's `UICharacterSelect.cpp` posts the same box) and is proposed as its own
+item. Back, the arrows and Create from an occupied slot stay as above.

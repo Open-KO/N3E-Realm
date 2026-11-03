@@ -17,8 +17,10 @@ a KO text-table row or the recipe's own string, and (version 11) where each
 layout's nodes go at a window's own size, as KO's UI code places them by the
 viewport (RQ-106, Q82), (version 12) the action `login_closed`, a node
 drawn only while the login group is not (1264's SetVisibleLogInUIs, RQ-108),
-and (version 13) 1298's select bar's actions, its start, create and delete
-buttons and its three info texts, with two messages (RQ-109).
+(version 13) 1298's select bar's actions, its start, create and delete
+buttons and its three info texts, with two messages (RQ-109), and (version
+14) the message box's yes and no buttons, with the message exit_confirm, the
+select's exit asked yes or no as 1298 asks it (RQ-111).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -49,7 +51,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 13
+VERSION = 14
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -96,7 +98,8 @@ UIF_KINDS = {0: "group", 1: "button", 3: "progress", 4: "image", 6: "text", 8: "
 ACTIONS = ("", "login", "exit", "login_group", "realm_group", "realm_list", "realm_connect", "notice",
            "select_prev", "select_next", "back", "char_info", "create_confirm", "name_field", "char_view",
            "class_desc", "progress", "version", "info", "message", "ok", "title", "login_closed",
-           "select_start", "select_create", "select_delete", "char_name", "char_level", "char_class")
+           "select_start", "select_create", "select_delete", "char_name", "char_level", "char_class",
+           "yes", "no")
 # Version 13 (RQ-109, specs/KO-FINDINGS.md 9.6): 1298's select bar
 # (co_CharacterSelect_us.uif, its ReceiveMessage 00607160): `select_start`
 # (btn_start, 005ff870: the centre click's start), `select_create` (btn_create,
@@ -105,8 +108,12 @@ ACTIONS = ("", "login", "exit", "login_group", "realm_group", "realm_list", "rea
 # character at rest) and the info texts its 006074c0 fills: `char_name`
 # (str_id), `char_level` (str_lev, "%d") and `char_class` (str_job).
 SELECT_ONLY = ("select_start", "select_create", "select_delete", "char_name", "char_level", "char_class")
+# Version 14 (RQ-111, specs/KO-FINDINGS.md 9.7): the message box's Btn_Yes and
+# Btn_No (1298's CUIMessageBox, shown for an MB_YESNO box by SetBoxStyle
+# 00527a40), which the client shows for the yes/no message exit_confirm only.
+MESSAGE_ONLY = ("yes", "no")
 # Actions bound on one screen only (the others never draw or use them).
-ONLY_ON = {"login_closed": "login", **{a: "select" for a in SELECT_ONLY}}
+ONLY_ON = {"login_closed": "login", **{a: "select" for a in SELECT_ONLY}, **{a: "message" for a in MESSAGE_ONLY}}
 # The select's info text: 1097's and 1264's one text00 (char_info), or any of
 # 1298's three (version 13); a select layout binds at least one.
 INFO_TEXTS = {"char_info", "char_name", "char_level", "char_class"}
@@ -176,7 +183,7 @@ UI_SCALE = {"native": 0, "window": 1}
 # message screen's node bound to `title`) and a `text` replacing the client's
 # own wording, each a string or a KO text-table row ({"table", "row"}).
 MESSAGES = ("connect_failed", "disconnected", "login", "login_blocked", "login_unavailable", "create_name",
-            "create_refused", "select_refused", "create_full", "delete_disabled")
+            "create_refused", "select_refused", "create_full", "delete_disabled", "exit_confirm")
 # A KO text table's columns (Data/Texts_us.tbl: the row id and its text; the
 # 1264 and 1298 clients' tables have these types).
 TEXT_TYPES = [6, 7]
@@ -1628,11 +1635,16 @@ def messages_section(config, assets):
     """Section 11 (version 10, RQ-102, Q81): a count and, for each worded
     message, its index in MESSAGES, its title, whether its text replaces the
     client's (0 or 1) and that text (empty when not). A title needs the
-    message screen's `title` binding to be drawn, so one without it is refused."""
+    message screen's `title` binding to be drawn, so one without it is refused.
+    Version 14 (RQ-111): `exit_confirm` makes the select's exit ask in a box
+    with Yes and No (1298's btn_exit, 00607160), so it needs the message
+    screen's `yes` and `no` bindings."""
     worded = message_texts(config, assets)
     bound = set(((config.get("screens") or {}).get("message") or {}).get("bindings", {}).values())
     if any(title for title, _ in worded.values()) and "title" not in bound:
         raise ValueError("front-end messages: a title, and no message screen node bound to `title`")
+    if "exit_confirm" in worded and not {"yes", "no"} <= bound:
+        raise ValueError("front-end messages: exit_confirm, and no message screen nodes bound to `yes` and `no`")
     data = u(len(worded))
     for kind in MESSAGES:
         if kind in worded:

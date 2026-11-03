@@ -62,7 +62,7 @@ choice" below); the engine knows none of them.
 | Character select | `ChrSelect/ka_chairs.n3shape`, `ka_light_0/1.n3light`, the Karus slots, spots and cameras of `CGameProcCharacterSelect::Init`; the Tuarek priest (`upc_ka_tu_pri.n3joint`, `upc_ka_at_wa.n3anim` clips 0, 1 and 2, `UPC_DefaultLooks`, the mace plug) | `ka_characterselect_us.uif` |
 | Character create | the character in `area_character` | `Ka_CharacterCreate_us.uif` |
 | Loading | none | `ka_loading_us.uif` |
-| Message box | over any screen | `co_MsgBoxOk_us.uif` |
+| Message box | over any screen | `co_MsgBoxOk_us.uif` (the 1097 choice draws 1264's `el_messagebox_us.uif`, §9.2; the 1298 recipe 1298's, the pinned tree's `el_messagebox_us.uif` with Yes and No, RQ-111) |
 
 Music (Q57, RQ-018, RQ-083): the chosen client's. For 1097 (Moradon's), `Snd/bgm_login.wav`
 on the login and the realm list, restarted every 21.66 s, and `Snd/bgm_el_battle.wav`,
@@ -101,10 +101,13 @@ replace the panels when the client has a Discord realm config.
   while a login is under way, as 1264 and 1298 do, whether it binds one or not),
   `select_start`, `select_create`, `select_delete`, `char_name`, `char_level`,
   `char_class` (N3FE version 13, RQ-109: 1298's select bar, its Start, Create and
-  Delete buttons and its name, level and class texts; KO-FINDINGS §9.6). The cook
+  Delete buttons and its name, level and class texts; KO-FINDINGS §9.6), `yes`,
+  `no` (N3FE version 14, RQ-111: the message box's Yes and No, drawn only for the
+  select's exit question, `exit_confirm`; KO-FINDINGS §9.7). The cook
   and the loader refuse an unknown action, an action bound twice in a screen, a
-  `login_closed` off the login screen, one of version 13's off the select, and a
-  screen whose required actions are unbound. Required per screen:
+  `login_closed` off the login screen, one of version 13's off the select, `yes` or
+  `no` off the message box, and a screen whose required actions are unbound.
+  Required per screen:
   - login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
     `realm_connect` (`notice` is optional; the Moradon package has none, Q61);
   - select: `select_prev`, `select_next`, `back`, `exit`, and an info text:
@@ -170,13 +173,20 @@ replace the panels when the client has a Discord realm config.
 - **The messages** (N3FE version 10, RQ-102, Q81). The front end's messages are a
   closed engine set (a failed connection, a closed one, the Discord flow's
   failures, a banned or unavailable login, an empty name, a refused create or
-  select, and (version 13) a create with every slot taken and a delete;
+  select, (version 13) a create with every slot taken and a delete, and
+  (version 14, RQ-111) the select's exit question, `exit_confirm`;
   `content/front-end.md` section 11). The package may give any of them
   a title, drawn in the message box's node bound to `title`, and a text that
   replaces the client's wording; the recipe's `messages` names each as a
   string or a row of a KO client's text table. The 1097 recipe titles and
   words the ones that stand for a box 1264 shows with a title and leaves the
   rest untitled in the realm's words (`content/front-end.md`, "Moradon").
+  Every message shows in an OK box but `exit_confirm`, which shows in a yes/no
+  box (KO's `MB_YESNO`: the nodes bound to `yes` and `no` drawn, `ok` hidden;
+  ENTER Yes, ESC No; Yes leaves the game, No closes the box). A package that
+  names `exit_confirm` makes the select's Exit ask so, as 1298's does
+  (KO-FINDINGS §9.7); without it, and on the login, Exit leaves at once. The
+  1298 recipe names it with row 1502; the 1097 recipe does not.
 - **The placement** (N3FE version 11, RQ-106, Q82). KO draws its front end on the
   screen's own pixels, never scaled, and places each layout's root and some of its
   nodes by the viewport's size each time the layout loads (`specs/KO-FINDINGS.md`
@@ -472,7 +482,11 @@ KO (`make live-ko`, needs `assets/ko`):
    swapped into the chosen package, draws 1298's select bar unscaled at
    ((W − w) >> 1, H − 10 − h) at each size, its ten bound nodes where 1298's Load
    puts them, its art drawn, and its name, level and class texts filled for a
-   character and empty with none.
+   character and empty with none. RQ-111: the 1298 recipe's Exit, clicked, asks in
+   its centred box with Yes and No and without OK (an OK box the reverse), its
+   frame drawing Yes and No where an OK box draws OK; ESC and No close it, ENTER,
+   the keypad's ENTER and Yes leave, the hidden OK does nothing; the chosen
+   package's Exit leaves at once.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

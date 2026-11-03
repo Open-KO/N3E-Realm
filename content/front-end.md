@@ -12,8 +12,9 @@ screen before the login (version 9, RQ-101: 1264's "K2 Network presents Knight
 Online"), each message box message's title and wording (version 10,
 RQ-102, Q81), where each layout's nodes go on a window of its own size
 (version 11, RQ-106, Q82), the action `login_closed`, a login node drawn
-only while the login group is not (version 12, RQ-108, Q85), and 1298's select
-bar's actions and two messages (version 13, RQ-109).
+only while the login group is not (version 12, RQ-108, Q85), 1298's select
+bar's actions and two messages (version 13, RQ-109), and the message box's
+Yes and No with the select's exit question (version 14, RQ-111).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -27,7 +28,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 13, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 14, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -141,7 +142,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    when the screen ends, as 1264 connects from its login; a message raised
    while it shows (the latest) waits for the login. A reset connection leaves
    the screen playing.
-11. The messages (version 10, RQ-102, Q81): a count (0–10, at most one per
+11. The messages (version 10, RQ-102, Q81): a count (0–11, at most one per
    message) and each: the message (an index of the closed set below, each
    once), its title (≤1024 ASCII bytes, may be empty), whether its text
    replaces the client's own wording (0 or 1) and that text (≤1024 ASCII
@@ -155,7 +156,9 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    6 `create_refused` (the realm refused a create), 7 `select_refused` (the
    realm refused a select), and (version 13, RQ-109) 8 `create_full` (create
    with every slot taken: 1298's `btn_create`) and 9 `delete_disabled` (delete,
-   which the realm does not offer: 1298's `btn_delete`). The client shows a message in the message box
+   which the realm does not offer: 1298's `btn_delete`), and (version 14,
+   RQ-111) 10 `exit_confirm` (the select's exit, asked yes or no: 1298's
+   `btn_exit`; named, it makes the select ask, "Actions" below). The client shows a message in the message box
    with the package's title in the node bound to `title` (empty for a message
    the package does not name) and the package's text where it replaces, its
    own wording otherwise. The cook writes the recipe's `messages` (below): a
@@ -163,7 +166,8 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    table (`{"table": "<input>:Data/Texts_us.tbl", "row": N}`, decrypted as
    `tools/assetc/ko_tbl.py` reads it; 1264 and 1298 look a row up by its id,
    1264's `005d2350`); it refuses a title without a `title` binding on the
-   message screen, a row the table lacks or holds twice, and text that is not
+   message screen, `exit_confirm` without both `yes` and `no` bindings there
+   (version 14), a row the table lacks or holds twice, and text that is not
    printable ASCII.
 12. The placement (version 11, RQ-106, Q82; `client/assets/front_place.h`):
    flags (0, or 1: the client scales the canvas to fit the window), then for
@@ -305,7 +309,9 @@ a zone, a zone mesh's flags other than above, fog values outside their bounds
 flag other than 0 or 1 or a text that does not replace, a node bound to
 `login_closed` on a screen other than the login (version 12), a node bound to
 `select_start`, `select_create`, `select_delete`, `char_name`, `char_level` or
-`char_class` on a screen other than the select (version 13), placement flags
+`char_class` on a screen other than the select (version 13), a node bound to
+`yes` or `no` on a screen other than the message box, or `exit_confirm` named
+without nodes bound to both on it (version 14), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
 file does not have, a rule of another kind or outside its bounds, a keep rule
 with a or c not 0, moves that do not leave the canvas rects where the file puts
@@ -318,7 +324,7 @@ The closed set, by index: none, `login`, `exit`, `login_group`, `realm_group`,
 `char_info`, `create_confirm`, `name_field`, `char_view`, `class_desc`,
 `progress`, `version`, `info`, `message`, `ok`, `title` (version 10), `login_closed`
 (version 12), `select_start`, `select_create`, `select_delete`, `char_name`,
-`char_level`, `char_class` (version 13). A group bound to `login_group` or
+`char_level`, `char_class` (version 13), `yes`, `no` (version 14). A group bound to `login_group` or
 `realm_group` is shown in its state only; `realm_list` lists the realm from
 `realm.json`; `notice`, `char_info`, `class_desc`, `version`, `info`,
 `message` and `title` (the message's title, item 11) are texts the client fills; `name_field` is the name entry; `char_view`
@@ -335,6 +341,19 @@ texts `char_name`, `char_level` and `char_class` are the character in focus's
 name, level (decimal) and the `class_name` string while the hall is at rest
 (the loop front-clip mode: always at rest; hover: while the pointer is on the
 character, as `char_info`), and empty for an empty slot or otherwise.
+
+The message box's styles (version 14, RQ-111, `specs/KO-FINDINGS.md` §9.7,
+`client/render/message_box.h`), message screen only: every message shows in an
+OK box, the node bound to `ok` drawn and those bound to `yes` and `no` hidden,
+but `exit_confirm`, which shows in a yes/no box, `yes` and `no` drawn and `ok`
+hidden (1298's SetBoxStyle, `00527a40`). In an OK box ENTER, the keypad's ENTER
+and ESC press OK; in the yes/no box ENTER and the keypad's ENTER press Yes and
+ESC presses No (OnKeyPress, `00527c60`); a click released on a drawn button
+presses it. Every press closes the box; Yes on `exit_confirm` also leaves the
+game (`BEHAVIOR_EXIT`, `00526d00`). A package that names `exit_confirm` (section
+11) makes the select's `exit` ask in that box instead of leaving at once (1298's
+select bar's `btn_exit`, `00607160`); the login's `exit` and a package that does
+not name it leave at once. The client's own wording for it is "Exit the game?".
 
 On the login screen (RQ-108, Q85, RQ-110, `client/render/front_login.h`) a
 login under way closes the login group:
@@ -516,8 +535,8 @@ recipe's, as "Moradon" below says, or missing, and marked here:
 - Music: `Snd/Intro_Sound.mp3`, looping on login, the realm list, select and
   create; loading silent (`005f68e0`, `005fea70`, "Moradon" below).
 - Still the 1097 recipe's, not 1298's: the 1098 login scene (1298 draws a UIF
-  intro), and the login, create, loading and message layouts (the pinned
-  tree's `UI_US`, as today). The hall lights `ka_light_0/1` are the files both
+  intro), and the login, create and loading layouts (the pinned tree's
+  `UI_US`, as today). The hall lights `ka_light_0/1` are the files both
   clients name.
 - Select (RQ-109, version 13, `specs/KO-FINDINGS.md` §9.6, binary): 1298's own,
   `UI_US/co_CharacterSelect_us.uif`, a 1024 × 113 bar, every node drawn,
@@ -530,10 +549,23 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   row 7675 ("Cannot create additional characters.") and `delete_disabled`
   with row 1501 ("Character deletion has been disabled currently") of the
   pinned tree's `Data/Texts_us.tbl`, untitled, as 1298 posts them. Not 1298's
-  (QUESTIONS Q87): Exit leaves at once (1298 asks row 1502, yes or no), Back
-  returns to the login (1298's to the server list), an arrow with no
-  neighbour is hidden (1298 draws both), and Create from an occupied slot puts
-  the camera on the empty slot (1298 flies it there).
+  (QUESTIONS Q87): Back returns to the login (1298's to the server list), an
+  arrow with no neighbour is hidden (1298 draws both), and Create from an
+  occupied slot puts the camera on the empty slot (1298 flies it there). Exit
+  asks, as 1298's does (below).
+- Message box (RQ-111, version 14, `specs/KO-FINDINGS.md` §9.7, binary): 1298's
+  own, the one its box manager (`005282a0`) loads for every message, the pinned
+  tree's `UI_US/el_messagebox_us.uif` (row 2, column 26 of its
+  `Data/UIs_us.tbl`) with the pinned tree's `ui_message_us.dxt` (its frame
+  grey), centred; the recipe drew `co_MsgBoxOk_us.uif` before, which 1298's
+  MessageBoxPost never loads. `Text_Message` is bound to `message`,
+  `Text_title` to `title` (every 1298 recipe message is untitled, so it draws
+  empty), `btn_ok` to `ok`, `btn_yes` to `yes` and `btn_no` to `no`;
+  `Edit_Common` and `btn_cancel` hidden. `messages` words `exit_confirm` with
+  row 1502 ("Are you sure you want to exit? "), untitled, as 1298's
+  `btn_exit` posts it (`00607160`: `MB_YESNO`, `BEHAVIOR_EXIT`), so the bar's
+  Exit asks: Yes (KO labels it "O  K") or ENTER leaves, No ("Cancel") or ESC
+  closes the box. The login's Cancel leaves at once, as 1298's does (source).
 - Placement (RQ-106, `specs/KO-FINDINGS.md` §9.3, binary): the 1097 recipe's
   `place` and `moves` (1264's code) for the login, create, loading and message
   layouts, but for the login's copyright line (below); the select's is 1298's

@@ -184,5 +184,10 @@ of which a select may bind in place of `char_info`, with the messages
 1298 recipe cooks 1298's own select, the `co_CharacterSelect_us.uif` bar, centred
 10 px above the bottom edge, with KO's rows 7675 and 1501 for the two messages
 (`specs/KO-FINDINGS.md` §9.6).
+N3FE version 14 (RQ-111) adds the message box's `yes` and `no` (message screen
+only) and the message `exit_confirm`, which makes the select's exit ask in a box
+with Yes and No; the cook refuses it without both bound. The 1298 recipe draws
+1298's own message box, the pinned tree's `el_messagebox_us.uif`, and words
+`exit_confirm` with KO's row 1502 (`specs/KO-FINDINGS.md` §9.7).
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

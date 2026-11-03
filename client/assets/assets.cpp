@@ -2676,7 +2676,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 13, "front end version");
+  need(r.u() == 14, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2765,8 +2765,15 @@ FrontEnd load_front_end(const Release &release) {
     }
     return bound;
   };
+  std::set<FrontAction> message_bound;
   for (size_t screen = 0; screen < fe.screens.size(); ++screen) {
     const auto bound = read_nodes(fe.screens[screen]);
+    // Version 14 (RQ-111): yes and no are the message box's only (KO's
+    // CUIMessageBox Btn_Yes and Btn_No, shown for an MB_YESNO box).
+    need(screen == size_t(FrontScreen::message) ||
+             (!bound.contains(FrontAction::yes) && !bound.contains(FrontAction::no)),
+         "front end yes/no off the message box");
+    if (screen == size_t(FrontScreen::message)) message_bound = bound;
     for (auto action : required[screen]) need(bound.contains(action), "front end screen action unbound");
     // Version 12 (RQ-108): login_closed is the login screen's only.
     need(screen == size_t(FrontScreen::login) || !bound.contains(FrontAction::login_closed),
@@ -3052,6 +3059,7 @@ FrontEnd load_front_end(const Release &release) {
   // (at most one per FrontMessage) and each: its FrontMessage (once), its
   // title, whether its text replaces the client's wording (0 or 1), and that
   // text (empty unless it replaces), each at most 1024 ASCII bytes.
+  // Version 14 adds exit_confirm, the select's yes/no question (RQ-111).
   const auto messages = r.count(uint32_t(FrontMessage::count), 0);
   std::set<uint32_t> worded;
   for (uint32_t i = 0; i < messages; ++i) {
@@ -3064,7 +3072,13 @@ FrontEnd load_front_end(const Release &release) {
     m.replaces = replaces == 1;
     m.text = ascii(text(1024));
     need(m.replaces || m.text.empty(), "front end message text");
+    m.named = true;
   }
+  // Version 14 (RQ-111): a package that names exit_confirm makes the select's
+  // exit ask first, in a box with Yes and No, so its message box binds both.
+  need(!fe.messages[size_t(FrontMessage::exit_confirm)].named ||
+           (message_bound.contains(FrontAction::yes) && message_bound.contains(FrontAction::no)),
+       "front end exit_confirm without yes and no");
   // 12. Version 11 (RQ-106, Q82): the placement. Its flags (0, or 1: the
   // client scales the canvas to fit the window), then for each layout (the
   // five screens, then the logo: none without one) a move count (at most 32)

@@ -17,10 +17,13 @@
 // tests/front_end.py to check against KO's own placements. RQ-108: the login
 // screen's state-bound nodes in each of the realm's login states
 // (client/render/front_login.h), as 1264's SetVisibleLogInUIs shows them.
+// RQ-111: the message box's styles, keys and answers (client/render/message_box.h)
+// as 1298's CUIMessageBox shows and answers an OK box and the yes/no exit.
 #include "assets/assets.h"
 #include "assets/front_place.h"
 #include "render/front_login.h"
 #include "render/front_logo.h"
+#include "render/message_box.h"
 #include "render/select_bar.h"
 #include "render/select_hall.h"
 #include "render/select_path.h"
@@ -377,6 +380,44 @@ int main(int argc, char **argv) {
     std::cout << "PASS select bar: 1298's create takes the slot in focus or the first empty one, or none when "
                  "all are taken; its delete box only for a character at rest\n";
   }
+  {
+    // RQ-111 (KO-FINDINGS 9.7, 1298 00527a40, 00527c60, 00526d00): exit_confirm
+    // is the one yes/no box, Yes and No shown and OK hidden; every other
+    // message an OK box. In a yes/no box ENTER presses Yes and ESC No; in an
+    // OK box both press OK. Yes on exit_confirm leaves; No, or OK anywhere,
+    // only closes; a button the box does not show does nothing.
+    using A = n3e::FrontAction;
+    using M = n3e::FrontMessage;
+    using n3e::front::BoxKey;
+    using n3e::front::BoxStyle;
+    std::string fail;
+    for (size_t k = 0; k < size_t(M::count); ++k) {
+      const auto kind = M(k);
+      const auto style = n3e::front::box_style(kind);
+      const bool question = kind == M::exit_confirm;
+      if ((style == BoxStyle::yes_no) != question) fail = "style of message " + std::to_string(k);
+      if (n3e::front::box_shows(A::ok, style) == question || n3e::front::box_shows(A::yes, style) != question ||
+          n3e::front::box_shows(A::no, style) != question || !n3e::front::box_shows(A::message, style) ||
+          !n3e::front::box_shows(A::title, style))
+        fail = "buttons of message " + std::to_string(k);
+      const auto enter = n3e::front::box_key(style, BoxKey::enter), escape = n3e::front::box_key(style, BoxKey::escape);
+      if (enter != (question ? A::yes : A::ok) || escape != (question ? A::no : A::ok) ||
+          n3e::front::box_key(style, BoxKey::none) != A::none)
+        fail = "keys of message " + std::to_string(k);
+      for (const auto button : {A::ok, A::yes, A::no, A::none, A::message}) {
+        const auto answer = n3e::front::box_press(kind, button);
+        const bool shown = button != A::none && button != A::message && n3e::front::box_shows(button, style);
+        if (answer.closes != shown || answer.exits != (question && button == A::yes))
+          fail = "answer of message " + std::to_string(k) + " to action " + std::to_string(int(button));
+      }
+    }
+    if (!fail.empty()) {
+      std::cerr << "FAIL message box: " << fail << "\n";
+      return 1;
+    }
+    std::cout << "PASS message box: exit_confirm's Yes and No (ENTER Yes, ESC No; Yes leaves), every other "
+                 "message's OK (ENTER or ESC)\n";
+  }
   int loaded = 0, refused = 0;
   for (int i = 1; i + 1 < argc; i += 2) {
     const std::string want = argv[i];
@@ -391,7 +432,7 @@ int main(int argc, char **argv) {
                              << " nodes, " << fe.logo->groups.size() << " groups, flags " << fe.logo->flags << "\n";
       // RQ-102: each worded message, by its FrontMessage index.
       for (size_t k = 0; k < fe.messages.size(); ++k)
-        if (const auto &m = fe.messages[k]; !m.title.empty() || m.replaces)
+        if (const auto &m = fe.messages[k]; m.named)
           std::cout << "message " << release.root.filename().string() << ": " << k << " title='" << m.title
                     << "' replaces=" << m.replaces << " text='" << m.text << "'\n";
       // RQ-106: placed NAME: layout=L size=WxH node=I rect=x0,y0,x1,y1

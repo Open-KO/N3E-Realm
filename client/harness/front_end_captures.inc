@@ -19,6 +19,15 @@
 //   FRONT_LOGIN idle=G,R,C waiting=G,R,C realms=G,R,C
 // (the shot login-waiting is the login with a login under way, rect= the
 // login_closed node's).
+// then (RQ-111) the select's exit: whether a click on it asks (a package that
+// names exit_confirm: 1298's yes/no box) or leaves at once, and, when it asks,
+// which of the box's OK, Yes and No draw in that box and in an OK box, and what
+// each answer does (closed or open, and the command: none or exit): ESC,
+// ENTER, the keypad's ENTER, a click on No, on Yes and on the hidden OK:
+//   FRONT_EXIT asks=0 command=exit
+//   FRONT_EXIT asks=1 shown=O,Y,N plain=O,Y,N esc=closed:none enter=closed:exit
+//     keypad=... no=... yes=... ok=open:none
+// (the shot message-exit is the select with that box, rect= Yes's);
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
 // logo-fade half way into the first group's fade-in, with rect= the logo
@@ -124,6 +133,68 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   // the rect is the title's.
   shot("message-titled", Screen::login, 0, "Local Realm", 0, A::title, "Disconnected from server", -1,
        n3e::FrontMessage::create_refused);
+  {
+    // RQ-111 (KO-FINDINGS 9.7): the select's exit, clicked and answered as a
+    // player does, through the screens' own input.
+    auto click = [&](n3e::FrontAction action) {
+      n3e::front::Output out;
+      const auto r = front->action_rect(action, width, height);
+      if (!r) return out;
+      const float x = ((*r)[0] + (*r)[2]) / 2, y = ((*r)[1] + (*r)[3]) / 2;
+      SDL_Event e{};
+      e.type = SDL_EVENT_MOUSE_MOTION;
+      front->event(e, x, y, width, height);
+      e = {};
+      e.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+      e.button.button = SDL_BUTTON_LEFT;
+      e.button.clicks = 1;
+      front->event(e, x, y, width, height);
+      e.type = SDL_EVENT_MOUSE_BUTTON_UP;
+      return front->event(e, x, y, width, height);
+    };
+    auto key = [&](SDL_Keycode k) {
+      SDL_Event e{};
+      e.type = SDL_EVENT_KEY_DOWN;
+      e.key.key = k;
+      return front->event(e, 0, 0, width, height);
+    };
+    auto asks = [&] {
+      front->jump(Screen::select);
+      const auto out = click(A::exit);
+      return std::pair{front->message_kind() == n3e::FrontMessage::exit_confirm, out};
+    };
+    auto shown = [&] {
+      return std::to_string(front->action_shown(A::ok)) + "," + std::to_string(front->action_shown(A::yes)) + "," +
+             std::to_string(front->action_shown(A::no));
+    };
+    const auto [asked, first] = asks();
+    std::cout << "FRONT_EXIT asks=" << asked;
+    if (!asked) std::cout << " command=" << (first.command == n3e::front::Command::exit ? "exit" : "none");
+    else {
+      std::cout << " shown=" << shown();
+      front->jump(Screen::select);
+      front->show_message(n3e::FrontMessage::disconnected, "Disconnected from server");
+      std::cout << " plain=" << shown();
+      auto answer = [&](const char *label, auto press) {
+        asks();
+        const auto out = press();
+        std::cout << " " << label << "=" << (front->showing_message() ? "open" : "closed") << ":"
+                  << (out.command == n3e::front::Command::exit ? "exit" : out.command == n3e::front::Command::none
+                                                                             ? "none"
+                                                                             : "other");
+      };
+      answer("esc", [&] { return key(SDLK_ESCAPE); });
+      answer("enter", [&] { return key(SDLK_RETURN); });
+      answer("keypad", [&] { return key(SDLK_KP_ENTER); });
+      answer("no", [&] { return click(A::no); });
+      answer("yes", [&] { return click(A::yes); });
+      answer("ok", [&] { return click(A::ok); });
+    }
+    std::cout << std::endl;
+    if (asked)
+      shot("message-exit", Screen::select, 1, "Local Realm", 0, A::yes, "Exit the game?", -1,
+           n3e::FrontMessage::exit_confirm);
+  }
   if (const auto &logo = front->logo()) {
     // RQ-101: each group in its hold, and the first half way into its fade-in.
     std::string alphas;

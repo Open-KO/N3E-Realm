@@ -302,6 +302,9 @@ problems = {
     "select bar action off the select": dict(specs={**{n: spec(n) for n in fe.SCREENS},
                                                     "login": spec("login", bindings={**BINDINGS["login"],
                                                                                      "notice": "char_name"})}),
+    # RQ-111 (version 14): yes and no are the message box's only.
+    "yes off the message box": dict(specs={**{n: spec(n) for n in fe.SCREENS},
+                                           "login": spec("login", bindings={**BINDINGS["login"], "notice": "yes"})}),
     "edit with two strings": dict(trees={**trees, "create.uif": node(0, "root", [
         button("btn_create"), button("btn_cancel"), node(8, "edit_name", [text(""), text("")]),
         node(9, "area_character")])[1]}),
@@ -774,7 +777,7 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=13, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=14, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, turn=0, paths=None, hall=1, zone=u(0), fog=FOG_OFF, more_textures=0,
          logo=u(0), messages=u(0), placement=NO_PLACEMENT):
@@ -922,6 +925,10 @@ message_problems = {
     "a text of a control byte": dict(worded={"login": {"text": "a\tb"}}),
     "a text past 1024 bytes": dict(worded={"login": {"text": "x" * 1025}}),
     "a number": dict(worded={"login": {"title": 1901}}),
+    # RQ-111 (version 14): exit_confirm asks yes or no, so the box binds both.
+    "exit_confirm without yes and no": dict(worded={"exit_confirm": {"text": "Exit?"}}),
+    "exit_confirm without no": dict(worded={"exit_confirm": {"text": "Exit?"}},
+                                    bindings={"bindings": {**TITLED["bindings"], "btn_yes": "yes"}}),
 }
 for reason, kw in message_problems.items():
     try:
@@ -929,6 +936,11 @@ for reason, kw in message_problems.items():
     except (ValueError, KeyError):
         continue
     raise AssertionError("message cook accepted " + reason)
+# RQ-111: exit_confirm with the box's yes and no bound, last in MESSAGES order.
+QUESTION_BINDINGS = {"bindings": {**TITLED["bindings"], "btn_yes": "yes", "btn_no": "no"}}
+EXIT_CONFIRM, _ = messages({"exit_confirm": {"text": row(2)}}, bindings=QUESTION_BINDINGS)
+assert fe.MESSAGES[-1] == "exit_confirm" and \
+    EXIT_CONFIRM == u(1) + u(len(fe.MESSAGES) - 1) + string("") + u(1) + string("Enter a name. "), EXIT_CONFIRM
 # The recipe's tables are paths the choice's prefix check sees (RQ-084).
 assert ("messages.login.title.table", "installer-1264:Data/Texts_us.tbl") in fe.recipe_paths(
     {"messages": {"login": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1}}}})
@@ -942,9 +954,38 @@ def message_raw(*entries, count=None):
     return out + b"".join(u(k) + string(t) + u(r) + string(x) for k, t, r, x in entries)
 
 
+# RQ-111 (version 14): the synthetic screens with a message box of KO's
+# Btn_Yes and Btn_No (El_MessageBox_us.uif's), and with yes or no cooked off
+# the message box (without the cook's own check) for the loader's.
+def question_screens(no=True):
+    tree = node(0, "root", [text("text_msg"), button("btn_ok"), button("btn_yes")] + [button("btn_no")] * no)
+    bindings = {**BINDINGS["message"], "btn_yes": "yes", **({"btn_no": "no"} if no else {})}
+    return cook_screens(trees={**trees, "message.uif": tree[1]},
+                        specs={**{n: spec(n) for n in fe.SCREENS}, "message": spec("message", bindings=bindings)})[0]
+
+
+def yes_off_message():
+    specs = {n: spec(n) for n in fe.SCREENS}
+    specs["login"]["bindings"]["notice"] = "yes"
+    saved = dict(fe.ONLY_ON)
+    fe.ONLY_ON.clear()
+    try:
+        return cook_screens(specs=specs)[0]
+    finally:
+        fe.ONLY_ON.update(saved)
+
+
+QUESTION = question_screens()
+assert struct.unpack_from("<I", QUESTION[4])[0] == 1 + 1 + 6 * 3, struct.unpack_from("<I", QUESTION[4])
 MESSAGE_CASES = {
     "ok-messages": blob(messages=MESSAGES_OK),
-    "ok-messages-every": blob(messages=message_raw(*((k, "t", 0, "") for k in range(len(fe.MESSAGES))))),
+    "ok-messages-every": blob(screen_data=QUESTION,
+                              messages=message_raw(*((k, "t", 0, "") for k in range(len(fe.MESSAGES))))),
+    "ok-exit-confirm": blob(screen_data=QUESTION, messages=EXIT_CONFIRM),
+    "ok-question-box-unused": blob(screen_data=QUESTION),
+    "bad-exit-confirm-no-buttons": blob(messages=EXIT_CONFIRM),
+    "bad-exit-confirm-no-no": blob(screen_data=question_screens(no=False), messages=EXIT_CONFIRM),
+    "bad-yes-off-message": blob(screen_data=yes_off_message()),
     "bad-messages-over": blob(messages=message_raw(*((k % len(fe.MESSAGES), "t", 0, "")
                                                      for k in range(len(fe.MESSAGES) + 1)))),
     "bad-message-kind": blob(messages=message_raw((len(fe.MESSAGES), "t", 0, ""))),
@@ -1193,6 +1234,17 @@ assert json.loads((ROOT / "games/moradon/front-end.json").read_text())["screens"
 # The 1298 recipe hides it and binds nothing to login_closed (RQ-110).
 login_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text())["screens"]["login"]
 assert "Text_Rights" in login_1298["hidden"] and "login_closed" not in login_1298["bindings"].values(), login_1298
+# RQ-111 (KO-FINDINGS 9.7): the 1298 recipe's message box is the one 1298's
+# box manager (005282a0) loads, El_MessageBox_us.uif, its Btn_Yes and Btn_No
+# bound for the select's exit, asked with row 1502 as 00607160 posts it
+# (untitled); the 1097 choice names no exit_confirm, so its exit leaves at once.
+recipe_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text())
+assert recipe_1298["screens"]["message"] == {
+    "ui": "UI_US/el_messagebox_us.uif", "place": "centre",
+    "bindings": {"Text_Message": "message", "Text_title": "title", "btn_ok": "ok", "btn_yes": "yes", "btn_no": "no"},
+    "hidden": ["Edit_Common", "btn_cancel"]}, recipe_1298["screens"]["message"]
+assert recipe_1298["messages"]["exit_confirm"] == {"text": {"table": "Data/Texts_us.tbl", "row": 1502}}
+assert "exit_confirm" not in json.loads((ROOT / "games/moradon/front-end.json").read_text()).get("messages", {})
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
     "a bottom placement of another key": {**PLACE_SPECS, "message": {"place": {"bottom": 10, "x": 1}}},
@@ -1372,6 +1424,8 @@ cases = {
     # RQ-109 (version 13): 1298's select bar, its info texts in place of
     # char_info; its actions on the select only, and an info text there.
     "bad-version-12": blob(version=12),
+    # RQ-111 (version 14): the message box's yes and no, and exit_confirm.
+    "bad-version-13": blob(version=13),
     "ok-select-bar": blob(screen_data=bar_screens),
     "ok-select-bar-name": blob(screen_data=bar(("str_id",))),
     "bad-select-bar-off-select": blob(screen_data=bar_off_select()),
@@ -1472,6 +1526,16 @@ try:
     assert "select action off the select" in line, line
     line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-select-no-info:"))
     assert "front end screen action unbound" in line, line
+    # RQ-111: yes or no off the message box, and exit_confirm without both,
+    # each for its own reason.
+    for name, reason in (("bad-yes-off-message", "yes/no off the message box"),
+                         ("bad-exit-confirm-no-buttons", "exit_confirm without yes and no"),
+                         ("bad-exit-confirm-no-no", "exit_confirm without yes and no")):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    exit_line = [l for l in run.stdout.splitlines() if l.startswith("message ok-exit-confirm: ")]
+    assert exit_line == ["message ok-exit-confirm: %d title='' replaces=1 text='Enter a name. '"
+                         % (len(fe.MESSAGES) - 1)], exit_line
     # RQ-102: the loaded messages, by FrontMessage index; the message refusals
     # are the section's own.
     worded = [l for l in run.stdout.splitlines() if l.startswith("message ok-messages: ")]

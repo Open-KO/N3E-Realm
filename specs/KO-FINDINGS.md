@@ -440,7 +440,7 @@ per screen. A choice can be offered only when every row it needs is data:
 | | Data today | Not yet |
 |---|---|---|
 | Login scene | the 1098 scene (1097's): camera, lights, the model's one clip and plugs, the moon quad | 1298's UIF intro (`ka_login_intro_us.uif`, wrapped UVs; spec 11 left it out), 2145's `re_login_intro`, Steam's intro procs |
-| Layouts | UIF trees `ko_hud.parse` reads (1298's and 1264's, the same files; 2145's `co_login`, `ka_characterselect`), bindings, moves, hidden, states, a string's text; a state image's own children (1264's message box labels, §9.2; client behaviour, no format change); since version 13 (RQ-109, §9.6) 1298's select bar, `co_CharacterSelect_us.uif`, with its start, create and delete buttons and three info texts | 1097's UIF version; the 2145 versions it refuses; Steam's pack; a loading layout chosen at run time by the last war's victor (Q80) |
+| Layouts | UIF trees `ko_hud.parse` reads (1298's and 1264's, the same files; 2145's `co_login`, `ka_characterselect`), bindings, moves, hidden, states, a string's text; a state image's own children (1264's message box labels, §9.2; client behaviour, no format change); since version 13 (RQ-109, §9.6) 1298's select bar, `co_CharacterSelect_us.uif`, with its start, create and delete buttons and three info texts; since version 14 (RQ-111, §9.7) the message box's Yes and No, shown for the select's exit question | 1097's UIF version; the 2145 versions it refuses; Steam's pack; a loading layout chosen at run time by the last war's victor (Q80) |
 | Select hall | meshes, lights, slots, the turn about `at` with per-slot ends, the spot's rate, front/start/rest clips with blend times, plugs; since version 6 (RQ-086) the front-clip mode, 1097's hover or 1298's loop, and as recipe data 1298's per-race joint and clips with the default looks (§8.3); since version 7 (RQ-087) the path turn mode with 1298's recorded `.n3camera` paths, its select UI hidden while they play, and as recipe data its slots and spots (§8.4); since version 8 (RQ-095) a zone as the hall, 1298's `karus_intro` (its terrain, static shapes and alpha parts), and the camera's fog | the zone's sky, light maps, grass, birds and animated shapes (Q79); each slot's own looks (RQ-005); 2145's `.n3anim` format (convertible: `anim_2145.to_1298`) |
 | Music | MPEG-1/2 Layer III tracks per screen, looping or once (1298's `Intro_Sound.mp3`); since version 5 (RQ-083) 16-bit PCM tracks and a restart period (1097's `bgm_login.wav` every 21.66 s, `bgm_el_battle.wav` looping); RQ-096 carried the period's clock for the process, 1097's and 1264's login timer (Q75, §9.1; client behaviour, no format change), off by default since RQ-105 (Q75 (a): every entry starts the track at once) | Ogg Vorbis (2145, Steam) |
 | Sounds | a sound-table id bound in `audio.bin` (1097's turn sound 2501) | 2145's Ogg `char_select_turn.ogg` |
@@ -460,7 +460,8 @@ camera paths, the UI hidden while they play, and 1298's slots and spots are data
 (N3FE version 7, §8.4); 1298's hall (the `karus_intro` zone) and its UIF intro are
 not. *RQ-095:* the `karus_intro` zone and the camera's fog are data (N3FE version
 8, §8.4), its sky not yet (Q79); the UIF intro is not. *RQ-109:* 1298's own select
-bar is data (N3FE version 13, §9.6). A "2145" choice needs a reader for its UIF versions and an Ogg
+bar is data (N3FE version 13, §9.6). *RQ-111:* its Exit's yes/no box is data
+(N3FE version 14, §9.7). A "2145" choice needs a reader for its UIF versions and an Ogg
 decision. Steam is not cookable yet: the packs are not readable, the exe is protected,
 and the install changes with every Steam update. The follow-up items are filed under
 RQ-078.
@@ -790,7 +791,46 @@ than flown there (the realm's create is a screen of its own); Delete shows row 1
 for a character at rest. Not 1298's (Q87): Exit leaves at once, with no yes/no box
 (the realm's message box has one button); Back returns to the login, not the server
 list; the arrows hide at the ends of the row, as every realm select's do. The 1097
-choice changes by the version word only.
+choice changes by the version word only. *RQ-111 (§9.7): Exit now asks, as 1298's
+does.*
+
+### 9.7 1298's message box and its Exit question (RQ-111, 2026-11-02)
+
+Read statically in n3e's 1298 `KnightOnLine.exe` (sha256 `828ab0db…`, Ghidra project
+`build/ghidra/audit-2026-09-19`, `-readOnly -noanalysis`, `AuditReference.java`
+`decompile`; output under `build/ghidra/rq111/`, not committed), with `objdump` for
+the two functions the project has not marked (the box's Load and OnKeyPress) and a
+PE reader for the box's vtable and strings; the pinned tree's
+`UI_US/el_messagebox_us.uif` through `ko_hud.parse` and its `Data/UIs_us.tbl`
+through `ko_tbl` (nothing committed from them). Not run (Wine is approved for 1097
+and 1264 only). The source agrees where named.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The select's Exit posts a yes/no box.** ReceiveMessage's `btn_exit` branch (§9.6) calls `00646ba0` (the source's `CGameProcedure::MessageBoxPost`) with row 1502's text, an empty title, style 4 and behaviour 1; `00646ba0` passes all five to the box manager's `005282a0` | 1298 `00607160`, `00646ba0` | binary |
+| **The manager loads El_MessageBox_us.uif and centres it.** `005282a0` looks the text up among its boxes (`005293b0`); for a new one it makes a box (`005267d0`, vtable `006a6710`) and loads row 2's column 26 (`+0x194` of the table's row-2 node) of the client's `Data\UIs_us.tbl`: in the pinned tree, row 2 column 26 is `UI_us\El_MessageBox_us.uif` (row 1's `Ka_MessageBox_us.uif`), for either nation. It then sets the style (`00527a40`), shows the edit only for behaviour 10 (`00527b00`), keeps the behaviour at `+0xd0`, sets the text and title (`00526cc0`, `00526ce0`), moves the box to `((W − w) >> 1, (H − h) >> 1)` and shows it | 1298 `005282a0`; the pinned tree's `Data/UIs_us.tbl` | binary; local-asset |
+| **Its Load finds seven nodes.** `Btn_OK` (`+0xb0`), `Btn_Yes` (`+0xb4`), `Btn_No` (`+0xb8`), `Btn_Cancel` (`+0xbc`), `Text_Message` (`+0xc0`), `Text_Title` (`+0xc4`) and `Edit_Common` (`+0xc8`), by name (vtable slot 3) | 1298 `005268c0` (objdump); strings `006d5ba4`, `006d63f8`, `006d63f0`, `006d586c`, `006d4cac`, `006d4f44`, `006d63e4` | binary |
+| **SetBoxStyle shows Yes and No for style 4.** `00527a40` hides all four buttons, keeps the style at `+0xd4`, then shows `Btn_Yes` and `Btn_No` for 4 (`MB_YESNO`), `Btn_Cancel` for 6 (`MB_CANCEL`) and `Btn_OK` otherwise | 1298 `00527a40`; source `UIMessageBox.cpp` `SetBoxStyle` | binary; source |
+| **Yes on BEHAVIOR_EXIT quits; No closes.** ReceiveMessage (`00526d00`, vtable slot 19), on a click: for `Btn_OK` or `Btn_Yes` it calls the parent's callback with 1, then by behaviour; behaviour 1 releases the sound (`00670b70`, `00670c00`, and `005dd790` when the main procedure is active) and calls `PostQuitMessage(0)`. For `Btn_No` or `Btn_Cancel` it calls the callback with 2, hides the box and empties its text and title, then by behaviour (no case for 1). Either way it hides the edit and resets the behaviour to 0 | 1298 `00526d00`; source `UIMessageBox.cpp` `ReceiveMessage` | binary; source |
+| **ENTER is Yes, ESC is No.** OnKeyPress (`00527c60`, vtable slot 24), with the box shown: in a style-4 box `DIK_ESCAPE` (1) presses `Btn_No` and `DIK_RETURN` (`0x1c`) or `DIK_NUMPADENTER` (`0x9c`) presses `Btn_Yes`; in a style-6 box any of the three presses `Btn_Cancel`; in a style-0 box, unless the behaviour is 3, any of the three presses `Btn_OK` | 1298 `00527c60` (objdump); source `UIMessageBox.cpp` `OnKeyPress` | binary; source |
+| **The box's Yes and No are labelled OK and Cancel.** The pinned tree's `el_messagebox_us.uif` (`8f7773d5…`, the 1264 install's byte for byte, §9.1) puts `btn_yes` at (9, 116)–(106, 145), each state image labelled `O  K`, and `btn_no` at (220, 116)–(317, 145), labelled `Cancel`; `btn_ok` and `btn_cancel` share the centre, (115, 116)–(212, 145); `Text_title` (12, 10)–(309, 24) holds "111" in the file; `Text_Message` (21, 28)–(304, 86). Its texture is the pinned tree's `ui_message_us.dxt` (the grey frame, §9.2) | the pinned tree's `UI_US/el_messagebox_us.uif` | local-asset |
+| Row 1502 of the pinned tree's `Data/Texts_us.tbl` is "Are you sure you want to exit? " | the pinned tree's `Data/Texts_us.tbl` | local-asset |
+| 1298's login Cancel quits at once, without a box (`PostQuitMessage(0)`); only its Option asks yes or no (`BEHAVIOR_EXECUTE_OPTION`). Not read in the binary | source `UILogin_1298.cpp` `ReceiveMessage` | source |
+
+**Decides (RQ-111):** N3FE version 14 adds the message box's actions `yes` and
+`no` (message screen only) and the message `exit_confirm`, the engine's one
+yes/no question. A package that names `exit_confirm` makes the select's `exit`
+ask in the message box instead of leaving: the box shows the nodes bound to `yes`
+and `no` and hides the one bound to `ok` (an OK box the reverse), ENTER and the
+keypad's ENTER press Yes, ESC presses No, and Yes leaves the game while No only
+closes the box. The cook and the loader refuse `exit_confirm` without both
+buttons bound. The 1298 recipe (not offered) now draws 1298's box,
+`UI_US/el_messagebox_us.uif` of the pinned tree, for every message (it drew
+`co_MsgBoxOk_us.uif`, which 1298's MessageBoxPost never loads), binds its Yes and
+No, hides `Edit_Common` and `btn_cancel`, binds `Text_title` to `title`, and words
+`exit_confirm` with row 1502, untitled, as 00607160 posts it. The login's Cancel
+still leaves at once (1298's does, by the source). The 1097 choice names no
+`exit_confirm`: its exit leaves at once, and it changes by the version word only.
 
 ## Not re-derived here
 
@@ -812,7 +852,7 @@ notes.
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |
 | Q73 | §9 (RQ-078): what differs per client on the five screens, and which of it the format expresses; the realm owner's choice is package data the cook checks. §9.2 (RQ-085): the 1097 choice's layouts are the 1264 install's, its message box and loading 1264's. |
 | Q85 | §9.4 (RQ-108): 1264 shows the login's copyright line, at `((W − w) / 2, H − h − 20)`, only while its login bar is hidden: from a login press until a failed answer, and with the server list after a success; the 1097 choice does the same (N3FE version 12's `login_closed`), the bar hidden while the Discord flow runs. |
-| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. |
+| Q87 | §9.6 (RQ-109): 1298's select is the `co_CharacterSelect_us.uif` bar, centred 10 px above the bottom edge: Start is the centre click, Create opens create in the slot in focus or the first empty one (row 7675 when none), Delete says row 1501, Exit asks row 1502 yes or no, Back returns to the server list, and both arrows always draw; the 1298 recipe draws the bar (N3FE version 13) and keeps the realm's Exit, Back and arrows. §9.7 (RQ-111): 1298's Exit box is `El_MessageBox_us.uif` with Yes and No (labelled OK and Cancel), ENTER Yes and ESC No, Yes quitting; the 1298 recipe asks so (N3FE version 14). |
 | Q86 | §9.5 (RQ-110): 1298's login draws no copyright line (its login is the intro layout, no `Text_Rights`) and hides its bar from a press until a failed answer; the 1298 recipe hides the line and, like every layout now, its bar while a login is under way. |
 | Q82 | §9.2 (RQ-101): 1264's logo procedure runs first, once a process: three groups fading in, holding and fading out on black over 12 s, `Snd\bless.wav` from 1 s faded out over 4 s from the third, any key skipping to the login, the cursor hidden; the 1097 choice shows it (N3FE version 9). §9.3 (RQ-106): KO draws every front-end layout unscaled, placed by the screen's size (the login on the bottom edge, the server list at the top-left, the select's buttons on the bottom edge, create, loading, the message box and the logo centred), the 3D scenes filling the screen; the realm does the same (N3FE version 11). |
 | Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. §9.2 (RQ-102): 1264 titles its login answer's and its create failures; the 1097 choice gives the realm's matching messages KO's title and wording (N3FE version 10) and leaves the rest untitled. |

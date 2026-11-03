@@ -85,14 +85,16 @@
       }
     },
     "message": {
-      "ui": "UI_US/co_MsgBoxOk_us.uif",
+      "ui": "UI_US/el_messagebox_us.uif",
       "place": "centre",
-      "bindings": {"text_msg": "message", "btn_ok": "ok"}
+      "bindings": {"Text_Message": "message", "Text_title": "title", "btn_ok": "ok", "btn_yes": "yes", "btn_no": "no"},
+      "hidden": ["Edit_Common", "btn_cancel"]
     }
   },
   "messages": {
     "create_full": {"text": {"table": "Data/Texts_us.tbl", "row": 7675}},
-    "delete_disabled": {"text": {"table": "Data/Texts_us.tbl", "row": 1501}}
+    "delete_disabled": {"text": {"table": "Data/Texts_us.tbl", "row": 1501}},
+    "exit_confirm": {"text": {"table": "Data/Texts_us.tbl", "row": 1502}}
   },
   "strings": {
     "select_info": "Level: {level}\nSpecialty: {class}\nID: {name}",

@@ -1,7 +1,8 @@
 #pragma once
 // Spec 11's KO front end: the logo screen when the package has one (RQ-101,
 // 1264's), login (the 1098 intro scene), the realm list, the
-// Karus character select hall, create, loading and the OK message box, drawn
+// Karus character select hall, create, loading and KO's message box (OK, or
+// RQ-111's yes/no for the select's exit), drawn
 // from front-end.bin (content/front-end.md). The screens are a state machine
 // here; the viewer turns each Command into the protocol message it already
 // sends for the legacy panels, and tells this module what the server said.
@@ -12,6 +13,7 @@
 #include "render/animation.h"
 #include "render/front_logo.h"
 #include "render/front_login.h"
+#include "render/message_box.h"
 #include "render/scene_clock.h"
 #include "render/select_bar.h"
 #include "render/select_hall.h"
@@ -293,10 +295,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // the login group from a login press until its answer and shows the node
   // bound to login_closed meanwhile (render/front_login.h).
   void login_waiting(bool on) { waiting = on; }
-  // Whether the current layout's node bound to `action` draws in this state
-  // (a test hook; false without one).
+  // Whether the current layout's node bound to `action` draws in this state,
+  // the message box's for its own actions (a test hook; false without one).
   bool action_shown(FrontAction action) const {
-    const auto screen = layout();
+    const auto screen = message_action(action) ? FrontScreen::message : layout();
     const auto &nodes = fe.screens[size_t(screen)];
     const auto shown = visible(screen);
     for (size_t i = 0; i < nodes.size(); ++i)
@@ -323,14 +325,20 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // reports can show over the logo; the latest waiting message shows then.
   // RQ-102 (Q81): the package words each kind of message: its title (the
   // node bound to `title`), and a text that replaces the client's own; a kind
-  // it does not word shows untitled in the client's words.
+  // it does not word shows untitled in the client's words. RQ-111: the box
+  // takes the message's style (render/message_box.h): exit_confirm's Yes and
+  // No, every other message's OK.
   void show_message(FrontMessage kind, std::string text) {
     const auto &worded = fe.messages[size_t(kind)];
-    Message m{worded.replaces ? worded.text : std::move(text), worded.title};
+    Message m{worded.replaces ? worded.text : std::move(text), worded.title, kind};
     if (state == Screen::logo) deferred = std::move(m);
     else message = std::move(m);
   }
   bool showing_message() const { return message.has_value(); }
+  // The message showing, and its box's style (a test hook; none: an OK box).
+  std::optional<FrontMessage> message_kind() const {
+    return message ? std::optional<FrontMessage>(message->kind) : std::nullopt;
+  }
   bool creating() const { return pending_create; }
   // The character in front as the last select frame showed it; the test
   // client checks the hover, its blends, the spot and the info text.
@@ -398,9 +406,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) {
-    const auto screen = action == FrontAction::message || action == FrontAction::ok || action == FrontAction::title
-                            ? FrontScreen::message
-                            : layout();
+    const auto screen = message_action(action) ? FrontScreen::message : layout();
     const auto &nodes = fe.screens[size_t(screen)];
     for (size_t i = 0; i < nodes.size(); ++i)
       if (nodes[i].action == action) {
@@ -418,6 +424,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const size_t at = state == Screen::logo ? FrontEnd::kLogoLayout : size_t(layout());
     const auto &nodes = front_layout(fe, at);
     return {ox + (placed[at][0][0] - nodes[0].rect[0]) * s, oy + (placed[at][0][1] - nodes[0].rect[1]) * s, s};
+  }
+  static bool message_action(FrontAction action) {
+    return action == FrontAction::message || action == FrontAction::ok || action == FrontAction::title ||
+           action == FrontAction::yes || action == FrontAction::no;
   }
   // Whether the layouts are scaled to the window (fe.scale_to_window, or a
   // window smaller than the canvas) at this size.
@@ -437,12 +447,22 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       return out;
     }
     if (message) {
-      const bool ok = (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat &&
-                       (e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER || e.key.key == SDLK_ESCAPE)) ||
-                      (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT &&
-                       hit(FrontScreen::message, cx, cy) == FrontAction::ok);
+      // KO's box (render/message_box.h): ENTER and the keypad's ENTER press
+      // OK or Yes, ESC OK or No (1298's OnKeyPress 00527c60); a click
+      // released on a button the box shows presses it. Yes on exit_confirm
+      // leaves the game (BEHAVIOR_EXIT); every press closes the box.
+      FrontAction button = FrontAction::none;
+      if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
+        const auto key = e.key.key == SDLK_RETURN || e.key.key == SDLK_KP_ENTER ? BoxKey::enter
+                         : e.key.key == SDLK_ESCAPE                             ? BoxKey::escape
+                                                                                : BoxKey::none;
+        button = box_key(box_style(message->kind), key);
+      } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
+        button = hit(FrontScreen::message, cx, cy);
       if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) pressed = hit(FrontScreen::message, cx, cy);
-      if (ok) message.reset(), pressed = FrontAction::none;
+      const auto answer = box_press(message->kind, button);
+      if (answer.exits) out.command = Command::exit;
+      if (answer.closes) message.reset(), pressed = FrontAction::none;
       return out;
     }
     if (state == Screen::loading) return out;
@@ -572,7 +592,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::vector<Buffer> statics, zone_meshes, intro_plugs, select_plugs, create_plugs;
   std::vector<std::vector<Scene>> clips;  // per scene: each clip's poses
   Screen state = Screen::login;
-  struct Message { std::string text, title; };
+  struct Message {
+    std::string text, title;
+    FrontMessage kind = FrontMessage::disconnected;
+  };
   std::optional<Message> message;
   std::array<float, 2> pointer{-1, -1};
   FrontAction pressed = FrontAction::none;
@@ -738,6 +761,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       // The login group, the realm group and (RQ-108) the node KO shows while
       // the login group is hidden, each in its states only.
       on = on && login_state_shows(nodes[i].action, state == Screen::login, state == Screen::realms, waiting);
+      // RQ-111: the message box's buttons by its style (SetBoxStyle 00527a40).
+      if (screen == FrontScreen::message && message) on = on && box_shows(nodes[i].action, box_style(message->kind));
       if (nodes[i].kind == FrontNode::BUTTON && on) {
         // Prev and next only where there is a neighbour to turn to.
         const auto order = slot_order();
@@ -825,7 +850,17 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     case FrontAction::login:
       if (state == Screen::login) out.command = Command::login;
       break;
-    case FrontAction::exit: out.command = Command::exit; break;
+    // RQ-111 (version 14, specs/KO-FINDINGS.md 9.7): 1298's select bar's
+    // btn_exit (00607160) asks row 1502 in a yes/no box (MB_YESNO,
+    // BEHAVIOR_EXIT) and leaves only on Yes; a package that names
+    // exit_confirm asks so on the select. Elsewhere, and without it, exit
+    // leaves at once (1298's login Cancel quits at once, by the source).
+    case FrontAction::exit:
+      if (state == Screen::select && fe.messages[size_t(FrontMessage::exit_confirm)].named)
+        show_message(FrontMessage::exit_confirm, "Exit the game?");
+      else
+        out.command = Command::exit;
+      break;
     case FrontAction::realm_list: break;
     case FrontAction::realm_connect:
       if (state == Screen::realms && slide >= realm_height) {

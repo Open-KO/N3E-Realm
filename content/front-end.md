@@ -158,7 +158,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    with every slot taken: 1298's `btn_create`) and 9 `delete_disabled` (delete,
    which the realm does not offer: 1298's `btn_delete`), and (version 14,
    RQ-111) 10 `exit_confirm` (the select's exit, asked yes or no: 1298's
-   `btn_exit`; named, it makes the select ask, "Actions" below). The client shows a message in the message box
+   `btn_exit`, 1264's `bt_exit`; named, it makes the select ask, "Actions" below). The client shows a message in the message box
    with the package's title in the node bound to `title` (empty for a message
    the package does not name) and the package's text where it replaces, its
    own wording otherwise. The cook writes the recipe's `messages` (below): a
@@ -352,7 +352,8 @@ ESC presses No (OnKeyPress, `00527c60`); a click released on a drawn button
 presses it. Every press closes the box; Yes on `exit_confirm` also leaves the
 game (`BEHAVIOR_EXIT`, `00526d00`). A package that names `exit_confirm` (section
 11) makes the select's `exit` ask in that box instead of leaving at once (1298's
-select bar's `btn_exit`, `00607160`); the login's `exit` and a package that does
+select bar's `btn_exit`, `00607160`; 1264's `bt_exit`, `00444e60`, RQ-115, which
+asks in the same box, `0050bfb0`, `0050c1d0`, `0050b510`); the login's `exit` and a package that does
 not name it leave at once. The client's own wording for it is "Exit the game?".
 
 On the login screen (RQ-108, Q85, RQ-110, `client/render/front_login.h`) a
@@ -663,7 +664,11 @@ box and loading are 1264's.
   1264's CUICharacterSelect::Load (`004448f0`, Q84): left's right edge at
   (W >> 1) − 100 − 26·W/1024 and right at (W >> 1) + 100 + 26·W/1024, each
   10 px above the bottom edge; exit centred 10 px above the bottom edge, back
-  centred 10 px above exit; delete hidden (Q53).
+  centred 10 px above exit; delete hidden (Q53). Exit asks before it leaves, as
+  1264's `bt_exit` does (RQ-115, `specs/KO-FINDINGS.md` §9.8, binary:
+  ReceiveMessage `00444e60` posts row 1502 untitled, `MB_YESNO`,
+  `BEHAVIOR_EXIT`): Yes (KO labels it "O  K") or ENTER leaves, No ("Cancel")
+  or ESC closes the box.
 - Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest fixed
   on, every other race, class, face, hair and stat arrow fixed disabled, the
   bonus points and stat highlights hidden (Q52).
@@ -673,10 +678,13 @@ box and loading are 1264's.
 - Message box (`UI_US/el_messagebox_us.uif`, centred): 1264's, for both nations
   (`0050c730`), with 1264's `ui_message_us.dxt` (its frame black, where the
   pinned tree's is grey). An OK box, as KO's `SetBoxStyle(MB_OK)` shows one:
-  `Text_Message` holds the message, `btn_ok` is OK; Yes, No, Cancel and the edit
+  `Text_Message` holds the message, `btn_ok` is OK; Cancel and the edit
   hidden; `Text_title` holds the message's title, bound to `title` (RQ-102,
   Q81: as `MessageBoxPost` sets it from its caller, empty where the caller
-  passes none). Each button state image holds
+  passes none). `btn_yes` is bound to `yes` and `btn_no` to `no` (RQ-115,
+  §9.8): drawn only in the select's exit question, a yes/no box as 1264's
+  `SetBoxStyle(MB_YESNO)` (`0050bfb0`) shows one, OK hidden; every other
+  message shows them hidden. Each button state image holds
   its own label, and the client draws a node's children only when it draws the
   node (`CN3UIBase::Render`), so one label shows per state.
 - Messages (RQ-102, Q81, `specs/KO-FINDINGS.md` §9.2, binary): `messages`
@@ -695,6 +703,7 @@ box and loading are 1264's.
   | `create_name`: "Enter a name: 1 to 24 letters, digits, _ or -." | an empty name (`0043a340`: code 6 → `0043a820`, ReportErrorCharacterCreate: row 1905, title row 1901) | title and text: the 1264 install's rows 1901 ("Failed creating character") and 1905 ("Please enter your character ID. ") |
   | `create_refused`: the server's "character name invalid/taken or limit reached" | the server's create answer (`0043a820` by its code: 1911 no more characters, 1912 a name in use, 1906 a forbidden letter, and others; title row 1901) | title only: the 1264 install's row 1901; the realm's refusal does not say which of KO's reasons it is, so its words stay |
   | `select_refused`: the server's "character not owned or already online" | the select refused (`004436a0`, CharacterSelectFailed: row 6066; title empty) | none: untitled, the realm's words |
+  | `exit_confirm` (RQ-115, §9.8): the client's "Exit the game?" | the select's `bt_exit` (`00444e60` → `005f7f80`: row 1502, title empty, `MB_YESNO`, `BEHAVIOR_EXIT`) | text: the 1264 install's row 1502 ("Are you sure you want to exit? "), untitled |
 
   The login rows come from the pinned tree's `Data/Texts_us.tbl` (1298's),
   not the 1264 install's: 1264 asks for rows 2907–2909 there (pushes at

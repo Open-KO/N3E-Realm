@@ -93,8 +93,8 @@
     "message": {
       "ui": "installer-1264:UI_US/el_messagebox_us.uif",
       "place": "centre",
-      "bindings": {"Text_Message": "message", "Text_title": "title", "btn_ok": "ok"},
-      "hidden": ["Edit_Common", "btn_yes", "btn_no", "btn_cancel"]
+      "bindings": {"Text_Message": "message", "Text_title": "title", "btn_ok": "ok", "btn_yes": "yes", "btn_no": "no"},
+      "hidden": ["Edit_Common", "btn_cancel"]
     }
   },
   "messages": {
@@ -104,7 +104,8 @@
                           "text": {"table": "Data/Texts_us.tbl", "row": 2908}},
     "create_name": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1901},
                     "text": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1905}},
-    "create_refused": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1901}}
+    "create_refused": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1901}},
+    "exit_confirm": {"text": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1502}}
   },
   "strings": {
     "select_info": "Level: {level}\nSpecialty: {class}\nID: {name}",

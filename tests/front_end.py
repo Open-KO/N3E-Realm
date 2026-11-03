@@ -1237,14 +1237,23 @@ assert "Text_Rights" in login_1298["hidden"] and "login_closed" not in login_129
 # RQ-111 (KO-FINDINGS 9.7): the 1298 recipe's message box is the one 1298's
 # box manager (005282a0) loads, El_MessageBox_us.uif, its Btn_Yes and Btn_No
 # bound for the select's exit, asked with row 1502 as 00607160 posts it
-# (untitled); the 1097 choice names no exit_confirm, so its exit leaves at once.
+# (untitled).
 recipe_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text())
 assert recipe_1298["screens"]["message"] == {
     "ui": "UI_US/el_messagebox_us.uif", "place": "centre",
     "bindings": {"Text_Message": "message", "Text_title": "title", "btn_ok": "ok", "btn_yes": "yes", "btn_no": "no"},
     "hidden": ["Edit_Common", "btn_cancel"]}, recipe_1298["screens"]["message"]
 assert recipe_1298["messages"]["exit_confirm"] == {"text": {"table": "Data/Texts_us.tbl", "row": 1502}}
-assert "exit_confirm" not in json.loads((ROOT / "games/moradon/front-end.json").read_text()).get("messages", {})
+# RQ-115 (KO-FINDINGS 9.8): 1264's select asks the same (bt_exit, 00444e60:
+# row 1502, style 4, behaviour 1) in the same box (0050c730, 0050bfb0), so the
+# 1097 choice binds 1264's el_messagebox_us.uif's btn_yes and btn_no and words
+# exit_confirm with the 1264 install's row 1502, untitled.
+recipe_1097 = json.loads((ROOT / "games/moradon/front-end.json").read_text())
+assert recipe_1097["screens"]["message"] == {
+    "ui": "installer-1264:UI_US/el_messagebox_us.uif", "place": "centre",
+    "bindings": {"Text_Message": "message", "Text_title": "title", "btn_ok": "ok", "btn_yes": "yes", "btn_no": "no"},
+    "hidden": ["Edit_Common", "btn_cancel"]}, recipe_1097["screens"]["message"]
+assert recipe_1097["messages"]["exit_confirm"] == {"text": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1502}}
 placement_problems = {
     "an unknown placement": {**PLACE_SPECS, "message": {"place": "right"}},
     "a bottom placement of another key": {**PLACE_SPECS, "message": {"place": {"bottom": 10, "x": 1}}},

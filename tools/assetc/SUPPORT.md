@@ -188,6 +188,8 @@ N3FE version 14 (RQ-111) adds the message box's `yes` and `no` (message screen
 only) and the message `exit_confirm`, which makes the select's exit ask in a box
 with Yes and No; the cook refuses it without both bound. The 1298 recipe draws
 1298's own message box, the pinned tree's `el_messagebox_us.uif`, and words
-`exit_confirm` with KO's row 1502 (`specs/KO-FINDINGS.md` §9.7).
+`exit_confirm` with KO's row 1502 (`specs/KO-FINDINGS.md` §9.7); the 1097 recipe
+binds 1264's box's Yes and No and words it with the 1264 install's row 1502, as
+1264's select asks the same (RQ-115, §9.8).
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

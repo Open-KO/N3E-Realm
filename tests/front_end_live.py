@@ -68,8 +68,11 @@ from the player's own KO data.
      (SetBoxStyle 00527a40), centred (005282a0); ESC and No close it, ENTER,
      the keypad's ENTER and Yes leave the game, the hidden OK does nothing
      (OnKeyPress 00527c60, ReceiveMessage 00526d00); the frame draws Yes and
-     No where the OK box draws OK, row 1502's text in the message rect. The
-     chosen package (1097) asks nothing: its exit leaves at once.
+     No where the OK box draws OK, row 1502's text in the message rect;
+   - the chosen package's exit (RQ-115, KO-FINDINGS 9.8): 1264's bt_exit
+     (00444e60) asks the same in 1264's El_MessageBox_us.uif (0050c730,
+     SetBoxStyle 0050bfb0, OnKeyPress 0050c1d0, ReceiveMessage 0050b510), so
+     the chosen package's select checks as the 1298 recipe's.
 
 No server or stack.
 """
@@ -257,6 +260,36 @@ def differing(a_path, b_path, inside):
     return tuple(counts)
 
 
+# RQ-111 (1298) and RQ-115 (1264), KO-FINDINGS 9.7 and 9.8: the select's Exit
+# asks row 1502 with Yes and No (MB_YESNO, BEHAVIOR_EXIT) in the box the
+# manager loads and centres; ESC and No close it, ENTER, the keypad's ENTER and
+# Yes leave, the hidden OK does nothing.
+EXIT_ASKS = ("asks=1 shown=0,1,1 plain=1,0,0 esc=closed:none enter=closed:exit "
+             "keypad=closed:exit no=closed:none yes=closed:exit ok=open:none")
+
+
+def check_exit(size, stdout, box_tree, width, height, plain, question, yes):
+    """The select's exit question against its box, `box_tree` centred at
+    ((W - w) >> 1, (H - h) >> 1): the client's report, the Yes rect the
+    shot names (`yes`), Yes and No drawn where the OK box (`plain`) draws OK
+    and the text in the message rect. Returns the box's origin."""
+    exits = re.search(r"^FRONT_EXIT (.*)$", stdout, re.M)
+    assert exits and exits.group(1) == EXIT_ASKS, (size, exits and exits.group(1))
+    root = box_tree["rect"]
+    bx, by = (width - (root[2] - root[0])) >> 1, (height - (root[3] - root[1])) >> 1
+    box_rect = {k: (bx + r[0] - root[0], by + r[1] - root[1], bx + r[2] - root[0], by + r[3] - root[1])
+                for k, r in ((k, find(box_tree, k)["rect"]) for k in ("btn_yes", "btn_no", "btn_ok", "Text_Message"))}
+    assert tuple(yes) == box_rect["btn_yes"], (size, yes, box_rect["btn_yes"])
+    for button in ("btn_yes", "btn_no", "btn_ok"):
+        r = box_rect[button]
+        inside, _ = differing(plain, question, [(r[0] + 2, r[1] + 2, r[2] - 2, r[3] - 2)])
+        assert inside > 200, (size, button, inside)
+    for button in ("btn_yes", "btn_no"):
+        assert len(set(region(question, box_rect[button]))) > 10, (size, button)
+    assert len(set(region(question, box_rect["Text_Message"]))) > 2, (size, "no exit text")
+    return bx, by
+
+
 def ko_placed(width, height):
     """{name: (x0, y0, x1, y1)} of the nodes the captures print, as 1264
     places them on a width x height viewport: the login's root at ((W - w) >>
@@ -331,8 +364,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
         got[name] = shots[shot_name][1]
     assert got == want, (size, {k: (got.get(k), v) for k, v in want.items() if got.get(k) != v})
     assert set(shots) == {"login", "login-waiting", "realms", "realms-unnamed", "select-1", "select-2", "select-3", "create",
-                          "loading-start", "loading-world", "message", "message-titled", "logo-0", "logo-1", "logo-2",
-                          "logo-fade"}, shots.keys()
+                          "loading-start", "loading-world", "message", "message-titled", "message-exit", "logo-0",
+                          "logo-1", "logo-2", "logo-fade"}, shots.keys()
 
     path, rect, boxes = shots["login"]
     assert [k for k, _ in boxes] == ["intro"], boxes
@@ -360,10 +393,10 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     # and on the realm list, where 1264 puts it.
     states = re.search(r"^FRONT_LOGIN (.*)$", run.stdout, re.M)
     assert states and states.group(1) == "idle=1,0,0 waiting=0,0,1 realms=0,1,1", (size, states and states.group(1))
-    # RQ-111: the chosen package names no exit_confirm, so its select's exit
-    # leaves at once.
-    exits = re.search(r"^FRONT_EXIT (.*)$", run.stdout, re.M)
-    assert exits and exits.group(1) == "asks=0 command=exit", (size, exits and exits.group(1))
+    # RQ-115 (KO-FINDINGS 9.8): the chosen package's select Exit asks as
+    # 1264's bt_exit does (00444e60), in 1264's El_MessageBox_us.uif.
+    exit_box = check_exit(size, run.stdout, LAYOUTS["message"], width, height, shots["message"][0],
+                          shots["message-exit"][0], shots["message-exit"][1])
     waiting, line, _ = shots["login-waiting"]
     login = LAYOUTS["login"]
     root_x, root_y = (width - (login["rect"][2] - login["rect"][0])) >> 1, height - (login["rect"][3] - login["rect"][1])
@@ -483,7 +516,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
           f"realm name {realm_name} px in the list, the copyright line at {line[:2]} ({white} white px) "
           f"instead of the bar while a login waits and on the realm list, 1-3 characters in the hall, create stands "
           f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}, the logo's three "
-          f"groups (faded {ratio:.2f}), music {frames} PCM frames, restarted, looped and played once")
+          f"groups (faded {ratio:.2f}), music {frames} PCM frames, restarted, looped and played once; "
+          f"the select's Exit asks yes or no in its box at {exit_box}, ESC and No closing it, ENTER and Yes leaving")
 
 # RQ-109 (KO-FINDINGS 9.6): the 1298 recipe's select is 1298's own bar,
 # co_CharacterSelect_us.uif, placed as its Load (00606c10) places it, its
@@ -534,8 +568,6 @@ bar_w = bar_tree["rect"][2] - bar_tree["rect"][0]
 bar_h = bar_tree["rect"][3] - bar_tree["rect"][1]
 # RQ-111: the 1298 recipe's message box, El_MessageBox_us.uif (005282a0's).
 box_tree = ko_hud.parse(pinned.get(recipe_1298["screens"]["message"]["ui"]))
-box_w = box_tree["rect"][2] - box_tree["rect"][0]
-box_h = box_tree["rect"][3] - box_tree["rect"][1]
 BAR = {"select_prev": "btn_left", "select_next": "btn_right", "back": "btn_back", "exit": "btn_exit",
        "select_start": "btn_start", "select_create": "btn_create", "select_delete": "btn_delete",
        "char_name": "str_id", "char_level": "str_lev", "char_class": "str_job"}
@@ -577,26 +609,9 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     # RQ-111 (KO-FINDINGS 9.7): Exit asks row 1502 with Yes and No, as
     # 00607160 posts it (MB_YESNO, BEHAVIOR_EXIT), in the box 005282a0 loads
     # and centres; ESC and No close it, ENTER and Yes leave.
-    exits = re.search(r"^FRONT_EXIT (.*)$", run.stdout, re.M)
-    assert exits and exits.group(1) == ("asks=1 shown=0,1,1 plain=1,0,0 esc=closed:none enter=closed:exit "
-                                        "keypad=closed:exit no=closed:none yes=closed:exit ok=open:none"), \
-        (size, exits and exits.group(1))
     assert {"message", "message-exit"} <= set(shots), (size, sorted(shots))
-    bx, by = (width - box_w) >> 1, (height - box_h) >> 1
-    box_rect = {k: (bx + r[0] - box_tree["rect"][0], by + r[1] - box_tree["rect"][1],
-                    bx + r[2] - box_tree["rect"][0], by + r[3] - box_tree["rect"][1])
-                for k, r in ((k, find(box_tree, k)["rect"]) for k in ("btn_yes", "btn_no", "btn_ok", "Text_Message"))}
-    assert tuple(map(int, shots["message-exit"][1].split(","))) == box_rect["btn_yes"], \
-        (size, shots["message-exit"][1], box_rect["btn_yes"])
-    plain, question = shots["message"][0], shots["message-exit"][0]
-    for button in ("btn_yes", "btn_no", "btn_ok"):
-        r = box_rect[button]
-        inner = (r[0] + 2, r[1] + 2, r[2] - 2, r[3] - 2)
-        inside, _ = differing(plain, question, [inner])
-        assert inside > 200, (size, button, inside)
-    for button in ("btn_yes", "btn_no"):
-        assert len(set(region(question, box_rect[button]))) > 10, (size, button)
-    assert len(set(region(question, box_rect["Text_Message"]))) > 2, (size, "no exit text")
+    bx, by = check_exit(size, run.stdout, box_tree, width, height, shots["message"][0], shots["message-exit"][0],
+                        tuple(map(int, shots["message-exit"][1].split(","))))
     print(f"PASS front-end captures 1298 recipe {size}: 1298's select bar at ({x0}, {y0}), unscaled, its ten "
           f"bound nodes where 1298's Load puts them, its info texts filled for a character and empty without; "
           f"its Exit asks yes or no in its centred box at ({bx}, {by}), ESC and No closing it, ENTER and Yes leaving the game")

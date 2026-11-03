@@ -1103,7 +1103,10 @@ package that names the message `exit_confirm` makes the select's Exit ask in the
 message box with its `yes` and `no` buttons (ENTER Yes, ESC No; Yes leaves). The 1298
 recipe draws 1298's own box, `El_MessageBox_us.uif`, and asks row 1502 untitled, as
 1298 does; its Yes and No are KO's buttons as KO labels them, "O  K" and "Cancel"
-(Q61). The 1097 choice names no `exit_confirm`, so its Exit still leaves at once;
-whether 1264's select Exit (the screens the 1097 choice draws) asks too was not read
-(the source's `UICharacterSelect.cpp` posts the same box) and is proposed as its own
-item. Back, the arrows and Create from an occupied slot stay as above.
+(Q61). Back, the arrows and Create from an occupied slot stay as above.
+**1264 read (RQ-115, KO-FINDINGS §9.8):** 1264's select Exit (`bt_exit`, `00444e60`)
+posts the same question, row 1502 untitled with `MB_YESNO` and `BEHAVIOR_EXIT`, in
+its `El_MessageBox_us.uif`, whose Yes quits and No closes as 1298's do; so the 1097
+choice now names `exit_confirm` with the 1264 install's row 1502 and binds that box's
+`btn_yes` and `btn_no`, and its Exit asks too. 1264's ESC on the select also presses
+Exit (the realm's ESC there is Back), which is proposed as its own item.

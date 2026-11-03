@@ -62,7 +62,7 @@ choice" below); the engine knows none of them.
 | Character select | `ChrSelect/ka_chairs.n3shape`, `ka_light_0/1.n3light`, the Karus slots, spots and cameras of `CGameProcCharacterSelect::Init`; the Tuarek priest (`upc_ka_tu_pri.n3joint`, `upc_ka_at_wa.n3anim` clips 0, 1 and 2, `UPC_DefaultLooks`, the mace plug) | `ka_characterselect_us.uif` |
 | Character create | the character in `area_character` | `Ka_CharacterCreate_us.uif` |
 | Loading | none | `ka_loading_us.uif` |
-| Message box | over any screen | `co_MsgBoxOk_us.uif` (the 1097 choice draws 1264's `el_messagebox_us.uif`, §9.2; the 1298 recipe 1298's, the pinned tree's `el_messagebox_us.uif` with Yes and No, RQ-111) |
+| Message box | over any screen | `co_MsgBoxOk_us.uif` (the 1097 choice draws 1264's `el_messagebox_us.uif`, §9.2, with Yes and No since RQ-115; the 1298 recipe 1298's, the pinned tree's `el_messagebox_us.uif` with Yes and No, RQ-111) |
 
 Music (Q57, RQ-018, RQ-083): the chosen client's. For 1097 (Moradon's), `Snd/bgm_login.wav`
 on the login and the realm list, restarted every 21.66 s, and `Snd/bgm_el_battle.wav`,
@@ -184,9 +184,10 @@ replace the panels when the client has a Discord realm config.
   Every message shows in an OK box but `exit_confirm`, which shows in a yes/no
   box (KO's `MB_YESNO`: the nodes bound to `yes` and `no` drawn, `ok` hidden;
   ENTER Yes, ESC No; Yes leaves the game, No closes the box). A package that
-  names `exit_confirm` makes the select's Exit ask so, as 1298's does
-  (KO-FINDINGS §9.7); without it, and on the login, Exit leaves at once. The
-  1298 recipe names it with row 1502; the 1097 recipe does not.
+  names `exit_confirm` makes the select's Exit ask so, as 1298's and 1264's do
+  (KO-FINDINGS §9.7, §9.8); without it, and on the login, Exit leaves at once.
+  The 1298 recipe names it with the pinned tree's row 1502, the 1097 recipe
+  with the 1264 install's (RQ-115).
 - **The placement** (N3FE version 11, RQ-106, Q82). KO draws its front end on the
   screen's own pixels, never scaled, and places each layout's root and some of its
   nodes by the viewport's size each time the layout loads (`specs/KO-FINDINGS.md`
@@ -485,8 +486,9 @@ KO (`make live-ko`, needs `assets/ko`):
    character and empty with none. RQ-111: the 1298 recipe's Exit, clicked, asks in
    its centred box with Yes and No and without OK (an OK box the reverse), its
    frame drawing Yes and No where an OK box draws OK; ESC and No close it, ENTER,
-   the keypad's ENTER and Yes leave, the hidden OK does nothing; the chosen
-   package's Exit leaves at once.
+   the keypad's ENTER and Yes leave, the hidden OK does nothing. RQ-115: the
+   chosen package's (1097) Exit asks the same in 1264's box, checked the same
+   way.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

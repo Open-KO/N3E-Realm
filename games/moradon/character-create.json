@@ -17,11 +17,15 @@
   "models": {"create": [2, 3, 4]},
   "tables": {
     "1264": {"values": "installer-1264:Data/NewChrValue.tbl", "key": {"race": 1, "specialty": 0},
-             "texts": "installer-1264:Data/Texts_us.tbl"},
+             "texts": "installer-1264:Data/Texts_us.tbl",
+             "dress": {"items": "installer-1264:Data/Item_Org_us.tbl", "extensions": "installer-1264:Data/Item_Ext_{}_us.tbl",
+                       "robe_exempt": [[2, 266]]}},
     "1298": {"values": "Data/NewChrValue.tbl", "key": {"race": 10000, "specialty": 1},
-             "texts": "Data/Texts_us.tbl"}
+             "texts": "Data/Texts_us.tbl",
+             "dress": {"items": "Data/Item_Org_us.tbl", "extensions": "Data/Item_Ext_{}_us.tbl",
+                       "robe_exempt": [[2, 266], [2, 969]]}}
   },
-  "columns": {"stats": [2, 3, 4, 5, 6], "bonus": 7},
+  "columns": {"stats": [2, 3, 4, 5, 6], "bonus": 7, "plugs": [8, 9], "parts": [10, 11, null, 13, 14, 15, 16, 17, 18, 19]},
   "front_ends": {"1097": "1264", "1298": "1298"},
   "refusals": {"limit": 1911, "mismatch": 1907, "taken": 1912, "failed": 1902, "name": 1906, "stats": 1915},
   "name": {"min": 1, "max": 20, "punctuation": "_:;"},

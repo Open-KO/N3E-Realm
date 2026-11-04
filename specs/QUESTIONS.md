@@ -1701,3 +1701,23 @@ Options:
 as before, a `create.races` race outside `content`; Moradon's `content` stays the
 Tuarek. How RQ-004 draws a race button whose race has a create model but is not
 offered is RQ-004's, with Q94's look question.
+
+### Q106 — The create dress before a screen draws it, and the 1097 choice's priest
+
+RQ-159 resolves each specialty's create dress from the chosen table (KO's item
+columns through Item_Org and Item_Ext, `content/character-create.md`, "How each item
+is drawn"). No screen draws it yet: RQ-004's create model and RQ-005's hall cook
+whatever they draw. On 1264's table, the 1097 choice's default (Q97 (b)), every
+Tuarek wears the rogue's chitin and crossbow, as 1264 draws it, so the fixed Tuarek
+priest (Q100) would be dressed as a rogue; 1298's table gives the priest its own set.
+
+Options:
+- (a) Check the dress in the cook now and leave the package's bytes as they are; the
+  item that first draws it ships it in the form it draws. The dress follows
+  `create.table`, as the version table proposes.
+- (b) Ship the resolved dress (item numbers and files) in `create.bin` or the
+  provenance now, ahead of its first consumer.
+- (c) As (a), and give the 1097 choice 1298's dress while it keeps 1264's stats.
+
+**Default taken:** (a). Every Moradon cook stays byte for byte as it was; the dress
+the 1097 choice draws is 1264's until the maintainer picks (c).

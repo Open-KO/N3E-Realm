@@ -232,17 +232,81 @@ first eight columns. (Local-asset; 1264 lookup `0043ae40`, binary.)
 - It returns early if the race has no `UPC_DefaultLooks` row.
 
 **The create dress.** With a row, the build dresses the model in the row's items:
-- parts 0..9 from `+0x34 + 4i` (`dwIDK[2..11]`; the five armour pieces);
+- parts 0..9 from `+0x34 + 4i` (`dwIDK[2..11]`; the five armour slots: upper 0,
+  lower 1, gauntlets 3, boots 4 and helmet 5);
 - the face through vtable `+0x28`;
 - the right- and left-hand plugs from `+0x2c`/`+0x30` (`dwIDK[0]`, `[1]`), looked up
   in the item table (`DAT_008186f4`) and attached by `FUN_006157b0`.
 
 Without a row it uses the looks parts. Each 1298 class row names its own weapon and
-armour set; 1264's rows name one set per race (a weapon and five armour pieces). 1097
-has no item columns: its SetChr (`004359f0`) draws the looks parts.
+armour set; 1264's rows name one set per race (a weapon and four armour pieces, no
+helmet). 1097 has no item columns: its SetChr (`004359f0`) draws the looks parts.
 (Local-asset; binary.)
 
 The dress is only the create screen's: the server does not create those items (below).
+
+**How each item is drawn (RQ-159).** Read statically in 1298 (`005fd120`,
+`006157b0`, `00467d50`, `00462bd0`, `00467b30`) and 1264 (`00439970`, `005d2a80`,
+`004680e0`, `00463350`); binary, `specs/KO-FINDINGS.md` §10.3:
+- **Slots.** Part slot i takes column `dwIDK[2 + i]` in slot order 0..9; slot 2 is
+  always the race's face. An item is looked up as Item_Org row item / 1000 × 1000 and
+  Item_Ext row item % 1000 of table `Item_Ext_<Item_Org column 2>`. An item of 0, or
+  one Item_Org lacks, leaves the slot the looks row's part (slot 5 its hair). The
+  plugs are cleared, then each hand's column is attached to that hand (plug 0 the
+  right, 1 the left) whatever hand the item's row names (1298's El Morad male
+  warrior holds two swords, its rogue a bow in the left hand).
+- **The file** (`006157b0`, 1264 `005d2a80`, the same code): a plug is
+  `Item\%.1d_%.4d_%.2d_%.1d.n3cplug` of its Item_Ext resource (column 6) when that is
+  not 0, else its Item_Org resource (column 7), and no file without an Item_Ext row;
+  a part is `Item\%.1d_%.4d_%.2d_%.1d.n3cpart` of its Item_Org number / 10 with the
+  race × 1000 added to the four-digit field, for a race and class the client's switch
+  accepts (every race and class the tables name), `%.2d_` first when number / 10000 %
+  100 is not 0. A resource of 0 names no file. The class 1298 names a part with is
+  the chosen class, or the race's default (above) before one; 1264's is always the
+  race's default.
+- **Robes.** The part set (`00467d50`, 1264 `004680e0`) draws the lower slot bare
+  (no part at all) while the upper's item is a robe: its Item_Org column 12 is not 0,
+  except, for an El Morad character, an item whose number / 10^6 is 266 (and, in
+  1298, 969). So the Wrinkle Tuarek's Complete Robe (266001000) leaves its lower bare
+  (its lower's file, `2_6603_20_0.n3cpart`, is in neither tree), and the El Morad
+  mage's lower is drawn.
+- **Shields.** A left-hand plug whose Item_Org class (column 11) is 60 hangs on the
+  joint at `+0x110` instead of the left hand's `+0x10c` (`00467b30`).
+
+**Package data and the cook.** `columns.plugs` and `columns.parts` name each hand's
+and each part slot's column (KO's 8, 9 and 10..19 counted from 0, the face's slot
+null); each table's `dress` names its `items` and `extensions` tables (one input's,
+`{}` the extension index) and its client's `robe_exempt` pairs ([nation, item /
+10^6]: 1264's `[2, 266]`, 1298's also `[2, 969]`), or is null for a table without
+item columns. `ko_create.dress` resolves each specialty's dress, as
+`tools/assetc/ko_item_files.py` names KO's files: parts `{slot, item, file}` (a bare
+lower's file null) and plugs `{slot, item, kind, file}`, each file with its input's
+prefix. `build` checks it for the races offered and the races with a create model,
+refusing an item Item_Org lacks, one whose form (part or plug) or part slot is not
+its column's, an icon-only item, an item whose Item_Ext table is 24 or more (KO's
+name function indexes its 24 tables with it unbounded for every item, `006157b0`,
+`005d2a80`), one that names no file or a file its input lacks,
+a race and class the switch would name from a stack address, and malformed item
+tables. Nothing is cooked from it yet: `create.bin` and the provenance of a package
+on 1264's table are as before (a package on 1298's table records the 1298 item
+tables it read). RQ-004 draws it on the create screen and RQ-005 in the hall.
+
+**Moradon's dress** (both tables, all races; local-asset), the files the parts and
+plugs name:
+
+| Race, class | 1264's table (`installer-1264:`, the 1097 choice's) | 1298's table |
+|---|---|---|
+| 1 Arch Tuarek 101 | `2_0601_*` chitin, sword `1_2151_00_0` | `2_0601_*`, `1_5621_00_0` |
+| 2 Tuarek 102 | `2_4602_*` rogue chitin, crossbow `1_6821_00_0` | the same |
+| 2 Tuarek 104 | the 102 set (one per race) | `2_8602_*` priest chitin, `1_4621_00_0` |
+| 3 Wrinkle Tuarek 103 | `2_6603_*` robe, lower bare, `1_8051_00_0` | the same set, `1_8031_00_0` |
+| 4 Puri Tuarek 104 | `2_8604_*`, `1_4025_00_0` | `2_8604_*`, `1_9061_00_0` and shield `1_7157_00_0` (its Item_Ext resource) |
+| 11 Barbarian 201 | `2_0611_*`, `1_2151_00_0` | `2_0611_*`, `1_2641_00_0` |
+| 12 El Morad male | `2_4612_*`, bow `1_6211_00_0` in the left hand, every class | 201 `2_0612_*` two `1_2151_00_0`; 202 `2_4612_*` left `1_6841_00_0`; 203 `2_6612_*` (lower drawn) `1_8031_00_0`; 204 `2_8612_*` `1_4111_00_0` |
+| 13 El Morad female | `2_4613_*`, `1_4025_00_0`, every class | 201 `2_0613_*`, `1_2151_00_0` and shield `1_7153_00_0`; 202 `2_4613_*`, two `1_1121_00_0`; 203 `2_6613_*`, `1_8031_00_0`; 204 `2_8613_*`, `1_4021_00_0` and shield `1_7155_00_0` |
+
+`*` is the upper, lower, gauntlets and boots (`_10`, `_20`, `_40`, `_50`). So the
+1097 choice dresses its fixed Tuarek priest as 1264 does, in the rogue's set.
 
 **The server's floors** are Ebenezer's own, not the table's (below). They equal
 1264's and 1298's bases.
@@ -446,8 +510,8 @@ rules; KO's are Moradon's, from the tables above:
 | `content` | the races the package has a player model for, every screen and the world drawing it: the races create may offer (Moradon: the Tuarek, 2; RQ-003, Q105, below) |
 | `player` | the race of the package's player scenes, one of `content` (Moradon: 2; RQ-003) |
 | `models` | the races whose model the package ships in each form a screen draws: `create`, the create screen's (`front-end.bin` N3FE version 24; Moradon: 2, 3, 4), which has every race of `content` (RQ-158, below) |
-| `tables` | the stat tables a realm validates against, by id: each a KO `values` table (`Data/NewChrValue.tbl`) read from the front end's inputs (a `<name>:` prefix as the recipe's paths), its row `key` (row id = race × `race` + specialty × `specialty`: 1264's `{1, 0}`, 1298's `{10000, 1}`) and the `texts` table its refusals are worded from |
-| `columns` | the values table's stat columns and bonus column (KO's 2..6 and 7) |
+| `tables` | the stat tables a realm validates against, by id: each a KO `values` table (`Data/NewChrValue.tbl`) read from the front end's inputs (a `<name>:` prefix as the recipe's paths), its row `key` (row id = race × `race` + specialty × `specialty`: 1264's `{1, 0}`, 1298's `{10000, 1}`), the `texts` table its refusals are worded from and its `dress` (RQ-159, above): the `items` and `extensions` tables and `robe_exempt`, or null for a table without item columns |
+| `columns` | the values table's stat columns and bonus column (KO's 2..6 and 7), and the item columns of each hand plug (`plugs`, 8 and 9) and each part slot (`parts`, 10..19, the face's null; RQ-159) |
 | `front_ends` | the table each front-end client draws by default (Q97 (b): 1264's for the 1097 choice, 1298's for the 1298 recipe) |
 | `refusals` | the text row of each refusal: `limit` 1911, `mismatch` 1907, `taken` 1912, `failed` 1902, `name` 1906, `stats` 1915 |
 | `name` | the name rule: `min` 1, `max` 20, `punctuation` `_:;` beside ASCII letters and digits (Q99) |
@@ -464,8 +528,8 @@ the front-end choice, before the survey (`tools/assetc/ko_create.py` `plan`, thr
 end's inputs (`build`). It refuses a malformed file or setting, a table the package
 lacks, a race without a player model, a `content` race without a create model
 (`models.create`, RQ-158), a table row whose race or specialty the
-package lacks, a missing row the offered races need, and a fixed choice the rules
-refuse. The package's manifest gets a `create` section, which
+package lacks, a missing row the offered races need, a fixed choice the rules
+refuse, and a create dress that does not resolve (RQ-159, above). The package's manifest gets a `create` section, which
 `tools/assetc/create.py` cooks into `create.bin` (N3CC version 1, little-endian u32s
 and u32-length ASCII strings):
 
@@ -601,8 +665,9 @@ player scenes (`player-<state>.bin`, `combat-<i>.bin`) RQ-007 ships per race.
 `create.races`' default, only when the select hall (RQ-005) and the world (RQ-007)
 draw it too, so no character is created that the hall or the world draws as a
 Tuarek. The cook refuses a `content` race outside `models.create`, and (as before) a
-`create.races` race outside `content`. The class data (the create dress, starting
-items and weapons, skills, class rules) is open too.
+`create.races` race outside `content`. The create dress is checked package data
+(RQ-159, above); the rest of the class data (starting items and weapons, skills,
+class rules) is open.
 
 ## What each item needs
 
@@ -625,7 +690,8 @@ items and weapons, skills, class rules) is open too.
   - its faces and hairs (the Wrinkle Tuarek without hair);
   - its base stats and bonus, and its class set.
 
-  For each class: the create dress (by the chosen table), the starting items (Q96),
+  For each class: the create dress (by the chosen table; RQ-159, checked, drawn by
+  RQ-004 and RQ-005), the starting items (Q96),
   and the skills and class rules RQ-007 needs. All of it is package data under
   `games/moradon`.
 - **RQ-004 (screen).** As 1298 draws it:

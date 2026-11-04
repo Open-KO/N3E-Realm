@@ -1510,6 +1510,27 @@ times sounds, is refused by name (`tools/assetc/KO-CHARACTER.md`, "Clips at 0 fr
 a second"). The El Morad male
 cooks.
 
+### 10.3 A specialty's create dress (RQ-159, 2026-11-04)
+
+Read statically in 1298's `KnightOnLine.exe` (`build/ghidra/audit-2026-09-19`,
+`-readOnly -noanalysis`, `AuditReference.java decompile` and `recover`; sha256
+`828ab0db…43a5e5`) and the 1264 client (`ko1264-unpacked.exe`, `build/ghidra/rq096`;
+sha256 `61e9a086…136471`). The string literals were read from the files' bytes.
+
+| Observation | Where | Label |
+|---|---|---|
+| The build looks each part slot's item (row `+0x34 + 4i`, i = 0..9, slot 2 the face through vtable `+0x28`) up as Item_Org item / 1000 × 1000 (`DAT_008186f4`) and, for an extension index below 24, Item_Ext item % 1000; it names the file with `006157b0(row, item, …, class, race)` and sets the part (vtable `+0x2c`). Without an Item_Org row it sets the looks row's part (slot 5: the hair, vtable `+0x24`). It clears both plugs, then attaches the row's `+0x2c` to plug 0 and `+0x30` to plug 1 (vtable `+0x30`), looking a plug's Item_Ext up with no bound on the index (`DAT_008186f8[index]`). The `< 24` test covers only the build's own lookup of a part's extension: every part and plug goes to `006157b0` with a name to fill, which indexes the 24 tables with the row's extension unbounded (below), so an index of 24 or more reads past them for either. The class is the build's (the chosen class, or the race's default before one), the race the player's | 1298 `005fd120` (arguments pushed at `005fd4ab`–`005fd4d2`) | binary |
+| 1264's build does the same with its row by race, naming every item with the race's default class (`[ESP + 0x14]`, set from the race at `00439a23`–`00439a90`) | 1264 `00439970` (calls at `00439cd3`, `00439e5f`, `00439fa9`) | binary |
+| The name: attach (`+0x42`) 0–4 is a plug (0, 1, 3 right; 2, 4 left; `".n3cplug"` at `006d8e70`), 5–9 a part (slots 0, 1, 5, 3, 4; `".n3cpart"` at `006d8e64`), 10–17 an icon (`".dxt"`). With a name to fill it first indexes the 24 Item_Ext tables with the row's extension (`+0x04`), unbounded, for every item (`DAT_008186f8[(byte)row[1]]`), and again for an icon to fill. A resource (`+0x30`) of 0 names nothing. A plug (or icon) needs an Item_Ext row and takes its resource (`+0x2c`) unless 0, else the Item_Org one, printed `"Item\%.1d_%.4d_%.2d_%.1d%s"` (`006d8e28`). A part takes Item_Org number / 10, and with class > 11 and race not −1, 0, 100 or 20 the switch at `00615be4` adds race × 1000 below the thousands (race 1: classes 101, 105, 106; 2: 102, 104, 107, 108, 111, 112; 3: 103, 109, 110; 4: 104, 111, 112; 11: 201, 205, 206; 12 and 13: 201–212); any other race or class loads the out string's pointer as the number (`00615e2a`). Number / 10000 % 100, unless `+0x54` is 2, is printed first with `"Item\%.2d_%.1d_%.4d_%.2d_%.1d%s"` (`006d8e44`) | 1298 `006157b0` | binary |
+| 1264's name function is the same (its unbounded index `DAT_007acee8[(byte)row[1]]`), with the same strings (`0066e7d8`, `0066e7cc`, `0066e790`, `0066e7ac`) | 1264 `005d2a80` | binary |
+| The player's part set, slot 1 (lower): while the current upper item is a robe it stores the item and sets the lower part to `""` directly, loading nothing; slot 0 with a robe clears a lower already set. A robe is the item's `+0x41`, except, at nation 2, an item whose number / 10^6 is 266 or 969 (1298) or 266 (1264) | 1298 `00467d50` (vtable `0x6a4198` + `0x2c`), `00462bd0`; 1264 `004680e0` (vtable `0x64926c` + `0x2c`), `00463350` | binary |
+| The plug set puts a left-hand item of class (`+0x40`) 60 on the joint at `+0x110`, any other on `+0x10c`, the right hand on `+0x108` | 1298 `00467b30` (vtable `+0x30`) | binary |
+| 1298's and 1264's rows resolve to files present in their trees, except the Wrinkle Tuarek's lower `2_6603_20_0.n3cpart`, which neither has and its robe upper (266001000, robe 1) leaves unloaded | the pinned tree, the 1264 install | local-asset |
+
+**Decides (RQ-159):** each specialty's create dress is the chosen table's item
+columns, resolved and checked by the cook as these functions draw them
+(`content/character-create.md`, "How each item is drawn"); RQ-004 and RQ-005 draw it.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

@@ -13,13 +13,19 @@ Each race also names its `looks`, the stem of its `UPC_DefaultLooks` parts, and
 RQ-003). `models` names the races whose model the package ships in each form
 a screen draws: `create`, the create screen's (front-end.bin, N3FE version 24,
 RQ-158), which every race in `content` has.
+A table with item columns names its `dress` (RQ-159): the KO item tables its
+items resolve through and the client's robe exemptions; `columns` names the
+hand-plug and part-slot columns, and `dress` gives each specialty's create
+dress as KO's build draws it (1298 `005fd120`, 1264 `00439970`), each file
+named as tools/assetc/ko_item_files.py does, checked by `build`.
 The realm owner's `realm-config.json` may name, under `create`, another `table`
 (Q97), the `races` offered (Q94, default `content`) and `reserved` words (Q99).
 
 `plan` checks both files and resolves the choice before any KO file is read;
 `build` reads the table and texts and returns the manifest's `create` section
-(tools/assetc/create.py's form). This module knows KO's table layout only
-through the package's `columns` and `key`; no race or specialty id is here.
+(tools/assetc/create.py's form), and checks the dress. This module knows KO's
+create table layout only through the package's `columns` and `key`; no race or
+specialty id is here.
 """
 import hashlib
 import pathlib
@@ -27,6 +33,7 @@ import re
 
 import create
 import front_end_choice
+import ko_item_files
 
 SOURCE = "character-create.json"
 KEYS = {"stats", "nation", "faces", "hairs", "races", "content", "player", "tables", "columns",
@@ -37,7 +44,11 @@ MODEL_KEYS = {"create"}
 RACE_KEYS = {"race", "nation", "specialties", "looks"}
 # A race's looks stem (UPC_DefaultLooks part names, ko_player.looks checks it).
 LOOKS = re.compile(r"[a-z0-9_]{1,32}\Z")
-TABLE_KEYS = {"values", "key", "texts"}
+TABLE_KEYS = {"values", "key", "texts", "dress"}
+# RQ-159: a table's dress, or null for a table without item columns (1097's).
+DRESS_KEYS = {"items", "extensions", "robe_exempt"}
+COLUMN_KEYS = {"stats", "bonus", "plugs", "parts"}
+MAX_SLOTS = 16
 FIXED_KEYS = {"race", "specialty", "face", "hair", "points"}
 # realm-config.json's `create`: the realm owner's choices (Q94, Q97, Q99).
 CONFIG_KEYS = {"table", "races", "reserved"}
@@ -99,11 +110,28 @@ def rules(game):
                 set(t["key"]) != {"race", "specialty"} or \
                 any(type(v) is not int or not 0 <= v <= 1000000 for v in t["key"].values()) or t["key"]["race"] == 0:
             raise Refused("%s: table %r: values and texts paths and a key {race, specialty}" % (path, tid))
+        d = t["dress"]
+        if d is not None and (
+                type(d) is not dict or set(d) != DRESS_KEYS or type(d["items"]) is not str or
+                type(d["extensions"]) is not str or d["extensions"].count("{}") != 1 or
+                front_end_choice.split(d["items"])[0] != front_end_choice.split(d["extensions"])[0] or
+                type(d["robe_exempt"]) is not list or
+                any(type(e) is not list or len(e) != 2 or any(type(v) is not int or not 0 <= v <= 4294 for v in e)
+                    for e in d["robe_exempt"])):
+            raise Refused("%s: table %r: dress is null or exactly %s: the items and extensions ({} the index) "
+                          "tables of one input and [nation, item / 1000000] pairs" % (path, tid, ", ".join(sorted(DRESS_KEYS))))
     columns = r["columns"]
-    if type(columns) is not dict or set(columns) != {"stats", "bonus"} or type(columns["stats"]) is not list or \
+    slot_lists = [columns.get(k) for k in ("plugs", "parts")] if type(columns) is dict else []
+    if type(columns) is not dict or set(columns) != COLUMN_KEYS or type(columns["stats"]) is not list or \
             len(columns["stats"]) != stats or \
-            any(type(c) is not int or not 1 <= c <= 63 for c in columns["stats"] + [columns["bonus"]]):
-        raise Refused("%s: columns {stats: %d column numbers, bonus}" % (path, stats))
+            any(type(c) is not list or not 1 <= len(c) <= MAX_SLOTS for c in slot_lists) or \
+            any(type(c) is not int or not 1 <= c <= 63 for c in columns["stats"] + [columns["bonus"]]) or \
+            any(c is not None and (type(c) is not int or not 1 <= c <= 63) for s in slot_lists for c in s):
+        raise Refused("%s: columns {stats: %d column numbers, bonus, plugs and parts: a column number or null "
+                      "per slot}" % (path, stats))
+    used = columns["stats"] + [columns["bonus"]] + [c for s in slot_lists for c in s if c is not None]
+    if len(set(used)) != len(used):
+        raise Refused("%s: columns names a column twice" % path)
     front_ends = r["front_ends"]
     if type(front_ends) is not dict or any(v not in tables for v in front_ends.values()):
         raise Refused("%s: front_ends maps a client id to one of its tables" % path)
@@ -159,28 +187,155 @@ def plan(game, client, config):
     return dict(rules=r, table=table, races=races, reserved=sorted({w.lower() for w in reserved}))
 
 
+def values(r, tid, assets):
+    """The chosen table's bytes and its rows by id, each with the stat columns
+    and, for a table with a dress, the item columns."""
+    import ko_tbl
+    table = r["tables"][tid]
+    data = assets.get(table["values"])
+    _, rows = ko_tbl.parse(ko_tbl.decrypt(data))
+    columns = r["columns"]
+    read = [0] + columns["stats"] + [columns["bonus"]]
+    if table["dress"] is not None:
+        read += [c for c in columns["plugs"] + columns["parts"] if c is not None]
+    by_id = {}
+    for row in rows:
+        if len(row) <= max(read) or any(type(row[c]) is not int for c in read):
+            raise Refused("create table %s (%s): a row without the %s columns" % (
+                tid, table["values"], "stat and item" if table["dress"] is not None else "stat"))
+        if row[0] in by_id:
+            raise Refused("create table %s (%s): row %d twice" % (tid, table["values"], row[0]))
+        by_id[row[0]] = row
+    return data, by_id
+
+
+def row_id(table, race, specialty):
+    return race * table["key"]["race"] + specialty * table["key"]["specialty"]
+
+
+def dress(chosen, assets, races=None):
+    """Each specialty's create dress from `plan`'s choice and the front end's
+    inputs: {race: {specialty: {parts, plugs}}} for `races` (default the races
+    offered and those with a create model), or None for a table without item
+    columns (KO draws the looks parts: 1097's SetChr `004359f0`).
+
+    As KO's build (1298 `005fd120`, 1264 `00439970`; binary): each part slot's
+    column holds an item, the slots in order; the face's slot (null) is the
+    race's face, and an item of 0 leaves the slot the race's looks part (the
+    helmet's slot its hair). A part is {slot, item, file}; a lower part under an
+    upper that is a robe is {slot, item, file: null}, drawn bare (1298
+    `00467d50` with `00462bd0`). Each hand plug's column holds an item for that
+    hand, whatever hand its row names; a plug is {slot, item, kind (its Item_Org
+    class, which puts a left-hand 60 on the shield joint: 1298 `00467b30`),
+    file}. A file is named by ko_item_files with the specialty and read from
+    the input of the table's items, its prefix kept. (1264 names a race's one
+    set with the race's default class, 00439970; a name depends on the class
+    only through the client's switch accepting it, which every specialty must,
+    so a table keyed by race gives each specialty that set.) Refuses an item
+    the items table lacks, an item whose form or slot is not its column's, and
+    one that names no file or a file the input lacks."""
+    r, tid = chosen["rules"], chosen["table"]
+    table = r["tables"][tid]
+    d = table["dress"]
+    if d is None:
+        return None
+    if races is None:
+        races = set(chosen["races"]) | set(r["models"]["create"])
+    _, by_id = values(r, tid, assets)
+    tree, rest = assets.split(d["items"])
+    prefix = d["items"][:len(d["items"]) - len(rest)]
+
+    def items(path, types):
+        try:
+            return ko_item_files.table(assets.get(path), types, path)
+        except front_end_choice.Refused:
+            raise
+        except ValueError as error:
+            raise Refused("create table %s dress: %s" % (tid, error))
+
+    orgs = items(d["items"], ko_item_files.ORG_TYPES)
+    exts = {}
+
+    def ext(org):
+        index = org[ko_item_files.ORG["extension"]]
+        if index not in exts:
+            exts[index] = items(d["extensions"].format(index), ko_item_files.EXT_TYPES)
+        return exts[index]
+
+    def resolve(where, item, race, specialty, want, slot):
+        org = orgs.get(item // 1000 * 1000)
+        if org is None:
+            raise Refused("%s: item %d has no row %d in %s" % (where, item, item // 1000 * 1000, d["items"]))
+        index = org[ko_item_files.ORG["extension"]]
+        if index >= ko_item_files.EXTENSIONS:
+            # 006157b0 / 005d2a80 index the extension tables with it for any item.
+            raise Refused("%s: item %d names Item_Ext table %d: KO has tables 0..%d, and its name function reads "
+                          "past them (006157b0, 005d2a80)" % (where, item, index, ko_item_files.EXTENSIONS - 1))
+        kind = ko_item_files.form(org)
+        if kind is None or kind[0] != want or (want == "part" and kind[1] != slot):
+            raise Refused("%s: item %d is %s, not %s %d" % (
+                where, item, "an icon" if kind is None else "%s %d" % kind, want, slot))
+        row = ext(org).get(item % 1000) if want == "plug" else None
+        try:
+            name = ko_item_files.name(org, row, race, specialty)
+        except ValueError as error:
+            raise Refused("%s: %s" % (where, error))
+        if not name:
+            raise Refused("%s: item %d names no file (006157b0: its resource is 0, it is a plug without an "
+                          "Item_Ext row, or its class is 11 or less)" % (where, item))
+        if not tree.has(name):
+            raise Refused("%s: item %d's file %s is not in the input" % (where, item, prefix + name))
+        return org, prefix + name
+
+    columns = r["columns"]
+    out = {}
+    for race in r["races"]:
+        if race["race"] not in races:
+            continue
+        sets = {}
+        for s in race["specialties"]:
+            rid = row_id(table, race["race"], s)
+            row = by_id.get(rid)
+            if row is None:
+                raise Refused("create table %s (%s): no row %d for race %d specialty %d"
+                              % (tid, table["values"], rid, race["race"], s))
+            where = "create table %s row %d (race %d specialty %d)" % (tid, rid, race["race"], s)
+            parts, plugs, robe = [], [], False
+            for slot, column in enumerate(columns["parts"]):
+                if column is None:
+                    continue
+                item = row[column]
+                if slot == ko_item_files.LOWER and robe:
+                    parts.append(dict(slot=slot, item=item, file=None))
+                    continue
+                if item == 0:
+                    continue
+                org, name = resolve("%s column %d" % (where, column), item, race["race"], s, "part", slot)
+                if slot == ko_item_files.UPPER:
+                    robe = ko_item_files.robe(org, race["nation"], d["robe_exempt"])
+                parts.append(dict(slot=slot, item=item, file=name))
+            for slot, column in enumerate(columns["plugs"]):
+                if column is None or row[column] == 0:
+                    continue
+                item = row[column]
+                org, name = resolve("%s column %d" % (where, column), item, race["race"], s, "plug", slot)
+                plugs.append(dict(slot=slot, item=item, kind=org[ko_item_files.ORG["kind"]], file=name))
+            sets[s] = dict(parts=parts, plugs=plugs)
+        out[race["race"]] = sets
+    return out
+
+
 def build(chosen, assets):
     """The manifest's `create` section and its provenance, from `plan`'s choice
     and the front end's inputs (`ko_front_end.Inputs`). Refuses a table whose
     rows name a race or specialty the package lacks, or that lacks a row the
-    package's offered races need (Q97)."""
+    package's offered races need (Q97), and a dress `dress` refuses."""
     import ko_front_end
-    import ko_tbl
     r, tid = chosen["rules"], chosen["table"]
     table = r["tables"][tid]
-    data = assets.get(table["values"])
-    _, rows = ko_tbl.parse(ko_tbl.decrypt(data))
-    columns, key = r["columns"], table["key"]
-    width = max(columns["stats"] + [columns["bonus"]]) + 1
-    by_id = {}
-    for row in rows:
-        if len(row) < width or any(type(row[c]) is not int for c in [0] + columns["stats"] + [columns["bonus"]]):
-            raise Refused("create table %s (%s): a row without the stat columns" % (tid, table["values"]))
-        if row[0] in by_id:
-            raise Refused("create table %s (%s): row %d twice" % (tid, table["values"], row[0]))
-        by_id[row[0]] = row
-    row_id = lambda race, specialty: race * key["race"] + specialty * key["specialty"]  # noqa: E731
-    known = {row_id(race["race"], s) for race in r["races"] for s in race["specialties"]}
+    data, by_id = values(r, tid, assets)
+    columns = r["columns"]
+    known = {row_id(table, race["race"], s) for race in r["races"] for s in race["specialties"]}
     extra = sorted(set(by_id) - known)
     if extra:
         raise Refused("create table %s (%s): rows %s name a race or specialty %s lacks"
@@ -191,10 +346,10 @@ def build(chosen, assets):
             continue
         specialties = []
         for s in race["specialties"]:
-            row = by_id.get(row_id(race["race"], s))
+            row = by_id.get(row_id(table, race["race"], s))
             if row is None:
                 raise Refused("create table %s (%s): no row %d for race %d specialty %d"
-                              % (tid, table["values"], row_id(race["race"], s), race["race"], s))
+                              % (tid, table["values"], row_id(table, race["race"], s), race["race"], s))
             specialties.append(dict(specialty=s, bonus=row[columns["bonus"]], base=[row[c] for c in columns["stats"]]))
         races.append(dict(race=race["race"], nation=race["nation"], faces=r["faces"], hairs=r["hairs"],
                           specialties=specialties))
@@ -214,6 +369,10 @@ def build(chosen, assets):
         create.check(section)
     except ValueError as error:
         raise Refused("%s: %s" % (SOURCE, error))
+    # RQ-159: every dress the create screen and the select hall will draw
+    # (RQ-004, RQ-005) resolves to files in the inputs; nothing is cooked from
+    # it yet, so the section and the provenance are as before.
+    dress(chosen, assets)
     texts = assets.get(table["texts"])
     report = dict(table=tid, values=table["values"], values_sha256=hashlib.sha256(data).hexdigest(),
                   texts=table["texts"], texts_sha256=hashlib.sha256(texts).hexdigest(), races=chosen["races"])

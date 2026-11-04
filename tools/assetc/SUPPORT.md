@@ -220,5 +220,9 @@ N3FE version 22 (RQ-133) adds create's nodes drawn only until the race is chosen
 four class images under their buttons and names the rogue and priest images and the
 warrior and mage buttons, so its race click swaps those buttons for their greyed
 images as 1298's `006060f0` does.
+A recipe's `states` takes `down` (RQ-138, Q89 (b), §9.16), cooked as fixed on with
+the button's down image in the on state and its on image left out (no version
+change); the 1097 choice's Tuarek and priest are `down`, as 1264 draws its chosen
+race and class.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

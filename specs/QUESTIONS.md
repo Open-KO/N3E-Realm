@@ -1289,5 +1289,11 @@ class buttons hidden for their images until a race), which draws down through RQ
 `create_race` and `create_class` but changes the create's flow, not only its look
 (1264's Create without a race or class was not read).
 **Default taken:** none applied; (b) proposed, the look 1264 shows for the same
-choice, with nothing else changed. The 1097 choice is unchanged until the maintainer
-answers.
+choice, with nothing else changed.
+**Decided (maintainer, 2026-11-03), RQ-138:** (b), "Sunken, as 1264". The 1097
+recipe's Tuarek and priest are the recipe state `down`, which the cook writes as
+fixed on with the button's down image in the on state and its on image left out
+(`content/front-end.md`, no N3FE version change), so they draw the layout's
+`BS_DOWN` tiles; race and class are still chosen from the open (Q52) and nothing
+else on the 1097 create changes. The 1298 recipe's chosen buttons already draw down
+(`create_race`, `create_class`, RQ-130).

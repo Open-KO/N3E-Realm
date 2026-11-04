@@ -393,7 +393,7 @@ chosen = {i: (a, f) for i, a, f in node_records(CHOICE[2]) if i.startswith(("btn
 assert chosen == {"btn_race_ka_tu": (fe.ACTIONS.index("create_race"), 0),
                   "btn_class_priest": (fe.ACTIONS.index("create_class"), 0)}, chosen
 assert fe.ACTIONS[-2:] == ("create_race", "create_class") and fe.ONLY_ON["create_race"] == "create", fe.ACTIONS
-for state in ("on", "disabled"):
+for state in ("on", "down", "disabled"):
     for button_id in ("btn_race_ka_tu", "btn_class_priest"):
         try:
             choice_screens(states={button_id: state})
@@ -419,6 +419,63 @@ assert not {"create_race", "create_class"} & set(create_1097["screens"]["create"
 assert not {"create_no_race", "create_no_class"} & set(create_1097.get("messages", {})), create_1097.get("messages")
 print("PASS front-end cook: create's race and class buttons, the 1298 recipe's waiting for both and wording "
       "their refusals with 1298's rows, the 1097 choice's chosen from the open")
+
+# RQ-138 (Q89 (b), KO-FINDINGS 9.16): the recipe state `down`, 1264's chosen
+# race and class (0043ec90 and 0043ee10 set state 3, which Render 00403a70
+# draws with BS_DOWN): fixed on in the file, the button's down image (state
+# image 1) drawn in the down and on states and its on image (2) not written.
+def masks(data):
+    """Each cooked node's (kind, id, parent, flags, mask), in order."""
+    out, at = [], 4
+    for _ in range(struct.unpack_from("<I", data)[0]):
+        kind, parent = struct.unpack_from("<2I", data, at)
+        length = struct.unpack_from("<I", data, at + 24)[0]
+        ident = data[at + 28:at + 28 + length].decode()
+        _action, flags, mask = struct.unpack_from("<3I", data, at + 28 + length)
+        out.append((kind, ident, parent, flags, mask))
+        at = fe.node_end(data, at)
+    return out
+
+
+def fixed_tree(chosen):
+    return node(0, "root", [button("btn_create"), button("btn_cancel"),
+                            node(8, "edit_name", [node(4, texture=""), text("")]), node(9, "area_character"),
+                            text("text_desc"), chosen])[1]
+
+
+def fixed_screens(chosen=None, **create):
+    tree = fixed_tree(chosen or button("btn_race_ka_tu"))
+    return cook_screens(trees={**trees, "create.uif": tree},
+                        specs={**{n: spec(n) for n in fe.SCREENS}, "create": spec("create", **create)})[0]
+
+
+def fixed_images(state):
+    records = masks(fixed_screens(states={"btn_race_ka_tu": state})[2])
+    at = next(i for i, r in enumerate(records) if r[1] == "btn_race_ka_tu")
+    return records[at][3], [m for kind, _, parent, _flags, m in records
+                            if parent == at and kind == fe.KINDS["image"]]
+
+
+assert fixed_images("on") == (fe.FIXED_ON, [1, 2, 4, 8]), fixed_images("on")
+assert fixed_images("down") == (fe.FIXED_ON, [1, 2 | 4, 8]), fixed_images("down")
+for reason, chosen in (
+        ("a button with no down image", text("btn_race_ka_tu")),
+        ("a button with no down image",
+         node(1, "btn_race_ka_tu", [node(4, reserved=s, texture="" if s == 1 else "synthetic.dxt") for s in range(4)])),
+        ("a button with no down image", node(1, "btn_race_ka_tu", [node(4, reserved=s) for s in (0, 2, 3)]))):
+    try:
+        fixed_screens(chosen, states={"btn_race_ka_tu": "down"})
+    except ValueError as error:
+        assert "state down: " + reason in str(error), (reason, error)
+        continue
+    raise AssertionError(("cooked state down", reason))
+# The 1097 choice: its Tuarek and priest are chosen from the open (Q52) and
+# draw down, as 1264's chosen buttons; no button is fixed on.
+states_1097 = create_1097["screens"]["create"]["states"]
+assert states_1097["btn_race_ka_tu"] == "down" and states_1097["btn_class_priest"] == "down", states_1097
+assert "on" not in states_1097.values(), states_1097
+print("PASS front-end cook: the recipe state down, the down image in the on state, the 1097 choice's Tuarek and "
+      "priest drawn down as 1264's chosen race and class")
 
 # RQ-133 (version 22, KO-FINDINGS 9.15): create's nodes drawn only until the
 # race is chosen (1298's 006060f0 hides the class buttons the race cannot take

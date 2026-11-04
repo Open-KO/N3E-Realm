@@ -186,7 +186,13 @@ STRINGS = ("select_info", "select_hint", "class_name", "class_desc", "loading_in
 # and their img_* stand in their place; the images of the classes it can are
 # hidden), in a create that binds `create_race`.
 FIXED_ON, FIXED_DISABLED, FOREGROUND, UNTIL_RACE = 1, 2, 4, 8
-STATES = {"on": FIXED_ON, "disabled": FIXED_DISABLED}
+# A recipe's fixed states. `down` (RQ-138, Q89, specs/KO-FINDINGS.md 9.16) is
+# cooked, not a node flag: fixed on, its BS_DOWN image (state image 1) drawn
+# in the down and on states and its BS_ON image (2) not written, so it draws
+# as 1264's chosen race and class (0043ec90 and 0043ee10 set state 3, which
+# Render 00403a70 draws with BS_DOWN).
+STATES = {"on": FIXED_ON, "down": FIXED_ON, "disabled": FIXED_DISABLED}
+BUTTON_DOWN, BUTTON_ON = 1, 2
 # Mesh flags. A zone mesh (version 8) takes UNLIT, and one of CUT_ZERO (opaque,
 # cut where its texel's alpha is 0) or BLEND (source alpha over its inverse,
 # drawn after the UI far to near).
@@ -1042,12 +1048,20 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
             raise ValueError("front-end node count")
         if kind == "edit":
             return
+        down = states.get(id(n)) == "down"
+        if down and (kind != "button" or not any(c["kind"] == 4 and c["reserved"] == BUTTON_DOWN and c["texture"]
+                                                 for c in n["children"])):
+            raise ValueError("front-end state down: a button with no down image")
         for c in n["children"]:
             child_mask, child_flags = mask, 0
             if kind == "button" and c["kind"] == 4:
                 if not 0 <= c["reserved"] <= 3:
                     raise ValueError("front-end button image state")
                 child_mask = 1 << c["reserved"]
+                if down and c["reserved"] == BUTTON_ON:
+                    continue
+                if down and c["reserved"] == BUTTON_DOWN:
+                    child_mask |= 1 << BUTTON_ON
             if kind == "progress" and c["kind"] == 4 and c["reserved"] == 1:
                 child_flags = FOREGROUND
             emit(c, index, child_mask, child_flags)

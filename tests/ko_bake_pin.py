@@ -449,9 +449,16 @@ CLIENT = Path("assets/ko")
 # index follows. Default features 01cbd524... -> 7acab486...; classic
 # 5ed59e78... -> 9f2c11d5...; 1097 e8630fe8... -> 0a4698b3.... The plain cooks
 # and the homelands keep their pins.
+# RQ-138 (Q89 (b), KO-FINDINGS 9.16) changed them again: the 1097 recipe's
+# Tuarek and priest are the recipe state `down`, so each button's down image
+# is written with the on state's mask bit and its on image is not: front-end.bin
+# loses two 60-byte image records (53,803,064 bytes) and the release index
+# follows. Default features 7acab486... -> 3f5d491a...; classic 9f2c11d5... ->
+# fecc57ba...; 1097 0a4698b3... -> da985b7a.... The plain cooks and the
+# homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "7acab48694ab0d8ff50dabd879c247f7e35ae86abd1c587fa5b5c2462139d928"),
+    "features": (["--features"], "3f5d491af30b3bfc985eaeba5b42fa062c7277c1a6f7de56caabf64c53dbc5fb"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -472,13 +479,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "9f2c11d5bf3d265bb70d24ac26930847d27b13570c1986f2d8fc08509295ebd5"),
+    "features": (["--features"], "fecc57ba940623f10006f6c92ab78d4f6f96120eb9cd8cf810a68fc65499cdb1"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "0a4698b36f141222f9cffcc2b1def7f7c5d5c97382235657cb6223214c9193cd"),
+    "features": (["--features"], "da985b7a388c1c475e2dcf23013bf196c22ea1788d79391847b5173ae6f628ea"),
 }
 
 

@@ -508,6 +508,15 @@ list of nodes of the layout, each once and none of them `hidden`; the cook
 refuses it on another screen, in a create that binds no `create_race`, and for
 a node that draws nothing.
 
+A recipe screen's `states` fixes a node's button state: `on` and `disabled` are
+flags 1 and 2. `down` (RQ-138, Q89 (b), `specs/KO-FINDINGS.md` §9.16, binary) is
+the cook's, with no flag or version of its own: flag 1, the button's down image
+(state image 1) written with the down and on mask bits and its on image (2) not
+written, so the button draws as one KO holds down whether or not the pointer is
+on it (1264's chosen race and class: `0043ec90` and `0043ee10` set state 3,
+which Render `00403a70` draws with `BS_DOWN`). The cook refuses `down` on a node
+that is not a button or whose down image is missing or untextured.
+
 The message box's styles (version 14, RQ-111, `specs/KO-FINDINGS.md` §9.7,
 `client/render/message_box.h`), message screen only: every message shows in an
 OK box, the node bound to `ok` drawn and those bound to `yes` and `no` hidden,
@@ -922,9 +931,12 @@ box and loading are 1264's.
   both (RQ-113, §9.13, binary: `004448f0`, `00444e60` and `004454e0` only place,
   compare and click them), the maintainer's choice (2026-11-03, "Draw both, as
   1264", RQ-124).
-- Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest fixed
-  on, every other race, class, face, hair and stat arrow fixed disabled, the
-  bonus points and stat highlights hidden (Q52).
+- Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest chosen
+  from the open (Q52) and fixed `down`, the layout's sunken pink tiles, as 1264
+  draws its chosen race and class (RQ-138, Q89 (b), the maintainer's 2026-11-03,
+  "Sunken, as 1264"; §9.16, binary: `0043ec90`, `0043ee10`, `00403a70`); every
+  other race, class, face, hair and stat arrow fixed disabled, the bonus points
+  and stat highlights hidden (Q52).
 - Loading (`UI_US/co_loading_us.uif`, centred; `Text_Version` at (10, 10)):
   1264's layout when no nation has won the last war (`005f9a30`); the realm has
   no war, so no victor (Q80).

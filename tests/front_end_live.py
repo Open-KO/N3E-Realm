@@ -37,7 +37,11 @@ from the player's own KO data.
    - create: the create model stands (KO's InitChr model breathing, not the hall's
      seated clip): its box is clearly taller than wide; and the stone background
      shows no seams (KO's UI point sampling on whole pixels): no column of a band
-     across its top is darker than 0.6 of the band's mean;
+     across its top is darker than 0.6 of the band's mean; the recipe's buttons
+     fixed `down` (RQ-138, Q89 (b), KO-FINDINGS 9.16: the 1097 choice's Tuarek
+     and priest) draw their down image's texels, as 1264 draws its chosen race
+     and class (0043ec90, 0043ee10, 00403a70), over 85% of their rect (the
+     rest under the label) and their on image's under half;
    - loading: the progress bar's lit share grows from the start stage (2/3: the
      package and its textures) to the first World (1);
    - message: the box's text rect holds text (RQ-085: 1264's El_MessageBox_us,
@@ -308,6 +312,31 @@ def find(tree, ident):
     return next((hit for c in tree["children"] if (hit := find(c, ident))), None)
 
 
+# RQ-138 (Q89 (b), KO-FINDINGS 9.16): the chosen recipe's create buttons fixed
+# `down` (the 1097 choice's Tuarek and priest) draw their down image (state
+# image 1), as 1264 draws its chosen race and class (0043ec90 and 0043ee10 set
+# state 3, which Render 00403a70 draws with BS_DOWN), not their on image (2):
+# each (id, the image's rect on the canvas, its down and on tiles' texels).
+def state_tiles(tree, ident):
+    images = {c["reserved"]: c for c in find(tree, ident)["children"] if c["kind"] == 4}
+
+    def tile(image):
+        w, h, rgba = ko_front_end.texture(create_tree_of_choice.get(image["texture"]))
+        x0, y0, x1, y1 = images[1]["rect"]
+        u0, v0 = round(image["uv"][0] * w), round(image["uv"][1] * h)
+        return [rgba[((v0 + y) * w + u0 + x) * 4:((v0 + y) * w + u0 + x) * 4 + 3]
+                for y in range(y1 - y0) for x in range(x1 - x0)]
+    assert images[1]["rect"] == images[2]["rect"], (ident, images[1]["rect"], images[2]["rect"])
+    return images[1]["rect"], tile(images[1]), tile(images[2])
+
+
+create_tree_of_choice, _ = choice_inputs.split(screen_recipes["create"]["ui"])
+DOWN = {ident: state_tiles(LAYOUTS["create"], ident)
+        for ident, state in screen_recipes["create"].get("states", {}).items() if state == "down"}
+if chosen == "1097":
+    assert sorted(DOWN) == ["btn_class_priest", "btn_race_ka_tu"], sorted(DOWN)
+
+
 def extent(tree):
     """The rect around a node's descendants (not its own rect: a group's
     region is KO's hit area, not what it draws)."""
@@ -525,6 +554,15 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     assert y1 - y0 > 1.5 * (x1 - x0), (size, boxes)
     seams = seam_columns(path, width, origins["create"])
     assert seams == 0, (size, seams)
+    root = LAYOUTS["create"]
+    cx = int((width - (root["rect"][2] - root["rect"][0])) / 2)
+    cy = int((height - (root["rect"][3] - root["rect"][1])) / 2)
+    for ident, (image, down, on) in DOWN.items():
+        drawn = region(path, (cx + image[0] - root["rect"][0], cy + image[1] - root["rect"][1],
+                              cx + image[2] - root["rect"][0], cy + image[3] - root["rect"][1]))
+        share = [sum(a == b for a, b in zip(drawn, tile)) / len(tile) for tile in (down, on)]
+        # The rest lie under the button's label, drawn over it in every state.
+        assert share[0] > 0.85 and share[1] < 0.5, (size, ident, share)
 
     start, rect, _ = shots["loading-start"]
     world = shots["loading-world"][0]

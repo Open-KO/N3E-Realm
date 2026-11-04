@@ -52,8 +52,8 @@
         "text_desc": "class_desc"
       },
       "states": {
-        "btn_race_ka_tu": "on",
-        "btn_class_priest": "on",
+        "btn_race_ka_tu": "down",
+        "btn_class_priest": "down",
         "btn_race_ka_at": "disabled",
         "btn_race_ka_wt": "disabled",
         "btn_race_ka_pt": "disabled",

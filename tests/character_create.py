@@ -94,6 +94,9 @@ plan = ko_create.plan(MORADON, "1097", {})
 assert (plan["table"], plan["races"], plan["reserved"]) == ("1264", rules["content"], []), plan
 assert ko_create.plan(MORADON, "1298", {})["table"] == "1298"
 assert ko_create.plan(MORADON, "1097", {"table": "1298", "reserved": ["GM", "gm", "Staff"]})["reserved"] == ["gm", "staff"]
+# RQ-158 (Q105): the package ships the create model of the Karus races that
+# convert on the front-end path; create offers only content, the Tuarek.
+assert (rules["models"], rules["content"]) == ({"create": [2, 3, 4]}, [2]), rules
 # The races the screen offers per nation (1298 006060f0), every one in a table.
 assert {r["race"]: r["specialties"] for r in rules["races"]} == {
     1: [101], 2: [102, 104], 3: [103], 4: [104], 11: [201], 12: [201, 202, 203, 204], 13: [201, 202, 203, 204]}
@@ -125,7 +128,13 @@ with tempfile.TemporaryDirectory(prefix="n3e-create-") as td:
                            (dict(player=True), "player names a race"),
                            (dict(races=[dict(r, looks="UPC_KA") for r in rules["races"]]), "race 1 looks"),
                            (dict(races=[{k: v for k, v in r.items() if k != "looks"} for r in rules["races"]]),
-                            "each race needs exactly")]:
+                            "each race needs exactly"),
+                           # RQ-158: the races whose create model ships, every race in content among them.
+                           (dict(models={}), "models needs exactly create"),
+                           (dict(models={"create": [2], "world": [2]}), "models needs exactly create"),
+                           (dict(models={"create": []}), "models.create"),
+                           (dict(models={"create": [2, 5]}), "models.create names a race it does not list"),
+                           (dict(models={"create": [3]}), "content names a race without a create model")]:
         (game / ko_create.SOURCE).write_text(json.dumps({**rules, **change}))
         plan_refused(expect, game=game)
     # realm-config.json's `create` reaches the plan through the front-end choice.

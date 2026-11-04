@@ -29,8 +29,10 @@ character's turn at each slot (RQ-125), (version 20) create's slide, its
 panels sliding in each time it opens (RQ-126), (version 21) create's race
 and class buttons, which a create that binds them waits for, with two
 messages (RQ-130), (version 22) create's nodes drawn only until its race
-is chosen (RQ-133), and (version 23) create's nodes drawn until a class is
-clicked, again from each open and each race click that builds (RQ-145).
+is chosen (RQ-133), (version 23) create's nodes drawn until a class is
+clicked, again from each open and each race click that builds (RQ-145),
+and (version 24) a create model per race the package's create rules name
+(`models.create`, RQ-158).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -61,7 +63,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 23
+VERSION = 24
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -1602,14 +1604,58 @@ def character_tree(assets, look):
     return tree, joint
 
 
-def create_scene(assets, race, work):
+# Version 24 (RQ-158): at most as many create models as create.bin has races.
+MAX_CREATE_MODELS = 32
+
+
+def create_model(assets, race, work, entry=None):
     """CGameProcCharacterCreate: the player's own model (InitChr from the
     race's UPC_DefaultLooks row: its joint, animation and default parts),
-    breathing (ANI_BREATH), with no plugs: a new character holds nothing."""
+    breathing (ANI_BREATH), with no plugs: a new character holds nothing.
+    With the package's race `entry` ({race, looks}, character-create.json),
+    its parts are KO's SetChr set (ko_player.looks: face 0 and hair 0, an
+    empty name setting no part, the row checked against the race's looks)."""
     row = looks(assets, race)
     joint, animation = row[2].replace("\\", "/"), row[3].replace("\\", "/")
-    definition = dict(joint=joint, animation=animation, parts=default_parts(assets, race))
-    return model(assets, joint, definition, [BREATH], work / "create") + u(0)
+    if entry is None:
+        parts = default_parts(assets, race)
+    else:
+        import ko_player
+        parts = ko_player.looks(assets, entry)["definition"]["parts"]
+    definition = dict(joint=joint, animation=animation, parts=parts)
+    return model(assets, joint, definition, [BREATH], work) + u(0)
+
+
+def create_races(select_race, rules=None):
+    """The create models' races, in file order (version 24): the select
+    character's race first (the one the realm's create draws until RQ-004
+    draws the chosen race's), then the rest of the package rules'
+    `models.create` in their `races` order, each as (race, its rules entry
+    or None). Without rules, the select race alone."""
+    if rules is None:
+        return [(select_race, None)]
+    entries = {r["race"]: r for r in rules["races"]}
+    shipped = rules["models"]["create"]
+    if select_race not in shipped:
+        raise ValueError("front-end select.character.race %r has no create model (models.create)" % select_race)
+    order = [select_race] + [r["race"] for r in rules["races"] if r["race"] in shipped and r["race"] != select_race]
+    return [(race, entries[race]) for race in order]
+
+
+def create_scene(assets, races, work):
+    """Version 24 (RQ-158): a count, then per race its code and its create
+    model (create_model), for `races` from create_races."""
+    if not 1 <= len(races) <= MAX_CREATE_MODELS:
+        raise ValueError("front-end create models: 1 to %d" % MAX_CREATE_MODELS)
+    if len({race for race, _ in races}) != len(races):
+        raise ValueError("front-end create race twice")
+    out = u(len(races))
+    for at, (race, entry) in enumerate(races):
+        if type(race) is not int or not 1 <= race <= 65535:
+            raise ValueError("front-end create race %r" % (race,))
+        # The first keeps the work directory the one create model had.
+        out += u(race) + create_model(assets, race, work / ("create" if at == 0 else "create-%d" % race), entry)
+    return out
 
 
 def mpeg_frame(data, at, end):
@@ -1919,8 +1965,12 @@ def node_end(data, at):
 
 def cook(assets, out, config_path, work):
     """Writes front-end.bin into the directory `out`; returns its provenance.
-    `assets` is the choice's `Inputs`, or one tree."""
+    `assets` is the choice's `Inputs`, or one tree. The package's create rules
+    (character-create.json beside the recipe, ko_create) name the races whose
+    create model it carries (version 24, RQ-158)."""
+    import ko_create
     config = load(pathlib.Path(config_path))
+    rules = ko_create.rules(pathlib.Path(config_path).parent)
     assets = assets if isinstance(assets, Inputs) else Inputs([assets])
     # The client files this cook reads, with their hashes (ko_character.Assets).
     shared = []
@@ -1928,14 +1978,14 @@ def cook(assets, out, config_path, work):
         shared.append((tree, tree.sources))
         tree.sources = {}
     try:
-        return write(assets, out, config, work)
+        return write(assets, out, config, work, rules)
     finally:
         for tree, earlier in shared:
             cooked, tree.sources = tree.sources, earlier
             earlier.update(cooked)
 
 
-def write(assets, out, config, work):
+def write(assets, out, config, work, rules=None):
     assets = assets if isinstance(assets, Inputs) else Inputs([assets])
     if set(config["screens"]) != set(SCREENS):
         raise ValueError("front-end screens")
@@ -1969,8 +2019,9 @@ def write(assets, out, config, work):
     scenes = intro_scene(assets, textures, config["intro"], pathlib.Path(work))
     zone_report = {}
     scenes += select_scene(assets, textures, config["select"], pathlib.Path(work), zone_report)
-    scenes += create_scene(character_tree(assets, config["select"]["character"])[0],
-                           config["select"]["character"]["race"], pathlib.Path(work))
+    # Version 24 (RQ-158): a create model per race of models.create.
+    races = create_races(config["select"]["character"]["race"], rules)
+    scenes += create_scene(character_tree(assets, config["select"]["character"])[0], races, pathlib.Path(work))
     atlases = b""
     sources = {False: pathlib.Path(config["fonts"]["regular"]), True: pathlib.Path(config["fonts"]["bold"])}
     for (size, bold), _ in sorted(fonts.items(), key=lambda kv: kv[1]):
@@ -1990,5 +2041,6 @@ def write(assets, out, config, work):
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)
     return dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), textures=len(textures.list),
+                create_races=[race for race, _ in races],
                 fonts=len(fonts), music=played, logo=logo_report, messages=message_report, font_substitutes=sorted(str(p) for p in sources.values()),
                 sources=dict(sorted(assets.sources.items())), **zone_report)

@@ -1633,6 +1633,18 @@ form nothing reads, and the create matrix would offer races the select hall and 
 world still draw as the Tuarek. `content` stays the Tuarek; RQ-003 lands the package
 data (`looks`, `player`) and the cook that reads any race.
 
+RQ-158 ships the first form: each race of `character-create.json`'s `models.create`
+has its create model in `front-end.bin` (N3FE version 24), about 1.0–1.4 MB a race
+(Moradon: the Tuarek, Wrinkle Tuarek and Puri Tuarek, +2,544,728 bytes;
+`content/character-create.md`, "Shipped"). Neither later consumer can share it at
+little cost: KO's select draws other joints and clips (`ChrSelect/`), and the world
+draws the player scenes. Those scenes repeat one mesh and atlas (1,391,008 bytes of
+the Tuarek's 1,431,652-byte `player-idle.bin`) in every state and combat clip, about
+44.6 MB a race (12 player scenes, 17.6 MB; 20 combat clips, 27.0 MB) against
+15–40 KB of tracks each; an N3NM-style model (one mesh and atlas, per-state tracks,
+as `npc_looks`) would hold a race in about 2–3 MB, for RQ-007 to weigh. What create
+offers meanwhile is Q105.
+
 ### Q103 — Player clips past four joint influences
 
 RQ-163: the Arch Tuarek's lower part has 49 drawn vertices with five joint influences
@@ -1670,3 +1682,22 @@ Options:
 engine 38 or later (wire 30); without such a vertex the bytes are as before
 (`content/appearance.md`, "Influence tables in render detail"). A 2145 armour part
 keeps the four-influence reader until 2233's skinning is read for it.
+
+### Q105 — Which races create offers before the select hall and the world draw them
+
+RQ-158 ships the create model of the Tuarek, the Wrinkle Tuarek and the Puri Tuarek
+(`models.create`, Q102). The select hall still draws one Tuarek priest for every
+slot (RQ-005), and the world the package's one player race (RQ-007).
+
+Options:
+- (a) Widen `content`, and so `create.races`' default (Q94), to `models.create`: a
+  Puri Tuarek created now draws as the Tuarek in the hall and the world.
+- (b) Keep `content` the races every screen and the world draw; `models.create`
+  names the races whose create model ships, and holds every race of `content`. A
+  race joins `content` when RQ-005 and RQ-007 draw it.
+- (c) Let a realm owner's `create.races` name any race of `models.create`.
+
+**Default taken:** (b). The cook refuses a `content` race outside `models.create` and,
+as before, a `create.races` race outside `content`; Moradon's `content` stays the
+Tuarek. How RQ-004 draws a race button whose race has a create model but is not
+offered is RQ-004's, with Q94's look question.

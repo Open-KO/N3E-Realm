@@ -2716,7 +2716,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 23, "front end version");
+  need(r.u() == 24, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -3072,7 +3072,18 @@ FrontEnd load_front_end(const Release &release) {
   // The front, start and rest clips (1097: pre_select, selected, dummy;
   // 1298: its clips 1, 2 and 0).
   need(fe.select.clips.size() == 3, "front end select clips");
-  model(fe.create);
+  // Version 24 (RQ-158): a create model per race (1-32, each race 1-65535
+  // once); the first is the one create draws, the others are kept for the
+  // create screen per race (RQ-004).
+  const auto create_models = r.count(32);
+  for (uint32_t i = 0; i < create_models; ++i) {
+    const auto race = r.u();
+    need(race >= 1 && race <= 65535 &&
+             std::find(fe.create_races.begin(), fe.create_races.end(), race) == fe.create_races.end(),
+         "front end create race");
+    fe.create_races.push_back(race);
+    model(i == 0 ? fe.create : fe.create_models.emplace_back());
+  }
   // 9. Music (version 3, RQ-018): each track's frames checked whole here, so
   // the stream that decodes them later meets only well-formed frames.
   // Version 5 (RQ-083): each track's kind (MPEG or 16-bit PCM) and restart

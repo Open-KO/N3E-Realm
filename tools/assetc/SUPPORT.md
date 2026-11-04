@@ -225,6 +225,11 @@ clicked and again from each open and each race click that builds (the create
 screen's `until_class`, node flag 16, §9.15); the 1298 recipe names `str_01` and
 `int_01`, so its priest click shows "STR" and "INT" in their cyan copies as 1298's
 `006062d0` does, until the Tuarek click that builds or the next open.
+N3FE version 24 (RQ-158, Q105) carries a create model per race of the package's
+`character-create.json` `models.create`, the select character's race first: Moradon's
+Tuarek, Wrinkle Tuarek and Puri Tuarek (the Wrinkle Tuarek's empty lower and hair
+parts set none, as KO's `SetChr`); create still draws the first until RQ-004 draws
+the chosen race's.
 A recipe's `states` takes `down` (RQ-138, Q89 (b), §9.16), cooked as fixed on with
 the button's down image in the on state and its on image left out (no version
 change); the 1097 choice's Tuarek and priest are `down`, as 1264 draws its chosen

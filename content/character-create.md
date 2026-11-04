@@ -443,8 +443,9 @@ rules; KO's are Moradon's, from the tables above:
 | `nation` | the account's nation until the realm keeps one per account (RQ-006): Moradon's 1, Karus (Q94, Q101) |
 | `faces`, `hairs` | how many faces and hairs every race offers: KO's 4 and 3 (1298 `00604f90`) |
 | `races` | each race's `race` code, `nation` and `specialties` (KO's classes), as 1298's race click offers them (`006060f0`), and its `looks`, the stem of its `UPC_DefaultLooks` parts (RQ-003, below) |
-| `content` | the races the package has a player model for (Moradon: the Tuarek, 2; RQ-003, below) |
+| `content` | the races the package has a player model for, every screen and the world drawing it: the races create may offer (Moradon: the Tuarek, 2; RQ-003, Q105, below) |
 | `player` | the race of the package's player scenes, one of `content` (Moradon: 2; RQ-003) |
+| `models` | the races whose model the package ships in each form a screen draws: `create`, the create screen's (`front-end.bin` N3FE version 24; Moradon: 2, 3, 4), which has every race of `content` (RQ-158, below) |
 | `tables` | the stat tables a realm validates against, by id: each a KO `values` table (`Data/NewChrValue.tbl`) read from the front end's inputs (a `<name>:` prefix as the recipe's paths), its row `key` (row id = race × `race` + specialty × `specialty`: 1264's `{1, 0}`, 1298's `{10000, 1}`) and the `texts` table its refusals are worded from |
 | `columns` | the values table's stat columns and bonus column (KO's 2..6 and 7) |
 | `front_ends` | the table each front-end client draws by default (Q97 (b): 1264's for the 1097 choice, 1298's for the 1298 recipe) |
@@ -461,7 +462,8 @@ default none). `create.start` and `create.items` are not settings yet (Q101).
 the front-end choice, before the survey (`tools/assetc/ko_create.py` `plan`, through
 `front_end_choice.choose`), then reads the chosen table and text rows from the front
 end's inputs (`build`). It refuses a malformed file or setting, a table the package
-lacks, a race without a player model, a table row whose race or specialty the
+lacks, a race without a player model, a `content` race without a create model
+(`models.create`, RQ-158), a table row whose race or specialty the
 package lacks, a missing row the offered races need, and a fixed choice the rules
 refuse. The package's manifest gets a `create` section, which
 `tools/assetc/create.py` cooks into `create.bin` (N3CC version 1, little-endian u32s
@@ -570,11 +572,37 @@ start `0041be40` sets the frame to the start and the tick `00418b20` adds rate �
 time to it; `specs/KO-FINDINGS.md` §10.2), and the reader reads it so, a selected
 one converting as that frame held.
 
-**Not in the package yet** (Q102). Only the player race's model is cooked into the
-package. `content` stays the Tuarek: a race joins it with the item that ships its
-model in the form its first consumer draws (the create screen RQ-004, the select hall
-RQ-005, the world RQ-007). The class data (the create dress, starting items and
-weapons, skills, class rules) is open too.
+**Shipped (RQ-158, Q102, Q105).** Each race of `models.create` has its create model
+in `front-end.bin` (N3FE version 24, `content/front-end.md` item 8): KO's `InitChr`
+for the race, its looks row's joint, animation and parts (face 0, hair 0, an empty
+name setting no part), breathing. The create screen is the models' first consumer
+(RQ-004); until it draws the chosen race's, create draws the first, the select
+character's race. Moradon ships the Karus races that convert on the front-end path
+(local-asset; `tests/ko_player_races.py` cooks each):
+
+| Race | Create model | Bytes it adds to `front-end.bin` |
+|---|---|---|
+| 2 Tuarek | N3S1, the bytes of the one create model before (1,014,644) | 8: the count and its race code |
+| 3 Wrinkle Tuarek | N3S1, four parts | 1,405,656 |
+| 4 Puri Tuarek | N3S1 | 1,139,064 |
+| 1 Arch Tuarek | not shipped: N3SI, which a front-end model record does not hold (RQ-165) | — |
+| 11 Barbarian, 13 El Morad female | not shipped: they cook, but the realm's create is Karus until nation select (RQ-006) | (1,042,195 and 1,034,220) |
+| 12 El Morad male | not shipped: N3SI (RQ-165), and El Morad (RQ-006) | — |
+
+Moradon's `front-end.bin` grows from 53,802,688 to 56,347,416 bytes, under its 64 MiB
+bound; the package hash changes, so the hosted
+realm's next deploy is a new realm (Q63). A create model is not the select hall's:
+KO's select draws its `ChrSelect/` joints and clips (the 1097 choice's
+`upc_ka_tu_pri`, 1298's `upc_ka_tu`), its create the looks row's `Chr/` ones, so
+RQ-005 ships each race's select model as its own record; nor the world's, whose
+player scenes (`player-<state>.bin`, `combat-<i>.bin`) RQ-007 ships per race.
+
+**What create offers** (Q105). `content` stays the Tuarek: a race joins it, and so
+`create.races`' default, only when the select hall (RQ-005) and the world (RQ-007)
+draw it too, so no character is created that the hall or the world draws as a
+Tuarek. The cook refuses a `content` race outside `models.create`, and (as before) a
+`create.races` race outside `content`. The class data (the create dress, starting
+items and weapons, skills, class rules) is open too.
 
 ## What each item needs
 

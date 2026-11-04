@@ -25,6 +25,14 @@ With the pinned client tree (assets/ko; SKIP without it), for every race:
 A race whose model the reader still refuses is listed in OPEN with the
 refusal and the item that reads KO's handling of it; the test fails when the
 refusal changes or the race cooks, so the list stays true.
+
+RQ-158: every race of `models.create` has its create model in front-end.bin
+(N3FE version 24): its create model (tools/assetc/ko_front_end.py
+create_model, KO's InitChr and SetChr parts, face 0 and hair 0, breathing)
+cooks N3S1 or N3SM, as a front-end model record holds. A race outside it is
+listed in UNSHIPPED with why: the front-end record's refusal for a race whose
+model has a drawn vertex past four influences (RQ-165), or none for a race
+that cooks but whose create screen the realm does not draw yet.
 """
 import os
 import pathlib
@@ -35,6 +43,7 @@ os.chdir(ROOT)
 sys.path.insert(0, str(ROOT / "tools/assetc"))
 import ko_character  # noqa: E402
 import ko_detail  # noqa: E402
+import ko_front_end  # noqa: E402
 import ko_player  # noqa: E402
 import main  # noqa: E402
 
@@ -42,6 +51,14 @@ TREE = pathlib.Path("assets/ko")
 OUT = pathlib.Path("build/ko-player-races")
 # Races the reader refuses today: (the refusal, what is open).
 OPEN = {}
+# RQ-158: convertible races whose create model the package does not ship:
+# (the front-end cook's refusal or None, why).
+UNSHIPPED = {
+    1: ("front-end model magic", "its create model is N3SI, which a front-end record does not hold (RQ-165)"),
+    11: (None, "El Morad: the realm's create is Karus until nation select (RQ-006)"),
+    12: ("front-end model magic", "its create model is N3SI, which a front-end record does not hold (RQ-165)"),
+    13: (None, "El Morad: the realm's create is Karus until nation select (RQ-006)"),
+}
 
 if not (TREE / "Data/UPC_DefaultLooks.tbl.csv").is_file():
     print("SKIP ko_player_races: no pinned client tree at assets/ko (make ko-assets)")
@@ -104,6 +121,19 @@ for entry in rules["races"]:
         continue
     assert race not in OPEN, "race %d now cooks: drop it from OPEN" % race
     cooked.append(race)
+    # RQ-158: its create model, as front-end.bin carries it.
+    shipped = race in rules["models"]["create"]
+    assert shipped != (race in UNSHIPPED), (race, "models.create and UNSHIPPED disagree")
+    try:
+        record = ko_front_end.create_model(assets, race, OUT / str(race) / "create", entry)
+        create_magic = record[4:8]
+        assert create_magic in (b"N3S1", b"N3SM"), (race, create_magic)
+        assert shipped or UNSHIPPED[race][0] is None, (race, "now cooks a create model", UNSHIPPED[race])
+    except ValueError as error:
+        assert not shipped and UNSHIPPED[race][0] and UNSHIPPED[race][0] in str(error), (race, str(error))
+        record, create_magic = None, None
+    print("PASS race %d create model: %s" % (race, "%s, %d bytes in front-end.bin" % (create_magic.decode(), len(record))
+                                              if shipped else "not shipped: " + UNSHIPPED[race][1]))
     print("PASS race %d (%s): %d parts, %d part files over its faces and hairs, %d clips, idle cooks (%s%s), "
           "render detail with its parts worn cooks (%s%s)"
           % (race, entry["looks"], len(positions), len(names), len(clips), magic.decode(),

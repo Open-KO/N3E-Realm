@@ -23,22 +23,24 @@ new character's turn at each slot (version 19, RQ-125), create's slide,
 its panels sliding in each time it opens (version 20, RQ-126), create's
 race and class buttons, which a create that binds them waits for, with two
 messages (version 21, RQ-130), create's nodes drawn only until its race is
-chosen (version 22, RQ-133), and create's nodes drawn until a class is clicked,
-again from each open and each race click that builds (version 23, RQ-145).
+chosen (version 22, RQ-133), create's nodes drawn until a class is clicked,
+again from each open and each race click that builds (version 23, RQ-145), and a
+create model per race the package's create rules name (version 24, RQ-158).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
 its header. A package with it is engine 42, so wire 30 (as engines 38–41). Its bound is
 64 MiB (`FRONT_END_FILE`, `MAX_FRONT_END_ASSET`, `kFrontEndFile`), since it holds
-two character models and the UI art.
+the character models and the UI art (Moradon's 1097 choice: 56,347,416 bytes with
+three create models, RQ-158).
 
 Integers are little-endian u32, reals f32; strings are a u32 length and that many
 bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 23, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 24, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -78,10 +80,23 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    mesh count, 0–256, 0 when the hall has parts, each a zone mesh; below), the
    fog (version 8; below), the model (version 4: three
    clips, by role the front, start and rest clips), its plugs.
-8. The create model and its plugs (version 2): `CGameProcCharacterCreate`'s
-   player (`InitChr`: the race's `UPC_DefaultLooks` joint, animation and default
-   parts) with one clip, `ANI_BREATH` (0), and no plugs (a new character holds
-   nothing). The select model's seated clips are for the hall's thrones.
+8. The create models (version 24, RQ-158): a count (1–32), then per race its
+   race code (1–65535, each once) and its model and plugs (version 2):
+   `CGameProcCharacterCreate`'s player (`InitChr`: the race's `UPC_DefaultLooks`
+   joint, animation and default parts, face 0 and hair 0, an empty part name
+   setting no part as `SetChr` sets them; source `GameProcCharacterCreate.cpp`,
+   `content/character-create.md` "The realm's races") with one clip,
+   `ANI_BREATH` (0), and no plugs (a new character holds nothing). The races
+   are the package's `models.create` (`games/<game>/character-create.json`):
+   the select character's race first (`select.character.race`, which must be
+   one of them), the model create draws, then the others in the rules' `races`
+   order, which the client keeps for the create screen per race (RQ-004). A
+   package with no `character-create.json` beside the recipe carries the select
+   race's alone; a malformed one stops the cook (`ko_create.rules`). Before
+   version 24 the file held one create model, the select race's. The select
+   model's seated clips are for the hall's thrones; it is not the create model
+   (KO's select draws `ChrSelect/` joints and clips, its create the looks row's
+   `Chr/` ones), so the two are separate records.
 9. Music (version 3, RQ-018; version 5, RQ-083): a track count (≤4), each
    its kind (version 5: 0 MPEG, 1 PCM), sample rate, channels (1 or 2), loop
    (0 or 1), restart period (version 5: a real, seconds, 0 for none or
@@ -409,7 +424,8 @@ address mode); the font atlases and the moon linear.
   and ambient (3 reals each), a vertex count (1–65536) of 8 reals (position,
   normal, uv), an index count (a multiple of 3, ≤196608), the indices.
 
-The loader refuses an unknown action, a screen missing one of its required
+The loader refuses (version 24) a create model count outside 1–32, a create race
+outside 1–65535 or named twice, an unknown action, a screen missing one of its required
 actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
 `realm_connect`; select: `select_prev`, `select_next`, `back`, `exit` and an
 info text, `char_info` or (version 13) any of `char_name`, `char_level` and

@@ -10,7 +10,9 @@ table each front end draws (Q97 (b)), the refusals' text rows (1298 `00600750`),
 the name rule (Q99) and the fixed choice a create without a race takes (Q52).
 Each race also names its `looks`, the stem of its `UPC_DefaultLooks` parts, and
 `player` is the race of the package's player scenes (tools/assetc/ko_player.py,
-RQ-003).
+RQ-003). `models` names the races whose model the package ships in each form
+a screen draws: `create`, the create screen's (front-end.bin, N3FE version 24,
+RQ-158), which every race in `content` has.
 The realm owner's `realm-config.json` may name, under `create`, another `table`
 (Q97), the `races` offered (Q94, default `content`) and `reserved` words (Q99).
 
@@ -28,7 +30,10 @@ import front_end_choice
 
 SOURCE = "character-create.json"
 KEYS = {"stats", "nation", "faces", "hairs", "races", "content", "player", "tables", "columns",
-        "front_ends", "refusals", "name", "fixed"}
+        "front_ends", "refusals", "name", "fixed", "models"}
+# RQ-158: the forms a race's model ships in (each a list of races): `create`,
+# the create screen's model (ko_front_end, N3FE version 24).
+MODEL_KEYS = {"create"}
 RACE_KEYS = {"race", "nation", "specialties", "looks"}
 # A race's looks stem (UPC_DefaultLooks part names, ko_player.looks checks it).
 LOOKS = re.compile(r"[a-z0-9_]{1,32}\Z")
@@ -77,6 +82,13 @@ def rules(game):
         raise Refused("%s: content names a race it does not list" % path)
     if type(r["player"]) is not int or r["player"] not in r["content"]:
         raise Refused("%s: player names a race without a player model (content)" % path)
+    models = r["models"]
+    if type(models) is not dict or set(models) != MODEL_KEYS:
+        raise Refused("%s: models needs exactly %s" % (path, ", ".join(sorted(MODEL_KEYS))))
+    if not set(ids(models["create"], "%s models.create" % path)) <= set(known):
+        raise Refused("%s: models.create names a race it does not list" % path)
+    if not set(r["content"]) <= set(models["create"]):
+        raise Refused("%s: content names a race without a create model (models.create)" % path)
     tables = r["tables"]
     if type(tables) is not dict or not tables:
         raise Refused("%s: tables, by id" % path)

@@ -1099,10 +1099,11 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=23, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=24, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
-         zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0)):
+         zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0),
+         creates=None):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -1125,9 +1126,41 @@ def blob(version=23, slots=1, screen_data=None, font_index=None, light=None, plu
     if paths is None:
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
     out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
-    out += character(select_clips, plug=plug) + character(plug=plug)
+    out += character(select_clips, plug=plug)
+    # Version 24 (RQ-158): the create models, each a race and a model record.
+    out += u(1) + u(2) + character(plug=plug) if creates is None else creates
     # Version 20 (RQ-126): create's slide, after the placement.
     return out + music + logo + messages + placement + slide + extra
+
+
+# --- the create models (version 24, RQ-158) -------------------------------------
+
+import ko_create  # noqa: E402
+
+# Without create rules, the select character's race alone; with Moradon's, it
+# first and then the rest of models.create in the rules' races order.
+assert fe.create_races(2) == [(2, None)]
+moradon_rules = ko_create.rules(ROOT / "games/moradon")
+ordered = fe.create_races(2, moradon_rules)
+assert [race for race, _ in ordered] == moradon_rules["models"]["create"] == [2, 3, 4], ordered
+assert [entry["looks"] for _, entry in ordered] == ["upc_ka_tu", "upc_ka_wt", "upc_ka_pu"], ordered
+assert [race for race, _ in fe.create_races(4, moradon_rules)] == [4, 2, 3]
+create_refusals = {
+    "a select race without a create model": lambda: fe.create_races(13, moradon_rules),
+    "no create models": lambda: fe.create_scene(None, [], pathlib.Path("/nonexistent")),
+    "33 create models": lambda: fe.create_scene(None, [(r, None) for r in range(1, 34)], pathlib.Path("/nonexistent")),
+    "a race twice": lambda: fe.create_scene(None, [(2, None), (2, None)], pathlib.Path("/nonexistent")),
+    "race 0": lambda: fe.create_scene(None, [(0, None)], pathlib.Path("/nonexistent")),
+    "race 65536": lambda: fe.create_scene(None, [(65536, None)], pathlib.Path("/nonexistent")),
+}
+for reason, call in create_refusals.items():
+    try:
+        call()
+    except ValueError:
+        continue
+    raise AssertionError("front-end cook accepted " + reason)
+print("PASS front-end cook: a create model per race of models.create, the select race first; %d refusals"
+      % len(create_refusals))
 
 
 # --- the logo screen (version 9, RQ-101) ---------------------------------------
@@ -1969,6 +2002,16 @@ def patch_node(screen_data, index, ident, action=None, flags=None):
 
 
 CHOICE_CASES = {
+    # RQ-158 (version 24): a create model per race.
+    "bad-version-23": blob(version=23),
+    "ok-create-races": blob(creates=u(3) + u(2) + character() + u(3) + character() + u(13) + character()),
+    "ok-create-races-32": blob(creates=u(32) + b"".join(u(r) + character() for r in range(1, 33))),
+    "bad-create-races-0": blob(creates=u(0)),
+    "bad-create-races-33": blob(creates=u(33) + b"".join(u(r) + character() for r in range(1, 34))),
+    "bad-create-race-0": blob(creates=u(1) + u(0) + character()),
+    "bad-create-race-65536": blob(creates=u(1) + u(65536) + character()),
+    "bad-create-race-twice": blob(creates=u(2) + u(2) + character() + u(2) + character()),
+    "bad-create-races-truncated": blob(creates=u(2) + u(2) + character() + u(3)),
     "bad-version-20": blob(version=20),
     # RQ-133 (version 22): create's nodes drawn until the race is chosen.
     "bad-version-21": blob(version=21),
@@ -2208,6 +2251,22 @@ try:
         assert reason in line, (name, line)
     for name in ("ok-create-choice", "ok-create-choice-race-only", "ok-until-race"):
         assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
+    # RQ-158: each create model's race, its one clip and the demo's joints, in
+    # file order; 1 to 32 models, each race 1 to 65535 once.
+    race_lines = {l.split(":")[0]: l.split(": ", 1)[1].split() for l in run.stdout.splitlines()
+                  if l.startswith("create-races ")}
+    assert set(race_lines) == {"create-races ok-create-races", "create-races ok-create-races-32"}, race_lines
+    three = race_lines["create-races ok-create-races"]
+    assert [x.split("/")[:2] for x in three] == [["2", "1"], ["3", "1"], ["13", "1"]], three
+    assert len({x.split("/")[2] for x in three}) == 1 and three[0].split("/")[2] != "0", three
+    assert [x.split("/")[0] for x in race_lines["create-races ok-create-races-32"]] == [str(r) for r in range(1, 33)]
+    for name, reason in (("bad-version-23", "front end version"), ("bad-create-races-0", "count"),
+                         ("bad-create-races-33", "count"), ("bad-create-race-0", "front end create race"),
+                         ("bad-create-race-65536", "front end create race"),
+                         ("bad-create-race-twice", "front end create race")):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    assert any(l.startswith("refused bad-create-races-truncated:") for l in run.stdout.splitlines())
     for name, reason in (("bad-yes-off-message", "yes/no off the message box"),
                          ("bad-exit-confirm-no-buttons", "exit_confirm without yes and no"),
                          ("bad-exit-confirm-no-no", "exit_confirm without yes and no")):

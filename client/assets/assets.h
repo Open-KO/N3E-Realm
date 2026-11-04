@@ -1047,6 +1047,11 @@ struct FrontEnd {
   std::array<std::vector<FrontNode>, size_t(FrontScreen::count)> screens;
   std::array<std::string, size_t(FrontString::count)> strings;
   FrontScene intro, select, create;  // create: the model only (no camera or lights)
+  // Version 24 (RQ-158): each create model's race, the first `create`'s, and
+  // the other races' models in that order (create_models[i] is
+  // create_races[i + 1]'s), for the create screen per race (RQ-004).
+  std::vector<uint32_t> create_races;
+  std::vector<FrontScene> create_models;
   uint32_t backdrop = 0;
   std::array<float, 4> backdrop_rect{};  // 1024 x 768 units
   std::vector<FrontSlot> slots;

@@ -608,6 +608,17 @@ int main(int argc, char **argv) {
       // RQ-113: a select whose arrows both draw at the end of the row.
       if (fe.select_arrows != n3e::FrontSelectArrows::hide)
         std::cout << "arrows " << release.root.filename().string() << ": " << uint32_t(fe.select_arrows) << "\n";
+      // RQ-158: a package with more than one create model: each race, then
+      // each model's clip count and joint count (the first create's).
+      if (fe.create_races.size() > 1) {
+        std::cout << "create-races " << release.root.filename().string() << ":";
+        for (size_t k = 0; k < fe.create_races.size(); ++k) {
+          const auto &scene = k == 0 ? fe.create : fe.create_models[k - 1];
+          std::cout << " " << fe.create_races[k] << "/" << scene.clips.size() << "/" << scene.model.joints.size();
+        }
+        std::cout << "\n";
+      }
+      if (fe.create_races.size() != fe.create_models.size() + 1) error = "create models inconsistent";
       // RQ-125: a create over the hall, and each slot's create yaw.
       if (fe.create_mode != n3e::FrontCreateMode::screen) {
         std::cout << std::setprecision(9) << "create " << release.root.filename().string() << ": "

@@ -39,6 +39,7 @@ import pick
 import postprocess
 import item_heads
 import create
+import render_detail
 
 
 def heightfield_triangles(hf):
@@ -180,6 +181,24 @@ def player_clip_magics(manifest, root):
     return magics
 
 
+# RQ-164 (content/appearance.md): render detail whose levels or appearance
+# parts have vertices past four joint influences is N3DI / N3DJ (N3D2 / N3D3
+# with influence tables), from engine 44; like 43 it needs an engine 38+
+# package (wire 30).
+DETAIL_INFLUENCES_ENGINE = render_detail.INFLUENCE_ENGINE
+DETAIL_INFLUENCE_MAGICS = (b"N3DI", b"N3DJ")
+
+
+def render_detail_magic(manifest, root):
+    """The package's render detail magic (its first four bytes), or None
+    without one; a missing or unsafe file is left to the check that reads it."""
+    try:
+        with open(safe(root, manifest["render_detail"]), "rb") as data:
+            return data.read(4)
+    except (KeyError, OSError, ValueError, TypeError):
+        return None
+
+
 def cook(root, out, materials=False, influences=False):
     """Cooks the package at `root` into `out`. `materials` lets the scene's
     glTF carry N3SM render states and further joint influence sets
@@ -270,6 +289,7 @@ def cook(root, out, materials=False, influences=False):
     if b"N3SI" in clip_magics and b"N3S1" in clip_magics:
         raise ValueError("player clips mix N3S1 and N3SI: they share one mesh")
     player_influences = b"N3SI" in clip_magics
+    detail_influences = render_detail_magic(manifest, root) in DETAIL_INFLUENCE_MAGICS
     compatibility = 30 if templated_npc or "attachments" in manifest or front_end else 29 if reference_npc else 28 if "skills" in manifest else 26 if "consumables" in manifest else 25 if 'upper_nodes' in manifest.get('combat_animation',{}) else 24 if 'combat_animation' in manifest else 23 if 'rest' in manifest else 22 if 'appearance' in manifest else 21 if item_drops else 20 if coins else 19 if party_loot else 18 if party_rewards else 17 if "party" in manifest else 16 if "friends" in manifest else 15 if "storage_auth" in manifest else 14 if "storage" in manifest else 13 if "wear" in manifest else 12 if "stats" in manifest else 11 if "equipment" in manifest else 10 if "repair" in manifest else 9 if "commerce" in manifest else 8 if "inventory" in manifest else 7 if "exploration" in manifest else 6 if "editing" in manifest else (5 if manifest["engine_version"] >= 10 else 4) if "progression" in manifest else 3 if "life" in manifest else 2 if "movement" in manifest["gameplay"] else 1
     engine_needed = max(
         # PQ-328 (D-186): attachment models are looks models, so a
@@ -321,6 +341,12 @@ def cook(root, out, materials=False, influences=False):
         if engine_needed < 38:
             raise ValueError("N3SI player clips need an engine 38+ package")
         engine_needed = max(engine_needed, PLAYER_INFLUENCES_ENGINE)
+    if detail_influences:
+        # RQ-164: N3DI / N3DJ render detail is engine 44, in a package that
+        # is already engine 38+ (so wire 30).
+        if engine_needed < 38:
+            raise ValueError("N3DI / N3DJ render detail needs an engine 38+ package")
+        engine_needed = max(engine_needed, DETAIL_INFLUENCES_ENGINE)
     if any(
         type(manifest[k]) is not int or manifest[k] != value
         for k, value in [
@@ -441,8 +467,9 @@ def cook(root, out, materials=False, influences=False):
     if "render_detail" in manifest:
         if not {"exploration", "presentation"} <= manifest.keys(): raise ValueError("detail requires world and player")
         data=read(safe(root,manifest["render_detail"]),128*1024*1024)
-        # N3D3 (PQ-348, D-191): N3D2 with a render state per appearance entry.
-        if data[:4] not in ((b"N3D2",b"N3D3") if "appearance" in manifest else (b"N3D1",)):raise ValueError("render detail magic")
+        # N3D3 (PQ-348, D-191): N3D2 with a render state per appearance entry;
+        # N3DI / N3DJ (RQ-164, engine 44): N3D2 / N3D3 with influence tables.
+        if data[:4] not in ((b"N3D2",b"N3D3")+DETAIL_INFLUENCE_MAGICS if "appearance" in manifest else (b"N3D1",)):raise ValueError("render detail magic")
         extras["render-detail.bin"]=data
         deps[manifest["render_detail"]]=digest(data).hex()
     if "rest" in manifest:

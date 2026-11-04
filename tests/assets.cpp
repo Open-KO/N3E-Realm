@@ -60,6 +60,43 @@ int main(int argc, char **argv) {
       }
       return 0;
     }
+    if (argc >= 4 && std::string(argv[2]) == "--detail") {
+      // --detail clip [t ...] (RQ-164): the render detail's geometries (which
+      // may carry N3DI / N3DJ influence tables from engine 44) skinned by the
+      // client on the player clip `clip`'s pose at each time t (default 0,
+      // 0.25, 0.5, 0.75 and 1); one line per time and geometry: the time, its
+      // label (level<i>, appearance<k>-<i>), then x y z of every corner in
+      // index order.
+      auto r = n3e::load_release(argv[1]);
+      std::vector<float> times{0.f, .25f, .5f, .75f, 1.f};
+      if (argc > 4) times.clear();
+      for (int i = 4; i < argc; ++i) {
+        size_t end = 0;
+        times.push_back(std::stof(argv[i], &end));
+        if (end != std::string(argv[i]).size() || !std::isfinite(times.back()) || times.back() < 0)
+          throw std::runtime_error("detail time");
+      }
+      auto skeleton = n3e::load_scene(r, "player-idle.bin");
+      auto detail = n3e::load_render_detail(r, skeleton);
+      std::vector<std::pair<std::string, const n3e::DetailMesh *>> meshes;
+      for (size_t i = 0; i < detail.levels.size(); ++i) meshes.push_back({"level" + std::to_string(i), &detail.levels[i]});
+      for (size_t k = 0; k < detail.appearances.size(); ++k)
+        for (size_t i = 0; i < detail.appearances[k].levels.size(); ++i)
+          meshes.push_back({"appearance" + std::to_string(k + 1) + "-" + std::to_string(i), &detail.appearances[k].levels[i]});
+      auto clip = n3e::load_scene(r, argv[3]);
+      std::cout << std::setprecision(9);
+      for (float t : times) {
+        auto pose = clip.sample(t);
+        for (const auto &[label, mesh] : meshes) {
+          auto out = mesh->scene.skin(pose);
+          std::cout << t << ' ' << label;
+          for (size_t v = 0; v < mesh->scene.indices.size(); ++v)
+            std::cout << ' ' << out[v * 8] << ' ' << out[v * 8 + 1] << ' ' << out[v * 8 + 2];
+          std::cout << "\n";
+        }
+      }
+      return 0;
+    }
     if (argc != 2 && argc != 6 && argc != 8 && argc != 11)
       throw std::runtime_error("asset-check package");
     auto r = n3e::load_release(argv[1]);

@@ -145,8 +145,10 @@ asset screenshots remain local under `build/ko-gameplay/`. This does not create
   The Arch Tuarek's `upc_ka_at_lower.n3cskins` has 49 drawn vertices with five
   (local-asset). `many_influences` in provenance records the drawn vertices past
   four, the most and the sets; a model without such a vertex writes one set,
-  as before. The render detail and appearance readers still reject more than
-  four. The bandicoot, rejected for this before PQ-267 (one LOD0 vertex with
+  as before. Since RQ-164 the render detail (`ko_detail`) and the 1298
+  appearance parts (`ko_appearance`) keep them too, through the strict reader's
+  `influences=True` (N3DI / N3DJ render detail, engine 44;
+  content/appearance.md); a 2145 armour part still rejects more than four. The bandicoot, rejected for this before PQ-267 (one LOD0 vertex with
   five, a lower LOD with 48), converts with every influence
   (evidence).
   Source vertex normals (with their length) and per-corner UVs are preserved,

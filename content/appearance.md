@@ -231,6 +231,50 @@ through the same character render, `00457420`; PQ-352) and KO's draw order
 inside a character, parts in slot order and then the plugs (PQ-353).
 Evidence.
 
+### Influence tables in render detail (N3DI / N3DJ, engine 44, RQ-164)
+
+KO skins every part of a character with every influence of its vertices: the
+skin load `004286f0` reads any number a vertex and the CPU skinning `00419f00`
+sums each with its weight as read (binary, 1298 `KnightOnLine.exe`, D-176's
+evidence). The body's parts and an equipped armour part (set by `0045cd90`
+into the same `CN3Chr` part vector, above) are drawn by that path; a player is
+a `CN3Chr` as an NPC is (source `src/Client/WarFare/PlayerBase.h`, RQ-163). The
+Arch Tuarek's lower part (`Item\upc_ka_at_lower.n3cskins`) has 49 vertices
+with five at LOD 0, 275 drawn corners (local-asset, `tests/ko_player_races.py`).
+
+`render-detail.bin` `N3DI` is N3D2, and `N3DJ` N3D3, whose every geometry
+(the four character levels, each attachment's, each appearance entry's four)
+carries D-176's influence table between its vertices and its indices: u32
+count of vertices with further influences (0 where none), then per vertex, in
+strictly increasing order, u32 vertex, u32 n (1-60) and n pairs of u32
+skeleton joint and f32 weight (above 0, at most 1). A vertex's four slots and
+its further weights sum to 1. The slots hold its first four influences in file
+order and the table the rest, as the N3SI player clips do
+([influence tables on the player path](animation.md#influence-tables-on-the-player-path-n3si-engine-43)).
+
+- `ko_detail` reads the body's skins and `ko_appearance` a 1298 armour part's
+  with the strict skin reader that admits up to 64 influences a vertex
+  (`ko_character.skins(..., influences=True)`; every other bound stays). A
+  2145 armour part (PQ-319) keeps the four-influence reader: its KO handling
+  is 2233's, which this item did not read. Hand plugs are rigid.
+- `render_detail.serialize(..., influences=True)` writes N3DI / N3DJ only when
+  a vertex has weight past its four slots; otherwise the bytes are N3D2's or
+  N3D3's as before. Without `influences` (every other caller) such a vertex
+  is refused, and tables without appearance entries are refused (N3D1 has no
+  such variant: an engine 38+ package always has appearance keys).
+- A package with N3DI / N3DJ render detail is engine 44 (wire 30); it must
+  already be engine 38 or later, and the cooker refuses it otherwise. Both
+  readers take the magics only from engine 44; the server reads only the
+  projection, as for N3D2. The client checks each table (vertex order and
+  range, counts, joints within the player skeleton, weights, every influence
+  summing to 1) and `Scene::skin` adds each further influence after the four
+  slots, in order, for the world, the portrait and every other draw of render
+  detail.
+- The provenance's `render_detail.many_influences` gives the corners past
+  four per level and per appearance key's level, and the most a corner has;
+  a cook without such corners writes no key, so every default package keeps
+  its bytes and pins.
+
 ## Attached characters (N3AT, PQ-328)
 
 A 2233/2145 addition: the 2233 client (PQ-314, a secondary reference) draws

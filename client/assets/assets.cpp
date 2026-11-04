@@ -442,8 +442,9 @@ Release load_release(const std::filesystem::path &root) {
   // Engines 38 (PQ-253), 39 (PQ-265: N3MM looks models with render
   // states) and 40 (PQ-283: N3NI / N3MI looks models with influence tables)
   // add client presentation only and keep wire 30; so do 41 (PQ-272),
-  // 42 (spec 11: front-end.bin) and 43 (RQ-163: N3SI player clips).
-  need(engine >= 1 && engine <= 43 &&
+  // 42 (spec 11: front-end.bin), 43 (RQ-163: N3SI player clips) and 44
+  // (RQ-164: N3DI / N3DJ render detail with influence tables).
+  need(engine >= 1 && engine <= 44 &&
            (engine >= 38 ? protocol == 30
             : engine >= 15 ? protocol == engine-7
             : engine >= 13 ? protocol == 7
@@ -901,10 +902,12 @@ Release load_release(const std::filesystem::path &root) {
   need(engine >= 15 ? !result.render_detail || exploration : result.render_detail == (engine == 14), "render detail compatibility");
   if (result.render_detail) {
     need(result.presentation, "render detail requires player presentation");
-    // N3D3 (PQ-348, D-191): N3D2 with a render state per appearance entry.
+    // N3D3 (PQ-348, D-191): N3D2 with a render state per appearance entry;
+    // N3DI / N3DJ (RQ-164): N3D2 / N3D3 with influence tables, engine 44.
     Reader d(root / "render-detail.bin", 128*1024*1024);
     const auto detail_magic=d.raw(4);
-    need(engine>=29?detail_magic=="N3D2"||detail_magic=="N3D3":detail_magic=="N3D1","cooked magic/version");
+    need(engine>=29?detail_magic=="N3D2"||detail_magic=="N3D3"||
+                      (engine>=44&&(detail_magic=="N3DI"||detail_magic=="N3DJ")):detail_magic=="N3D1","cooked magic/version");
     result.camera.fov=d.f(); result.camera.near_plane=d.f(); result.camera.far_plane=d.f();
     need(result.camera.fov>=.2f && result.camera.fov<=2.5f && result.camera.near_plane>=.01f &&
          result.camera.near_plane<=2 && result.camera.far_plane>=10 && result.camera.far_plane<=1000, "projection bounds");
@@ -2179,8 +2182,13 @@ std::vector<WorldTextureBank> world_texture_banks(const WorldTextures &textures,
 RenderDetail load_render_detail(const Release &release, const Scene &skeleton) {
   need(release.render_detail,"missing render detail");
   Reader r(release.root/"render-detail.bin",128*1024*1024);
-  const auto magic=r.raw(4);const bool states=magic=="N3D3";
-  need(release.appearance.empty()?magic=="N3D1":magic=="N3D2"||states,"cooked magic/version");
+  // RQ-164 (content/appearance.md): from engine 44, N3DI / N3DJ are N3D2 /
+  // N3D3 with an influence table in every geometry (D-176's, as N3SI has),
+  // for a body or appearance part past four joint influences; Scene::skin
+  // sums every one, as KO's 00419f00 does.
+  const auto magic=r.raw(4);const bool states=magic=="N3D3"||magic=="N3DJ";
+  const bool tables=(magic=="N3DI"||magic=="N3DJ")&&release.engine>=44;
+  need(release.appearance.empty()?magic=="N3D1":magic=="N3D2"||magic=="N3D3"||tables,"cooked magic/version");
   r.floats<3>(); RenderDetail d;
   for(auto &row:d.thresholds) {
     float last=0;
@@ -2214,16 +2222,34 @@ RenderDetail load_render_detail(const Release &release, const Scene &skeleton) {
     need(ni%3==0 && ((nv==0)==(ni==0)),"detail geometry counts");
     total_vertices+=nv;total_indices+=ni;
     need(total_vertices<=262144 && total_indices<=786432,"detail geometry budget");
+    std::vector<float> sums;sums.reserve(nv);
     for(uint32_t i=0;i<nv;++i) {
       Vertex v;v.p=r.floats<3>();v.n=r.floats<3>();norm(v.n);v.uv=r.floats<2>();
       for(float uv:v.uv)need(std::abs(uv)<=1024,"detail UV");
       for(auto &j:v.joints) { j=r.u();need(j<skeleton.joints.size(),"detail joint"); }
       v.weights=r.floats<4>();float sum=0;
       for(float w:v.weights){need(w>=0 && w<=1,"detail weight");sum+=w;}
-      need(std::abs(sum-1)<.001f,"detail weight sum");
+      sums.push_back(sum);
       auto slot=r.u();need(slot<nt,"detail texture slot");
       m.scene.vertices.push_back(v);m.slots.push_back(slot);
     }
+    if(tables){
+      // As an N3SI table: vertices strictly increasing, each with 1-60
+      // further influences on skeleton joints, weights above 0 (and at most 1).
+      auto entries=r.count(nv,0);int64_t last=-1;
+      for(uint32_t e=0;e<entries;++e){
+        auto vertex=r.u();need(vertex<nv&&int64_t(vertex)>last,"detail influence vertex");last=vertex;
+        auto n=r.count(60);auto &v=m.scene.vertices[vertex];
+        v.first_influence=uint32_t(m.scene.influences.size());v.influences=n;
+        for(uint32_t k=0;k<n;++k){
+          Influence influence{r.u(),r.f()};
+          need(influence.joint<skeleton.joints.size(),"detail influence joint");
+          need(std::isfinite(influence.weight)&&influence.weight>0&&influence.weight<=1,"detail influence weight");
+          sums[vertex]+=influence.weight;m.scene.influences.push_back(influence);
+        }
+      }
+    }
+    for(float sum:sums)need(std::abs(sum-1)<.001f,"detail weight sum");
     for(uint32_t i=0;i<ni;++i){auto ix=r.u();need(ix<nv,"detail index");m.scene.indices.push_back(ix);}
     for(size_t i=0;i<m.scene.indices.size();i+=3)need(m.slots[m.scene.indices[i]]==m.slots[m.scene.indices[i+1]]&&m.slots[m.scene.indices[i]]==m.slots[m.scene.indices[i+2]],"detail triangle material");
     return m;

@@ -353,14 +353,18 @@ def vertex(r):
     return p + (vector(n, 3) if all(math.isfinite(x) for x in n) else n)
 
 
-def skins(data, every=False):
+def skins(data, every=False, influences=False):
     """An .n3cskins' four LODs. Without `every` (render detail, appearance,
     the bounds readers) a vertex with more than four influences or a joint
     index past 63 is refused, as before PQ-267, and so is a non-finite
     normal. With it (convert) a vertex may have up to MAX_INFLUENCES
     influences on joints below MAX_JOINTS, all kept as read, in file order
     (PQ-283), and a non-finite normal (PQ-281); `joints` and `weights` hold
-    at least four entries a vertex."""
+    at least four entries a vertex. `influences` (render detail and the
+    1298 appearance parts, RQ-164) is the strict reader that admits up to
+    MAX_INFLUENCES influences a vertex, kept as `every` keeps them; every
+    other bound stays strict, so a skin without such a vertex reads as
+    before."""
     r = Reader(data)
     name = r.string()
     lods = []
@@ -380,7 +384,7 @@ def skins(data, every=False):
         origins = []
         joints = []
         weights = []
-        most, bound = (MAX_INFLUENCES, MAX_JOINTS) if every else (4, 64)
+        most, bound = (MAX_INFLUENCES, MAX_JOINTS) if every else (MAX_INFLUENCES if influences else 4, 64)
         for k in range(nv):
             origins.append(r.floats(3))
             n = r.integer()

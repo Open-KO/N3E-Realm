@@ -12,11 +12,14 @@ import ko
 import ko_tiles
 
 
-def part_levels(assets, name, slot, rebuilt=None):
+def part_levels(assets, name, slot, rebuilt=None, influences=False):
     """`rebuilt`, when a list, gets each level's count of drawn vertices whose
-    normal was rebuilt (ko_character.corner_normals)."""
+    normal was rebuilt (ko_character.corner_normals). `influences` (a 1298
+    part, RQ-164) keeps a vertex's influences past four, as KO's skinning
+    00419f00 sums them; the detail file then carries them in its influence
+    tables (render_detail N3DI / N3DJ)."""
     part = character.part(assets.get(name))
-    _, skins = character.skins(assets.get(part['skin']))
+    _, skins = character.skins(assets.get(part['skin']), influences=influences)
     levels = []
     for skin in skins:
         vertices, indices = [], []
@@ -281,7 +284,10 @@ def cook(assets, mappings, world, textures, body_slots):
         else:
             # 0045cd90, the armour-part setter, has no effect path (PQ-210).
             if 'ko_item' in row:raise ValueError('a KO item effect needs a hand plug')
-            levels, texture = part_levels(assets, row['source'], slot)
+            # RQ-164: the 1298 part setter 0045cd90 puts the part in the
+            # character's part vector, which 00419f00 skins with every
+            # influence (a 2145 part above keeps the four-influence reader).
+            levels, texture = part_levels(assets, row['source'], slot, influences=True)
             replaces = [body_slots[i] for i in row['parts']]
             states.append(part_state(assets, row['source']))
             report = dict(parts=row['parts'], render_state=list(states[-1]))

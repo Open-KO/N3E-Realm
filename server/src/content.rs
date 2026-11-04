@@ -167,9 +167,11 @@ pub fn load(root: &Path) -> Result<Release> {
     // states) and 40 (PQ-283: N3NI / N3MI looks models with influence
     // tables) add client presentation only and keep wire 30; so does 41
     // (PQ-272: N3N4 templates with a drawn scale, sent as `Entity.scale`),
-    // 42 (spec 11: the KO front end, front-end.bin) and 43 (RQ-163: N3SI
-    // player clips, which the client reads and the server only hashes).
-    if !(1..=43).contains(&engine)
+    // 42 (spec 11: the KO front end, front-end.bin), 43 (RQ-163: N3SI
+    // player clips, which the client reads and the server only hashes) and
+    // 44 (RQ-164: N3DI / N3DJ render detail with influence tables, of which
+    // the server reads only the projection).
+    if !(1..=44).contains(&engine)
         || if engine >= 38 { protocol != 30 } else if engine >= 15 { protocol != engine - 7 } else if engine >= 13 {
             protocol != 7
         } else if engine == 12 {
@@ -588,10 +590,12 @@ pub fn load(root: &Path) -> Result<Release> {
         if !presentation { return Err(bad("render detail requires player presentation")); }
         let mut d = Reader::open_bounded(&root.join("render-detail.bin"), 128*1024*1024)?;
         // N3D3 (PQ-348, D-191) is N3D2 with a render state per appearance
-        // entry; the client reads the geometry and the states, the server
-        // only the projection below.
+        // entry, and N3DI / N3DJ (RQ-164, engine 44) N3D2 / N3D3 with
+        // influence tables; the client reads the geometry, the tables and
+        // the states, the server only the projection below.
         let magic = d.take(4)?;
-        if !(if engine >= 29 { magic == b"N3D2" || magic == b"N3D3" } else { magic == b"N3D1" }) {
+        let tables = engine >= 44 && (magic == b"N3DI" || magic == b"N3DJ");
+        if !(if engine >= 29 { magic == b"N3D2" || magic == b"N3D3" || tables } else { magic == b"N3D1" }) {
             return Err(bad("render detail magic"));
         }
         let (fov, near, far) = (d.f()?, d.f()?, d.f()?);

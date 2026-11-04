@@ -15,7 +15,12 @@ With the pinned client tree (assets/ko; SKIP without it), for every race:
 - its idle model converts and cooks, face 0 and hair 0, as the package's
   player does: N3S1, or N3SI (engine 43, RQ-163) for a race with a drawn
   vertex past four joint influences, which keeps every influence as KO's
-  skinning sums them (the Arch Tuarek: 49 lower-part vertices with five).
+  skinning sums them (the Arch Tuarek: 49 lower-part vertices with five);
+- its render detail (tools/assetc/ko_detail.py, face 0 and hair 0, no world)
+  cooks with each of its parts also worn as a 1298 appearance part
+  (ko_appearance.part_levels): N3D2, or N3DI (engine 44, RQ-164) when a drawn
+  vertex has more than four influences, kept in the influence tables of the
+  body's level 0 and of each key that wears such a part.
 
 A race whose model the reader still refuses is listed in OPEN with the
 refusal and the item that reads KO's handling of it; the test fails when the
@@ -29,6 +34,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT / "tools/assetc"))
 import ko_character  # noqa: E402
+import ko_detail  # noqa: E402
 import ko_player  # noqa: E402
 import main  # noqa: E402
 
@@ -77,6 +83,22 @@ for entry in rules["races"]:
         many = report.get("many_influences")
         magic = (out / "cooked-idle/scene.bin").read_bytes()[:4]
         assert magic == (b"N3SI" if many else b"N3S1"), (race, magic, many)
+        # RQ-164: render detail with each part also worn as an appearance part.
+        rows = [dict(item="test:part/%d" % i, slot=i, source=name, parts=[i])
+                for i, name in enumerate(definition["parts"])]
+        detail, detail_report = ko_detail.cook(TREE, dict(atlas=None), definition, rows)
+        tables = detail_report.get("many_influences")
+        assert detail[:4] == (b"N3DI" if many else b"N3D2"), (race, detail[:4], tables)
+        assert bool(tables) == bool(many), (race, tables, many)
+        if tables:
+            # Each part's corners past four influences, at each of its four LODs.
+            past = []
+            for name in definition["parts"]:
+                _, lods = ko_character.skins(assets.get(ko_character.part(assets.get(name))["skin"]), every=True)
+                past.append([sum(1 for v in lod["indices"] if len(lod["joints"][v]) > 4) for lod in lods])
+            assert tables["levels"] == [sum(p[k] for p in past) for k in range(4)], (race, tables, past)
+            assert tables["appearances"] == {i + 1: p for i, p in enumerate(past) if any(p)}, (race, tables, past)
+            assert tables["most"] == many["most"], (race, tables, many)
     except ValueError as error:
         assert race in OPEN, (race, str(error))
         assert OPEN[race][0] in str(error), (race, str(error), OPEN[race])
@@ -84,9 +106,12 @@ for entry in rules["races"]:
         continue
     assert race not in OPEN, "race %d now cooks: drop it from OPEN" % race
     cooked.append(race)
-    print("PASS race %d (%s): %d parts, %d part files over its faces and hairs, %d clips, idle cooks (%s%s)"
+    print("PASS race %d (%s): %d parts, %d part files over its faces and hairs, %d clips, idle cooks (%s%s), "
+          "render detail with its parts worn cooks (%s%s)"
           % (race, entry["looks"], len(positions), len(names), len(clips), magic.decode(),
-             ": %(vertices)d drawn vertices past four influences, at most %(most)d" % many if many else ""))
+             ": %(vertices)d drawn vertices past four influences, at most %(most)d" % many if many else "",
+             detail[:4].decode(), ": %d corners past four in level 0 and in keys %s"
+             % (tables["levels"][0], sorted(tables["appearances"])) if tables else ""))
 assert sorted(refused) == sorted(OPEN), (refused, OPEN)
 for race in refused:
     print("OPEN race %d: %s" % (race, OPEN[race][1]))

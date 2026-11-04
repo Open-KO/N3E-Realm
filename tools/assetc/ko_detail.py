@@ -18,8 +18,23 @@ def bind_world(assets,definition):
     return world
 
 
+def influence_report(levels,appearances):
+    """{'many_influences': ...} when a drawn corner has more than four joint
+    influences (RQ-164): such corners per character level and per appearance
+    key's level, and the most a corner has; {} otherwise, so a cook without
+    them keeps its provenance."""
+    def corners(geometry):return sum(1 for v in geometry[0] if any(w>0 for w in v[4][4:]))
+    found=[corners(g) for g in levels]
+    keys={key:[corners(g) for g in meshes] for key,(_,meshes) in enumerate(appearances,1) if any(corners(g) for g in meshes)}
+    if not any(found) and not keys:return {}
+    most=max(len(v[3]) for g in list(levels)+[g for _,ms in appearances for g in ms] for v in g[0])
+    return {'many_influences':dict(levels=found,appearances=keys,most=most)}
+
+
 def cook(assets_root,built,definition,mappings=(),world_root=None):
-    """Render detail (N3D1/N3D2). An N3W2 build's world textures are its N3WT
+    """Render detail (N3D1/N3D2/N3D3, or N3DI/N3DJ when a body or appearance
+    part has a drawn vertex past four joint influences: RQ-164, engine 44,
+    render_detail.serialize). An N3W2 build's world textures are its N3WT
     (`ko_scene.world_textures_bytes`), so its world subset is the transparent slot alone.
     `world_root` is the map's client root when it is not the character's (PQ-274)."""
     assets=character.Assets(assets_root)
@@ -37,7 +52,9 @@ def cook(assets_root,built,definition,mappings=(),world_root=None):
         part=character.part(assets.get(name));slot=len(textures);body_slots.append(slot)
         # 0064b9b0 default LOD_Chr=0 is incremented and clamped to one.
         textures.append(ko_tiles.mip_chains(assets.get(part['texture']),skip=1)[0])
-        _,skins=character.skins(assets.get(part['skin']))
+        # RQ-164: every influence of a vertex, as KO's skinning 00419f00 sums
+        # them (the Arch Tuarek's lower part has 49 with five).
+        _,skins=character.skins(assets.get(part['skin']),influences=True)
         for level,skin in enumerate(skins):
             vertices,indices=levels[level];base=len(vertices)
             for corner,index in enumerate(skin['indices']):
@@ -54,9 +71,9 @@ def cook(assets_root,built,definition,mappings=(),world_root=None):
     # PQ-348 (D-191): N3D3 only when a part's render state is not opaque.
     states=states if ko_appearance.needs_states(states) else None
     payload=render_detail.serialize(view,THRESHOLDS,[30,60,100],world_count,textures,radius,levels,appearances=appearances,
-                                    states=states)
+                                    states=states,influences=True)
     report=dict(view=view,character_radius=radius,character_triangles=[len(x[1])//3 for x in levels],
-                textures=len(textures),native_mip_levels=sum(len(c) for c in textures),
+                textures=len(textures),**influence_report(levels,appearances),native_mip_levels=sum(len(c) for c in textures),
                 native_pixel_bytes=sum(len(p) for c in textures for _,_,p in c),
                 world_sources=sources,character_sources=assets.sources,
                 texture_policy=dict(character_skip=1,shape_skip=0,terrain_skip=0),

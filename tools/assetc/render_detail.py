@@ -1,4 +1,4 @@
-"""Generic N3D1/N3D2/N3D3 serialization. All historical selection policy is package data."""
+"""Generic N3D1/N3D2/N3D3/N3DI/N3DJ serialization. All historical selection policy is package data."""
 import math
 import struct
 from common import *
@@ -10,6 +10,15 @@ from common import *
 # indices. An unlit part is refused until a check draws it (PQ-280).
 STATE_FLAGS = 3
 BLEND_FACTOR_COUNT = 10
+# N3DI / N3DJ (RQ-164, content/appearance.md): N3D2 / N3D3 whose every
+# geometry (the four levels, each attachment, each appearance entry's four)
+# carries an influence table between its vertices and its indices, as N3SI
+# does (D-176): u32 count of vertices with further influences, then per
+# vertex, in strictly increasing order, u32 vertex, u32 n (1-60) and n pairs
+# of u32 joint and f32 weight (above 0). KO's skinning 00419f00 sums every
+# influence of a vertex. A package with one is engine 44.
+INFLUENCE_ENGINE = 44
+MAX_FURTHER = 60
 
 
 def check_state(state):
@@ -27,13 +36,37 @@ def check_state(state):
     return state
 
 
+def further(vertex):
+    """A detail vertex's influences past its four slots that carry weight, as
+    (joint, weight) pairs in order (an entry of the N3DI / N3DJ table)."""
+    _, _, _, joints, weights, _ = vertex
+    if len(joints) != len(weights) or len(joints) < 4:
+        raise ValueError('detail vertex influences')
+    return [(j, w) for j, w in zip(joints[4:], weights[4:]) if w > 0]
+
+
 def serialize(view, thresholds, workload, world_count, textures, radius, levels, attachments=(), appearances=(),
-              states=None):
+              states=None, influences=False):
     """`states`, when not None, is one render state per appearance entry and
-    makes the file N3D3; without it the bytes are N3D2's (or N3D1's) as before."""
+    makes the file N3D3; without it the bytes are N3D2's (or N3D1's) as before.
+    `influences` (ko_detail, RQ-164) admits vertices with more than four
+    joint influences; when one carries weight past its four slots the file is
+    N3DI (N3D2's layout) or N3DJ (N3D3's) with an influence table in every
+    geometry, and without one the bytes are as before. Without `influences`
+    such a vertex is refused."""
     if states is not None and (not appearances or len(states) != len(appearances)):
         raise ValueError('appearance render state count')
-    magic = b'N3D3' if states is not None else b'N3D2' if appearances else b'N3D1'
+    meshes = list(levels) + [g for g, _ in attachments] + [m for _, ms in appearances for m in ms]
+    extra = [further(v) for vertices, _ in meshes for v in vertices if len(v[3]) > 4]
+    if extra and not influences:
+        raise ValueError('detail vertex past four joint influences')
+    tables = any(extra)
+    if tables and not appearances:
+        raise ValueError('detail influence tables need appearance entries (N3DI / N3DJ)')
+    if any(len(x) > MAX_FURTHER for x in extra):
+        raise ValueError('detail vertex past %d joint influences' % (4 + MAX_FURTHER))
+    magic = (b'N3DJ' if tables else b'N3D3') if states is not None else \
+        (b'N3DI' if tables else b'N3D2') if appearances else b'N3D1'
     out=bytearray(magic+f(view)+f([v for row in thresholds for v in row]))
     out+=b''.join(u(v) for v in workload)+u(world_count)+u(len(textures))
     for chain in textures:
@@ -45,8 +78,14 @@ def serialize(view, thresholds, workload, world_count, textures, radius, levels,
     def geometry(g):
         vertices,indices=g
         b=bytearray(u(len(vertices))+u(len(indices)))
-        for p,n,uv,joints,weights,slot in vertices:
-            b+=f(p+n+uv)+b''.join(u(j) for j in joints)+f(weights)+u(slot)
+        table=[]
+        for k,(p,n,uv,joints,weights,slot) in enumerate(vertices):
+            b+=f(p+n+uv)+b''.join(u(j) for j in joints[:4])+f(weights[:4])+u(slot)
+            pairs=further((p,n,uv,joints,weights,slot)) if len(joints)>4 else []
+            if pairs:table.append((k,pairs))
+        if tables:
+            b+=u(len(table))
+            for k,pairs in table:b+=u(k)+u(len(pairs))+b''.join(u(j)+f([w]) for j,w in pairs)
         b+=b''.join(u(i) for i in indices)
         return b
     for level in levels:out+=geometry(level)

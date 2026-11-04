@@ -101,6 +101,7 @@ test-fast:
 	python tests/npc_reference.py
 	python tests/npc_looks.py
 	python tests/player_influences.py
+	python tests/detail_influences.py
 	python tests/npc_scale.py
 	python tests/attachments.py
 	python tests/ko_npc_looks_import.py

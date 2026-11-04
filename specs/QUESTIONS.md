@@ -1616,8 +1616,7 @@ convert today: the Tuarek, the Wrinkle Tuarek, the Puri Tuarek, the Barbarian (s
 RQ-156) and the El Morad female. The Arch Tuarek needs skin vertices past four
 influences on the player path, and the El Morad male KO's handling of a clip at 0
 frames a second read first. (RQ-163: the Arch Tuarek converts too, its player scenes
-N3SI, engine 43; its render-detail and appearance parts still need the strict
-readers past four influences.) Nothing draws a second race yet: the create screen
+N3SI, engine 43; RQ-164: its render detail and 1298 appearance parts N3DI, engine 44.) Nothing draws a second race yet: the create screen
 (RQ-004), the select hall (RQ-005) and the world (RQ-007) each draw one Tuarek. The
 player scenes are about 1.4 MB a state, with 14 base states and more per class.
 
@@ -1650,3 +1649,22 @@ Options:
 clips is engine 43 and must already be engine 38 or later (wire 30); its player clips
 are all N3SI or all N3S1; every other package cooks byte for byte as before
 (`content/animation.md`, "Influence tables on the player path").
+
+### Q104 — Render detail past four joint influences
+
+RQ-164: the Arch Tuarek's lower part (49 vertices with five influences, Q103) is also
+a render-detail level part and, worn, a 1298 appearance part; KO skins both with
+every influence (`00419f00`, D-176). `render-detail.bin` had no place for them.
+
+Options:
+- (a) Fold them into engine 43 (RQ-163's N3SI player clips), since both come from one
+  race: no new engine, but it changes what an engine 43 package may hold after the
+  fact, and an armour part can have them without the body.
+- (b) `N3DI` / `N3DJ`: N3D2 / N3D3 with D-176's influence table in every geometry,
+  engine 44.
+- (c) More slots in every detail vertex (rewrites every render detail).
+
+**Default taken:** (b). A package with N3DI / N3DJ is engine 44 and must already be
+engine 38 or later (wire 30); without such a vertex the bytes are as before
+(`content/appearance.md`, "Influence tables in render detail"). A 2145 armour part
+keeps the four-influence reader until 2233's skinning is read for it.

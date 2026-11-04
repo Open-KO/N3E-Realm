@@ -67,10 +67,10 @@ such a vertex.
   each further influence after the four slots, in order. The server only hashes the
   clips, as before.
 
-The render-detail levels (`render-detail.bin`, cooked by `ko_detail`) and the
-appearance parts read KO skins with the strict four-influence reader, so a package
-whose player race is the Arch Tuarek still stops there. No package ships that race
-yet (Q102).
+The render-detail levels (`render-detail.bin`, cooked by `ko_detail`) and the 1298
+appearance parts carry such vertices too since RQ-164: N3DI / N3DJ render detail,
+engine 44 ([influence tables in render detail](appearance.md#influence-tables-in-render-detail-n3di--n3dj-engine-44-rq-164)).
+No package ships that race yet (Q102).
 
 ## Runtime state and time
 

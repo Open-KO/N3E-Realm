@@ -14,8 +14,9 @@ Discord), and give operators a kick/ban that actually ends a live connection.
 In: OAuth2 code exchange (server), account record keyed by Discord user id, session
 mint / verify / revoke, the player's logout, concurrency cap, bans, the client-side OAuth flow and token
 storage. Out: Discord role sync into the game; guild-membership enforcement (Q4);
-character management (`Characters` / `CreateCharacter` / `SelectCharacter` are
-unchanged after login); attack-disable (deferred, Q14). Mute is in scope (spec 03 routes; `muted_until` below).
+character management (`Characters` / `CreateCharacter` / `SelectCharacter` follow
+the login as before; their fields and the create's checks are spec 11's and
+`content/character-create.md`'s, RQ-002); attack-disable (deferred, Q14). Mute is in scope (spec 03 routes; `muted_until` below).
 
 ## Interfaces
 

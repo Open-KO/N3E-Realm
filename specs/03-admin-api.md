@@ -160,9 +160,12 @@ skipped deploy.
 **`GET /v1/accounts/by-discord/{discord_id}`**, **`GET /v1/accounts/{id}`** → `200`
 `{id, discord_id, discord_name, created_at, last_login_at, banned_at, banned_until,
 ban_reason, muted_at, muted_until, mute_reason, sessions, online, characters: [{id,
-name}]}` or `404`. Times are RFC 3339 UTC or `null`; `sessions` counts unexpired
+name, slot, nation, race, specialty}]}` or `404`. Times are RFC 3339 UTC or `null`; `sessions` counts unexpired
 sessions; `online` is whether the account has a logged-in socket on this realm;
-`characters` are this realm's. A legacy (password) account has `discord_id` `null`.
+`characters` are this realm's, in slot order, each with what its create chose
+(RQ-002, `content/character-create.md`: `nation`, `race` and `specialty` are `null`
+for a character created without the package's create rules, `slot` for a row
+inserted without one). A legacy (password) account has `discord_id` `null`.
 
 **`POST /v1/accounts/{id}/kick`** `{"reason"}` → `200 {connections_closed}`. Deletes every session (spec 02 `revoke_account(kick)`). Emits `account.kicked`.
 **`POST /v1/accounts/{id}/ban`** `{"reason", "until": "<rfc3339>|null"}` → `200 {banned_until, connections_closed}`. Deletes every session and kicks. Emits `account.banned`.

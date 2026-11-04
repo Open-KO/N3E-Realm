@@ -5,7 +5,7 @@ import time
 from world_peer import blob, first, integer
 
 
-def audit(connect):
+def audit(connect, sql=None):
     unselected = connect('companion', select=False)
     unselected.send(31, blob(1, 'Explorer') + blob(2, 'unauthorized'))
     assert first(unselected.until(4)[1], 1) == 5
@@ -95,7 +95,15 @@ def audit(connect):
     drain()
     print('PASS unavailable/self/malformed/bounded recipient errors and reconnect routing to fresh identity', flush=True)
     collision = connect('companion', select=False)
-    other_id = collision.create('COMPANION')
+    # Q99: a new name is unique without regard to case, so the create is refused as
+    # taken (code 8, KO's 3). A case-distinct pair still exists as a name kept from
+    # before the rule (migration 026 leaves its name_folded NULL); the realm makes one
+    # here to keep checking that such a pair cannot redirect a whisper.
+    collision.send(7, blob(1, 'COMPANION'))
+    tag, refused = collision.until(6, 4)
+    assert tag == 4 and first(refused, 1) == 8 and first(refused, 4) == 3, refused
+    other_id = collision.create('Companiox')
+    sql(f"UPDATE characters SET name='COMPANION', name_folded=NULL WHERE id={other_id}")
     assert collision.select(other_id)[0] == 10
     peers.append(collision)
     cooldown()

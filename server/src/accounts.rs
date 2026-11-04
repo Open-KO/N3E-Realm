@@ -6,6 +6,7 @@ use crate::{
     wire,
 };
 use postgres::Client;
+use prost::Message;
 use std::sync::{mpsc, Arc};
 use tokio::sync::oneshot;
 
@@ -107,68 +108,145 @@ impl Database {
         // have bounded statement/socket timeouts and the caller owns the result.
         rx.await.map_err(|_| bad("database worker unavailable"))?
     }
-    /// The account's characters in creation order, each with its level as the
-    /// HUD shows it (rewards::inventory): the progression curve's level, else
-    /// 1 + xp / level_xp; 1 before the first inventory read (spec 11).
-    pub async fn list(&self, account: i64, realm: String, rules: &Rules) -> Result<wire::Characters> {
+    /// The account's characters in slot order (creation order for those
+    /// without a slot), each with its level as the HUD shows it
+    /// (rewards::inventory): the progression curve's level, else
+    /// 1 + xp / level_xp; 1 before the first inventory read (spec 11). RQ-002:
+    /// each with what its create chose and the public keys of its committed
+    /// equipment (`appearance`, as Entity.appearance projects them).
+    pub async fn list(
+        &self,
+        account: i64,
+        realm: String,
+        rules: &Rules,
+        appearance: &crate::appearance::Policy,
+    ) -> Result<wire::Characters> {
         let (progression, level_xp) = (rules.progression.clone(), rules.level_xp.max(1) as u64);
+        let appearance = appearance.clone();
         self.call(move |c| {
             let rows = c.query(
-                "SELECT c.id,c.name,p.xp,q.curve_xp FROM characters c \
+                "SELECT c.id,c.name,p.xp,q.curve_xp,c.slot,c.nation,c.race,c.specialty,c.face,c.hair,b.state \
+                 FROM characters c \
                  LEFT JOIN character_progress p ON p.character_id=c.id \
                  LEFT JOIN character_reward_progress q ON q.character_id=c.id \
-                 WHERE c.account_id=$1 AND c.realm=$2 ORDER BY c.id LIMIT 8",
+                 LEFT JOIN character_bags b ON b.character_id=c.id \
+                 WHERE c.account_id=$1 AND c.realm=$2 ORDER BY c.slot NULLS LAST,c.id LIMIT 8",
                 &[&account, &realm],
             )?;
-            let characters = rows
-                .iter()
-                .map(|r| {
-                    let level = match &progression {
-                        Some(p) => r.get::<_, Option<i64>>(3).map(|xp| p.level(xp as u64)).unwrap_or(1),
-                        None => r.get::<_, Option<i64>>(2).map(|xp| 1 + xp as u64 / level_xp).unwrap_or(1) as u32,
-                    };
-                    wire::Character { id: r.get::<_, i64>(0) as u64, name: r.get(1), level }
-                })
-                .collect();
+            let mut characters = Vec::with_capacity(rows.len());
+            for (at, r) in rows.iter().enumerate() {
+                let level = match &progression {
+                    Some(p) => r.get::<_, Option<i64>>(3).map(|xp| p.level(xp as u64)).unwrap_or(1),
+                    None => r.get::<_, Option<i64>>(2).map(|xp| 1 + xp as u64 / level_xp).unwrap_or(1) as u32,
+                };
+                let small = |i: usize| r.get::<_, Option<i16>>(i).map_or(0, |v| v as u32);
+                let wide = |i: usize| r.get::<_, Option<i32>>(i).map_or(0, |v| v as u32);
+                // A bag that does not decode drops only this character's
+                // appearance: the list (and so the login) still shows it.
+                let id = r.get::<_, i64>(0);
+                let bag = r.get::<_, Option<Vec<u8>>>(10).and_then(|b| match wire::BagState::decode(b.as_slice()) {
+                    Ok(bag) => Some(bag),
+                    Err(e) => {
+                        eprintln!("character_list_bag_undecodable character={id} error={e}");
+                        None
+                    }
+                });
+                characters.push(wire::Character {
+                    id: id as u64,
+                    name: r.get(1),
+                    level,
+                    slot: r.get::<_, Option<i16>>(4).map_or(at as u32, |v| v as u32),
+                    nation: small(5),
+                    race: wide(6),
+                    specialty: wide(7),
+                    face: small(8),
+                    hair: small(9),
+                    appearance: appearance.project(bag.as_ref()),
+                });
+            }
             Ok(wire::Characters { characters })
         })
         .await
     }
+    /// Creates a character the package's rules accepted (`create::check`):
+    /// refused, as a `create::Refusal` error, when the account already has
+    /// `limit` characters (Limit), the name is another character's in this
+    /// realm without regard to case (Taken, Q99), or the slot named is taken
+    /// (Failed, as KO's procedure answers it). Without a slot it takes the
+    /// first free one below `limit`. Any other error is the database's; the
+    /// caller answers Failed, never success.
     pub async fn create(
         &self,
         account: i64,
-        name: String,
+        character: crate::create::Valid,
         owner: Arc<Owner>,
         spawn: [f32; 3],
         limit: u32,
     ) -> Result<()> {
-        if !valid_name(&name, 24) {
-            return Err(bad("character name must be 1..24 ASCII letters/digits/_/-"));
-        }
+        use crate::create::Refusal;
         self.call(move |c| {
             let mut t = c.transaction()?;
             persistence::fence(&mut t, &owner.realm, &owner.owner, owner.generation)?;
-            let count: i64 = t
+            let taken: Vec<i16> = t
+                .query(
+                    "SELECT slot FROM characters WHERE account_id=$1 AND realm=$2 FOR UPDATE",
+                    &[&account, &owner.realm],
+                )?
+                .iter()
+                .filter_map(|r| r.get::<_, Option<i16>>(0))
+                .collect();
+            let count = t
                 .query_one(
                     "SELECT count(*) FROM characters WHERE account_id=$1 AND realm=$2",
                     &[&account, &owner.realm],
                 )?
-                .get(0);
+                .get::<_, i64>(0);
             if count >= limit as i64 {
-                return Err(bad("character limit"));
+                return Err(Box::new(Refusal::Limit) as _);
             }
-            let id: i64 = t.query_one(
-                "INSERT INTO characters(account_id,realm,name,x,y,z) VALUES($1,$2,$3,$4,$5,$6) RETURNING id",
+            if t.query_opt(
+                "SELECT 1 FROM characters WHERE realm=$1 AND lower(name)=lower($2)",
+                &[&owner.realm, &character.name],
+            )?
+            .is_some()
+            {
+                return Err(Box::new(Refusal::Taken) as _);
+            }
+            let slot = match character.slot {
+                Some(s) if taken.contains(&(s as i16)) => return Err(Box::new(Refusal::Failed) as _),
+                Some(s) => s as i16,
+                None => (0..limit.min(255) as i16)
+                    .find(|s| !taken.contains(s))
+                    .ok_or_else(|| Box::new(Refusal::Limit) as Box<dyn std::error::Error + Send + Sync>)?,
+            };
+            let chosen = character.chosen.as_ref();
+            let small = |f: fn(&crate::create::Chosen) -> u32| chosen.map(|c| f(c) as i16);
+            let wide = |f: fn(&crate::create::Chosen) -> u32| chosen.map(|c| f(c) as i32);
+            let stats: Option<Vec<i32>> = chosen.map(|c| c.stats.iter().map(|v| *v as i32).collect());
+            let id: i64 = match t.query_one(
+                "INSERT INTO characters(account_id,realm,name,name_folded,x,y,z,slot,nation,race,specialty,face,hair,stats) \
+                 VALUES($1,$2,$3,lower($3),$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id",
                 &[
                     &account,
                     &owner.realm,
-                    &name,
+                    &character.name,
                     &spawn[0],
                     &spawn[1],
                     &spawn[2],
+                    &slot,
+                    &small(|c| c.nation),
+                    &wide(|c| c.race),
+                    &wide(|c| c.specialty),
+                    &small(|c| c.face),
+                    &small(|c| c.hair),
+                    &stats,
                 ],
-            )?
-            .get(0);
+            ) {
+                Ok(row) => row.get(0),
+                // Another create of the name or slot committed between the
+                // checks above and this insert (Q99): the index's refusal.
+                Err(e) => return Err(unique_refusal(&e).map_or_else(|| e.into(), |r| Box::new(r) as _)),
+            };
             crate::settlements::initialize(&mut t, &owner.realm, id)?;
             t.commit()?;
             Ok(())
@@ -216,6 +294,17 @@ impl Database {
             }
             t.commit()?; Ok(())
         }).await
+    }
+}
+/// The create refusal a unique violation on `characters` stands for: the
+/// case-folded name's index (Taken, KO's 3) or the slot's (Failed, KO's 4).
+pub(crate) fn unique_refusal(e: &postgres::Error) -> Option<crate::create::Refusal> {
+    use crate::create::Refusal;
+    let db = e.as_db_error().filter(|d| *d.code() == postgres::error::SqlState::UNIQUE_VIOLATION)?;
+    match db.constraint()? {
+        "characters_name_folded" | "characters_realm_name_key" => Some(Refusal::Taken),
+        "characters_slot" => Some(Refusal::Failed),
+        _ => None,
     }
 }
 pub fn valid_name(s: &str, max: usize) -> bool {
@@ -322,9 +411,9 @@ mod database_tests {
             .get(0);
         let db = Database::start(url, Default::default())?;
         let rules = Rules::load(std::path::Path::new("../build/packages/legacy-demo/gameplay.bin"), "demo")?;
-        runtime.block_on(db.create(account, "Fenced".into(), owner.clone(), [0., 0., 0.], 8))?;
+        runtime.block_on(db.create(account, crate::create::Valid::named("Fenced"), owner.clone(), [0., 0., 0.], 8))?;
         let id = runtime
-            .block_on(db.list(account, realm.clone(), &rules))?
+            .block_on(db.list(account, realm.clone(), &rules, &Default::default()))?
             .characters[0]
             .id as i64;
         assert!(runtime
@@ -395,6 +484,109 @@ mod database_tests {
             .is_err());
         c.execute("DELETE FROM characters WHERE realm=$1", &[&realm])?;
         c.execute("DELETE FROM accounts WHERE id=$1", &[&account])?;
+        c.execute("DELETE FROM realm_ownership WHERE realm=$1", &[&realm])?;
+        Ok(())
+    }
+    /// RQ-002: a create the rules accepted is kept whole (slot, nation, race,
+    /// specialty, face, hair, stats) and listed with it; the database refuses
+    /// the account's limit, a name another character has in any case, and a
+    /// taken slot, and a create without a slot takes the first free one.
+    #[test]
+    #[ignore = "isolated postgres supplied by tests/multiplayer.py"]
+    fn create_keeps_the_choice_and_refuses_limit_name_and_slot() -> Result<()> {
+        use crate::create::{check, tests::policy, Refusal};
+        let runtime = tokio::runtime::Runtime::new()?;
+        let url = std::env::var("N3E_TEST_DATABASE_URL")?;
+        let mut c = persistence::connect(&url)?;
+        let realm = format!("rq002-{}", std::process::id());
+        let generation = persistence::acquire(&mut c, &realm, "create")?;
+        let owner = Arc::new(Owner { realm: realm.clone(), owner: "create".into(), generation });
+        let mut accounts = Vec::new();
+        for n in ["a", "b"] {
+            accounts.push(
+                c.query_one(
+                    "INSERT INTO accounts(name,salt,password_hash) VALUES($1,$2,$3) RETURNING id",
+                    &[&format!("rq002-{n}-{}", std::process::id()), &&[0u8; 16][..], &&[0u8; 32][..]],
+                )?
+                .get::<_, i64>(0),
+            );
+        }
+        let db = Database::start(url, Default::default())?;
+        let rules = Rules::load(std::path::Path::new("../build/packages/legacy-demo/gameplay.bin"), "demo")?;
+        let p = policy();
+        let refusal = |r: Result<()>| *r.unwrap_err().downcast_ref::<Refusal>().expect("a refusal");
+        let q = |name: &str, slot: u32| wire::CreateCharacter {
+            name: name.into(),
+            slot,
+            race: 7,
+            specialty: 70,
+            face: 3,
+            hair: 2,
+            stats: vec![45, 30, 20],
+        };
+        let create = |account: i64, v| runtime.block_on(db.create(account, v, owner.clone(), [1., 2., 3.], 3));
+        create(accounts[0], check(Some(&p), &q("Chosen", 2), 3).unwrap())?;
+        // A slot taken is KO's 4; a name in another case is taken, also for
+        // another account; race 0 takes the fixed choice in the first free slot.
+        assert_eq!(refusal(create(accounts[0], check(Some(&p), &q("Other", 2), 3).unwrap())), Refusal::Failed);
+        assert_eq!(refusal(create(accounts[1], check(Some(&p), &q("cHOSEN", 0), 3).unwrap())), Refusal::Taken);
+        create(accounts[0], check(Some(&p), &wire::CreateCharacter { name: "Fixed".into(), ..Default::default() }, 3).unwrap())?;
+        create(accounts[0], crate::create::Valid::named("Named"))?;
+        assert_eq!(refusal(create(accounts[0], crate::create::Valid::named("Fourth"))), Refusal::Limit);
+        let listed = runtime.block_on(db.list(accounts[0], realm.clone(), &rules, &Default::default()))?.characters;
+        let seen: Vec<_> = listed
+            .iter()
+            .map(|c| (c.name.as_str(), c.slot, c.nation, c.race, c.specialty, c.face, c.hair))
+            .collect();
+        assert_eq!(
+            seen,
+            [("Fixed", 0, 1, 7, 71, 0, 0), ("Named", 1, 0, 0, 0, 0, 0), ("Chosen", 2, 1, 7, 70, 3, 2)],
+            "{listed:?}"
+        );
+        let stats: Vec<Option<Vec<i32>>> = c
+            .query("SELECT stats FROM characters WHERE realm=$1 ORDER BY slot", &[&realm])?
+            .iter()
+            .map(|r| r.get(0))
+            .collect();
+        assert_eq!(stats, [Some(vec![20, 30, 45]), None, Some(vec![45, 30, 20])]);
+        // The schema keeps a choice whole and a new name unique without regard
+        // to case; a create that loses that race to the index is Taken, one
+        // that loses the slot's is Failed.
+        assert!(c
+            .execute("UPDATE characters SET race=NULL WHERE realm=$1 AND name='Chosen'", &[&realm])
+            .is_err());
+        let lost = c
+            .execute(
+                "INSERT INTO characters(account_id,realm,name,name_folded) VALUES($1,$2,'FIXED','fixed')",
+                &[&accounts[1], &realm],
+            )
+            .unwrap_err();
+        assert_eq!(unique_refusal(&lost), Some(Refusal::Taken));
+        let lost = c
+            .execute(
+                "INSERT INTO characters(account_id,realm,name,name_folded,slot) VALUES($1,$2,'Other','other',0)",
+                &[&accounts[0], &realm],
+            )
+            .unwrap_err();
+        assert_eq!(unique_refusal(&lost), Some(Refusal::Failed));
+        let other = c
+            .execute("INSERT INTO characters(account_id,realm,name) VALUES($1,'no-such-realm','x')", &[&accounts[0]])
+            .unwrap_err();
+        assert_eq!(unique_refusal(&other), None);
+        // A bag that does not decode keeps its character listed, without appearance.
+        let chosen: i64 = c
+            .query_one("SELECT id FROM characters WHERE realm=$1 AND name='Chosen'", &[&realm])?
+            .get(0);
+        c.execute(
+            "INSERT INTO character_bags(character_id,realm,definition,state) VALUES($1,$2,$3,$4)",
+            &[&chosen, &realm, &&[0u8; 32][..], &&[0xffu8][..]],
+        )?;
+        let listed = runtime.block_on(db.list(accounts[0], realm.clone(), &rules, &Default::default()))?.characters;
+        assert_eq!(listed.len(), 3);
+        assert!(listed.iter().all(|c| c.appearance.is_empty()), "{listed:?}");
+        c.execute("DELETE FROM character_bags WHERE character_id=$1", &[&chosen])?;
+        c.execute("DELETE FROM characters WHERE realm=$1", &[&realm])?;
+        c.execute("DELETE FROM accounts WHERE id=ANY($1)", &[&accounts])?;
         c.execute("DELETE FROM realm_ownership WHERE realm=$1", &[&realm])?;
         Ok(())
     }

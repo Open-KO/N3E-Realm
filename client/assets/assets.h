@@ -462,6 +462,7 @@ struct Release {
   std::optional<PostProcess> postprocess;
   std::optional<Audio> audio;
   bool front_end = false;  // front-end.bin (N3FE, engine 42, spec 11); load_front_end reads it
+  bool create = false;     // create.bin (N3CC, RQ-002): the server's create rules; hashed, its magic checked
   std::optional<Skills> skills;
   std::optional<std::vector<InputBinding>> input;
   NameDisplayPolicy names;

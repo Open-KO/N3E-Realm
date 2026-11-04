@@ -482,9 +482,15 @@ CLIENT = Path("assets/ko")
 # release index follows. Default features d7d4864f... -> 15525ab8...; classic
 # ace73ebd... -> f28ad90f...; 1097 08060ea2... -> 7d085d69.... The plain cooks
 # and the homelands keep their pins.
+# RQ-002 changed them again: every --features cook adds create.bin (N3CC 1, the
+# character-create rules from games/moradon/character-create.json and the 1264
+# install's NewChrValue and text rows, 384 bytes) and the manifest's `create`
+# section in recipe.json; the release index follows. Default features
+# 15525ab8... -> 286d620d...; classic f28ad90f... -> 99e3f6d9...; 1097
+# 7d085d69... -> 68e4321f.... The plain cooks and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "15525ab880e219bc573b1db43e2f83dc2af30d8f0a31df0ad990d3594860f7c3"),
+    "features": (["--features"], "286d620ddb63ad9e19a47ed195fc458fcadcb3fdcfe2c95008bcd835a26f404a"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -505,13 +511,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "f28ad90ff3d16b9199bb616ac1f425184a4f7011ecba44538dff0c580b41fafb"),
+    "features": (["--features"], "99e3f6d9b29bcdd5bd6fb7c93add485013169583fb2795777dca3c548b512b8d"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "7d085d69198cd754ea8013312e6ec7dab88f748831a11949e9fda09cc153e8f7"),
+    "features": (["--features"], "68e4321f1a60df676c32a2c8a5e1d65bedc58b2477338b8864cec9c9d18979b8"),
 }
 
 

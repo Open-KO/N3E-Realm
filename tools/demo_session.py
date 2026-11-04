@@ -477,7 +477,8 @@ def main():
             return
         if args.chat_check:
             from chat_channels import audit
-            audit(connect)
+            audit(connect, lambda command: run("docker", "exec", name, "psql", "-U", "n3e", "-d", "n3e",
+                                               "-v", "ON_ERROR_STOP=1", "-Atc", command).stdout)
             return
         if args.check:
             p = connect("explorer")

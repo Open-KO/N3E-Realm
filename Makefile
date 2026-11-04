@@ -71,6 +71,7 @@ test-fast:
 	build/client/n3e-login-check
 	python tests/front_end.py
 	python tests/front_end_choice.py
+	python tests/character_create.py
 	build/client/n3e-message-log-check
 	python tests/check.py
 	python tests/isolation_check.py

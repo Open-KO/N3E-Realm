@@ -487,6 +487,13 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
                 None if pin is None else {k:v for k,v in pin.items() if k!='hashes'} for pin in front['pins']])
         manifest['presentation']['front-end.bin']='front-end.bin'
         manifest.update(engine_version=max(manifest['engine_version'],42),protocol_version=30)
+        if front['create'] is not None:
+            # RQ-002: the character-create rules (games/moradon/character-create.json,
+            # the realm owner's create choices), their stats and wording from the
+            # chosen table in the front end's inputs; the server checks every
+            # create against create.bin.
+            import ko_create
+            manifest['create'],report['create']=ko_create.build(front['create'],front_inputs)
         if des:
             # Exploration: Demon's Souls characters from the user's own dump (moradon_des.py).
             import moradon_des

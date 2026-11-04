@@ -860,6 +860,13 @@ Release load_release(const std::filesystem::path &root) {
     need(engine>=42&&result.presentation,"front end compatibility");
     result.front_end=true;
   }
+  // RQ-002: the character-create rules the server checks a create against;
+  // hashed above, the client checks its magic and version (its create screen
+  // reads them in RQ-004).
+  if(files.erase("create.bin")){
+    Reader c(root/"create.bin");c.magic("N3CC");need(c.u()==1,"create version");
+    result.create=true;
+  }
   result.loot_model=files.erase("loot-model.bin")!=0;
   need(!result.loot_model||(engine>=10&&result.presentation&&result.thresholds),"loot model requires durable loot presentation");
   if(files.erase("pick.bin")){

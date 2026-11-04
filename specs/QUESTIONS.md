@@ -1564,3 +1564,46 @@ Options:
   Ebenezer's is. KO's staff and company words are not carried.
 
 The rule applies to new creates; an existing name outside it is kept.
+
+### Q100 — The create until the screen sends a choice
+
+RQ-002 makes the server check every create against the package's rules
+(`create.bin`, Q95), but the realm's create screen still shows one race and class
+and no stat arrows (Q52) until RQ-004, and sends only a name. KO's client always
+sends the whole packet, its ten points spent (code 10, 1298 `005fffd0`, binary), so
+a name alone would be refused as a forged packet is.
+
+Options:
+- (a) Refuse a create without a choice until RQ-004 (no character can be made on
+  the Moradon package meanwhile).
+- (b) A create whose race is 0 takes the package's fixed choice
+  (`character-create.json` `fixed`: race, specialty, face, hair and where the
+  bonus points go) in the account's first free slot; the server fills it, never the
+  client, and checks it as any other create.
+- (c) The client fills the fixed choice from `create.bin`.
+
+**Default taken:** (b). Moradon's is Q52's Tuarek priest, face 0, hair 0, the ten
+points in the fifth stat (MP, the priest's), so its stats are the chosen table's
+base plus ten MP (60 / 60 / 70 / 50 / 60 with 1264's or 1298's table). The cook
+refuses a fixed choice the rules refuse. RQ-004 sends the player's choice and
+removes the fixed one.
+
+### Q101 — The account's nation and the create settings RQ-002 does not land
+
+RQ-001's contract (`content/character-create.md`, "The create packet") keeps the
+nation off the create packet, as KO's: the nation is the account's. RQ-002's item
+title lists the nation among the packet's fields. Q94, Q96, Q97 and Q99 propose
+realm-owner settings `create.races`, `create.start`, `create.items`,
+`create.table` and `create.reserved`.
+
+**Default taken:**
+- `CreateCharacter` carries no nation; the server takes the account's, which until
+  RQ-006 keeps one per account is the package's `nation` (Moradon: 1, Karus, Q94).
+  The `Characters` list carries each character's nation.
+- `realm-config.json` takes `create.table`, `create.races` and `create.reserved`
+  (RQ-002). `create.races` may name only races the package has a player model for
+  (`character-create.json` `content`, Moradon's the Tuarek alone until RQ-003); the
+  cook refuses another.
+- `create.start` and `create.items` are not added: a new character starts at the
+  package's spawn with its `starting` items, as Q96 (b) keeps them, until RQ-003
+  gives each class its set.

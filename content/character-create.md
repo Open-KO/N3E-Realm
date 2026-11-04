@@ -6,8 +6,9 @@ is the contract for the character lane: RQ-002 (wire and server), RQ-003 (conten
 race and class), RQ-004 (the create screen), RQ-005 (the select hall per character),
 RQ-006 (nation select), RQ-007 (in-world play) and RQ-008 (delete). Where 1097, 1264
 and 1298 differ, each version is recorded and a realm-owner setting is proposed;
-the decisions it needs are Q94–Q99 (`specs/QUESTIONS.md`). Nothing here changes code
-or package data; the realm's behaviour today is under "The realm today".
+the decisions it needs are Q94–Q99 (`specs/QUESTIONS.md`). RQ-001 changed no code or
+package data; the realm before RQ-002 is under "The realm today (before RQ-002)", and
+RQ-002's wire, package rules and server checks under "The realm's create (RQ-002)".
 
 ## Sources
 
@@ -429,6 +430,102 @@ module names a race, class or zone.
   (Q51, Q52).
 
 Q99 replaces those name rules with KO's.
+
+## The realm's create (RQ-002)
+
+**Package data.** `games/<game>/character-create.json` holds the package's create
+rules; KO's are Moradon's, from the tables above:
+
+| Key | Meaning |
+|---|---|
+| `stats` | how many stats a character has (Moradon: 5, KO's order str, sta, dex, int, MAP) |
+| `nation` | the account's nation until the realm keeps one per account (RQ-006): Moradon's 1, Karus (Q94, Q101) |
+| `faces`, `hairs` | how many faces and hairs every race offers: KO's 4 and 3 (1298 `00604f90`) |
+| `races` | each race's `race` code, `nation` and `specialties` (KO's classes), as 1298's race click offers them (`006060f0`) |
+| `content` | the races the package has a player model for (Moradon: the Tuarek, 2, until RQ-003) |
+| `tables` | the stat tables a realm validates against, by id: each a KO `values` table (`Data/NewChrValue.tbl`) read from the front end's inputs (a `<name>:` prefix as the recipe's paths), its row `key` (row id = race × `race` + specialty × `specialty`: 1264's `{1, 0}`, 1298's `{10000, 1}`) and the `texts` table its refusals are worded from |
+| `columns` | the values table's stat columns and bonus column (KO's 2..6 and 7) |
+| `front_ends` | the table each front-end client draws by default (Q97 (b): 1264's for the 1097 choice, 1298's for the 1298 recipe) |
+| `refusals` | the text row of each refusal: `limit` 1911, `mismatch` 1907, `taken` 1912, `failed` 1902, `name` 1906, `stats` 1915 |
+| `name` | the name rule: `min` 1, `max` 20, `punctuation` `_:;` beside ASCII letters and digits (Q99) |
+| `fixed` | the choice a create without a race takes (Q100): race, specialty, face, hair and the bonus `points` per stat; Moradon's the Tuarek priest, face 0, hair 0, the ten points in MP |
+
+The realm owner's `realm-config.json` may add `create`: `table` (Q97, default the
+front end's), `races` (Q94, default `content`; only races in `content`) and
+`reserved` (Q99, words no name may contain, compared without regard to case;
+default none). `create.start` and `create.items` are not settings yet (Q101).
+
+**The cook.** `make realm-assets` (`ko_bake.py --features`) checks both files with
+the front-end choice, before the survey (`tools/assetc/ko_create.py` `plan`, through
+`front_end_choice.choose`), then reads the chosen table and text rows from the front
+end's inputs (`build`). It refuses a malformed file or setting, a table the package
+lacks, a race without a player model, a table row whose race or specialty the
+package lacks, a missing row the offered races need, and a fixed choice the rules
+refuse. The package's manifest gets a `create` section, which
+`tools/assetc/create.py` cooks into `create.bin` (N3CC version 1, little-endian u32s
+and u32-length ASCII strings):
+
+```
+"N3CC" 1 stats nation race_count
+  per race: race nation faces hairs specialty_count
+    per specialty: specialty bonus base[stats]
+name_min name_max punctuation reserved_count reserved[...]
+refusal text × 6 (limit, mismatch, taken, failed, name, stats; empty keeps the engine's)
+fixed (0 or 1) [race specialty face hair stats[stats]]
+```
+
+Bounds: 1..8 stats, nation 1..255, 1..32 races of 1..16 specialties, ids 1..65535,
+1..256 faces and hairs, bonus and base 0..1000, name 1..24 bytes, up to 256 reserved
+words (lower-case printable ASCII, 1..24 bytes), refusal texts printable ASCII up to
+200 bytes. The server (`server/src/create.rs`) and the client
+(`client/assets/assets.cpp`, magic and version only until RQ-004 reads it) refuse
+any other file; the server's `--check-content` prints `create races=… specialties=…
+stats=… nation=… fixed=…`. A package without `create.bin` creates by name alone, as
+before. The Moradon package is the only one with rules; its table is 1264's for the
+1097 choice, the same bases as 1298's (above), so the fixed Tuarek priest's stats are
+60 / 60 / 70 / 50 / 60.
+
+**Wire** (`protocol/wire.proto`, no version change; goldens `create-character`,
+`create-refusal`, `characters`):
+- `CreateCharacter` gains `slot`, `race`, `specialty`, `face`, `hair` and `stats`
+  (the package's order): KO's packet's fields. The nation is the account's.
+- `Character` gains `slot`, `nation`, `race`, `specialty`, `face`, `hair` (0 for a
+  character created without create rules) and `appearance`, the public keys of its
+  committed equipment as `Entity.appearance` projects them.
+- A refused create is `Error` code 8 (CONFLICT), `request` 7, and `create_result`
+  (`CreateCharacter.Result`: KO's 1 limit, 2 mismatch, 3 taken, 4 failed, 5 name,
+  17 stats), its `detail` the package's text for that result (KO's row, cooked) or
+  the engine's wording.
+
+**The server's checks**, in order (Q95, Q99):
+1. The name: `name.min`..`name.max` bytes of ASCII letters, digits and the
+   punctuation, no reserved word → 5.
+2. A create whose race is 0 takes the fixed choice in the first free slot (Q100);
+   otherwise the slot must be under the package's slot count → 1.
+3. The race offered and of the account's nation, the specialty one of the race's →
+   2.
+4. Face and hair under the race's counts, as many stats as the package's, each at
+   least the specialty's base and all summing to the base's sum plus the bonus → 17.
+5. In the database: the account under the slot count → 1; no character in the realm
+   with the name in any case → 3; the slot free → 4. A create that loses a race
+   for the name or slot to another at the insert gets the index's answer, 3 or 4.
+6. Any other failure → 4, logged, never success.
+
+Without create rules only the name is checked, against today's rule (1..24 ASCII
+letters, digits, `_`, `-`), with the database's checks; every new name is unique
+without regard to case.
+
+**Database** (`deploy/026-character-create.sql`): `characters` gains `slot` (unique
+per account and realm, backfilled in creation order), `nation`, `race`, `specialty`,
+`face`, `hair` and `stats` (all set or all NULL: NULL for a character created
+before or without rules), and `name_folded` (`lower(name)`, unique per realm, NULL
+for a name kept from before). The list is in slot order; a character whose bag does
+not decode is listed without `appearance` (logged), not dropped. Spec 03's account view lists
+each character's `slot`, `nation`, `race` and `specialty`.
+
+**What stays.** A new character starts at the package's spawn with its `starting`
+items (Q96 (b)); the stats are kept but play does not read them yet (RQ-007); the
+screen still sends a name alone (RQ-004); one nation (RQ-006).
 
 ## What each item needs
 

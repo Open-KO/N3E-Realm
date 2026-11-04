@@ -6,7 +6,10 @@ message Snapshot { uint64 tick = 1; Input echo = 2; }
 // PQ-405 (D-208): request is the Envelope body field number of the client message
 // this Error refuses (9 Move, 32 BagRequest, ...), 0 when it answers none of them
 // (handshake, connection limits). A client shows a refusal only on that feature.
-message Error { enum Code { MALFORMED = 0; VERSION = 1; CONTENT = 2; INVALID_MOVEMENT = 3; RATE_LIMITED = 4; UNAUTHENTICATED = 5; DEPENDENCY_UNAVAILABLE = 6; FORBIDDEN = 7; CONFLICT = 8; } Code code = 1; string detail = 2; uint32 request = 3; }
+// RQ-002: create_result is set only on a refused CreateCharacter (code CONFLICT,
+// request 7): which of the create's refusals it is, the client's key to its own
+// wording (content/character-create.md, "The realm's create").
+message Error { enum Code { MALFORMED = 0; VERSION = 1; CONTENT = 2; INVALID_MOVEMENT = 3; RATE_LIMITED = 4; UNAUTHENTICATED = 5; DEPENDENCY_UNAVAILABLE = 6; FORBIDDEN = 7; CONFLICT = 8; } Code code = 1; string detail = 2; uint32 request = 3; CreateCharacter.Result create_result = 4; }
 message Envelope { oneof body { Handshake handshake = 1; Input input = 2; Snapshot snapshot = 3; Error error = 4; Login login = 5; Characters characters = 6; CreateCharacter create_character = 7; SelectCharacter select_character = 8; Move move = 9; World world = 10; Chat chat = 11; Logout logout = 12; LoggedOut logged_out = 13; Ping ping = 14; Action action = 15; ActionResult action_result = 16; RewardStatus reward_status = 17; RewardResult reward_result = 18; Respawn respawn = 19; RespawnResult respawn_result = 20; SettlementStatus settlement_status = 21; SettlementResult settlement_result = 22; LootList loot_list = 23; LootPage loot_page = 24; Claim claim = 25; ClaimResult claim_result = 26; ClaimStatus claim_status = 27; AdminRequest admin_request = 28; AdminResult admin_result = 29; Registry registry = 30; PrivateMessage private_message = 31; BagRequest bag_request = 32; BagResult bag_result = 33; StorageRequest storage_request = 34; StorageResult storage_result = 35; StorageAuthRequest storage_auth_request = 36; StorageAuthResult storage_auth_result = 37;
     FriendRequest friend_request = 38; FriendResult friend_result = 39;
     FriendPresenceQuery friend_presence_query = 40; FriendPresence friend_presence = 41;
@@ -30,8 +33,21 @@ message LoginResult { bytes token = 1; uint64 expires_at_unix = 2; string discor
 message SessionLogout { bytes token = 1; }
 message Characters { repeated Character characters = 1; }
 // Spec 11: `level` as the HUD shows it, for the front end's select screen.
-message Character { uint64 id = 1; string name = 2; uint32 level = 3; }
-message CreateCharacter { string name = 1; }
+// RQ-002 (content/character-create.md, "The realm's create"): the character's
+// slot, its nation, race, specialty (KO's class), face and hair as created (0 for
+// a character created without the package's create rules), and `appearance`,
+// the public keys of its committed equipment as Entity.appearance projects them.
+message Character { uint64 id = 1; string name = 2; uint32 level = 3; uint32 slot = 4; uint32 nation = 5; uint32 race = 6; uint32 specialty = 7; uint32 face = 8; uint32 hair = 9; repeated uint32 appearance = 10; }
+// RQ-002: what KO's create packet carries (WIZ_NEW_CHAR: slot, name, race,
+// class, face, hair and the five stats), the stats in the package's order
+// (create.bin). The nation is the account's, never the client's. The server
+// checks every field against the package's create rules and never trusts them;
+// a create with race 0 takes the package's fixed choice and the first free slot
+// (Q52, Q100, until the create screen sends a choice: RQ-004). Result numbers are
+// KO's create results (Ebenezer 00491a02, CREATE_NEW_CHAR); 0 is no refusal.
+message CreateCharacter {
+  enum Result { CREATE_OK = 0; CREATE_LIMIT = 1; CREATE_MISMATCH = 2; CREATE_TAKEN = 3; CREATE_FAILED = 4; CREATE_NAME = 5; CREATE_STATS = 17; }
+  string name = 1; uint32 slot = 2; uint32 race = 3; uint32 specialty = 4; uint32 face = 5; uint32 hair = 6; repeated uint32 stats = 7; }
 message SelectCharacter { uint64 id = 1; }
 message Move { uint64 session = 1; uint64 seq = 2; float x = 3; float z = 4; uint32 mode = 5; bool turbo = 6; uint64 entity = 7; uint64 permission_generation = 8; }
 // Wire22 appearance keys derive only from committed equipment; private bags stay private.

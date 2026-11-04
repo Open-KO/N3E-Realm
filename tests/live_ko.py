@@ -212,7 +212,9 @@ FRONT_END = ["client/render/front_end.h", "client/render/select_hall.h", "client
              "client/render/create_choice.h",
              "tools/assetc/ko_front_end.py",
              "games/moradon/front-end.json", "games/moradon/front-end-1298.json",
-             "tools/assetc/front_end_choice.py", "games/moradon/front-ends.json", "games/moradon/realm-config.json"]
+             "tools/assetc/front_end_choice.py", "games/moradon/front-ends.json", "games/moradon/realm-config.json",
+             # RQ-002: the create rules the server words a refused create from.
+             "tools/assetc/ko_create.py", "tools/assetc/create.py", "games/moradon/character-create.json"]
 # The Moradon feature cook (tools/assetc/ko_bake.py --features, --des).
 MORADON_FEATURES = ["tools/assetc/moradon_features.py", "tools/assetc/moradon_des.py"]
 

@@ -1084,7 +1084,11 @@ fn account_json(a: &crate::sessions::Account, online: usize) -> Value {
         "mute_reason": a.mute_reason,
         "sessions": a.sessions,
         "online": online > 0,
-        "characters": a.characters.iter().map(|(id, name)| json!({"id": id, "name": name})).collect::<Vec<_>>(),
+        "characters": a
+            .characters
+            .iter()
+            .map(|c| json!({"id": c.id, "name": c.name, "slot": c.slot, "nation": c.nation, "race": c.race, "specialty": c.specialty}))
+            .collect::<Vec<_>>(),
     })
 }
 

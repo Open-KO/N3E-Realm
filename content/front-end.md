@@ -574,8 +574,10 @@ choice is package data, cooked into `front-end.bin`; the engine knows no client
 and plays whatever the file says. Two files in the package source hold it:
 
 - `games/<game>/realm-config.json`, the realm owner's choices:
-  `{"front_end": "<client>"}`. It takes no other key (a misspelt one is refused,
-  not ignored). Moradon's is `"1097"` (Q71).
+  `{"front_end": "<client>"}`, and optionally `create`, the character-create
+  choices (RQ-002: `table`, `races`, `reserved`; `content/character-create.md`,
+  "The realm's create"). It takes no other key (a misspelt one is refused, not
+  ignored). Moradon's is `"1097"` (Q71), with no `create`.
 - `games/<game>/front-ends.json`, the clients the package can cook, by id
   (lower-case letters, digits and `-`, up to 32): each a `recipe`, the
   `ko_front_end` input beside it (the files, bindings and placements of that
@@ -1006,7 +1008,7 @@ box and loading are 1264's.
   | `login_unavailable`: "The realm cannot log you in right now. ENTER to try again." | the login answer's other results (`005bf010`'s last branch: row 2908, title row 2909) | title and text: the pinned tree's rows 2909 and 2908 ("There is an error in the selected server. ") |
   | `login`: the Discord flow's own failures (denied, timed out, its callback, the redirect ports, a refused code, a logout the realm could not end) and the address to open | none: KO has no Discord step | none: untitled, the realm's words |
   | `create_name`: "Enter a name: 1 to 24 letters, digits, _ or -." | an empty name (`0043a340`: code 6 → `0043a820`, ReportErrorCharacterCreate: row 1905, title row 1901) | title and text: the 1264 install's rows 1901 ("Failed creating character") and 1905 ("Please enter your character ID. ") |
-  | `create_refused`: the server's "character name invalid/taken or limit reached" | the server's create answer (`0043a820` by its code: 1911 no more characters, 1912 a name in use, 1906 a forbidden letter, and others; title row 1901) | title only: the 1264 install's row 1901; the realm's refusal does not say which of KO's reasons it is, so its words stay |
+  | `create_refused`: the server's wording of the refusal | the server's create answer (`0043a820` by its code: 1911 no more characters, 1912 a name in use, 1906 a forbidden letter, and others; title row 1901) | title only: the 1264 install's row 1901; since RQ-002 the server words each refusal with KO's row for its code, from the package's create table's texts (`content/character-create.md`, "The realm's create"), so its words stay |
   | `select_refused`: the server's "character not owned or already online" | the select refused (`004436a0`, CharacterSelectFailed: row 6066; title empty) | none: untitled, the realm's words |
   | `exit_confirm` (RQ-115, §9.8): the client's "Exit the game?" | the select's `bt_exit` (`00444e60` → `005f7f80`: row 1502, title empty, `MB_YESNO`, `BEHAVIOR_EXIT`) | text: the 1264 install's row 1502 ("Are you sure you want to exit? "), untitled |
 

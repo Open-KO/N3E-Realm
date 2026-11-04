@@ -65,9 +65,13 @@ try:
     run('docker','exec','-i',name,'psql','-v','ON_ERROR_STOP=1','-U','n3e','-d','legacy_restore',stdin=backup)
     assert run('docker','exec',name,'psql','-U','n3e','-d','legacy_restore','-Atc','SELECT version,digest FROM schema_migrations ORDER BY version').stdout.decode().strip()==before
     for table,key in [('characters','realm'),('character_roles','realm'),('reward_operations','realm')]:
-        query=f"SELECT md5(string_agg(row_to_json(t)::text,E'\\n' ORDER BY row_to_json(t)::text)) FROM {table} t WHERE {key}='test-legacy-backup'"
+        # The legacy schema's columns only: later migrations add columns (026
+        # adds the create's to characters) and leave these rows' values as they were.
+        columns=run('docker','exec',name,'psql','-U','n3e','-d','legacy_restore','-Atc',
+                    f"SELECT string_agg(quote_ident(column_name),',' ORDER BY ordinal_position) FROM information_schema.columns WHERE table_schema='public' AND table_name='{table}'").stdout.decode().strip()
+        query=f"SELECT md5(string_agg(row_to_json(t)::text,E'\\n' ORDER BY row_to_json(t)::text)) FROM (SELECT {columns} FROM {table} WHERE {key}='test-legacy-backup') t"
         restored=run('docker','exec',name,'psql','-U','n3e','-d','legacy_restore','-Atc',query).stdout.decode().strip()
-        assert restored==sql(query)
+        assert restored==sql(query),(table,restored)
     query="SELECT row_to_json(p)::text FROM character_progress p JOIN characters c ON c.id=p.character_id WHERE realm='test-legacy-backup'"
     assert run('docker','exec',name,'psql','-U','n3e','-d','legacy_restore','-Atc',query).stdout.decode().strip()==sql(query)
     (B/'backup-sha256.txt').write_text(''.join(f'{hashlib.sha256(data).hexdigest()}  {file}\n' for file,data in [('pre-conversion.sql',backup),('post-settlement.sql',dump)]))

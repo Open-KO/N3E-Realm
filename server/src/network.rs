@@ -38,6 +38,20 @@ pub mod request {
 pub fn error(code: i32, detail: &str) -> Envelope {
     refusal(code, 0, detail)
 }
+/// RQ-002: a refused CreateCharacter: CONFLICT (8, the code the client shows a
+/// create refusal on), naming the request and its create result, in the
+/// package's wording of that result (create.bin), else the engine's.
+pub fn create_refusal(policy: Option<&crate::create::Policy>, refusal: crate::create::Refusal) -> Envelope {
+    let detail = policy.map_or(refusal.engine_text(), |p| p.text(refusal));
+    Envelope {
+        body: Some(Body::Error(wire::Error {
+            code: 8,
+            detail: detail.into(),
+            request: 7,
+            create_result: refusal.result() as i32,
+        })),
+    }
+}
 /// An Error refusing the client request whose Envelope field number is `request`.
 pub fn refusal(code: i32, request: u32, detail: &str) -> Envelope {
     Envelope {
@@ -45,6 +59,7 @@ pub fn refusal(code: i32, request: u32, detail: &str) -> Envelope {
             code,
             detail: detail.into(),
             request,
+            ..Default::default()
         })),
     }
 }
@@ -751,7 +766,7 @@ async fn peer(
                             }
                             Some(Envelope {
                                 body: Some(Body::Characters(
-                                    world.db.list(a.account, world.owner.realm.clone(), &r.rules).await?,
+                                    world.db.list(a.account, world.owner.realm.clone(), &r.rules, &r.appearance).await?,
                                 )),
                             })
                         }
@@ -759,26 +774,38 @@ async fn peer(
                 }
                 Some(Body::SessionLogout(l)) if account.is_none() => Some(logout(&world, l, &ip, &ready).await),
                 Some(Body::CreateCharacter(c)) if account.is_some() && selected.is_none() => {
-                    match world
-                        .db
-                        .create(
-                            account.unwrap(),
-                            c.name,
-                            world.owner.clone(),
-                            r.player_spawn()?,
-                            r.character_slots,
-                        )
-                        .await
-                    {
+                    // RQ-002: the package's rules first (never the client's
+                    // word), then the database's count, name and slot; every
+                    // refusal, an internal failure included, answers its own
+                    // result in the package's wording, never success.
+                    let policy = r.create.as_deref();
+                    let created = match crate::create::check(policy, &c, r.character_slots) {
+                        Err(refusal) => Err(refusal),
+                        Ok(valid) => match world
+                            .db
+                            .create(account.unwrap(), valid, world.owner.clone(), r.player_spawn()?, r.character_slots)
+                            .await
+                        {
+                            Ok(()) => Ok(()),
+                            Err(e) => Err(match e.downcast_ref::<crate::create::Refusal>() {
+                                Some(refusal) => *refusal,
+                                None => {
+                                    eprintln!("character_create_failed account={} error={e}", account.unwrap());
+                                    crate::create::Refusal::Failed
+                                }
+                            }),
+                        },
+                    };
+                    match created {
                         Ok(()) => Some(Envelope {
                             body: Some(Body::Characters(
                                 world
                                     .db
-                                    .list(account.unwrap(), world.owner.realm.clone(), &r.rules)
+                                    .list(account.unwrap(), world.owner.realm.clone(), &r.rules, &r.appearance)
                                     .await?,
                             )),
                         }),
-                        Err(_) => Some(error(8, "character name invalid/taken or limit reached")),
+                        Err(refusal) => Some(create_refusal(policy, refusal)),
                     }
                 }
                 Some(Body::SelectCharacter(c)) if account.is_some() && selected.is_none() => {

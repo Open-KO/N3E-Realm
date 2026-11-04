@@ -1,6 +1,7 @@
 mod skills;
 mod skill_runtime;
 mod accounts;
+mod create;
 mod inventory;
 mod commerce;
 mod repair;
@@ -361,7 +362,7 @@ async fn main() -> Result<()> {
         let party=wire::Envelope{body:Some(wire::envelope::Body::PartyResult(wire::PartyResult{sequence:63,status:"joined".into()}))};
         std::fs::write(format!("{}-party-result.bin",args[2]),party.encode_to_vec())?;
         // PQ-405 (D-208): a refusal names the request it answers (32 BagRequest).
-        let refusal=wire::Envelope{body:Some(wire::envelope::Body::Error(wire::Error{code:4,detail:"inventory rate limit".into(),request:32}))};
+        let refusal=wire::Envelope{body:Some(wire::envelope::Body::Error(wire::Error{code:4,detail:"inventory rate limit".into(),request:32,..Default::default()}))};
         std::fs::write(format!("{}-error.bin",args[2]),refusal.encode_to_vec())?;
         // specs/02-auth-sessions.md: the Discord and session logins and their result.
         let token:Vec<u8>=(0u8..32).collect();
@@ -376,9 +377,16 @@ async fn main() -> Result<()> {
         // RQ-136: a Ping with a nonce, the client's round-trip probe and the server's echo.
         let ping=wire::Envelope{body:Some(wire::envelope::Body::Ping(wire::Ping{nonce:300}))};
         std::fs::write(format!("{}-ping.bin",args[2]),ping.encode_to_vec())?;
-        // Spec 11: the character list with levels.
-        let characters=wire::Envelope{body:Some(wire::envelope::Body::Characters(wire::Characters{characters:vec![wire::Character{id:129,name:"Nelly".into(),level:30},wire::Character{id:7,name:"Peer".into(),level:1}]}))};
+        // Spec 11: the character list with levels; RQ-002: each character's
+        // slot, nation, race, specialty, face, hair and visible equipment (the
+        // second, created without create rules, has none of them).
+        let characters=wire::Envelope{body:Some(wire::envelope::Body::Characters(wire::Characters{characters:vec![wire::Character{id:129,name:"Nelly".into(),level:30,slot:2,nation:2,race:13,specialty:204,face:3,hair:2,appearance:vec![1,300]},wire::Character{id:7,name:"Peer".into(),level:1,..Default::default()}]}))};
         std::fs::write(format!("{}-characters.bin",args[2]),characters.encode_to_vec())?;
+        // RQ-002: KO's create packet's fields, and a refused create's result.
+        let create=wire::Envelope{body:Some(wire::envelope::Body::CreateCharacter(wire::CreateCharacter{name:"Nelly".into(),slot:2,race:13,specialty:204,face:3,hair:2,stats:vec![50,50,70,80,50]}))};
+        std::fs::write(format!("{}-create-character.bin",args[2]),create.encode_to_vec())?;
+        let refusal=network::create_refusal(None,create::Refusal::Stats);
+        std::fs::write(format!("{}-create-refusal.bin",args[2]),refusal.encode_to_vec())?;
         let strike=wire::Envelope{body:Some(wire::envelope::Body::World(wire::World{self_:7,entities:vec![wire::Entity{id:7,strike_tick:100,strike_sequence:129,..Default::default()}],events:vec![wire::PresentationEvent{sequence:1,tick:100,actor:7,target:8,kind:2,style:2,request_sequence:129,..Default::default()}],..Default::default()}))};
         std::fs::write(format!("{}-strike.bin",args[2]),strike.encode_to_vec())?;
         // Wire30 (PQ-249): a templated NPC's looks key and maximum health.
@@ -555,6 +563,11 @@ async fn main() -> Result<()> {
         if let Some(s) = &r.rules.skills {
             let plane = if s.reach.planar { "xz" } else { "3d" };
             println!("skills reach start={} hold={} plane={plane} radii={}", s.reach.start, s.reach.hold, s.radii);
+        }
+        // RQ-002: the character-create rules the server checks creates against.
+        if let Some(c) = &r.create {
+            let specialties: usize = c.races.iter().map(|r| r.specialties.len()).sum();
+            println!("create races={} specialties={specialties} stats={} nation={} fixed={}", c.races.len(), c.stats, c.nation, c.fixed.is_some());
         }
         return Ok(());
     }

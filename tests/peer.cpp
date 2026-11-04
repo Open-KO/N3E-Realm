@@ -149,7 +149,10 @@ int main(int argc, char **argv) {
        Envelope s;s.mutable_session_login()->set_token(token);s.mutable_session_login()->set_client_label("host");write(s,"-session-login.bin");
        Envelope o;o.mutable_session_logout()->set_token(token);write(o,"-session-logout.bin");
        Envelope r;auto*x=r.mutable_login_result();x->set_token(token);x->set_expires_at_unix(1795996800);x->set_discord_id("80351110224678912");x->set_discord_name("Nelly");write(r,"-login-result.bin");
-       Envelope c;auto*a=c.mutable_characters()->add_characters();a->set_id(129);a->set_name("Nelly");a->set_level(30);a=c.mutable_characters()->add_characters();a->set_id(7);a->set_name("Peer");a->set_level(1);write(c,"-characters.bin");
+       Envelope c;auto*a=c.mutable_characters()->add_characters();a->set_id(129);a->set_name("Nelly");a->set_level(30);a->set_slot(2);a->set_nation(2);a->set_race(13);a->set_specialty(204);a->set_face(3);a->set_hair(2);a->add_appearance(1);a->add_appearance(300);a=c.mutable_characters()->add_characters();a->set_id(7);a->set_name("Peer");a->set_level(1);write(c,"-characters.bin");
+       // RQ-002: KO's create packet's fields, and a refused create's result.
+       Envelope n;auto*k=n.mutable_create_character();k->set_name("Nelly");k->set_slot(2);k->set_race(13);k->set_specialty(204);k->set_face(3);k->set_hair(2);for(unsigned v:{50u,50u,70u,80u,50u})k->add_stats(v);write(n,"-create-character.bin");
+       Envelope f;auto*e=f.mutable_error();e->set_code(n3e::Error::CONFLICT);e->set_detail("character stats, face or hair invalid");e->set_request(7);e->set_create_result(n3e::CreateCharacter::CREATE_STATS);write(f,"-create-refusal.bin");
        // RQ-136: a Ping with a nonce, the client's round-trip probe and the server's echo.
        Envelope g;g.mutable_ping()->set_nonce(300);write(g,"-ping.bin");}
       Envelope admin;auto*q=admin.mutable_admin_request();q->set_session(63);q->set_id("request-1");q->set_operation("publish");q->set_expected(127);q->set_base(std::string(64,'a'));auto*v=q->add_patch();v->set_key("fixture:lighting.intensity");v->set_value(.5f);q->set_reason("golden");auto admin_bytes=bytes(admin);std::ofstream(std::string(argv[2])+"-admin.bin",std::ios::binary).write(admin_bytes.data(),admin_bytes.size());

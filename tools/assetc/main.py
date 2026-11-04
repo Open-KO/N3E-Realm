@@ -38,6 +38,7 @@ import input_map
 import pick
 import postprocess
 import item_heads
+import create
 
 
 def heightfield_triangles(hf):
@@ -157,7 +158,7 @@ def cook(root, out, materials=False):
     (gltf.cook): only ko_npc_looks passes it, for the throwaway package whose
     scene.bin is a looks clip (PQ-265, PQ-283)."""
     manifest = load(root / "package.json")
-    if set(manifest) - {"attachments", "npc_looks", "input", "pick", "postprocess", "item_heads", "skills", "consumables", "combat_animation", "ranged_attack", "rest", "appearance", "party", "friends", "storage_auth", "storage", "wear", "stats", "equipment", "repair", "commerce", "inventory", "render_detail", "exploration", "editing", "world", "world_textures", "world_overlay", "presentation", "camera", "melee", "damage", "npc", "life", "animation", "progression"} != set(
+    if set(manifest) - {"create", "attachments", "npc_looks", "input", "pick", "postprocess", "item_heads", "skills", "consumables", "combat_animation", "ranged_attack", "rest", "appearance", "party", "friends", "storage_auth", "storage", "wear", "stats", "equipment", "repair", "commerce", "inventory", "render_detail", "exploration", "editing", "world", "world_textures", "world_overlay", "presentation", "camera", "melee", "damage", "npc", "life", "animation", "progression"} != set(
         [
             "game_id",
             "package_version",
@@ -496,6 +497,9 @@ def cook(root, out, materials=False):
         extras["friends.bin"] = friends.cook(manifest["friends"])
     if "party" in manifest:
         extras["party.bin"] = party.cook(manifest["party"])
+    # RQ-002: the character-create rules the server checks every create against.
+    if "create" in manifest:
+        extras["create.bin"] = create.cook(manifest["create"])
     if "storage_auth" in manifest:
         extras["storage-auth.bin"] = storage_auth.cook(manifest["storage_auth"])
     if "storage" in manifest:

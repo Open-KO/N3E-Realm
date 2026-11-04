@@ -82,6 +82,11 @@ WORK = Path(os.environ.get("N3E_KO_WORK", "build/live-ko/work"))
 package = (WORK / "packages" / "moradon").resolve()
 manifest = json.loads((package / "recipe.json").read_text())["manifest"]
 CONTENT = (package / "release.sha256").read_text().strip()
+# RQ-002: the server refuses a create in the package's wording of each result
+# (create.bin, from the chosen table's text rows; no KO text here): a name
+# another character has, and a fourth character (KO's 3 and 1).
+TAKEN = manifest["create"]["refusals"]["taken"]
+LIMIT = manifest["create"]["refusals"]["limit"]
 server_binary = str(Path(os.environ.get("N3E_TEST_SERVER", "target/debug/n3e-server")).resolve())
 name = "n3e-front-end-" + uuid.uuid4().hex[:10]
 out = ROOT / "build/live-ko/front-end-flow"
@@ -89,7 +94,6 @@ out.mkdir(parents=True, exist_ok=True)
 CLIENT_ID = "223456789012345678"
 SECRET = "s3cret-" + secrets.token_hex(8)
 REDIRECT = "http://127.0.0.1:49152/callback"
-REFUSED = "character name invalid/taken or limit reached"
 # RQ-102 (Q81): the package's message titles and wordings, as the cook reads
 # them from the chosen front end's recipe and its KO trees (no KO text here).
 sys.path.insert(0, str(ROOT / "tools/assetc"))
@@ -253,10 +257,11 @@ try:
         holder.create(n)
     holder.send(7, blob(1, "Fourth"))
     tag, data = holder.until(6, 4)
-    assert tag == 4 and (first(data, 1), first(data, 2, b"").decode()) == (8, REFUSED), (tag, data)
+    assert tag == 4 and (first(data, 1), first(data, 2, b"").decode(), first(data, 3), first(data, 4)) == \
+        (8, LIMIT, 7, 1), (tag, data)
     assert [n for _, n in holder.characters] == ["Taken", "Second", "Third"], holder.characters
     holder.s.close()
-    print(f"PASS character_slots 3: a fourth character refused ({REFUSED})")
+    print(f"PASS character_slots 3: a fourth character refused ({LIMIT!r}, result 1)")
 
     # The client through the KO screens.
     player = user("90351110224678002", "Wanderer")
@@ -312,7 +317,7 @@ try:
     assert enters == ["enter connected=0"], flow
     assert screens == ["logo", "login", "realms", "select", "create", "select", "loading", "world", "login"], flow
     assert messages == [shown("login", "Discord login was cancelled. ENTER to try again."),
-                        shown("create_refused", REFUSED),
+                        shown("create_refused", TAKEN),
                         shown("disconnected", "You were disconnected by an operator: flow test.")], flow
     order = [f.split()[0] for f in flow if f.startswith(("screen=", "music="))]
     want = ["screen=logo", "music=stream1", "screen=login", "music=stream2", "screen=realms", "screen=select",

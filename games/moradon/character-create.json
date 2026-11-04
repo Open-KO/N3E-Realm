@@ -1,0 +1,27 @@
+{
+  "stats": 5,
+  "nation": 1,
+  "faces": 4,
+  "hairs": 3,
+  "races": [
+    {"race": 1, "nation": 1, "specialties": [101]},
+    {"race": 2, "nation": 1, "specialties": [102, 104]},
+    {"race": 3, "nation": 1, "specialties": [103]},
+    {"race": 4, "nation": 1, "specialties": [104]},
+    {"race": 11, "nation": 2, "specialties": [201]},
+    {"race": 12, "nation": 2, "specialties": [201, 202, 203, 204]},
+    {"race": 13, "nation": 2, "specialties": [201, 202, 203, 204]}
+  ],
+  "content": [2],
+  "tables": {
+    "1264": {"values": "installer-1264:Data/NewChrValue.tbl", "key": {"race": 1, "specialty": 0},
+             "texts": "installer-1264:Data/Texts_us.tbl"},
+    "1298": {"values": "Data/NewChrValue.tbl", "key": {"race": 10000, "specialty": 1},
+             "texts": "Data/Texts_us.tbl"}
+  },
+  "columns": {"stats": [2, 3, 4, 5, 6], "bonus": 7},
+  "front_ends": {"1097": "1264", "1298": "1298"},
+  "refusals": {"limit": 1911, "mismatch": 1907, "taken": 1912, "failed": 1902, "name": 1906, "stats": 1915},
+  "name": {"min": 1, "max": 20, "punctuation": "_:;"},
+  "fixed": {"race": 2, "specialty": 104, "face": 0, "hair": 0, "points": [0, 0, 0, 0, 10]}
+}

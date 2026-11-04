@@ -25,8 +25,9 @@ import ko_installs
 CONFIG = "realm-config.json"
 CATALOGUE = "front-ends.json"
 # The realm-config.json keys this cook knows; any other is refused (a typo
-# would otherwise cook the default without a word).
-CONFIG_KEYS = {"front_end"}
+# would otherwise cook the default without a word). RQ-002: `create`, the
+# character-create choices (tools/assetc/ko_create.py).
+CONFIG_KEYS = {"front_end", "create"}
 ENTRY_KEYS = {"recipe", "inputs"}
 INPUT_KEYS = {"tree", "get"}
 # RQ-084: the name a recipe path's prefix gives the input (required after the first).
@@ -116,8 +117,10 @@ def catalogue(game):
 
 def choose(game, root="."):
     """The front end the realm owner chose (`realm-config.json`), checked
-    against the package and the inputs on this machine: `resolve`'s result.
-    `root` is the checkout the input trees are relative to."""
+    against the package and the inputs on this machine: `resolve`'s result,
+    with `create`, the character-create choice (`ko_create.plan`, RQ-002; None
+    for a package without create rules). `root` is the checkout the input
+    trees are relative to."""
     game = pathlib.Path(game)
     path = game / CONFIG
     config = read(path, "the realm's choices; content/front-end.md, \"Choosing the client\"")
@@ -131,7 +134,11 @@ def choose(game, root="."):
     if client not in offered:
         raise Refused("%s: front end %r is not one this package cooks; it cooks %s (%s)"
                       % (path, client, ", ".join(sorted(offered)), game / CATALOGUE))
-    return resolve(game, client, root, offered)
+    # RQ-002: the create rules' choice, checked before any input is read; None
+    # for a package without create rules.
+    import ko_create
+    chosen = ko_create.plan(game, client, config.get("create", {}))
+    return dict(resolve(game, client, root, offered), create=chosen)
 
 
 def split(path):

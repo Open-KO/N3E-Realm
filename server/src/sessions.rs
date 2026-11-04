@@ -296,7 +296,18 @@ pub struct Account {
     pub muted_until: Option<i64>,
     pub mute_reason: Option<String>,
     pub sessions: i64,
-    pub characters: Vec<(i64, String)>,
+    pub characters: Vec<CharacterRow>,
+}
+/// RQ-002: a character as spec 03's account view lists it: what its create
+/// chose, None for one created without the package's create rules.
+#[derive(Debug)]
+pub struct CharacterRow {
+    pub id: i64,
+    pub name: String,
+    pub slot: Option<i16>,
+    pub nation: Option<i16>,
+    pub race: Option<i32>,
+    pub specialty: Option<i32>,
 }
 pub enum Key {
     Id(i64),
@@ -317,11 +328,19 @@ pub async fn account(db: &Database, key: Key, realm: String) -> Result<Option<Ac
         let id: i64 = r.get(0);
         let characters = c
             .query(
-                "SELECT id,name FROM characters WHERE account_id=$1 AND realm=$2 ORDER BY id LIMIT 8",
+                "SELECT id,name,slot,nation,race,specialty FROM characters WHERE account_id=$1 AND realm=$2 \
+                 ORDER BY slot NULLS LAST,id LIMIT 8",
                 &[&id, &realm],
             )?
             .iter()
-            .map(|r| (r.get(0), r.get(1)))
+            .map(|r| CharacterRow {
+                id: r.get(0),
+                name: r.get(1),
+                slot: r.get(2),
+                nation: r.get(3),
+                race: r.get(4),
+                specialty: r.get(5),
+            })
             .collect();
         Ok(Some(Account {
             id,

@@ -34,6 +34,7 @@ QUERY = "SELECT version||':'||digest FROM schema_migrations ORDER BY version"
 # (tests/live.py checks that each one has an owner).
 CORE_TESTS = [
     "accounts::database_tests::character_and_realm_fences",
+    "accounts::database_tests::create_keeps_the_choice_and_refuses_limit_name_and_slot",
     "persistence::migration_tests::fresh_upgrade_and_failed_second_migration_rollback",
     "persistence::tests::ownership_generation_and_atomic_fence",
     "persistence::tests::start_waits_out_a_dead_owner_and_never_takes_a_live_one",

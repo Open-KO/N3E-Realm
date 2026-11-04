@@ -113,7 +113,7 @@ with tempfile.TemporaryDirectory(prefix="n3e-front-end-choice-") as td:
     base = pathlib.Path(td)
     game = package(base, config={"front_end": "1097"})
     assert choice.choose(game, base) == dict(client="1097", recipe=game / "front-end.json", inputs=[base / "trees/a"],
-                                             names=[None], pins=[None])
+                                             names=[None], pins=[None], create=None)
 
 messages = [
     refused("front end '2145' is not one this package cooks; it cooks 1097, 1298", config={"front_end": "2145"}),

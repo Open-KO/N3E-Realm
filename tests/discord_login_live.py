@@ -226,7 +226,13 @@ try:
     assert tag == 10
     code, a = call("GET", f"/v1/accounts/{nelly_id}", bot)
     assert code == 200 and a["discord_id"] == nelly["id"] and a["discord_name"] == "Nelly" and a["online"], a
-    assert a["sessions"] == 1 and a["characters"] == [{"id": character, "name": "Nelly"}] and a["banned_at"] is None, a
+    # Each character carries what its create chose (spec 03, RQ-002): the row's own
+    # values, NULL where the package has no create rules.
+    row = sql(f"SELECT slot,nation,race,specialty FROM characters WHERE id={character}").split("|")
+    chosen = {"id": character, "name": "Nelly",
+              **{k: None if v == "" else int(v) for k, v in zip(("slot", "nation", "race", "specialty"), row)}}
+    assert chosen["slot"] == 0, row
+    assert a["sessions"] == 1 and a["characters"] == [chosen] and a["banned_at"] is None, a
     assert call("GET", f"/v1/accounts/by-discord/{nelly['id']}", bot) == (200, a)
     assert call("GET", "/v1/accounts/by-discord/1", bot)[0] == 404
     assert call("GET", "/v1/accounts/999999", bot)[0] == 404

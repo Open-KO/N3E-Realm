@@ -110,6 +110,23 @@ asset screenshots remain local under `build/ko-gameplay/`. This does not create
   is rejected; unusable nonselected source clip records are retained verbatim as data.
   A clip table without clips rejects, except for the NPC rest pose (no clip
   index; PQ-268, D-178: KO poses the joints at frame 0 when no clip starts).
+- **Rotation keys of length 0** (RQ-156; binary, 1298 `KnightOnLine.exe`). The
+  key load `00411950` reads a track's keys as they are, normalizing none; the
+  sampler `00427640` copies key i when the blend is exactly 0.0 (`006a37dc`) and
+  otherwise slerps key i toward i + 1 with `0064d002` (D3DX's: the dot `0064ce6e`,
+  negated below 0, a linear blend when 1 − dot ≤ 1e-5, else atan2 weights), which
+  gives zero from two zero keys; the joint matrix `00427a50` builds the rotation
+  with `0064cad6`, the unnormalized quaternion matrix, which is the identity for a
+  zero quaternion. So a frame on or between zero keys draws the joint unrotated:
+  it converts as the identity rotation. A blend between a zero key and a unit key
+  (t > 0) is `sin((1 − t)π/2)·a + sin(tπ/2)·b`, shorter than 1, whose matrix is
+  not a rotation; it is refused by name. Any other key off unit length is still
+  refused, and a track without a zero key samples as before. Local-asset: every
+  such key in the pinned tree is exactly (0, 0, 0, 0): the Arch Tuarek's
+  `Chr/upc_ka_at.n3joint` has 115 on each of 19 animated joints (2185), whole
+  clips 28–31, 93 and 94 (shooting and the crossbow and javelin breaths) and its
+  last key; the Barbarian's `Chr/upc_el_ba.n3joint` its last key on each of 19
+  (19), in no clip. No clip of either reaches a blend toward one.
 - Version 0 white-diffuse parts. Render flags 1 (blend with the material's
   factors), 4 (double-sided) and `0x40` (unlit) are read into a render state
   (PQ-265, D-173); flag 2 (KO's fog off) and other flags, another diffuse and

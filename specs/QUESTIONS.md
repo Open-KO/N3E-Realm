@@ -1611,9 +1611,10 @@ realm-owner settings `create.races`, `create.start`, `create.items`,
 ### Q102 — When a race's model enters the package
 
 RQ-003 makes every race's model cookable from its `UPC_DefaultLooks` row
-(`content/character-create.md`, "The realm's races (RQ-003)"). Four of the seven
-convert today: the Tuarek, the Wrinkle Tuarek, the Puri Tuarek and the El Morad female.
-The other three need KO's handling of a zero-length rotation key and of a clip at 0
+(`content/character-create.md`, "The realm's races (RQ-003)"). Five of the seven
+convert today: the Tuarek, the Wrinkle Tuarek, the Puri Tuarek, the Barbarian (since
+RQ-156) and the El Morad female. The Arch Tuarek needs skin vertices past four
+influences on the player path, and the El Morad male KO's handling of a clip at 0
 frames a second read first. Nothing draws a second race yet: the create screen
 (RQ-004), the select hall (RQ-005) and the world (RQ-007) each draw one Tuarek. The
 player scenes are about 1.4 MB a state, with 14 base states and more per class.

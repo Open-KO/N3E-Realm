@@ -552,19 +552,21 @@ it was.
 
 | Race | Parts KO sets | Faces, hairs | Converts on the player path |
 |---|---|---|---|
-| 1 Arch Tuarek | all six | 00..03, 00..02 | no: its joint has rotation keys of length 0 (2185 of them), which the reader refuses ("non-unit quaternion") |
+| 1 Arch Tuarek | all six | 00..03, 00..02 | no: 49 lower-part vertices have five joint influences, which the player's N3S1 scenes do not carry (PQ-280); its 2185 rotation keys of length 0 now read (RQ-156) |
 | 2 Tuarek | all six | 00..03, 00..02 | yes (the package's player) |
 | 3 Wrinkle Tuarek | upper, face, hands, feet | 00..03, none | yes |
 | 4 Puri Tuarek | all six, on the El Morad female joint | 00..03, 00..02 (03 unreached) | yes |
-| 11 Barbarian | all six | 00..03, 00..02 | no: 19 rotation keys of length 0 |
+| 11 Barbarian | all six | 00..03, 00..02 | yes (its 19 rotation keys of length 0 read as KO draws them, RQ-156) |
 | 12 El Morad male | all six | 00..03, 00..02 | no: clip 93, `breath_CrossBow0`, has 0 frames a second ("animation metadata") |
 | 13 El Morad female | all six | 00..03, 00..02 | yes |
 
 Every face and hair the screen reaches is opaque, as the player path draws. Every clip
 table has 136 clips, and each one the reader reads (all but the El Morad male's) has
-the clips the player cook converts. How KO
-draws a zero-length rotation key and a clip at 0 frames a second is unread; the
-reader keeps refusing both until those items read them.
+the clips the player cook converts. KO draws a joint on or between rotation keys
+of length 0 unrotated (RQ-156, binary: `00411950`, `00427640`, `0064d002`,
+`0064cad6`; `specs/KO-FINDINGS.md` §10.1), and the reader converts that frame as
+the identity rotation. How KO draws a clip at 0 frames a second is unread; the
+reader keeps refusing it.
 
 **Not in the package yet** (Q102). Only the player race's model is cooked into the
 package. `content` stays the Tuarek: a race joins it with the item that ships its

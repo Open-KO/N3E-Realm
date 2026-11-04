@@ -713,6 +713,76 @@ print(
 )
 
 
+# RQ-156: rotation keys of length 0 (the Arch Tuarek's and the Barbarian's
+# joints have them, local-asset). 1298's key load 00411950 keeps them as read;
+# the sampler 00427640 copies key i at a blend of exactly 0 and otherwise
+# slerps with 0064d002 (zero from two zero keys); the joint matrix 00427a50
+# builds its rotation with 0064cad6, the identity of a zero quaternion
+# (KnightOnLine.exe, binary). A zero frame converts as the identity; a blend
+# between a zero key and a unit one is not a rotation in KO and is refused.
+turn = [0, 0, math.sin(0.2), math.cos(0.2)]
+back = [math.sin(0.1), 0, 0, math.cos(0.1)]
+zero_track = (30, [turn, [0, 0, 0, 0], [0, 0, 0, 0], [-0.0, 0, 0, -0.0], back])
+zero_joint = joint_bytes("root", [0, 0, 0], [0, 0, 0, 1], [1, 1, 1], keys=(None, zero_track, None))
+k = ko.skeleton(zero_joint)[0]["keys"][1]
+assert k["values"][1:4] == [[0, 0, 0, 0], [0, 0, 0, 0], [-0.0, 0, 0, -0.0]], k["values"]
+assert max(abs(a - b) for a, b in zip(ko.sample(k, 0, None), turn)) < 1e-6  # a unit key beside a zero one
+assert max(abs(a - b) for a, b in zip(ko.sample(k, 4, None), back)) < 1e-6
+for frame in (1, 1.5, 2, 2.5, 3):
+    assert ko.sample(k, frame, None) == [0, 0, 0, 1], (frame, ko.sample(k, frame, None))
+for frame in (0.5, 3.5):
+    try:
+        ko.sample(k, frame, None)
+    except ValueError as error:
+        assert "between a key of length 0 and a unit key" in str(error), error
+    else:
+        raise AssertionError("blend from a zero rotation key accepted at frame %s" % frame)
+try:  # any other key off unit length is still refused
+    ko.skeleton(joint_bytes("root", [0, 0, 0], [0, 0, 0, 1], [1, 1, 1], keys=(None, (30, [turn, [0, 0, 0, 0.5]]), None)))
+except ValueError as error:
+    assert "non-unit quaternion" in str(error), error
+else:
+    raise AssertionError("rotation key of length 0.5 accepted")
+
+
+def zero_clip(start, end):
+    return ints(1, 0) + f([start, end, 30, 0, 0, 0, 0, 0]) + ints(0) + f([0, 0]) + string("zero")
+
+
+with tempfile.TemporaryDirectory() as td:
+    root = pathlib.Path(td)
+    for name, data in files.items():
+        (root / name).write_bytes(data)
+    (root / "Joint.bin").write_bytes(zero_joint)
+    (root / "Skin.bin").write_bytes(skin)
+    out = pathlib.Path("build/check/ko-zero-rotation")
+    for player in (False, True):
+        (root / "Anim.bin").write_bytes(zero_clip(1, 3))
+        ko.convert(root, "character.bin", out, 0, 1.0, player=player)
+        g = json.loads((out / "character.gltf").read_text())
+        data = (out / "character.bin").read_bytes()
+        (channel,) = g["animations"][0]["channels"]
+        assert channel["target"] == {"node": 0, "path": "rotation"}, channel
+        a = g["accessors"][g["animations"][0]["samplers"][channel["sampler"]]["output"]]
+        start = g["bufferViews"][a["bufferView"]]["byteOffset"] + a.get("byteOffset", 0)
+        rows = [list(struct.unpack_from("<4f", data, start + 16 * n)) for n in range(a["count"])]
+        assert a["count"] == 5 and rows == [[0, 0, 0, 1]] * 5, rows
+        assetc.cook(out, out.parent / "ko-zero-rotation-cooked")
+        for clip in ((0, 1), (3, 4)):
+            (root / "Anim.bin").write_bytes(zero_clip(*clip))
+            try:
+                ko.convert(root, "character.bin", out, 0, 1.0, player=player)
+            except ValueError as error:
+                assert "between a key of length 0 and a unit key" in str(error), error
+            else:
+                raise AssertionError("clip %s across a zero rotation key accepted" % (clip,))
+print(
+    "PASS rotation keys of length 0 (RQ-156): kept as read, a frame on or between them converts and cooks as the "
+    "identity rotation (gutter and no gutter), a unit key beside one samples as itself, a blend from or to one is "
+    "refused by name, any other non-unit key is still refused"
+)
+
+
 # PQ-267 (D-175): skeletons past 64 joints; PQ-283 (D-176): skin vertices past
 # four influences (evidence/pq-267-ko-character-skin-bounds.md,
 # evidence/pq-283-ko-skin-many-influences.md). KO's skin load 004286f0 reads

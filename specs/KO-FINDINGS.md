@@ -1473,6 +1473,23 @@ covers:
 
 The decisions it needs are Q94–Q99.
 
+### 10.1 A joint's rotation keys of length 0 (RQ-156, 2026-11-04)
+
+Read statically in 1298's `KnightOnLine.exe` (`build/ghidra/audit-2026-09-19`,
+`-readOnly -noanalysis`, `AuditReference.java recover`; sha256 `828ab0db…43a5e5`).
+
+| Observation | Where | Label |
+|---|---|---|
+| The key load reads the count, then (above 0) the type and the rate, and the keys as they are (12 bytes each for type 0, 16 for type 1), copying the last key one past the end. It normalizes nothing | `00411950` | binary |
+| The sampler takes i = trunc(frame / (30 / rate)) (`006a3c48`, 30.0), refuses nothing up to the count (i = count is key count − 1), and for the rotation (type 1 at `+0xd4`) copies key i when the blend `(frame − i × span) / span` equals 0.0 (`006a37dc`), and otherwise calls `0064d002(+0x2c, key i, key i + 1, blend)` | `00427640` | binary |
+| `0064d002` is the slerp: the dot (`0064ce6e`) is negated with a sign of −1 below 0.0 (`006aaad8`, `006aaae0`); when 1 − dot ≤ 1e-5 (`006aaab8`) the weights are 1 − t and t; otherwise θ = atan2(√(1 − dot²), dot) and the weights sin((1 − t)θ)/sin θ and sin(tθ)/sin θ. For two zero keys it gives zero; for one zero key, dot 0 and θ = π/2, `sin((1 − t)π/2)·a + sin(tπ/2)·b`, of length below 1 | `0064d002`, `0064ce6e` | binary |
+| The joint matrix builds the rotation from `+0x2c` with `0064cad6` when the joint has no orientation keys (`+0x144` < 1), the unnormalized quaternion matrix (2.0, `006aaad0`): 1 − 2(y² + z²) on the diagonal and so on, the identity for a zero quaternion | `00427a50`, `0064cad6` | binary |
+| Every non-unit rotation key in the pinned tree is exactly (0, 0, 0, 0): `Chr/upc_ka_at.n3joint` 2185 (115 on each of 19 joints: clips 28–31, 93 and 94 whole, and the last key), `Chr/upc_el_ba.n3joint` 19 (the last key of each), no clip of either blending toward one | the pinned tree | local-asset |
+
+**Decides (RQ-156):** a frame on or between zero keys converts as the identity
+rotation, as KO draws it; a blend toward or from one is refused by name
+(`tools/assetc/KO-CHARACTER.md`, "Rotation keys of length 0").
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

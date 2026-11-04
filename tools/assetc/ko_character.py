@@ -81,8 +81,16 @@ def key(r, kind):
         raise ValueError("animation sample rate")
     values = [r.floats(3 if kind == 0 else 4) for _ in range(n)]
     if kind == 1:
-        values = [normalized(q) for q in values]
+        # A rotation key of length 0 is kept as read (RQ-156): KO's key load
+        # 00411950 copies the keys as they are, and `sample` draws it as KO
+        # does. Any other key off unit length is refused.
+        values = [q if is_zero(q) else normalized(q) for q in values]
     return {"rate": rate, "values": values, "kind": kind}
+
+
+def is_zero(q):
+    """Whether a rotation key has length 0: all four components 0 (either sign)."""
+    return not any(q)
 
 
 def sample(k, frame, default, hold=False):
@@ -94,7 +102,17 @@ def sample(k, frame, default, hold=False):
     take i up to the count; past it KO leaves the joint unchanged, which this
     reader refuses, or, with `hold` (a clip that plays on past its keys from
     their start, RQ-086), gives the last key: the value the joint was left
-    at when the frame passed the count."""
+    at when the frame passed the count.
+
+    A rotation key of length 0 (RQ-156; KO-CHARACTER.md "Rotation keys of
+    length 0") is drawn as 1298 draws it: 00427640 copies key i when the
+    blend is exactly 0 and otherwise slerps with 0064d002, whose result from
+    two zero keys is zero; the joint matrix 00427a50 builds its rotation with
+    0064cad6, which makes the identity of a zero quaternion. Such a frame is
+    the identity rotation. A blend between a zero key and a unit one (0 < t)
+    is 0064d002's sin((1 - t) pi / 2) a + sin(t pi / 2) b, a quaternion of
+    length below 1 whose 0064cad6 matrix is not a rotation; it is refused by
+    name. A track without a zero key samples as before."""
     if k is None:
         return default[:]
     at = frame * k["rate"] / 30
@@ -106,6 +124,11 @@ def sample(k, frame, default, hold=False):
     j = min(i + 1, len(k["values"]) - 1)
     t = at - int(at)
     a, b = k["values"][i], k["values"][j]
+    if k["kind"] == 1 and (is_zero(a) or is_zero(b)):
+        if t != 0 and not (is_zero(a) and is_zero(b)):
+            raise ValueError("KO joint rotation between a key of length 0 and a unit key (not a rotation in KO)")
+        # Key i as copied (t = 0), or the slerp of two zero keys (zero).
+        return [0.0, 0.0, 0.0, 1.0] if is_zero(a) else a[:]
     return slerp(a, b, t) if k["kind"] == 1 else [x + (y - x) * t for x, y in zip(a, b)]
 
 

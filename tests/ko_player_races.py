@@ -34,8 +34,8 @@ TREE = pathlib.Path("assets/ko")
 OUT = pathlib.Path("build/ko-player-races")
 # Races the reader refuses today: (the refusal, what is open).
 OPEN = {
-    1: ("non-unit quaternion", "the joint's rotation keys of length 0 (KO's handling unread)"),
-    11: ("non-unit quaternion", "the joint's rotation keys of length 0 (KO's handling unread)"),
+    1: ("past four joint influences", "49 lower-part vertices with five joint influences, which the player's "
+        "N3S1 scenes do not carry (PQ-280)"),
     12: ("animation metadata", "clip 93 (breath_CrossBow0) at 0 frames a second (KO's handling unread)"),
 }
 

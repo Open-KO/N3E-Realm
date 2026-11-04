@@ -557,16 +557,18 @@ it was.
 | 3 Wrinkle Tuarek | upper, face, hands, feet | 00..03, none | yes |
 | 4 Puri Tuarek | all six, on the El Morad female joint | 00..03, 00..02 (03 unreached) | yes |
 | 11 Barbarian | all six | 00..03, 00..02 | yes (its 19 rotation keys of length 0 read as KO draws them, RQ-156) |
-| 12 El Morad male | all six | 00..03, 00..02 | no: clip 93, `breath_CrossBow0`, has 0 frames a second ("animation metadata") |
+| 12 El Morad male | all six | 00..03, 00..02 | yes: its clip 93, `breath_CrossBow0`, at 0 frames a second reads as KO plays it, its start frame held (RQ-157); its 57 drawn vertices past four joint influences (at most five) keep every influence, in N3SI player scenes and N3DI render detail with its parts worn (RQ-163, RQ-164) |
 | 13 El Morad female | all six | 00..03, 00..02 | yes |
 
 Every face and hair the screen reaches is opaque, as the player path draws. Every clip
-table has 136 clips, and each one the reader reads (all but the El Morad male's) has
-the clips the player cook converts. KO draws a joint on or between rotation keys
+table has 136 clips, and each has the clips the player cook converts. KO draws a joint on or between rotation keys
 of length 0 unrotated (RQ-156, binary: `00411950`, `00427640`, `0064d002`,
 `0064cad6`; `specs/KO-FINDINGS.md` §10.1), and the reader converts that frame as
-the identity rotation. How KO draws a clip at 0 frames a second is unread; the
-reader keeps refusing it.
+the identity rotation. KO holds a clip at 0 frames a second on its start frame
+(RQ-157, binary: the clip-table load `00410c00` keeps the rate as read, the clip
+start `0041be40` sets the frame to the start and the tick `00418b20` adds rate ×
+time to it; `specs/KO-FINDINGS.md` §10.2), and the reader reads it so, a selected
+one converting as that frame held.
 
 **Not in the package yet** (Q102). Only the player race's model is cooked into the
 package. `content` stays the Tuarek: a race joins it with the item that ships its

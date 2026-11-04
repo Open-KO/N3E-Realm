@@ -232,7 +232,13 @@ def animations(data, empty=False, unused_word=False):
     a clip's first word: `Intro/intro.n3anim` carries uninitialised bytes
     there. The reference's __AnimData::Load reads that word into a local
     ("where a string pointer used to be, for compatibility") and never uses
-    it. Every other caller keeps refusing a non-zero word."""
+    it. Every other caller keeps refusing a non-zero word.
+
+    A clip's frame rate may be 0 (RQ-157; KO-CHARACTER.md "Clips at 0 frames
+    a second"): 1298's clip-table load 00410c00 stores the field as read,
+    and the frame tick 00418b20 adds rate x time to a frame the clip start
+    0041be40 set to the clip's start, so such a clip holds its start frame.
+    A rate below 0 or past 120, or not finite, is still refused."""
     r = Reader(data)
     out = []
     n = r.integer()
@@ -247,7 +253,7 @@ def animations(data, empty=False, unused_word=False):
         flags = r.integer()
         strike = r.floats(2)
         name = r.string()
-        if (reserved and not unused_word) or not all(0 <= f <= 100000 for f in v[:2]) or not 0 < v[2] <= 120:
+        if (reserved and not unused_word) or not all(0 <= f <= 100000 for f in v[:2]) or not 0 <= v[2] <= 120:
             raise ValueError("animation metadata")
         out.append(
             {
@@ -812,7 +818,17 @@ def convert(root, source, out, clip_index=1, meters=1.0, definition=None, player
     # end or back to the start (no length to wrap by), the same frame, and
     # 00418e00 poses every joint at that frame. It converts as two identical
     # keys one 60 Hz sample apart.
-    held = clip["end"] == clip["start"]
+    # A clip at 0 frames a second (RQ-157) is held at its start too: the tick
+    # adds 0 x time to the frame 0041be40 set to the start, so the frame never
+    # leaves it (nor passes an end above it: KO never counts the clip played,
+    # where a converted held clip loops). A strike frame the markers would
+    # time (one in the clip, above 0) is refused by name on such a clip: what
+    # KO's strike tests do with a frame that never moves is unread, and the
+    # pinned tree's one such clip has none.
+    still = clip["fps"] == 0
+    if still and any(clip["start"] <= f <= clip["end"] and f > 0 for f in clip["strike"]):
+        raise ValueError("strike frame on a clip at 0 frames a second")
+    held = clip["end"] == clip["start"] or still
     duration = HELD_SECONDS if held else (clip["end"] - clip["start"]) / clip["fps"]
     samples = 2 if held else math.ceil(duration * 60) + 1
     count(samples, 4096, 2)

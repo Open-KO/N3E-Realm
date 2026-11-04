@@ -1490,6 +1490,26 @@ Read statically in 1298's `KnightOnLine.exe` (`build/ghidra/audit-2026-09-19`,
 rotation, as KO draws it; a blend toward or from one is refused by name
 (`tools/assetc/KO-CHARACTER.md`, "Rotation keys of length 0").
 
+### 10.2 A clip at 0 frames a second (RQ-157, 2026-11-04)
+
+Read statically in 1298's `KnightOnLine.exe` (`build/ghidra/audit-2026-09-19`,
+`-readOnly -noanalysis`, `AuditReference.java decompile`; sha256 `828ab0db…43a5e5`).
+
+| Observation | Where | Label |
+|---|---|---|
+| The clip-table load presets each clip's third field to 30.0 (`0x41f00000`) and reads the file's value over it with the other ten, checking none, then appends the 0x3c-byte record | `00410c00` | binary |
+| The clip start sets the current frame (`+0x1dc`) to the record's start (`+0x10`) and the blend time from the record (`+0x2c`) or the caller | `0041be40` | binary |
+| With no blend running, the frame tick adds the frame time (`006d3ab0`, §9.15) × the speed (`+0x220`) × the record's rate (`+0x18`) to the frame, raises it to the start, and only once it passes the end (`+0x14`) holds it on the end for the freeze time (`+0x1f4`, the clip start's `freeze` argument) or, that done, counts the clip played (`+0x1e4`) and stops it on the end (once), marks it for a re-blend to the start (flag bit 0: `+0x1d9`, which the next tick turns into a blend from `+0x2c` with the frame back on the start, only once the clip has been counted played) or wraps it by its length. The upper-body controller (`+0x1f8`) ticks the same way | `00418b20` | binary |
+| So at rate 0 the frame stays on the start: the joints hold the start frame while the clip is current, and the clip is never counted played | `00410c00`, `0041be40`, `00418b20` | inference from the three |
+| The pinned tree's one clip at rate 0 is `Chr/upc_el_rm.n3anim` clip 93, `breath_CrossBow0` (frames 4972–5012, strikes −4979.4 and 0, sound frames −4980 and 0); the 1298 tree has no other clip whose rate is outside 0 < rate ≤ 120 | the pinned tree | local-asset |
+
+**Decides (RQ-157):** the clip table reads a clip at rate 0; a selected one converts
+as its start frame held, as PQ-273's one-frame clips (n3e's held clip loops, KO's
+never ends); a strike frame inside it, and a sound frame inside it where `ko_audio`
+times sounds, is refused by name (`tools/assetc/KO-CHARACTER.md`, "Clips at 0 frames
+a second"). The El Morad male
+cooks.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

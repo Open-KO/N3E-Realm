@@ -137,6 +137,16 @@ with tempfile.TemporaryDirectory(prefix='n3e-skills-')as root:
  try:ko_audio.pcm(stream.getvalue()[:-1])
  except ValueError:pass
  else:raise AssertionError('truncated PCM accepted')
+ # RQ-157: sound frames inside a clip are timed from its start at its rate;
+ # a clip at 0 frames a second never leaves its start frame (00418b20), so a
+ # sound frame inside one is refused by name, one outside it ignored.
+ clip=dict(start=10.0,end=40.0,fps=30.0,blend_seconds=0.25,sound=[25.0,10.0])
+ assert ko_audio.sound_times(clip)==[0.25+15/30],ko_audio.sound_times(clip)
+ assert ko_audio.sound_times(dict(clip,fps=0.0,sound=[-4980.0,0.0]))==[]
+ for sound in ([25.0,0.0],[0.0,40.0]):
+  try:ko_audio.sound_times(dict(clip,fps=0.0,sound=sound))
+  except ValueError as error:assert 'sound frame on a clip at 0 frames a second' in str(error),error
+  else:raise AssertionError('sound frame on a clip at 0 frames a second timed')
  # PQ-013: N3A2 positional policy, cooker and native reader agree on bounds.
  audio=pathlib.Path(root)/'audio.bin'
  body=u(48000)+u(1)+u(1)+u(2)+b'\0\0\0\0'+u(0)+u(0)

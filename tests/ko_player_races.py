@@ -41,9 +41,7 @@ import main  # noqa: E402
 TREE = pathlib.Path("assets/ko")
 OUT = pathlib.Path("build/ko-player-races")
 # Races the reader refuses today: (the refusal, what is open).
-OPEN = {
-    12: ("animation metadata", "clip 93 (breath_CrossBow0) at 0 frames a second (KO's handling unread)"),
-}
+OPEN = {}
 
 if not (TREE / "Data/UPC_DefaultLooks.tbl.csv").is_file():
     print("SKIP ko_player_races: no pinned client tree at assets/ko (make ko-assets)")

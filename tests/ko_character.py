@@ -346,6 +346,65 @@ print(
 )
 
 
+# RQ-157: a clip at 0 frames a second (the El Morad male's clip 93,
+# breath_CrossBow0, local-asset). 1298's clip-table load 00410c00 stores the
+# rate as read; the tick 00418b20 adds rate x time to the frame the clip start
+# 0041be40 set to the clip's start, so the frame stays there (binary;
+# KO-CHARACTER.md "Clips at 0 frames a second"). The table reads; the clip
+# converts as its start frame held, as PQ-273's; a strike frame in it is
+# refused by name; a rate below 0, past 120 or not finite is still refused.
+with tempfile.TemporaryDirectory() as td:
+    root = pathlib.Path(td)
+    for name, data in files.items():
+        (root / name).write_bytes(data)
+    out = pathlib.Path("build/check/ko-still")
+    head = ints(3) + animation[4:-len(string("turn"))] + string("turn")
+    table = head + clip(0.5, 1, 0, 0) + clip(0, 1, 0, 0.5)
+    assert [c["fps"] for c in ko.animations(table)[1:]] == [0.0, 0.0], ko.animations(table)
+    for rate in (-1, -1e-30, 120.5, math.nan, math.inf, -math.inf):
+        try:
+            ko.animations(ints(1) + clip(0, 1, rate, 0))
+        except ValueError as error:
+            assert ("animation metadata" if math.isfinite(rate) else "invalid vector") in str(error), (rate, error)
+        else:
+            raise AssertionError("clip rate %r accepted" % rate)
+    ko.convert(root, "character.bin", out, 0, 1.0)
+    assert outputs(out) == UNCHANGED, outputs(out)
+    (root / "Anim.bin").write_bytes(table)
+    try:
+        ko.convert(root, "character.bin", out, 2, 1.0)
+    except ValueError as error:
+        assert "strike frame on a clip at 0 frames a second" in str(error), error
+    else:
+        raise AssertionError("strike frame on a clip at 0 frames a second accepted")
+    for player in (False, True):
+        # Frame 0.5 is a quarter turn about z (converted basis (-x, -y, z, w)).
+        report = ko.convert(root, "character.bin", out, 1, 1.0, player=player)
+        assert report["duration_seconds"] == 1 / 60 and report["held_frame"] == 0.5, report["duration_seconds"]
+        g = json.loads((out / "character.gltf").read_text())
+        data = (out / "character.bin").read_bytes()
+        (sampler,) = g["animations"][0]["samplers"]
+        times, values = (g["accessors"][sampler[k]] for k in ("input", "output"))
+        assert times["count"] == values["count"] == 2, (times, values)
+        view = g["bufferViews"][values["bufferView"]]
+        for i in range(2):
+            q = struct.unpack_from("<4f", data, view["byteOffset"] + 16 * i)
+            assert max(abs(a - b) for a, b in zip(q, [0, 0, math.sin(math.pi / 4), math.cos(math.pi / 4)])) < 1e-6, q
+        assert json.loads((out / "scene.json").read_text())["markers"] == []
+        metadata = ko.animation_metadata(report)
+        assert metadata["duration"] == 1 / 60 and metadata["markers"] == [-1, -1], metadata
+        cooked = out.parent / "ko-still-cooked"
+        assetc.cook(out, cooked)
+        text = subprocess.check_output(["build/client/n3e-asset-check", str(cooked)], text=True).splitlines()
+        poses = [list(map(float, line.split()))[1:] for line in text[1:6]]
+        assert all(max(abs(a - b) for a, b in zip(p, poses[0])) < 1e-6 for p in poses), poses
+print(
+    "PASS clips at 0 frames a second (RQ-157): the table reads, the clip converts and cooks as its start frame held "
+    "(gutter and no gutter, no marker), a strike frame in it refused by name, rates below 0, past 120 or not "
+    "finite refused, a clip with a rate at its pin"
+)
+
+
 # PQ-265 (D-173): part render states. KO's part renderer 00412570 acts on the
 # material's flags 1 (blend with the material's factors), 4 (cull off) and
 # 0x40 (lighting off; 2, fog off, is refused: not carried), and every part is

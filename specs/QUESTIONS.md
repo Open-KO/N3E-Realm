@@ -1616,7 +1616,9 @@ convert today: the Tuarek, the Wrinkle Tuarek, the Puri Tuarek, the Barbarian (s
 RQ-156) and the El Morad female. The Arch Tuarek needs skin vertices past four
 influences on the player path, and the El Morad male KO's handling of a clip at 0
 frames a second read first. (RQ-163: the Arch Tuarek converts too, its player scenes
-N3SI, engine 43; RQ-164: its render detail and 1298 appearance parts N3DI, engine 44.) Nothing draws a second race yet: the create screen
+N3SI, engine 43; RQ-164: its render detail and 1298 appearance parts N3DI, engine 44.
+RQ-157: the El Morad male converts too, KO holding its 0 fps clip on the start frame;
+its scenes are N3SI and its render detail N3DI, as the Arch Tuarek's.) Nothing draws a second race yet: the create screen
 (RQ-004), the select hall (RQ-005) and the world (RQ-007) each draw one Tuarek. The
 player scenes are about 1.4 MB a state, with 14 base states and more per class.
 

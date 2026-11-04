@@ -6,6 +6,16 @@ import audio_spatial, ko_character, ko_player
 
 RATE=48000
 
+def sound_times(clip):
+    """The seconds after a clip starts at which its sound frames play (each
+    frame inside the clip, past its start). A clip at 0 frames a second
+    (RQ-157) never moves its frame off the start (00418b20), so a sound frame
+    inside it is refused by name rather than timed; what KO's sound test does
+    on a frame that never moves is unread."""
+    timed=[n for n in clip['sound'] if clip['start']<n<=clip['end']]
+    if timed and clip['fps']==0:raise ValueError('sound frame on a clip at 0 frames a second')
+    return [clip['blend_seconds']+(n-clip['start'])/clip['fps'] for n in timed]
+
 def pcm(data):
     if len(data)>4*1024*1024:raise ValueError('WAV byte bound')
     with wave.open(io.BytesIO(data)) as w:
@@ -69,8 +79,7 @@ def cook(assets,effects,hud,out,item_icons=None,extra=None):
     npc=ko_character.animations(assets.get('Chr/mob_worm.n3anim'))
     config=json.loads(Path('games/moradon/combat-animation.json').read_text())
     timings=[]
-    def markers(clip):
-        return [clip['blend_seconds']+(n-clip['start'])/clip['fps'] for n in clip['sound'] if clip['start']<n<=clip['end']]
+    markers=sound_times
     for style,profile in enumerate(config['profiles'],1):
         for variant,index in enumerate(profile['attacks'],1):timings.append((style,variant,markers(player[index])))
         timings.append((style,3,markers(player[profile['moving']])))

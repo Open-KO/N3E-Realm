@@ -105,7 +105,8 @@ asset screenshots remain local under `build/ko-gameplay/`. This does not create
   (evidence). Imported clip is
   resampled at 60Hz with LINEAR translation/shortest-arc SLERP. Bind pose is source
   frame 0, independent of the selected clip's start. A selected clip whose end equals
-  its start is KO's held pose (clip start `0041be40`, tick `00418b20`; PQ-273) and
+  its start, or whose rate is 0 (RQ-157, below), is KO's held pose (clip start
+  `0041be40`, tick `00418b20`; PQ-273) and
   converts as two equal keys 1/60 s apart, recorded as `held_frame`; a reversed clip
   is rejected; unusable nonselected source clip records are retained verbatim as data.
   A clip table without clips rejects, except for the NPC rest pose (no clip
@@ -127,6 +128,27 @@ asset screenshots remain local under `build/ko-gameplay/`. This does not create
   clips 28–31, 93 and 94 (shooting and the crossbow and javelin breaths) and its
   last key; the Barbarian's `Chr/upc_el_ba.n3joint` its last key on each of 19
   (19), in no clip. No clip of either reaches a blend toward one.
+- **Clips at 0 frames a second** (RQ-157; binary, 1298 `KnightOnLine.exe`). The
+  clip-table load `00410c00` presets a clip's rate to 30.0 and overwrites it with
+  the file's third field, checking nothing; the clip start `0041be40` sets the
+  frame (`+0x1dc`) to the clip's start (`+0x10`); the frame tick `00418b20`, once
+  no blend runs, adds time × speed × the rate (`+0x18`) to the frame, raises it to
+  the start and acts on the end (`+0x14`) only once the frame passes it. At rate 0
+  the frame stays on the start: the joints hold the start frame for as long as
+  the clip is current, and the clip is never counted played (`+0x1e4`): the
+  freeze time at the end (`+0x1f4`, the clip start's `freeze` argument) never runs down,
+  and a flag-bit-0 clip never re-blends to its start (`+0x1d9`, the blend from
+  `+0x2c`), both waiting on the frame passing the end. The clip table reads such a clip,
+  and a selected one converts as its start frame held (two equal keys 1/60 s
+  apart, `held_frame`, as PQ-273's): the pose KO shows, though n3e's held clip
+  loops where KO's never ends. A strike frame inside such a clip (above 0) is
+  refused by name, KO's strike tests on a frame that never moves being unread, and
+  so is a sound frame inside it where `ko_audio` times one ("sound frame on a clip
+  at 0 frames a second"); a
+  rate below 0, above 120 or not finite is still refused. Local-asset: the
+  pinned tree's one such clip is the El Morad male's `Chr/upc_el_rm.n3anim`
+  clip 93, `breath_CrossBow0` (frames 4972–5012, strikes −4979.4 and 0, sound frames −4980 and 0), which
+  no player state converts; the Arch Tuarek's clip 93 holds zero keys (above).
 - Version 0 white-diffuse parts. Render flags 1 (blend with the material's
   factors), 4 (double-sided) and `0x40` (unlit) are read into a render state
   (PQ-265, D-173); flag 2 (KO's fog off) and other flags, another diffuse and

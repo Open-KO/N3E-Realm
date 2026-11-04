@@ -1270,3 +1270,24 @@ before login holds its pre-auth slot this long without sending (two seconds befo
 bounded per source by `N3E_IP_MAX_CONCURRENT`; a dead client in the world is still
 caught sooner by the 2 s write bound once its socket buffers fill. The client's own
 2 s bound on a frame it has begun to receive (`client/network/world.cpp`) is unchanged.
+
+### Q89 — The 1097 choice's chosen race and class: the on image or the down image
+
+RQ-134 (KO-FINDINGS §9.16) read 1264's create, which the 1097 choice draws: its chosen
+race and class draw `UI_STATE_BUTTON_DOWN` (`0043ec90`, `0043ee10`), the layout's
+`BS_DOWN` tile, and 1264 never draws a chosen button with its `BS_ON` tile (that is a
+NORMAL button's under the pointer). The 1097 choice keeps the Tuarek and the priest
+chosen from the open (Q52) with the fixed `on` state, which draws `BS_ON`. Both tiles
+are the same pink; `BS_ON` has the normal buttons' raised bevel, `BS_DOWN` a sunken
+one (a dark inner shadow along the top and left), visible side by side (a third of the
+pixels differ by more than 32 in a channel). Options: (a) keep the on image (the
+realm's look today); (b) draw the down image, as 1264's chosen buttons, the race and
+class still chosen from the open (Q52): a cook-side change (the fixed state's mask bit
+on the down image), or a recipe state `down`, with no change to the realm's flow;
+(c) wait for the race and class clicks as 1264 does (each open with none chosen, the
+class buttons hidden for their images until a race), which draws down through RQ-130's
+`create_race` and `create_class` but changes the create's flow, not only its look
+(1264's Create without a race or class was not read).
+**Default taken:** none applied; (b) proposed, the look 1264 shows for the same
+choice, with nothing else changed. The 1097 choice is unchanged until the maintainer
+answers.

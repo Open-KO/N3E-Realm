@@ -1291,6 +1291,36 @@ warrior and mage before the race click, the rogue after); at rest they look as
 1298's, the disabled image being the normal one. No look is added: the images and
 buttons are the layout's own. The 1097 choice names none and is unchanged.
 
+### 9.16 1264's chosen race and class draw down (RQ-134, 2026-11-03)
+
+The realm's fixed `on` draws a button's `BS_ON` image; 1298's chosen race and class
+draw `UI_STATE_BUTTON_DOWN` (RQ-130, above). The 1097 choice draws 1264's create
+(§9.2), its Tuarek and priest fixed `on` (Q52), so this reads 1264's. Read in §9.1's
+1264 image (`ko1264-unpacked.exe`, sha256 `61e9a086…99e136471`) in the same Ghidra
+project (`build/ghidra/rq096`, `-readOnly -noanalysis`, output under
+`build/ghidra/rq134/`, not committed; `objdump` for the button class), with the 1264
+install's `Ka_CharacterCreate_us.uif` (`4a1b072a…`), `ui_ka_charcreate02_us.dxt`
+(`6f0ef999…`, the pinned tree's byte for byte) and `ui_el_charcreate01_us.dxt`
+(`e5a83809…`), decoded by `ko_hud`, and the realm's own capture of the 1097 choice's
+create (`make live-ko`, `build/live-ko/front-end/1024x768.create.ppm`, not committed).
+Not run: 1264 reaches create only from a game server's select, and the static read
+leaves nothing open.
+
+| Observation | Where | Label |
+|---|---|---|
+| **1264's button draws one image per state, as the source's.** The button (vtable `006484e8`, constructor `00403820`: state `+0x74` 2, style `+0x78` `0x10000`) keeps its state images at `+0xb4`–`+0xc0` by each image's reserved index (Load `00403e70`: an image child whose `+0x7c` is under 4 goes to `+0xb4` + 4 × index, `00403ed5`–`00403ee6`; `ko_hud`'s slot). Render (`00403a70`, a jump table at `00403b0c` on the state − 2) draws state 2 with index 0 (`BS_NORMAL`), 3, 4 and 5 with index 1 (`BS_DOWN`), 6 with index 2 (`BS_ON`) and 7 with index 3 (`BS_DISABLE`), each only when present; SetState (`+0x34`, `00403710`) stores the state. MouseProc (`00403b30`) turns a NORMAL button under the pointer ON (`00403d42`–`00403d51`) | 1264 `00403820`, `00403e70`, `00403a70`, `00403710`, `00403b30`; source `N3UIButton.cpp` `Render`, `MouseProc` | binary; source |
+| **The chosen race and class draw down.** `0043ec90` (the source's `UpdateRaceAndClassButtons`) starts the race buttons (`+0xb8`–`+0xc4`) at 2 and the class buttons (`+0xc8`–`+0xd4`) at 7, then sets the chosen race to 3 (`UI_STATE_BUTTON_DOWN`) and its classes to 2 (Karus 1 the warrior, 2 the rogue and priest, 3 the mage, 4 the priest; El Morad 11 the warrior, 12 and 13 all four), stores the race at the player's `+0x398` and −1 at its class `+0x3a0`, sets each button's state, and shows each class's `img_*` (`+0xd8`–`+0xe4`) only when its state is 7 and the button only when it is not. `0043ee10` (`UpdateClassButtons`) sets the class buttons to 2 and the chosen class (101–104, 201–204) to 3, and shows its stat labels (`+0xe8`…). Neither sets 6 (ON) | 1264 `0043ec90`, `0043ee10` | binary |
+| **The clicks call them; each open starts with none.** ReceiveMessage (`0043dfc0`) sets the race for a race button by nation (`+0x39c`), calls SetChr (`00439970`) only when the race changed, then `0043ec90(race)`; a class button sets the class and calls `0043ee10(class)` (`0043e310`). SetChr calls Reset (`0043ea10`), `0043ec90` and `0043ee10` (`0043a077`–`0043a093`). The create Init (`00439550`) sets race and class to −1 each time; Load (`0043cd00`) calls Reset (`0043dbf9`), which shows the four class images and hides the four class buttons, and the race buttons keep the constructor's 2: 1264's create opens with no race or class chosen | 1264 `0043dfc0`, `00439970`, `0043ea10`, `00439550`, `0043cd00` | binary |
+| **The down and on images differ: sunken against raised.** The layout's race and class buttons are check buttons (style `0x00020000`). The Tuarek's states 0 and 3 are the grey tile at (0, 74) of `ui_ka_charcreate02_us.dxt`, its on (2) the pink tile at (195, 74), its down (1) the pink tile at (0, 404); the priest's on is at (195, 222) and its down at (195, 369) (194 × 36 each, unlabelled; the labels are root strings drawn over the buttons in every state). Both pinks are the same colour; the on tile has the normal tile's raised bevel (light top and left, dark bottom and right), the down tile a sunken one (a dark inner shadow along the top and left). A third of the pixels (0.32) differ by more than 32 in a channel between on and down, a mean of 37.6 of 255 | `UI_US/Ka_CharacterCreate_us.uif`, `ui_ka_charcreate02_us.dxt` (decoded and viewed) | local-asset |
+| **The realm draws the on tiles.** In the 1097 choice's create at 1024 × 768 (the root at (0, −10)), 6,507 of the Tuarek button's 6,984 pixels are its on tile's (the rest under its label), 6,567 of the priest's; the down tiles match 2,823 and 2,879 at best | `build/live-ko/front-end/1024x768.create.ppm` against the tiles | local-asset |
+| **Two more differences on the same buttons.** The Puri Tuarek (`btn_race_ka_pt`, style `0x10000`) has no texture on its disabled image, so the realm's fixed disabled draws only its label where 1264, which never disables a race button, draws its normal tile (`ui_el_charcreate01_us.dxt`, v 0.703–0.773). And after a Tuarek click 1264 hides the warrior and mage buttons for their `img_*` (darker grey tiles of `ui_el_charcreate01_us.dxt`, v 0.414–0.484 and 0.559–0.629), where the 1097 choice draws those buttons fixed disabled, their normal grey tile (RQ-133 carried 1298's for the 1298 recipe) | `0043ec90`; the layout and textures above | binary; local-asset |
+
+**Decides nothing yet (Q89):** 1264 never draws a chosen race or class with its on
+image; the on image is only a NORMAL button's under the pointer. The realm's chosen
+Tuarek and priest look raised where 1264's look pressed in, the same pink. Changing
+it is look and feel, put to the maintainer one by one (Q89); the 1097 choice is
+unchanged. The Puri Tuarek and the class images are proposed as their own items.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -1316,4 +1346,5 @@ notes.
 | Q82 | §9.2 (RQ-101): 1264's logo procedure runs first, once a process: three groups fading in, holding and fading out on black over 12 s, `Snd\bless.wav` from 1 s faded out over 4 s from the third, any key skipping to the login, the cursor hidden; the 1097 choice shows it (N3FE version 9). §9.3 (RQ-106): KO draws every front-end layout unscaled, placed by the screen's size (the login on the bottom edge, the server list at the top-left, the select's buttons on the bottom edge, create, loading, the message box and the logo centred), the 3D scenes filling the screen; the realm does the same (N3FE version 11). |
 | Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. §9.2 (RQ-102): 1264 titles its login answer's and its create failures; the 1097 choice gives the realm's matching messages KO's title and wording (N3FE version 10) and leaves the rest untitled. |
 | Q75 | §9.1 (RQ-096): 1264's login tick keeps 1097's timer (`007ac9d0`, written only by the tick), so in both a return to the login is silent until it passes 21.66 s. RQ-096 made the realm do the same; RQ-105 (maintainer) starts the track at once on every entry instead and keeps the carried clock off by default. |
+| Q89 | §9.16 (RQ-134): 1264's chosen race and class draw `UI_STATE_BUTTON_DOWN` (`0043ec90`, `0043ee10`), the layout's sunken pink tile; the 1097 choice's fixed `on` draws the raised pink on tile. Open: the maintainer's look-and-feel choice. |
 | Q72 | §9.10 (RQ-120, correcting §8.2): 1097 and 1264 (and 1298, RQ-121) clear the UI flag from the select request until the main procedure, so no arrow, ESC or button reaches the select during the start clip; only the tick's ENTER skips it. RQ-121 (the maintainer) makes the realm's ESC and Exit do nothing then too. §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077), as RQ-120 corrects it: DoJobLeft and DojobRight would start a turn from state 3, but no arrow reaches them during the clip; the realm ignores them then too. |

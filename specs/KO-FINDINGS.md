@@ -1291,6 +1291,36 @@ warrior and mage before the race click, the rogue after); at rest they look as
 1298's, the disabled image being the normal one. No look is added: the images and
 buttons are the layout's own. The 1097 choice names none and is unchanged.
 
+**The stat labels after a priest click (RQ-143, 2026-11-04).** Read from RQ-125's
+decompile (`build/ghidra/rq125/`, n3e's project `audit-2026-09-19`, `-readOnly
+-noanalysis`, the client `KnightOnLine.exe` sha256 `828ab0db…0e643a5e5`, not
+committed): the class click's `006062d0`, the panel texts `00605950`, the reset
+`006066b0`, Load `00603850` (its listing for the stack slots), the build `005fd120`
+and ReceiveMessage `00604f90`; the label names read from the image's `.rdata`; with
+the pinned layout and the realm's capture of the 1298 recipe's create (`make
+live-ko`, `build/live-ko/front-end/1298-1024x768.create.ppm`, sha256
+`c7cd4123…0f6935d8`, and the 1280×1024 and 1600×1200 shots, not committed). Not run
+(1298 is never run). The source has neither name.
+
+| Observation | Where | Label |
+|---|---|---|
+| **Load keeps two label sets in the order str, dex, sta, int, map.** One loop of five finds `str_01`, `dex_01`, `sta_01`, `int_01`, `map_01` (strings `006d8968`–`006d8948`) at `+0x10c`–`+0x11c`, `str_02` … `map_02` (`006d8940`–`006d8920`) at `+0x120`–`+0x130`, the `text_*` values at `+0x134`–`+0x144` and the `area_*` tooltips at `+0x148`–`+0x158` (rows `0xc93`, `0xc82`, `0xc94`, `0xc8a`, `0xc81`) | 1298 `00603850` (`00603e94`–`00604479`) | binary |
+| **Each pair is a cream label over a cyan copy.** In `Group_class` each `*_02` (Arial 12 bold, 0xff80ffff) comes right before its `*_01` (the same font and text, 0xfffdf8d0) in the same rect: "STR", "DEX", "HP", "INT", "MP" at x 32–89, y 320, 354, 390, 424, 458 (22 high). Drawn in file order, so a shown `*_01` covers its `*_02`'s glyphs; a hidden one leaves the cyan | `UI_US/co_characterCreate_us.uif` (`f918867a…3868d2e4`); source `N3UIBase.cpp` | local-asset; source |
+| **A class click hides its class's two cream labels.** `006062d0(class)` sets each `+0x10c`… node visible when its flag is clear (`SETZ`, vtable `+0x3c`): flags 0 and 2 for the warrior (101, 201), 1 and 2 for the rogue, 3 and 4 for the mage, 0 and 3 for the priest (104, 204), none for −1. So after a priest click `str_01` and `int_01` hide and "STR" and "INT" read cyan, "DEX", "HP" and "MP" cream. It never touches the `*_02` set | 1298 `006062d0` (`006063aa`–`006063b0`) | binary |
+| **Each open and each build show all ten.** `00605950` shows `+0x10c`–`+0x130` (vtable `+0x3c` with 1) and writes the five values (`+0x134`…, vtable `+0x7c`, from the player's `+0x830`…); the reset `006066b0` calls it, then writes the five values and `text_bonus` (`+0x160`) empty (`006dfe28`). The build `005fd120` calls `00605950`, `006060f0(race)` and `006062d0` with the player's class as it stands (`+0x494`, which it never writes), so a race click (class −1) leaves all five cream. A class click runs `006062d0(class)` and, on a change, the build, which ends with the same call; a build with no race (a class clicked first) returns before `00605950`. `006060f0` touches no label | 1298 `00605950`, `006066b0`, `005fd120`, `00604f90`, `006060f0` | binary |
+| **A race click on the same race keeps the cyan.** ReceiveMessage sets the class to −1 on every race click but builds only when the race changes, so after Tuarek, priest, Tuarek the priest button is NORMAL again (`006060f0`) and "STR" and "INT" stay cyan until the next build or open | 1298 `00604f90` | binary |
+| **The realm draws all five cream throughout.** The 1298 recipe hides none of the ten and has no state that changes them. In the open shot (no race, no class) each rect's text is cream: 175, 194, 136, 139 and 159 near-cream pixels in the STR, DEX, HP, INT and MP rects and at most one cyan-leaning pixel at 1024×768, within three pixels of that at the other two sizes; no live suite shoots the create after a class click | `build/live-ko/front-end/1298-*.create.ppm`; `games/moradon/front-end-1298.json` | local-asset |
+
+So at each open and after the race click 1298 and the realm both read five cream
+labels; after the priest click 1298 reads "STR" and "INT" cyan (0x80ffff), where the
+realm stays cream. Side by side: `build/ghidra/rq143/create-stat-labels-1298.png` (not
+committed; left the 1024×768 capture, right the same with each STR and INT text pixel
+redrawn cyan at a coverage fitted against the cream over a local background, as
+1298's `str_02` and `int_02` alone would draw). Also on this frame, not this item:
+1298's build fills the five values (`00605950`), which the realm leaves empty (Q52;
+RQ-135 reads that function's texts). **Decided nothing at RQ-143 (Q93):** a
+look-and-feel difference, put to the maintainer.
+
 ### 9.16 1264's chosen race and class draw down (RQ-134, 2026-11-03)
 
 The realm's fixed `on` draws a button's `BS_ON` image; 1298's chosen race and class
@@ -1434,4 +1464,5 @@ notes.
 | Q90 | §9.16 (RQ-134): the 1264 layout's Puri Tuarek has an untextured `BS_DISABLE` image, so the realm's fixed disabled drew only its label; 1264 never disables a race button (`0043ec90`). RQ-139 (the maintainer's): the 1097 choice leaves it unfixed and unbound, drawing its `BS_NORMAL` grey tile, inert as the other race buttons. |
 | Q91 | §9.16 (RQ-140): after a Tuarek and a priest click 1264 shows `img_warrior` and `img_mage` (darker grey tiles) for the warrior and mage buttons, the rogue a live NORMAL button and the priest down (`0043ec90`, `0043ee10`); the 1097 choice drew the warrior, rogue and mage fixed disabled in their normal grey tile. RQ-142 (option (b), the maintainer's): the 1097 choice hides the warrior and mage buttons for their images and hides `img_rogue` and `img_priest`, the rogue still inert, race and class still chosen from the open. |
 | Q92 | §9.16 (RQ-141): after a priest click 1264 shows `img_str` and `img_int` (`0043ee10(104)`), pink copies drawn over the light "Strength" and "Intelligence"; each open hides all five (`0043ea10`). The 1097 choice hid all five, so its labels were all light. RQ-144 (option (b), the maintainer's): the 1097 choice draws `img_str` and `img_int` and hides the other three, the stat values still empty. |
+| Q93 | §9.15 (RQ-143): 1298's create has a cream (`*_01`) and a cyan (`*_02`) copy of each stat label in one rect, cream drawn last; each open and build shows all ten (`00605950`), and a class click hides its class's two cream ones (`006062d0`), so after the priest click "STR" and "INT" read cyan; a click on the same race keeps them so (no build). The 1298 recipe draws all five cream throughout. |
 | Q72 | §9.10 (RQ-120, correcting §8.2): 1097 and 1264 (and 1298, RQ-121) clear the UI flag from the select request until the main procedure, so no arrow, ESC or button reaches the select during the start clip; only the tick's ENTER skips it. RQ-121 (the maintainer) makes the realm's ESC and Exit do nothing then too. §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077), as RQ-120 corrects it: DoJobLeft and DojobRight would start a turn from state 3, but no arrow reaches them during the clip; the realm ignores them then too. |

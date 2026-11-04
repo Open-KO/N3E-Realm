@@ -1383,3 +1383,33 @@ values stay empty (Q52). Package data only: no cook, format or client change;
 `make live-ko` finds pink text in the two rects and only light text in the other
 three at each size. The 1298 recipe is unchanged (its stat labels are their own
 item).
+
+### Q93 — The 1298 recipe's stat labels after the priest click: all cream or 1298's cyan pair
+
+RQ-143 (KO-FINDINGS §9.15): 1298's create layout draws each stat label twice in one
+rect, a cyan (0x80ffff) `*_02` and then a cream (0xfdf8d0) `*_01` with the same text.
+Each open and each character build show all ten (`00605950`), so the labels read
+cream; a class click hides its class's two cream copies (`006062d0`), so after the
+priest click "STR" and "INT" read cyan and "DEX", "HP" and "MP" cream. The 1298
+recipe hides none and changes none, so the realm reads five cream labels throughout:
+the same as 1298 at the open and after the race click, different after the priest
+click. Side by side: `build/ghidra/rq143/create-stat-labels-1298.png` (not committed;
+the newest `make live-ko` 1298 create capture, STR and INT redrawn cyan by a fitted
+coverage).
+Options: (a) keep the realm's look (five cream labels after the priest click too);
+(b) match 1298: "STR" and "INT" turn cyan on the priest click and cream again when
+a race click unchooses the class or create opens again. Unlike Q92 (b) this is not
+package data alone, because the 1298 recipe waits for the class click (Q87 (b)): it
+needs a create node drawn only while the class is not chosen (a format version and
+node flag beside version 22's `until_race`, say an `until_class` list naming
+`str_01` and `int_01`, in a create that binds `create_class`), with the cook and
+`make live-ko` checks to match. One edge would still differ: 1298 builds only when
+the race changes, so a second click on the already chosen Tuarek unchooses the
+priest but leaves "STR" and "INT" cyan, where (b) would turn them cream (exact would
+mean keeping the class's labels until the next build or open; the realm has one race,
+so that is a re-click on the Tuarek).
+Either way the five stat values stay empty (Q52), where 1298's build fills them
+(`00605950`, RQ-135's function), and `text_bonus` stays hidden; that is not this
+question. The 1097 choice (Q92) is unchanged.
+**Default taken:** none applied; (b) proposed, the look 1298 shows for the same
+clicks, as Q87 (b) and Q92 (b) were taken, the re-click edge left to the maintainer.

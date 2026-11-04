@@ -337,6 +337,35 @@ if chosen == "1097":
     assert sorted(DOWN) == ["btn_class_priest", "btn_race_ka_tu"], sorted(DOWN)
 
 
+# RQ-139 (KO-FINDINGS 9.16, the maintainer's "Grey button, as 1264"): a create
+# button the chosen recipe leaves unfixed and unbound draws its normal image
+# (state image 0), as 1264's race buttons at rest (0043ec90 sets them 2, which
+# Render 00403a70 draws with BS_NORMAL): the 1097 choice's Puri Tuarek, whose
+# disabled image has no texture. Each (id, the image's rect, its texels).
+def normal_tile(tree, ident):
+    image = next(c for c in find(tree, ident)["children"] if c["kind"] == 4 and c["reserved"] == 0)
+    w, h, rgba = ko_front_end.texture(create_tree_of_choice.get(image["texture"]))
+    x0, y0, x1, y1 = image["rect"]
+    u0, v0 = round(image["uv"][0] * w), round(image["uv"][1] * h)
+    return image["rect"], [rgba[((v0 + y) * w + u0 + x) * 4:((v0 + y) * w + u0 + x) * 4 + 3]
+                           for y in range(y1 - y0) for x in range(x1 - x0)]
+
+
+def descendants(tree):
+    for c in tree["children"]:
+        yield c
+        yield from descendants(c)
+
+
+create_recipe = screen_recipes["create"]
+NORMAL = {ident: normal_tile(LAYOUTS["create"], ident) for ident in
+          (n["id"] for n in descendants(LAYOUTS["create"]) if n["kind"] == 1 and n["id"].startswith("btn_race_"))
+          if ident not in create_recipe.get("states", {}) and ident not in create_recipe.get("bindings", {})
+          and ident not in create_recipe.get("hidden", [])}
+if chosen == "1097":
+    assert sorted(NORMAL) == ["btn_race_ka_pt"], sorted(NORMAL)
+
+
 def extent(tree):
     """The rect around a node's descendants (not its own rect: a group's
     region is KO's hit area, not what it draws)."""
@@ -563,6 +592,12 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
         share = [sum(a == b for a, b in zip(drawn, tile)) / len(tile) for tile in (down, on)]
         # The rest lie under the button's label, drawn over it in every state.
         assert share[0] > 0.85 and share[1] < 0.5, (size, ident, share)
+    for ident, (image, tile) in NORMAL.items():
+        drawn = region(path, (cx + image[0] - root["rect"][0], cy + image[1] - root["rect"][1],
+                              cx + image[2] - root["rect"][0], cy + image[3] - root["rect"][1]))
+        share = sum(a == b for a, b in zip(drawn, tile)) / len(tile)
+        # The rest lie under the button's label, a root string over it.
+        assert share > 0.85, (size, ident, share)
 
     start, rect, _ = shots["loading-start"]
     world = shots["loading-world"][0]

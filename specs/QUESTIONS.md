@@ -1297,3 +1297,20 @@ fixed on with the button's down image in the on state and its on image left out
 `BS_DOWN` tiles; race and class are still chosen from the open (Q52) and nothing
 else on the 1097 create changes. The 1298 recipe's chosen buttons already draw down
 (`create_race`, `create_class`, RQ-130).
+
+### Q90 — The 1097 choice's Puri Tuarek: the label alone or the grey tile
+
+RQ-134 (KO-FINDINGS §9.16): the 1264 create layout's Puri Tuarek (`btn_race_ka_pt`,
+style `0x10000`) has no texture on its `BS_DISABLE` image, so the realm's fixed
+disabled drew only its label, where 1264, which never disables a race button
+(`0043ec90` sets every race button 2 before the chosen one), draws its `BS_NORMAL`
+grey tile (`ui_el_charcreate01_us.dxt`, v 0.703–0.773). The Arch and Wrinkle Tuarek's
+disabled images are their normal tiles, so they already look as 1264's at rest.
+**Decided (maintainer, 2026-11-03), RQ-139:** "Grey button, as 1264". The 1097
+recipe gives the Puri Tuarek no fixed state and no action, so it draws its normal
+tile, never lights under the pointer (the client lights only a bound button) and
+does nothing when clicked: the race stays Tuarek (Q52), as the fixed disabled Arch
+and Wrinkle Tuarek. Package data only; no cook, format or client change. The 1298
+recipe's layout (`co_characterCreate_us.uif`) textures every race button's disabled
+image, so it is unchanged. The class buttons' images after a race click (§9.16's
+second difference) are a separate item (RQ-140).

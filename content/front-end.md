@@ -745,7 +745,8 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   `btn_cancel` `back`, `edit_name` `name_field`, `text_desc` `class_desc`,
   and (RQ-130, version 21) `btn_race_ka_tu` `create_race` and
   `btn_class_priest` `create_class`; states as the 1097 recipe's create (the
-  other races and classes, face, hair and the stat arrows disabled), but the
+  other races and classes, face, hair and the stat arrows disabled, the Puri
+  Tuarek too: this layout's disabled image is its normal tile), but the
   Tuarek and the priest wait for their clicks; hidden: El Morad's three
   race buttons (Load shows Karus's and hides El Morad's for a Karus player)
   and `text_bonus`, as the 1097 recipe. The four class images draw, each
@@ -936,7 +937,11 @@ box and loading are 1264's.
   draws its chosen race and class (RQ-138, Q89 (b), the maintainer's 2026-11-03,
   "Sunken, as 1264"; §9.16, binary: `0043ec90`, `0043ee10`, `00403a70`); every
   other race, class, face, hair and stat arrow fixed disabled, the bonus points
-  and stat highlights hidden (Q52).
+  and stat highlights hidden (Q52), but the Puri Tuarek (`btn_race_ka_pt`), whose
+  disabled image has no texture: it takes no state and no action, so it draws its
+  normal grey tile as 1264's race buttons at rest, takes no pointer and does
+  nothing when clicked (RQ-139, Q90, the maintainer's 2026-11-03, "Grey button,
+  as 1264"; §9.16, binary: `0043ec90`).
 - Loading (`UI_US/co_loading_us.uif`, centred; `Text_Version` at (10, 10)):
   1264's layout when no nation has won the last war (`005f9a30`); the realm has
   no war, so no victor (Q80).

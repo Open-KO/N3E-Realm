@@ -1326,6 +1326,16 @@ Tuarek and the class images are proposed as their own items.
 the down image in the on state, `content/front-end.md`), so they draw their `BS_DOWN`
 tiles as 1264's chosen race and class; they stay chosen from the open (Q52).
 
+**Decides (RQ-139, Q90, the maintainer's 2026-11-03, "Grey button, as 1264"):** the
+1097 choice's Puri Tuarek takes no fixed state and no action, so it draws its
+`BS_NORMAL` tile, as 1264's race buttons at rest (`0043ec90` sets them 2, which
+Render `00403a70` draws with index 0), where its fixed disabled drew only its label.
+Like the fixed disabled Arch and Wrinkle Tuarek (their disabled images are their
+normal tiles) it never lights under the pointer (the client lights only a bound
+button) and a click does nothing: the race stays Tuarek (Q52). `make live-ko`
+matches the drawn rect to the normal tile at each size. The 1298 recipe's layout
+textures every race button's disabled image and is unchanged.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -1352,4 +1362,5 @@ notes.
 | Q80, Q81 | §9.2 (RQ-085): 1264 picks the loading layout by the server's war-victor byte (`005f9a30`) and shows each message with the caller's title; the realm has neither, so it draws the no-victor layout and an empty title. §9.2 (RQ-102): 1264 titles its login answer's and its create failures; the 1097 choice gives the realm's matching messages KO's title and wording (N3FE version 10) and leaves the rest untitled. |
 | Q75 | §9.1 (RQ-096): 1264's login tick keeps 1097's timer (`007ac9d0`, written only by the tick), so in both a return to the login is silent until it passes 21.66 s. RQ-096 made the realm do the same; RQ-105 (maintainer) starts the track at once on every entry instead and keeps the carried clock off by default. |
 | Q89 | §9.16 (RQ-134): 1264's chosen race and class draw `UI_STATE_BUTTON_DOWN` (`0043ec90`, `0043ee10`), the layout's sunken pink tile; the 1097 choice's fixed `on` drew the raised pink on tile. RQ-138 (option (b), the maintainer's): the 1097 choice's Tuarek and priest are the recipe state `down` and draw their `BS_DOWN` tiles, still chosen from the open. |
+| Q90 | §9.16 (RQ-134): the 1264 layout's Puri Tuarek has an untextured `BS_DISABLE` image, so the realm's fixed disabled drew only its label; 1264 never disables a race button (`0043ec90`). RQ-139 (the maintainer's): the 1097 choice leaves it unfixed and unbound, drawing its `BS_NORMAL` grey tile, inert as the other race buttons. |
 | Q72 | §9.10 (RQ-120, correcting §8.2): 1097 and 1264 (and 1298, RQ-121) clear the UI flag from the select request until the main procedure, so no arrow, ESC or button reaches the select during the start clip; only the tick's ENTER skips it. RQ-121 (the maintainer) makes the realm's ESC and Exit do nothing then too. §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077), as RQ-120 corrects it: DoJobLeft and DojobRight would start a turn from state 3, but no arrow reaches them during the clip; the realm ignores them then too. |

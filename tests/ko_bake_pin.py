@@ -456,9 +456,15 @@ CLIENT = Path("assets/ko")
 # follows. Default features 7acab486... -> 3f5d491a...; classic 9f2c11d5... ->
 # fecc57ba...; 1097 0a4698b3... -> da985b7a.... The plain cooks and the
 # homelands keep their pins.
+# RQ-139 (Q90, KO-FINDINGS 9.16) changed them again: the 1097 recipe leaves the
+# Puri Tuarek unfixed, so its node's flags go from 2 (fixed disabled) to 0, one
+# byte of front-end.bin (still 53,803,064 bytes), and the release index
+# follows. Default features 3f5d491a... -> bb27278c...; classic fecc57ba... ->
+# fe535927...; 1097 da985b7a... -> bd6b08ba.... The plain cooks and the
+# homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "3f5d491af30b3bfc985eaeba5b42fa062c7277c1a6f7de56caabf64c53dbc5fb"),
+    "features": (["--features"], "bb27278c28c8a09a38e6c258a3aff14897f74fdee86b8d726a7953965861ae32"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -479,13 +485,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "fecc57ba940623f10006f6c92ab78d4f6f96120eb9cd8cf810a68fc65499cdb1"),
+    "features": (["--features"], "fe5359274968ada28b9671a1de7b6afa060ce5ecc25e3a6b398b8255b253b3fb"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "da985b7a388c1c475e2dcf23013bf196c22ea1788d79391847b5173ae6f628ea"),
+    "features": (["--features"], "bd6b08ba30b7506bfa319abf5abd2751b905c334eba395fda15b115e5c0771f6"),
 }
 
 

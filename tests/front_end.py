@@ -474,8 +474,16 @@ for reason, chosen in (
 states_1097 = create_1097["screens"]["create"]["states"]
 assert states_1097["btn_race_ka_tu"] == "down" and states_1097["btn_class_priest"] == "down", states_1097
 assert "on" not in states_1097.values(), states_1097
+# RQ-139 (KO-FINDINGS 9.16, the maintainer's "Grey button, as 1264"): the Puri
+# Tuarek's disabled image has no texture, so it takes no fixed state and no
+# action: it draws its normal tile, as 1264's race buttons at rest (0043ec90
+# sets them 2), and takes no pointer, as the fixed disabled Arch and Wrinkle
+# Tuarek, whose disabled image is their normal tile.
+assert "btn_race_ka_pt" not in states_1097, states_1097
+assert "btn_race_ka_pt" not in create_1097["screens"]["create"]["bindings"], create_1097["screens"]["create"]
+assert states_1097["btn_race_ka_at"] == states_1097["btn_race_ka_wt"] == "disabled", states_1097
 print("PASS front-end cook: the recipe state down, the down image in the on state, the 1097 choice's Tuarek and "
-      "priest drawn down as 1264's chosen race and class")
+      "priest drawn down as 1264's chosen race and class, its Puri Tuarek unfixed and unbound")
 
 # RQ-133 (version 22, KO-FINDINGS 9.15): create's nodes drawn only until the
 # race is chosen (1298's 006060f0 hides the class buttons the race cannot take

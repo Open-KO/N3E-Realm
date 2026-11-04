@@ -1314,3 +1314,33 @@ and Wrinkle Tuarek. Package data only; no cook, format or client change. The 129
 recipe's layout (`co_characterCreate_us.uif`) textures every race button's disabled
 image, so it is unchanged. The class buttons' images after a race click (§9.16's
 second difference) are a separate item (RQ-140).
+
+### Q91 — The 1097 choice's class column: fixed disabled buttons or 1264's images
+
+RQ-140 (KO-FINDINGS §9.16): the 1097 choice's create is chosen from the open (Q52),
+the state 1264's create reaches after a Tuarek click and a priest click. There 1264
+(`0043ec90(2)`, then `0043ee10(104)`) hides the warrior and mage buttons and shows
+`img_warrior` and `img_mage`, darker grey tiles of the same size under the same
+labels (mean grey 91 and 88 against 131 and 129); the rogue is a NORMAL button,
+which lights under the pointer and would choose the rogue on a click; the priest
+draws down; `img_rogue` and `img_priest` are hidden. The 1097 choice draws the
+warrior, rogue and mage fixed disabled, which in this layout is their normal grey
+tile, hides `img_warrior`, `img_rogue` and `img_mage`, and leaves `img_priest`
+drawn under the priest (its down tile's edge pixels blend over it, up to 17 of 255).
+Side by side: `build/ghidra/rq140/create-class-column.png` (not committed; built
+from the layout's textures over the newest `make live-ko` create capture).
+Options: (a) keep the realm's look (three grey buttons); (b) match 1264's column with
+race and class still chosen from the open: the warrior and mage drawn as their
+images, the rogue still inert in its normal tile (fixed disabled), `img_priest`
+hidden, package data only (the 1097 recipe's create hides `btn_class_warrior`,
+`btn_class_mage` and `img_priest` in place of `img_warrior` and `img_mage`; no cook,
+format or client change; `make live-ko` would check the two rects against the image
+tiles); (c) as (b) with the rogue live as 1264's (lighting under the pointer, a click
+choosing it), which changes the create's flow (Q52 makes every create a Tuarek
+priest), not only its look. The 1298 recipe already draws 1298's images (RQ-133,
+`until_race`), its rogue inert too.
+**Default taken:** none applied; (b) proposed, the look 1264 shows for the same
+choice, with nothing else changed, as Q89 (b) and Q90 were taken. The stat labels
+1264 shows after the priest click (`img_str` and `img_int`, pink, which the 1097
+recipe hides) are a separate difference on the same frame, proposed as their own
+item.

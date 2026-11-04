@@ -1336,6 +1336,33 @@ button) and a click does nothing: the race stays Tuarek (Q52). `make live-ko`
 matches the drawn rect to the normal tile at each size. The 1298 recipe's layout
 textures every race button's disabled image and is unchanged.
 
+**The class column after a Tuarek and a priest click (RQ-140, 2026-11-03).** The 1097
+choice's create is chosen from the open (Q52), so it stands for 1264's create after a
+Tuarek click and a priest click. Re-read in the same image and project (`0043ec90`,
+`0043ee10` and `0043ea10` decompiled again, `-readOnly -noanalysis`, output under
+`build/ghidra/rq140/`, not committed, identical to RQ-134's), with the layout and
+textures above and the realm's capture of the 1097 choice's create after RQ-139
+(`make live-ko`, `build/live-ko/front-end/1024x768.create.ppm`, sha256 `4f2407f3…`,
+not committed). Not run, as above.
+
+| Observation | Where | Label |
+|---|---|---|
+| **Load pairs each class button with its image.** The loop that ends Load (`0043cd00`, from `param_1 + 0x32`) stores `btn_class_warrior`, `_rogue`, `_mage`, `_priest` at `+0xc8`–`+0xd4` and `img_warrior`, `img_rogue`, `img_mage`, `img_priest` at `+0xd8`–`+0xe4`, four steps of one each; the stat labels `img_str`, `img_sta`, `img_dex`, `img_int`, `img_map` go to `+0xe8`–`+0xf8` | 1264 `0043cd00` | binary |
+| **After the Tuarek: warrior and mage images, rogue and priest buttons.** `0043ec90(2)` (case 2, the Karus Tuarek) sets the race buttons 2 but the Tuarek 3, and the class states to 7, 2, 7, 2: it hides `btn_class_warrior` and `btn_class_mage` and shows `img_warrior` and `img_mage`, and shows the rogue and priest buttons with `img_rogue` and `img_priest` hidden. The source's `UpdateRaceAndClassButtons` does the same | 1264 `0043ec90`; source `UICharacterCreate.cpp` | binary; source |
+| **After the priest: the priest down, the rogue a live button, the images kept.** `0043ee10(104)` (`0x68`) sets all four class buttons to 2 and the priest to 3 and changes no button's or image's visibility, so the warrior and mage stay hidden behind their images; it shows stat labels 0 and 3, `img_str` and `img_int` (the layout's pink 0xff8080 "Strength" and "Intelligence" over the grey ones). The rogue is a NORMAL button: under the pointer MouseProc (`00403b30`) turns it ON (its raised pink tile) and a click would choose the rogue. The images are image nodes: no pointer, no click | 1264 `0043ee10`, `00403b30` | binary |
+| **The images are darker grey tiles under the same labels.** `img_warrior` and `img_mage` (root children 165 and 163) have the buttons' rects and draw before them (171–174) and before the labels (root strings 221–228: a light 0xc0c0c0 copy and the dark 0x382e14 one), so the labels draw over the images as over the buttons. Their tiles are `ui_el_charcreate01_us.dxt` (512 × 512) at (201, 212) and (201, 286), 194 × 36, opaque but for 16 corner pixels. Blended over the panel, their mean grey is 91 and 88 against the realm's drawn 131 and 129, and 70 % of their pixels differ from the realm's by more than 32 in a channel (a mean of 44 of 255) | `UI_US/Ka_CharacterCreate_us.uif`, `ui_el_charcreate01_us.dxt` (decoded and viewed) | local-asset |
+| **The realm's column today.** In the capture the warrior, rogue and mage draw their fixed disabled image, which in this layout is the normal tile (6,467, 6,506 and 6,302 of 6,984 pixels equal it; the rest under the labels or at the corners), the priest its down tile (6,433); the recipe hides `img_warrior`, `img_rogue` and `img_mage` but not `img_priest`, which draws under the priest: the down tile's 155 edge pixels (alpha 238 and below) all match a blend over `img_priest`, not over the panel, up to 17 of 255 apart. 1264 hides it after the Tuarek. The recipe also hides all five stat labels, where 1264 shows the priest's two | `build/live-ko/front-end/1024x768.create.ppm`; `games/moradon/front-end.json` | local-asset |
+
+So in the same frame 1264's warrior and mage are darker grey (their images) where the
+realm's are the normal grey of the rogue; the rogue and the priest look the same. Side
+by side, built from the layout's own textures: `build/ghidra/rq140/create-class-column.png`
+(not committed; left the capture, right the same frame with `img_warrior` and
+`img_mage` blended over the panel in the warrior and mage rects, the label pixels
+re-blended by their estimated coverage, and the priest's edge over the panel). What a
+still does not show: 1264's rogue lights and takes a click, where the realm's three
+are inert. **Decided nothing at RQ-140 (Q91):** a look-and-feel difference, put to the
+maintainer. The stat labels are proposed as their own item.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -1363,4 +1390,5 @@ notes.
 | Q75 | §9.1 (RQ-096): 1264's login tick keeps 1097's timer (`007ac9d0`, written only by the tick), so in both a return to the login is silent until it passes 21.66 s. RQ-096 made the realm do the same; RQ-105 (maintainer) starts the track at once on every entry instead and keeps the carried clock off by default. |
 | Q89 | §9.16 (RQ-134): 1264's chosen race and class draw `UI_STATE_BUTTON_DOWN` (`0043ec90`, `0043ee10`), the layout's sunken pink tile; the 1097 choice's fixed `on` drew the raised pink on tile. RQ-138 (option (b), the maintainer's): the 1097 choice's Tuarek and priest are the recipe state `down` and draw their `BS_DOWN` tiles, still chosen from the open. |
 | Q90 | §9.16 (RQ-134): the 1264 layout's Puri Tuarek has an untextured `BS_DISABLE` image, so the realm's fixed disabled drew only its label; 1264 never disables a race button (`0043ec90`). RQ-139 (the maintainer's): the 1097 choice leaves it unfixed and unbound, drawing its `BS_NORMAL` grey tile, inert as the other race buttons. |
+| Q91 | §9.16 (RQ-140): after a Tuarek and a priest click 1264 shows `img_warrior` and `img_mage` (darker grey tiles) for the warrior and mage buttons, the rogue a live NORMAL button and the priest down (`0043ec90`, `0043ee10`); the 1097 choice draws the warrior, rogue and mage fixed disabled in their normal grey tile. Open: put to the maintainer, nothing applied. |
 | Q72 | §9.10 (RQ-120, correcting §8.2): 1097 and 1264 (and 1298, RQ-121) clear the UI flag from the select request until the main procedure, so no arrow, ESC or button reaches the select during the start clip; only the tick's ENTER skips it. RQ-121 (the maintainer) makes the realm's ESC and Exit do nothing then too. §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077), as RQ-120 corrects it: DoJobLeft and DojobRight would start a turn from state 3, but no arrow reaches them during the clip; the realm ignores them then too. |

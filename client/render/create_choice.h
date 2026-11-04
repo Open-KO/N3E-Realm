@@ -20,7 +20,14 @@
 // it sends nothing. RQ-133 (version 22): a create node flagged UNTIL_RACE
 // draws only while `race` is not chosen (1298's race click, 006060f0, hides
 // the class buttons the race cannot take and the images of those it can;
-// render/front_end.h View::visible). No GL; render/front_end.h acts by it and
+// render/front_end.h View::visible). RQ-145 (version 23, Q93 (b)): a create
+// node flagged UNTIL_CLASS draws only while `marked` is clear: a class click
+// sets it (1298's 006062d0 hides the clicked class's cream stat labels, so the
+// priest's "STR" and "INT" read in their cyan copies), each open clears it
+// (the reset 006066b0 by 00605950), and so does a race click that builds the
+// character (005fd120 shows all ten labels, then 006062d0 with the class the
+// click unset); a click on the race already chosen builds nothing, so it
+// leaves the labels as they are. No GL; render/front_end.h acts by it and
 // tests/front_end.cpp checks it.
 
 #include "assets/assets.h"
@@ -33,6 +40,8 @@ struct CreateChoice {
   // button (create_class): create waits for that click.
   bool waits_race = false, waits_class = false;
   bool race = true, klass = true;  // chosen
+  // A class click's marks show: create's UNTIL_CLASS nodes are hidden.
+  bool marked = false;
   // The slot the new character stands at, set by the click that built it;
   // -1: the slot in focus (a create that does not wait for its race).
   int figure = -1;
@@ -42,23 +51,26 @@ struct CreateChoice {
     waits_race = binds_race, waits_class = binds_class;
     race = !waits_race, klass = !waits_class;
     figure = -1;
+    marked = false;
   }
   // A click on the race button with the camera at `camera_slot`: the race
   // chosen and the class not; a race that was not chosen builds the
-  // character there.
+  // character there, which clears a class click's marks.
   void click_race(int camera_slot) {
     if (!waits_race) return;
     const bool changed = !race;
     race = true;
     if (waits_class) klass = false;
-    if (changed) figure = camera_slot;
+    if (changed) figure = camera_slot, marked = false;
   }
-  // A click on the class button: the class chosen; a class that was not
-  // chosen builds the character again, at the camera's slot, once a race is.
+  // A click on the class button: the class chosen and its marks shown; a
+  // class that was not chosen builds the character again, at the camera's
+  // slot, once a race is.
   void click_class(int camera_slot) {
     if (!waits_class) return;
     const bool changed = !klass;
     klass = true;
+    marked = true;
     if (changed && race && waits_race) figure = camera_slot;
   }
   // Whether the new character stands (a race chosen).

@@ -861,8 +861,11 @@ struct FrontNode {
   static constexpr uint32_t IMAGE = 0, TEXT = 1, BUTTON = 2, EDIT = 3, PROGRESS = 4, GROUP = 5, AREA = 6, LIST = 7;
   // UNTIL_RACE (version 22, RQ-133): a create node drawn only until the race
   // is chosen (1298's 006060f0, KO-FINDINGS 9.15; render/create_choice.h), in
-  // a create that binds create_race.
-  static constexpr uint32_t FIXED_ON = 1, FIXED_DISABLED = 2, FOREGROUND = 4, UNTIL_RACE = 8;
+  // a create that binds create_race. UNTIL_CLASS (version 23, RQ-145): a
+  // create node drawn until a class is clicked and again from each open and
+  // each race click that builds the character (1298's 006062d0 and 005fd120),
+  // in a create that binds create_class.
+  static constexpr uint32_t FIXED_ON = 1, FIXED_DISABLED = 2, FOREGROUND = 4, UNTIL_RACE = 8, UNTIL_CLASS = 16;
   uint32_t kind = 0, parent = 0, flags = 0, mask = 15;
   FrontAction action = FrontAction::none;
   std::array<float, 4> rect{}, uv{};

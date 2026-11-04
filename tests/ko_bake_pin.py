@@ -475,9 +475,16 @@ CLIENT = Path("assets/ko")
 # follows. Default features 5d5d452a... -> d7d4864f...; classic
 # 50155b5f... -> ace73ebd...; 1097 165da149... -> 08060ea2.... The plain cooks
 # and the homelands keep their pins.
+# RQ-145 (Q93 (b), KO-FINDINGS 9.15) changed them again: N3FE version 23 adds
+# node flag 16 (create's nodes drawn until a class is clicked), which only the
+# 1298 recipe (not cooked here) sets, so against RQ-144's cooks front-end.bin
+# keeps its size (53,802,688 bytes) and only its version word changes; the
+# release index follows. Default features d7d4864f... -> 15525ab8...; classic
+# ace73ebd... -> f28ad90f...; 1097 08060ea2... -> 7d085d69.... The plain cooks
+# and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "d7d4864ffbc0460fb214b3b6f0470b1f50852e0ba322a87258795ba18bd3c8e7"),
+    "features": (["--features"], "15525ab880e219bc573b1db43e2f83dc2af30d8f0a31df0ad990d3594860f7c3"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -498,13 +505,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "ace73ebd10067ee35ea3ea0072321eae47d3286ec036edd323021d471646890d"),
+    "features": (["--features"], "f28ad90ff3d16b9199bb616ac1f425184a4f7011ecba44538dff0c580b41fafb"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "08060ea2af392bc9e7c38b55b164add1a7962ec2d53fa4f20294cc0fb73abc61"),
+    "features": (["--features"], "7d085d69198cd754ea8013312e6ec7dab88f748831a11949e9fda09cc153e8f7"),
 }
 
 

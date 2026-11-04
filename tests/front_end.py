@@ -507,26 +507,35 @@ print("PASS front-end cook: the recipe state down, the down image in the on stat
 # race is chosen (1298's 006060f0 hides the class buttons the race cannot take
 # for their img_*, and the images of the classes it can), the create's
 # `until_race`: flag 8, in a create that binds create_race.
-def until_tree(race=True):
+# RQ-145 (version 23, Q93 (b)): create's nodes drawn until a class is clicked
+# and again from each open and each race click that builds (1298's 006062d0
+# hides the class's cream stat labels; 005fd120 shows them), the create's
+# `until_class`: flag 16, in a create that binds create_class.
+def until_tree(race=True, klass=True):
     return node(0, "root", [button("btn_create"), button("btn_cancel"),
                             node(8, "edit_name", [node(4, texture=""), text("")]), node(9, "area_character"),
                             text("text_desc"), node(4, "img_rogue"), node(4, "img_blank", texture=""),
+                            text("str_02"), text("str_01"),
                             button("btn_race_ka_tu" if race else "btn_race_other"),
-                            button("btn_class_warrior"), button("btn_class_priest")])[1]
+                            button("btn_class_warrior"), button("btn_class_priest" if klass else "btn_class_other")])[1]
 
 
-def until_screens(race=True, specs=None, **create):
-    bindings = dict(CHOICE_BINDINGS) if race else {k: v for k, v in CHOICE_BINDINGS.items() if v != "create_race"}
-    return cook_screens(trees={**trees, "create.uif": until_tree(race)},
+def until_screens(race=True, klass=True, specs=None, **create):
+    gone = {"create_race"} if not race else set()
+    gone |= {"create_class"} if not klass else set()
+    bindings = {k: v for k, v in CHOICE_BINDINGS.items() if v not in gone}
+    return cook_screens(trees={**trees, "create.uif": until_tree(race, klass)},
                         specs={**{n: spec(n) for n in fe.SCREENS},
                                "create": spec("create", bindings=bindings, **create), **(specs or {})})[0]
 
 
-UNTIL = until_screens(until_race=["img_rogue", "btn_class_warrior"], states={"btn_class_warrior": "disabled"})
-until_flags = {i: f for i, _, f in node_records(UNTIL[2]) if i in ("img_rogue", "btn_class_warrior", "btn_class_priest")}
-assert fe.UNTIL_RACE == 8 and until_flags == {"img_rogue": fe.UNTIL_RACE,
-                                              "btn_class_warrior": fe.FIXED_DISABLED | fe.UNTIL_RACE,
-                                              "btn_class_priest": 0}, until_flags
+UNTIL = until_screens(until_race=["img_rogue", "btn_class_warrior"], until_class=["str_01"],
+                      states={"btn_class_warrior": "disabled"})
+until_flags = {i: f for i, _, f in node_records(UNTIL[2])
+               if i in ("img_rogue", "btn_class_warrior", "btn_class_priest", "str_01", "str_02")}
+assert fe.UNTIL_RACE == 8 and fe.UNTIL_CLASS == 16 and until_flags == {
+    "img_rogue": fe.UNTIL_RACE, "btn_class_warrior": fe.FIXED_DISABLED | fe.UNTIL_RACE, "btn_class_priest": 0,
+    "str_01": fe.UNTIL_CLASS, "str_02": 0}, until_flags
 for reason, kw in (
         ("create's only", dict(specs={"login": spec("login", until_race=["notice"])})),
         ("a node named twice or hidden", dict(until_race=["img_rogue", "img_rogue"])),
@@ -539,6 +548,19 @@ for reason, kw in (
         assert "until_race: " + reason in str(error), (reason, error)
         continue
     raise AssertionError(("cooked until_race", reason, kw))
+for reason, kw in (
+        ("create's only", dict(specs={"login": spec("login", until_class=["notice"])})),
+        ("a node named twice, hidden or until the race", dict(until_class=["str_01", "str_01"])),
+        ("a node named twice, hidden or until the race", dict(until_class=["str_01"], hidden=["str_01"])),
+        ("a node named twice, hidden or until the race", dict(until_class=["img_rogue"], until_race=["img_rogue"])),
+        ("a create that binds no create_class", dict(klass=False, until_class=["str_01"])),
+        ("a node it names is not drawn", dict(until_class=["img_blank"]))):
+    try:
+        until_screens(**kw)
+    except ValueError as error:
+        assert "until_class: " + reason in str(error), (reason, error)
+        continue
+    raise AssertionError(("cooked until_class", reason, kw))
 # The 1298 recipe (KO-FINDINGS 9.15, RQ-133): before its race click every class
 # button and image draws (the reset 006066b0's 00605950 shows them all, the
 # images under the buttons, which come after them in the layout); the Tuarek
@@ -549,8 +571,19 @@ assert create_1298["until_race"] == ["img_rogue", "img_priest", "btn_class_warri
     create_1298.get("until_race")
 assert not {"img_warrior", "img_rogue", "img_mage", "img_priest"} & set(create_1298["hidden"]), create_1298["hidden"]
 assert "until_race" not in create_1097["screens"]["create"], create_1097["screens"]["create"]
-print("PASS front-end cook: create's nodes drawn until the race is chosen, the 1298 recipe's class buttons and "
-      "images as 006060f0 shows them, the 1097 choice's none")
+# The 1298 recipe (KO-FINDINGS 9.15, RQ-143; RQ-145, Q93 (b), the
+# maintainer's "Match 1298"): each stat label is a cyan *_02 under a cream
+# *_01 in one rect; the priest click (006062d0(104)) hides str_01 and int_01,
+# so "STR" and "INT" read cyan, and the build (005fd120) shows them again. So
+# until_class names those two, the *_02 set always draws. The 1097 choice
+# names none (its priest is chosen from the open, Q92 (b)).
+assert create_1298["until_class"] == ["str_01", "int_01"], create_1298.get("until_class")
+labels_1298 = {"%s_%s" % (stat, n) for stat in ("str", "dex", "sta", "int", "map") for n in ("01", "02")}
+assert not labels_1298 & set(create_1298["hidden"]) and not labels_1298 & set(create_1298["until_race"]), create_1298
+assert "until_class" not in create_1097["screens"]["create"], create_1097["screens"]["create"]
+print("PASS front-end cook: create's nodes drawn until the race is chosen and until a class is clicked, the 1298 "
+      "recipe's class buttons and images as 006060f0 shows them and its STR and INT as 006062d0 shows them, the "
+      "1097 choice's none")
 
 
 # RQ-084: a layout from another input (`<name>:<path>`) reads its textures from
@@ -1066,7 +1099,7 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=22, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=23, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0)):
@@ -1942,7 +1975,12 @@ CHOICE_CASES = {
     "ok-until-race": blob(screen_data=UNTIL),
     "bad-until-race-no-race": blob(screen_data=patch_node(UNTIL, 2, "btn_race_ka_tu", action=0)),
     "bad-until-race-off-create": blob(screen_data=patch_node(UNTIL, 0, "notice", flags=8)),
-    "bad-node-flags": blob(screen_data=patch_node(UNTIL, 2, "img_rogue", flags=16)),
+    # RQ-145 (version 23): create's nodes drawn until a class is clicked.
+    "bad-version-22": blob(version=22),
+    "bad-until-class-no-class": blob(screen_data=patch_node(UNTIL, 2, "btn_class_priest", action=0)),
+    "bad-until-class-off-create": blob(screen_data=patch_node(UNTIL, 0, "notice", flags=16)),
+    "bad-until-class-and-race": blob(screen_data=patch_node(UNTIL, 2, "str_01", flags=24)),
+    "bad-node-flags": blob(screen_data=patch_node(UNTIL, 2, "img_rogue", flags=32)),
     "ok-create-choice": blob(screen_data=CHOICE),
     "ok-create-choice-race-only": blob(screen_data=patch_node(CHOICE, 2, "btn_class_priest", action=0)),
     "bad-create-choice-on": blob(screen_data=patch_node(CHOICE, 2, "btn_race_ka_tu", flags=1)),
@@ -2156,6 +2194,10 @@ try:
                          ("bad-version-21", "front end version"),
                          ("bad-until-race-no-race", "front end until race"),
                          ("bad-until-race-off-create", "front end until race"),
+                         ("bad-version-22", "front end version"),
+                         ("bad-until-class-no-class", "front end until class"),
+                         ("bad-until-class-off-create", "front end until class"),
+                         ("bad-until-class-and-race", "front end until class"),
                          ("bad-node-flags", "front end node state"),
                          ("bad-create-choice-on", "front end create choice"),
                          ("bad-create-choice-disabled", "front end create choice"),

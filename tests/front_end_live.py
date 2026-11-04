@@ -121,7 +121,12 @@ from the player's own KO data.
      each open draws every class button over its img_* (the reset 006066b0's
      00605950 shows them all); the race click hides the warrior and mage
      buttons, their images standing in their place, and the rogue and priest
-     images (006060f0(2)); a Cancel and a new open draw them all again.
+     images (006060f0(2)); a Cancel and a new open draw them all again;
+   - the 1298 recipe's stat labels (RQ-145, Q93 (b), KO-FINDINGS 9.15): the
+     cream "STR" and "INT" draw at each open and hide on a priest click, their
+     cyan copies showing (006062d0), draw again on the race click that builds
+     (005fd120), stay hidden on a click on the race already chosen (00604f90)
+     and draw again on a new open.
 
 No server or stack.
 """
@@ -841,9 +846,18 @@ CREATE_FLY = (f"click=create path={fly_index} frames={fly_frames:.6g} slot=1 foc
 # priest images), and all again after a Cancel and a new open (006066b0).
 UNTIL_1298 = "img_rogue,img_priest,btn_class_warrior,btn_class_mage"
 assert sorted(UNTIL_1298.split(",")) == sorted(recipe_1298["screens"]["create"]["until_race"]), recipe_1298
-CREATE_CHOICE = (f"open=0,0,0 until={UNTIL_1298} empty=create_name norace=create_no_race class=1,0 "
-                 f"until={UNTIL_1298} classfirst=create_no_race race=1,0,1 until=- noclass=create_no_class "
-                 f"both=1,1,1 create=none sent=1 reopen={UNTIL_1298}")
+# RQ-145 (Q93 (b), KO-FINDINGS 9.15): the recipe's until-class nodes, the
+# cream "STR" and "INT" (str_01, int_01, over their cyan str_02 and int_02),
+# draw at each open, hide on a priest click (006062d0(104)), draw again on the
+# race click that builds the character (005fd120's 00605950), stay hidden on a
+# second click on the chosen race, which builds nothing (00604f90), and draw
+# again after a Cancel and a new open.
+LABELS_1298 = "str_01,int_01"
+assert sorted(LABELS_1298.split(",")) == sorted(recipe_1298["screens"]["create"]["until_class"]), recipe_1298
+CREATE_CHOICE = (f"open=0,0,0 until={UNTIL_1298} labels={LABELS_1298} empty=create_name norace=create_no_race "
+                 f"class=1,0 until={UNTIL_1298} labels=- classfirst=create_no_race race=1,0,1 until=- "
+                 f"labels={LABELS_1298} noclass=create_no_class both=1,1,1 labels=- again=1,0,1 labels=- "
+                 f"create=none sent=1 reopen={UNTIL_1298} labels={LABELS_1298}")
 # RQ-125: 1298's in-select create, co_characterCreate_us.uif (row 2's, as
 # 005fab40 loads it), its root at the origin and its panels where its Tick
 # (00606450) clamps their slides: Group_class at (50, H - 30 - h), Group_race at

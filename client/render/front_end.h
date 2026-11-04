@@ -378,14 +378,15 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // chosen) (test hooks).
   bool create_waits() const { return choice.waits_race || choice.waits_class; }
   int create_figure() const { return choice.stands() ? choice.stands_at(focus) : -1; }
-  // RQ-133 (version 22): the ids of create's nodes drawn only until its race
-  // is chosen that draw now (a test hook).
-  std::vector<std::string> until_race_drawn() const {
+  // RQ-133 (version 22), RQ-145 (version 23): the ids of create's nodes
+  // with `flag` (FrontNode::UNTIL_RACE or UNTIL_CLASS) that draw now (a test
+  // hook).
+  std::vector<std::string> until_drawn(uint32_t flag) const {
     const auto &nodes = fe.screens[size_t(FrontScreen::create)];
     const auto shown = visible(FrontScreen::create);
     std::vector<std::string> out;
     for (size_t i = 0; i < nodes.size(); ++i)
-      if ((nodes[i].flags & FrontNode::UNTIL_RACE) && shown[i]) out.push_back(nodes[i].id);
+      if ((nodes[i].flags & flag) && shown[i]) out.push_back(nodes[i].id);
     return out;
   }
   // The state the current layout's button bound to `action` draws in (0
@@ -938,6 +939,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       // cannot take and the images of those it can; each open's reset,
       // 006066b0 by 00605950, shows them all again).
       if (screen == FrontScreen::create && (nodes[i].flags & FrontNode::UNTIL_RACE)) on = on && !choice.race;
+      // RQ-145 (version 23, Q93 (b)): create's nodes drawn until a class is
+      // clicked and again from each open and each race click that builds
+      // (1298's 006062d0 hides the clicked class's cream stat labels;
+      // 005fd120's 00605950 shows them all; render/create_choice.h).
+      if (screen == FrontScreen::create && (nodes[i].flags & FrontNode::UNTIL_CLASS)) on = on && !choice.marked;
       shown[i] = on;
     }
     return shown;

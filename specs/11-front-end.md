@@ -82,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 22, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 23, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -275,6 +275,15 @@ replace the panels when the client has a Discord realm config.
   classes it can (`specs/KO-FINDINGS.md` §9.15). The 1298 recipe draws the four
   class images under their buttons and names `img_rogue`, `img_priest`,
   `btn_class_warrior` and `btn_class_mage`; the 1097 choice names none.
+- **Create's nodes until a class** (N3FE version 23, RQ-145, Q93 (b)). In a create
+  that binds `create_class` the package may mark nodes drawn until a class is
+  clicked and again from each open and each race click that builds the character
+  (node flag 16, the recipe's `until_class`; `content/front-end.md`, "Actions"),
+  as 1298's class click (`006062d0`) hides its class's cream stat labels and its
+  build (`005fd120`) shows them; a click on the race already chosen builds nothing,
+  so it leaves them (`specs/KO-FINDINGS.md` §9.15). The 1298 recipe names `str_01`
+  and `int_01`, so "STR" and "INT" read in their cyan copies from the priest
+  click; the 1097 choice names none.
 - **The placement** (N3FE version 11, RQ-106, Q82). KO draws its front end on the
   screen's own pixels, never scaled, and places each layout's root and some of its
   nodes by the viewport's size each time the layout loads (`specs/KO-FINDINGS.md`
@@ -405,7 +414,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 22 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, no select bar actions, no message box Yes and No or exit question, no select ESC or its `none`, no select Back, no select arrow rule, no create mode, no create slide, no create choices, or no until-race nodes) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 23 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, no select bar actions, no message box Yes and No or exit question, no select ESC or its `none`, no select Back, no select arrow rule, no create mode, no create slide, no create choices, no until-race nodes, or no until-class nodes) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas (1024 × 768) | KO's placements would cut the layouts off, so the UI scales down uniformly, centred, as with `ui_scale` `window` (RQ-106). No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -617,8 +626,15 @@ KO (`make live-ko`, needs `assets/ko`):
    click hides the warrior and mage buttons and the rogue and priest images, and a
    Cancel and a new open draw them again. The cook and loader take `until_race` on
    create and refuse it off create, on a create that binds no `create_race`, twice,
-   hidden or on a node that draws nothing, a flag above 15, and a version 21
-   package.
+   hidden or on a node that draws nothing, a flag above 15 (31 since RQ-145), and a version 21
+   package. RQ-145: on the 1298 recipe's, each open draws `str_01` and `int_01`,
+   a priest click hides them, the Tuarek click that follows draws them again, a
+   priest click and a second Tuarek click leave them hidden, and a race and a
+   priest click, a Cancel and a new open draw them again. The cook and loader take
+   `until_class` on create and refuse it off create, on a create that binds no
+   `create_class`, twice, hidden, until the race too or on a node that draws
+   nothing, flag 16 off create, on a create without `create_class` or with flag
+   8, a flag above 31, and a version 22 package.
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

@@ -220,6 +220,11 @@ N3FE version 22 (RQ-133) adds create's nodes drawn only until the race is chosen
 four class images under their buttons and names the rogue and priest images and the
 warrior and mage buttons, so its race click swaps those buttons for their greyed
 images as 1298's `006060f0` does.
+N3FE version 23 (RQ-145, Q93 (b)) adds create's nodes drawn until a class is
+clicked and again from each open and each race click that builds (the create
+screen's `until_class`, node flag 16, §9.15); the 1298 recipe names `str_01` and
+`int_01`, so its priest click shows "STR" and "INT" in their cyan copies as 1298's
+`006062d0` does, until the Tuarek click that builds or the next open.
 A recipe's `states` takes `down` (RQ-138, Q89 (b), §9.16), cooked as fixed on with
 the button's down image in the on state and its on image left out (no version
 change); the 1097 choice's Tuarek and priest are `down`, as 1264 draws its chosen

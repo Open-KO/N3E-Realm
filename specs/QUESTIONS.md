@@ -1413,3 +1413,13 @@ Either way the five stat values stay empty (Q52), where 1298's build fills them
 question. The 1097 choice (Q92) is unchanged.
 **Default taken:** none applied; (b) proposed, the look 1298 shows for the same
 clicks, as Q87 (b) and Q92 (b) were taken, the re-click edge left to the maintainer.
+**Decided (maintainer, 2026-11-04), RQ-145:** (b), "Match 1298", the re-click edge
+exact: a click on the chosen Tuarek keeps "STR" and "INT" cyan, as 1298's. N3FE
+version 23 adds node flag 16, a create node drawn until a class is clicked and
+again from each open and each race click that builds the character (the recipe's
+create `until_class`, in a create that binds `create_class`); the 1298 recipe names
+`str_01` and `int_01`. So "STR" and "INT" read cyan from the priest click (before
+the race too) until the Tuarek click that builds or the next open, and a re-click
+on the chosen Tuarek, which builds nothing, leaves them cyan. The cook, the client
+and the server move to version 23 together; the 1097 choice differs only by the
+version byte. The stat values stay empty and `text_bonus` hidden (Q52).

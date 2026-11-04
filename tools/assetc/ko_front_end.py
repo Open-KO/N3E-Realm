@@ -28,8 +28,9 @@ create is a screen of its own or draws over the select hall, with the new
 character's turn at each slot (RQ-125), (version 20) create's slide, its
 panels sliding in each time it opens (RQ-126), (version 21) create's race
 and class buttons, which a create that binds them waits for, with two
-messages (RQ-130), and (version 22) create's nodes drawn only until its race
-is chosen (RQ-133).
+messages (RQ-130), (version 22) create's nodes drawn only until its race
+is chosen (RQ-133), and (version 23) create's nodes drawn until a class is
+clicked, again from each open and each race click that builds (RQ-145).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -60,7 +61,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 22
+VERSION = 23
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -185,7 +186,13 @@ STRINGS = ("select_info", "select_hint", "class_name", "class_desc", "loading_in
 # `until_race` (1298's 006060f0 hides the class buttons the race cannot take
 # and their img_* stand in their place; the images of the classes it can are
 # hidden), in a create that binds `create_race`.
-FIXED_ON, FIXED_DISABLED, FOREGROUND, UNTIL_RACE = 1, 2, 4, 8
+# UNTIL_CLASS (version 23, RQ-145, Q93 (b), 9.15): a create node drawn until a
+# class is clicked, and again from each open and each race click that builds
+# the character, the recipe's create `until_class` (1298's 006062d0 hides the
+# clicked class's cream stat labels, its *_01, for their cyan *_02; the build
+# 005fd120 shows them all; a click on the race already chosen builds nothing),
+# in a create that binds `create_class`, none of them also until the race.
+FIXED_ON, FIXED_DISABLED, FOREGROUND, UNTIL_RACE, UNTIL_CLASS = 1, 2, 4, 8, 16
 # A recipe's fixed states. `down` (RQ-138, Q89, specs/KO-FINDINGS.md 9.16) is
 # cooked, not a node flag: fixed on, its BS_DOWN image (state image 1) drawn
 # in the down and on states and its BS_ON image (2) not written, so it draws
@@ -972,6 +979,13 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
     if len(set(until)) != len(until) or set(until) & hidden:
         raise ValueError("front-end until_race: a node named twice or hidden")
     until = set(until)
+    # Version 23 (RQ-145): create's nodes drawn until a class is clicked.
+    until_class = [id(resolve(root, a)) for a in spec.get("until_class", [])]
+    if until_class and name != "create":
+        raise ValueError("front-end until_class: create's only")
+    if len(set(until_class)) != len(until_class) or set(until_class) & (hidden | until):
+        raise ValueError("front-end until_class: a node named twice, hidden or until the race")
+    until_class = set(until_class)
     wanted = [id(resolve(root, a)) for a in find]
     for extra in spec.get("added", []):
         # A string KO's layout lacks (a status line, say), in UIF
@@ -1017,6 +1031,8 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
             raise ValueError("front-end %s: a button with no fixed state" % action)
         if id(n) in until:
             flags |= UNTIL_RACE
+        if id(n) in until_class:
+            flags |= UNTIL_CLASS
         record = u(KINDS[kind]) + u(0xFFFFFFFF if parent is None else parent) + f(n["rect"]) + \
             string(n["id"][:64]) + u(ACTIONS.index(action)) + u(flags) + u(mask)
         if kind == "image" and not n["texture"]:
@@ -1079,6 +1095,10 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
         raise ValueError("front-end until_race: a create that binds no create_race")
     if any(n not in found for n in until):
         raise ValueError("front-end until_race: a node it names is not drawn")
+    if until_class and "create_class" not in seen:
+        raise ValueError("front-end until_class: a create that binds no create_class")
+    if any(n not in found for n in until_class):
+        raise ValueError("front-end until_class: a node it names is not drawn")
     data = u(len(nodes)) + b"".join(nodes)
     if placements is not None:
         # A move of a node that draws nothing (hidden) is not written.

@@ -16,6 +16,11 @@
   bare, the client's exemption, a plug's Item_Ext resource), refuses an item
   that does not resolve to an existing part or plug of its column, and leaves
   the section and the provenance as they were.
+- RQ-160: ko_create.starting checks each specialty's starting set (Moradon's:
+  the package's starting items, the practice blade its weapon) against the
+  package's inventory, equipment and wear, refusing an item the bag lacks, a
+  count over its stack, a set the bag cannot hold, and a weapon that does not
+  attack or that the package's player may not wear.
 - A package carrying create.bin passes the client's asset check and the
   server's content check, which reads its rules; a create.bin with a bad magic
   or version, rehashed into the release, fails both.
@@ -98,6 +103,7 @@ print("PASS create.bin: the server's layout (%d bytes), malformed sections refus
 MORADON = pathlib.Path("games/moradon")
 rules = ko_create.rules(MORADON)
 plan = ko_create.plan(MORADON, "1097", {})
+STARTING = rules["starting"][0]
 assert (plan["table"], plan["races"], plan["reserved"]) == ("1264", rules["content"], []), plan
 assert ko_create.plan(MORADON, "1298", {})["table"] == "1298"
 assert ko_create.plan(MORADON, "1097", {"table": "1298", "reserved": ["GM", "gm", "Staff"]})["reserved"] == ["gm", "staff"]
@@ -153,7 +159,21 @@ with tempfile.TemporaryDirectory(prefix="n3e-create-") as td:
                                rules["tables"]["1298"]["dress"], extensions="installer-1264:Data/Item_Ext_{}_us.tbl")))),
                             "dress is null"),
                            (dict(tables=dict(rules["tables"], x={k: v for k, v in rules["tables"]["1298"].items()
-                                                                 if k != "dress"})), "table 'x' needs exactly")]:
+                                                                 if k != "dress"})), "table 'x' needs exactly"),
+                           # RQ-160: each specialty's starting set, once, its weapon among its items.
+                           (dict(starting=[]), "starting is null or a list"),
+                           (dict(starting=[dict(STARTING, extra=1)]), "starting is null or a list"),
+                           (dict(starting=[dict(STARTING, items=[])]), "items, 1 to 64"),
+                           (dict(starting=[dict(STARTING, items=[["demo:item/blade", 0]])]), "items, 1 to 64"),
+                           (dict(starting=[dict(STARTING, items=[["demo:item/blade", 1], ["demo:item/blade", 2]])]),
+                            "items, 1 to 64"),
+                           (dict(starting=[dict(STARTING, weapon="demo:item/twohand", items=[["demo:item/blade", 1]])]),
+                            "weapon is one of its items"),
+                           (dict(starting=[dict(STARTING, specialties=[101, 102, 103, 201, 202, 203, 204])]),
+                            "without a set: 104"),
+                           (dict(starting=[STARTING, dict(STARTING, specialties=[104])]), "twice: 104"),
+                           (dict(starting=[dict(STARTING, specialties=STARTING["specialties"] + [105])]),
+                            "no race has: 105")]:
         (game / ko_create.SOURCE).write_text(json.dumps({**rules, **change}))
         plan_refused(expect, game=game)
     # realm-config.json's `create` reaches the plan through the front-end choice.
@@ -357,6 +377,49 @@ for plan_, trees, expect in [
     except ValueError as error:
         assert expect in str(error), (expect, str(error))
 print("PASS create build: KO's tables by race and by race and specialty, the refusals' rows")
+
+# --- RQ-160: each specialty's starting items and weapon ------------------------------
+FEATURES = json.loads((MORADON / "features.json").read_text())
+PACKAGE = dict(FEATURES, gameplay=json.loads(pathlib.Path("games/demo/package.json").read_text())["gameplay"])
+kits = ko_create.starting(plan, PACKAGE)
+# Every specialty the races have; Moradon's set is the package's own starting
+# items (Q96 (b)), in its order, and its weapon the practice blade.
+assert sorted(kits) == sorted({s for r in rules["races"] for s in r["specialties"]}), kits
+kit = [[i["id"], i["starting"]] for i in FEATURES["inventory"]["items"] if i["starting"]]
+assert all(k == dict(items=kit, weapon="demo:item/blade") for k in kits.values()), kits
+assert ko_create.starting(dict(plan, rules=dict(rules, starting=None)), PACKAGE) is None
+
+
+def starting_refused(expect, group=None, package=PACKAGE):
+    chosen = dict(plan, rules=dict(rules, starting=[dict(STARTING, **(group or {}))]))
+    try:
+        ko_create.starting(chosen, package)
+    except front_end_choice.Refused as error:
+        assert expect in str(error), (expect, str(error))
+        return
+    raise AssertionError("started (%s)" % expect)
+
+
+def swap(section, key, item, **change):
+    s = copy.deepcopy(PACKAGE)
+    s[section][key] = [dict(i, **change) if i["id"] == item else i for i in s[section][key]]
+    return s
+
+
+starting_refused("item demo:item/nothing is not in the package's inventory",
+                 dict(items=kit + [["demo:item/nothing", 1]]))
+starting_refused("item demo:item/potion: 21 over its stack limit 20", dict(items=[["demo:item/potion", 21], ["demo:item/blade", 1]]))
+starting_refused("weapon demo:item/shield is not an equipment item that attacks", dict(weapon="demo:item/shield"))
+starting_refused("weapon demo:item/potion is not an equipment item that attacks", dict(weapon="demo:item/potion"))
+starting_refused("do not fit the bag of 16", package=dict(PACKAGE, inventory=dict(PACKAGE["inventory"], capacity=16)))
+starting_refused("do not fit the bag of 9", package=dict(PACKAGE, inventory=dict(PACKAGE["inventory"], capacity=9)))
+for change in (dict(title=1), dict(race=2), dict(attributes=[61, 0, 0, 0, 0])):
+    starting_refused("weapon demo:item/blade: the package's player may not wear it",
+                     package=swap("equipment", "items", "demo:item/blade", **change))
+assert ko_create.starting(plan, swap("equipment", "items", "demo:item/blade", race=1, attributes=[60, 60, 60, 50, 50]))
+starting_refused("starting needs the package's inventory, equipment and wear",
+                 package={k: v for k, v in PACKAGE.items() if k != "wear"})
+print("PASS starting items: each specialty's set in the package's bag, its weapon one the player may wear")
 
 # --- a package with create.bin through both readers ------------------------------
 with tempfile.TemporaryDirectory(dir="build", prefix="character-create-") as td:

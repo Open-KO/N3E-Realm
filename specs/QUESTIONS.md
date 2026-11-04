@@ -1494,6 +1494,12 @@ Options:
 and `create.items` (per class, default the package's `starting`). The dress stays
 display only, as in every KO version.
 
+RQ-160 gives each class its set: `character-create.json` `starting`, each
+specialty's items and the weapon among them it can use, checked by the cook
+(`content/character-create.md`, "Starting items"). Moradon's set is the package's
+`starting` items for every specialty, so `create.items`' default (RQ-154) gives a
+new character what it gets today. Which weapon is Q107.
+
 ### Q97 — Which version's create table the realm validates against
 
 The base stats and the dress differ by version (`content/character-create.md`,
@@ -1606,7 +1612,8 @@ realm-owner settings `create.races`, `create.start`, `create.items`,
   cook refuses another.
 - `create.start` and `create.items` are not added: a new character starts at the
   package's spawn with its `starting` items, as Q96 (b) keeps them, until RQ-003
-  gives each class its set.
+  gives each class its set (RQ-160 has: `character-create.json` `starting`, which
+  RQ-154's `create.items` takes as its default).
 
 ### Q102 — When a race's model enters the package
 
@@ -1721,3 +1728,28 @@ Options:
 
 **Default taken:** (a). Every Moradon cook stays byte for byte as it was; the dress
 the 1097 choice draws is 1264's until the maintainer picks (c).
+
+### Q107 — Each class's starting weapon before the package has class weapons
+
+RQ-160 gives each specialty a starting set and a weapon it can use
+(`content/character-create.md`, "Starting items"). KO grants a new character no item
+(Q96). Its items name the class that may wear them and their stat floors, and its
+create dress gives each 1298 class a weapon of its kind: swords and spears for
+warriors, daggers and bows for rogues, staffs for mages, maces for priests. A new
+character could not wield those dress weapons: each needs 106 to 200 of a stat
+(local-asset; 1264's and 1298's dress). The package's two weapons are the practice
+blade and the two-hand blade, drawn as KO's Short Blade and Two-Handed Sword (both
+class 0, 62 and 72 strength). The package's own rules give them no stat floor, and
+its equipment rule has no class (`server/src/equipment.rs`).
+
+Options:
+- (a) Every specialty starts with the package's starting items, its weapon the
+  practice blade, until RQ-007 adds class weapons and class rules.
+- (b) Add a package weapon of each class's KO kind now (dagger, bow, staff, mace),
+  each specialty starting with its own. This needs new items in the bag, equipment,
+  stats, wear, appearance and icons, and a class rule on equipment (RQ-162).
+- (c) As KO's operator: no items (Q96 (a)).
+
+**Default taken:** (a). The cook checks that the weapon is an equipment item that
+attacks and that the package's player may wear. RQ-007 gives each class its own
+weapon when play has class rules.

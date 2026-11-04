@@ -516,11 +516,13 @@ rules; KO's are Moradon's, from the tables above:
 | `refusals` | the text row of each refusal: `limit` 1911, `mismatch` 1907, `taken` 1912, `failed` 1902, `name` 1906, `stats` 1915 |
 | `name` | the name rule: `min` 1, `max` 20, `punctuation` `_:;` beside ASCII letters and digits (Q99) |
 | `fixed` | the choice a create without a race takes (Q100): race, specialty, face, hair and the bonus `points` per stat; Moradon's the Tuarek priest, face 0, hair 0, the ten points in MP |
+| `starting` | each specialty's starting set (RQ-160, below): groups of `specialties` sharing `items` (`[item, count]` pairs of the package's bag items) and the `weapon` among them it can use, every specialty of `races` in one group; or null, every specialty starting with the package's `starting` items |
 
 The realm owner's `realm-config.json` may add `create`: `table` (Q97, default the
 front end's), `races` (Q94, default `content`; only races in `content`) and
 `reserved` (Q99, words no name may contain, compared without regard to case;
-default none). `create.start` and `create.items` are not settings yet (Q101).
+default none). `create.start` and `create.items` are not settings yet (Q101);
+`create.items`' default is `starting` (RQ-160, RQ-154).
 
 **The cook.** `make realm-assets` (`ko_bake.py --features`) checks both files with
 the front-end choice, before the survey (`tools/assetc/ko_create.py` `plan`, through
@@ -529,7 +531,8 @@ end's inputs (`build`). It refuses a malformed file or setting, a table the pack
 lacks, a race without a player model, a `content` race without a create model
 (`models.create`, RQ-158), a table row whose race or specialty the
 package lacks, a missing row the offered races need, a fixed choice the rules
-refuse, and a create dress that does not resolve (RQ-159, above). The package's manifest gets a `create` section, which
+refuse, a create dress that does not resolve (RQ-159, above), and a starting set
+that does not fit the package (RQ-160, below). The package's manifest gets a `create` section, which
 `tools/assetc/create.py` cooks into `create.bin` (N3CC version 1, little-endian u32s
 and u32-length ASCII strings):
 
@@ -592,7 +595,7 @@ not decode is listed without `appearance` (logged), not dropped. Spec 03's accou
 each character's `slot`, `nation`, `race` and `specialty`.
 
 **What stays.** A new character starts at the package's spawn with its `starting`
-items (Q96 (b)); the stats are kept but play does not read them yet (RQ-007); the
+items (Q96 (b); RQ-154 gives it its specialty's set); the stats are kept but play does not read them yet (RQ-007); the
 screen still sends a name alone (RQ-004); one nation (RQ-006).
 
 ## The realm's races (RQ-003)
@@ -666,8 +669,39 @@ player scenes (`player-<state>.bin`, `combat-<i>.bin`) RQ-007 ships per race.
 draw it too, so no character is created that the hall or the world draws as a
 Tuarek. The cook refuses a `content` race outside `models.create`, and (as before) a
 `create.races` race outside `content`. The create dress is checked package data
-(RQ-159, above); the rest of the class data (starting items and weapons, skills,
-class rules) is open.
+(RQ-159, above), and so are each specialty's starting items and weapon (RQ-160,
+below); skills and class rules are open.
+
+**Starting items (RQ-160, Q96, Q107).** KO grants a new character nothing (the
+operator's `CREATE_NEW_CHAR`, local-asset, "Starting state" above); the realm grants
+the package's (Q96 (b)). What KO says about a weapon a class can use:
+
+| Observation | Where | Label |
+|---|---|---|
+| An item names the race (Item_Org column 14) and class kind (column 15: warrior, rogue, mage or priest, or 0 for any) that may wear it, and its rank, title and stat floors (columns 29–35); the client refuses another race or class kind before it moves an item to a slot | `src/Client/WarFare/UIInventory.cpp` `CUIInventory::IsValidRaceAndClass`, `src/Client/WarFare/GameDef.h` `__TABLE_ITEM_BASIC` | source |
+| The server's item move refuses another race, then `ItemEquipAvailable`'s rank, title and stat floors; it reads no class | `src/Server/Ebenezer/User.cpp` (the item move, `CUser::ItemEquipAvailable`) | source |
+| Of the pinned tree's 197 hand items (attach 0–4), 20 name a class. The Short Blade (120110000) and the Two-Handed Sword (125310000), the practice blade's and the two-hand blade's art (`games/moradon/appearance.json`), name none and need 62 and 72 strength | the pinned `Data/Item_Org_us.tbl` (sha256 `fe48c0df…07b2a`) | local-asset |
+| Each class's create dress weapon is of its kind (1298: swords and spears for warriors, daggers and bows for rogues, staffs for mages, maces for priests; 1264 one per race), each needing 106 to 200 of a stat, above a new character's; only the bows name a class (rogue) | 1264's and 1298's dress (RQ-159, above) through their Item_Org | local-asset |
+
+The 1298 binary's equip checks were not read; the source is the evidence here.
+
+`starting` in `character-create.json` gives each specialty its set. `ko_create.starting`
+checks it, in the `--features` cook, against the package's inventory, equipment and wear
+(`features.json` and the items the cook adds). It refuses:
+- an item the bag lacks, or a count over its stack limit;
+- a set the bag cannot hold beside the progression's reward slots (the inventory
+  cook's rule for the package's own `starting`);
+- a weapon that is not an equipment item that attacks (a wear item with attack slots);
+- a weapon the package's player may not wear by the server's rule
+  (`server/src/equipment.rs`): its race 0 or the package's, its title and attributes
+  at most the package's.
+
+Moradon's set is the package's `starting` items for every specialty, its weapon the
+practice blade (Q107 (a)). The package has no weapon of a rogue's, mage's or priest's
+kind, and the realm's equipment rule has no class (RQ-162, RQ-007). Nothing is cooked
+from `starting` yet: `create.bin`, the provenance and every pin are as before, and a new
+character still gets the package's `starting` items. RQ-154's `create.items` takes it
+as its default.
 
 ## What each item needs
 
@@ -691,7 +725,8 @@ class rules) is open.
   - its base stats and bonus, and its class set.
 
   For each class: the create dress (by the chosen table; RQ-159, checked, drawn by
-  RQ-004 and RQ-005), the starting items (Q96),
+  RQ-004 and RQ-005), the starting items and a weapon it can use (Q96; RQ-160,
+  checked; RQ-154 grants them),
   and the skills and class rules RQ-007 needs. All of it is package data under
   `games/moradon`.
 - **RQ-004 (screen).** As 1298 draws it:

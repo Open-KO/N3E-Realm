@@ -18,6 +18,11 @@ items resolve through and the client's robe exemptions; `columns` names the
 hand-plug and part-slot columns, and `dress` gives each specialty's create
 dress as KO's build draws it (1298 `005fd120`, 1264 `00439970`), each file
 named as tools/assetc/ko_item_files.py does, checked by `build`.
+`starting` (RQ-160, Q96 (b)) gives each specialty its starting items, groups
+of specialties sharing a set, each set naming the weapon among its items that
+the specialty can use, which the function `starting` checks against the
+package's inventory, equipment and wear (features.json); or it is null and
+every specialty starts with the package's `starting` items.
 The realm owner's `realm-config.json` may name, under `create`, another `table`
 (Q97), the `races` offered (Q94, default `content`) and `reserved` words (Q99).
 
@@ -37,7 +42,7 @@ import ko_item_files
 
 SOURCE = "character-create.json"
 KEYS = {"stats", "nation", "faces", "hairs", "races", "content", "player", "tables", "columns",
-        "front_ends", "refusals", "name", "fixed", "models"}
+        "front_ends", "refusals", "name", "fixed", "models", "starting"}
 # RQ-158: the forms a race's model ships in (each a list of races): `create`,
 # the create screen's model (ko_front_end, N3FE version 24).
 MODEL_KEYS = {"create"}
@@ -50,6 +55,9 @@ DRESS_KEYS = {"items", "extensions", "robe_exempt"}
 COLUMN_KEYS = {"stats", "bonus", "plugs", "parts"}
 MAX_SLOTS = 16
 FIXED_KEYS = {"race", "specialty", "face", "hair", "points"}
+# RQ-160: a group of specialties and the starting set they share.
+STARTING_KEYS = {"specialties", "items", "weapon"}
+MAX_STARTING = 64
 # realm-config.json's `create`: the realm owner's choices (Q94, Q97, Q99).
 CONFIG_KEYS = {"table", "races", "reserved"}
 
@@ -143,6 +151,30 @@ def rules(game):
                               type(fixed["points"]) is not list or len(fixed["points"]) != stats or
                               any(type(v) is not int or v < 0 for v in fixed["points"])):
         raise Refused("%s: fixed is null or exactly %s, with %d points" % (path, ", ".join(sorted(FIXED_KEYS)), stats))
+    starting = r["starting"]
+    if starting is not None:
+        if type(starting) is not list or not starting or \
+                any(type(g) is not dict or set(g) != STARTING_KEYS for g in starting):
+            raise Refused("%s: starting is null or a list of groups, each exactly %s" % (path, ", ".join(sorted(STARTING_KEYS))))
+        given = []
+        for g in starting:
+            given += ids(g["specialties"], "%s starting specialties" % path)
+            items = g["items"]
+            if type(items) is not list or not 1 <= len(items) <= MAX_STARTING or \
+                    any(type(i) is not list or len(i) != 2 or type(i[0]) is not str or not i[0] or
+                        type(i[1]) is not int or not 1 <= i[1] <= 9999 for i in items) or \
+                    len({i[0] for i in items}) != len(items):
+                raise Refused("%s: starting %s: items, 1 to %d distinct [item, count] pairs, count 1..9999"
+                              % (path, g["specialties"], MAX_STARTING))
+            if type(g["weapon"]) is not str or g["weapon"] not in [i[0] for i in items]:
+                raise Refused("%s: starting %s: weapon is one of its items" % (path, g["specialties"]))
+        offered = {s for race in races for s in race["specialties"]}
+        twice = sorted({s for s in given if given.count(s) > 1})
+        missing, extra = sorted(offered - set(given)), sorted(set(given) - offered)
+        if twice or missing or extra:
+            raise Refused("%s: starting names each specialty the races have once (%s)" % (path, "; ".join(
+                what % ", ".join(map(str, v)) for what, v in (("twice: %s", twice), ("without a set: %s", missing),
+                                                              ("no race has: %s", extra)) if v)))
     return r
 
 
@@ -322,6 +354,58 @@ def dress(chosen, assets, races=None):
                 plugs.append(dict(slot=slot, item=item, kind=org[ko_item_files.ORG["kind"]], file=name))
             sets[s] = dict(parts=parts, plugs=plugs)
         out[race["race"]] = sets
+    return out
+
+
+def starting(chosen, manifest):
+    """Each specialty's starting set (RQ-160, Q96 (b)): {specialty: {items:
+    [[item, count], ...], weapon}}, or None when the rules have none (every
+    specialty starts with the package's `starting` items). Nothing is cooked
+    from it yet: RQ-154's `create.items` takes it as its default.
+
+    Checked against the package `manifest`'s inventory, equipment and wear
+    (features.json and what the cook adds): each item is in the bag, its
+    count at most its stack limit, and a set fits the bag beside the
+    progression's reward slots, as the inventory cook requires of the
+    package's own `starting`. The weapon is an equipment item that attacks
+    (a wear item with attack slots) and that the package's player may wear,
+    by the server's rule (server/src/equipment.rs `eligible`): its race 0 or
+    the package's, its title and attributes at most the package's. (KO grants
+    no items, CREATE_NEW_CHAR, local-asset; its items name the class that may
+    wear them and their stat floors, content/character-create.md, "Starting
+    items".) Refuses a set that does not."""
+    r = chosen["rules"]
+    groups = r["starting"]
+    if groups is None:
+        return None
+    if any(k not in manifest for k in ("inventory", "equipment", "wear")):
+        raise Refused("%s: starting needs the package's inventory, equipment and wear (features.json)" % SOURCE)
+    inventory, equipment = manifest["inventory"], manifest["equipment"]
+    bag = {i["id"]: i for i in inventory["items"]}
+    gear = {i["id"]: i for i in equipment["items"]}
+    attacks = {i["id"] for i in manifest["wear"]["items"] if i["attack_slots"]}
+    rewards = manifest.get("gameplay", {}).get("slots", 0)
+    out = {}
+    for g in groups:
+        where = "%s starting %s" % (SOURCE, g["specialties"])
+        for item, count in g["items"]:
+            if item not in bag:
+                raise Refused("%s: item %s is not in the package's inventory" % (where, item))
+            if count > bag[item]["stack_limit"]:
+                raise Refused("%s: item %s: %d over its stack limit %d" % (where, item, count, bag[item]["stack_limit"]))
+        if len(g["items"]) >= inventory["capacity"] or len(g["items"]) + rewards > inventory["capacity"]:
+            raise Refused("%s: %d stacks and %d reward slots do not fit the bag of %d"
+                          % (where, len(g["items"]), rewards, inventory["capacity"]))
+        weapon = gear.get(g["weapon"])
+        if weapon is None or g["weapon"] not in attacks:
+            raise Refused("%s: weapon %s is not an equipment item that attacks (equipment, wear attack_slots)"
+                          % (where, g["weapon"]))
+        if weapon["title"] > equipment["title"] or weapon["race"] not in (0, equipment["race"]) or \
+                any(need > base for need, base in zip(weapon["attributes"], equipment["attributes"])):
+            raise Refused("%s: weapon %s: the package's player may not wear it (its race, title or attributes)"
+                          % (where, g["weapon"]))
+        for s in g["specialties"]:
+            out[s] = dict(items=[list(i) for i in g["items"]], weapon=g["weapon"])
     return out
 
 

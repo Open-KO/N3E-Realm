@@ -29,5 +29,11 @@
   "front_ends": {"1097": "1264", "1298": "1298"},
   "refusals": {"limit": 1911, "mismatch": 1907, "taken": 1912, "failed": 1902, "name": 1906, "stats": 1915},
   "name": {"min": 1, "max": 20, "punctuation": "_:;"},
-  "fixed": {"race": 2, "specialty": 104, "face": 0, "hair": 0, "points": [0, 0, 0, 0, 10]}
+  "fixed": {"race": 2, "specialty": 104, "face": 0, "hair": 0, "points": [0, 0, 0, 0, 10]},
+  "starting": [
+    {"specialties": [101, 102, 103, 104, 201, 202, 203, 204], "weapon": "demo:item/blade",
+     "items": [["demo:item/blade", 1], ["demo:item/potion", 5], ["demo:item/shield", 1], ["demo:item/twohand", 1],
+               ["demo:item/ring", 1], ["demo:item/other_race", 1], ["demo:item/strong", 1], ["demo:item/titled", 1],
+               ["demo:item/armor", 1]]}
+  ]
 }

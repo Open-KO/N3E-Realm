@@ -1423,3 +1423,144 @@ the race too) until the Tuarek click that builds or the next open, and a re-clic
 on the chosen Tuarek, which builds nothing, leaves them cyan. The cook, the client
 and the server move to version 23 together; the 1097 choice differs only by the
 version byte. The stat values stay empty and `text_bonus` hidden (Q52).
+
+### Q94 — Which races and classes the realm's create offers
+
+RQ-001 (`content/character-create.md`, binary): no KO version disables a race
+button. 1298's race click enables the race's classes:
+- Arch Tuarek and Barbarian: warrior.
+- Tuarek: rogue and priest.
+- Wrinkle Tuarek: mage.
+- Puri Tuarek: priest.
+- El Morad male and female: all four.
+
+The Puri Tuarek, which the item thought disabled, is a live check button in 1298's
+layout, with its own table row and looks. The realm offers one race and class today
+(Q52).
+
+Options:
+- (a) KO's whole matrix for the account's nation, the Puri Tuarek included.
+- (b) A subset the realm owner names, the other buttons drawn as KO draws a class
+  the race cannot take. For a race button that is new (no KO version disables one),
+  so a subset needs its own look decision.
+
+**Default taken:** (a), as package data (the matrix, per race), with a realm-owner
+`create.races` list defaulting to every race the package has content for. Until
+RQ-003 cooks a race's model, the realm leaves that race's button as Q52 has it.
+Until RQ-006, the nation is Karus.
+
+### Q95 — How strictly the realm's server checks a create
+
+Ebenezer (`00491a02`, binary) checks the name, a slot 0..4, that the class exists,
+a sum of at most 300, each stat ≥ 50, and per-race floors. It does not check:
+- the race/class matrix, or the class's nation;
+- that the race exists;
+- face or hair;
+- an exact sum.
+
+When its queue send fails it answers success. The realm's rule is that the server
+never trusts the client (RQ-002).
+
+Options:
+- (a) KO's checks exactly.
+- (b) Stricter:
+  - the race offered (Q94) and of the account's nation;
+  - the class in the race's set;
+  - face 0..3 and hair 0..2;
+  - each stat at least the table's base;
+  - the sum exactly base + bonus.
+
+  Internal failures answer an error, never success.
+
+**Default taken:** (b), a recorded deviation. Every create KO's client sends passes
+both. Only a forged or broken packet sees the difference, and it is refused with
+KO's nearest code: 2 for race, class or nation; 17 for stats, face or hair.
+
+### Q96 — Where a new character starts and what it carries
+
+KO's operator procedure (`CREATE_NEW_CHAR`, local-asset) starts every character in
+zone 21, Moradon, at (312, 402), with no items. The ko4life procedure starts it in
+the nation's home zone. The create screen's dress (`NewChrValue`'s items) is drawn
+only: no version's server creates it. The realm starts each character at the
+package's spawn, with the package's `starting` items (`server/src/inventory.rs`).
+
+Options:
+- (a) KO's operator: no items, Moradon's spawn.
+- (b) The realm's: the package's `starting` items and spawn, per class once RQ-003
+  gives each class its set.
+- (c) The create dress as real items.
+
+**Default taken:** (b), with realm-owner settings `create.start` (zone and position)
+and `create.items` (per class, default the package's `starting`). The dress stays
+display only, as in every KO version.
+
+### Q97 — Which version's create table the realm validates against
+
+The base stats and the dress differ by version (`content/character-create.md`,
+local-asset):
+- 1097's `NewChrValue` is keyed by race, has no item columns, and gives the Tuarek
+  65 / 65 / 60 / 50 / 50.
+- 1264's is keyed by race, with one dress per race; its Tuarek is 60 / 60 / 70.
+- 1298's is keyed by race and class, with one dress per class; its Tuarek is
+  60 / 60 / 70.
+
+Ebenezer's own floors (dex ≥ 70 for a Tuarek) match 1264's and 1298's. A 1097
+Tuarek passes them only with all ten points in dex.
+
+Options:
+- (a) One table for every front end (1298's).
+- (b) The table of the client whose create screen the front end draws: 1264's for
+  the 1097 choice (§9.2, it draws 1264's screens), 1298's for the 1298 recipe.
+- (c) A realm-owner `create.table` setting, defaulting as (b).
+
+**Default taken:** (c) with (b)'s default. The server's floors come from the chosen
+table's bases, not from Ebenezer's code. The cook refuses a table whose races or
+classes the package lacks.
+
+### Q98 — Nation per account, and changing it
+
+In KO the nation is the account's (`ACCOUNT_CHAR.bNation`, local-asset). A login
+answer with nation 0 opens nation select.
+
+1298 and 1264 ask text 10420 before sending: "You must delete all your characters in
+this nation if you wish to create a character in the opposite nation."
+
+Deleting the last character returns to nation select (source). But the operator's
+`NATION_SELECT` has its character-count check commented out, so the rule is only
+the client's.
+
+Options:
+- (a) KO's: the server accepts a nation at any time.
+- (b) The server refuses a nation change while the account has a character. A
+  durable per-account nation is set by the first choice and cleared when the last
+  character is deleted.
+
+**Default taken:** (b), a recorded deviation in the server only. The screens and
+texts stay KO's. RQ-006 lands it, and RQ-008 clears the nation on the last delete.
+
+### Q99 — Character name rules
+
+KO's client and server disagree on names (`content/character-create.md`, binary):
+
+| | Length | Characters | Reserved words |
+|---|---|---|---|
+| Ebenezer | 1..20 | ASCII letters and digits, plus `_`, `:` and `;` | a flagged list of 12 staff and company words, and a 100-word list |
+| 1298 client | no limit found | allows bytes ≥ 0x80, except some symbols | none |
+| The realm today | 1..24 | ASCII letters, digits, `_` and `-` (KO refuses `-`) | none |
+
+The realm today is also case-sensitive unique. KO's lookup is case-insensitive under
+SQL Server's default collation.
+
+Options:
+- (a) Ebenezer's rules.
+- (b) Ebenezer's without `:` and `;`.
+- Either way: case-insensitive uniqueness per realm, and a realm-owner reserved list.
+
+**Default taken:** (a):
+- 1..20 ASCII letters, digits, `_`, `:` and `;`;
+- unique per realm without regard to case;
+- refused with code 5 (row 1906), a taken name with 3 (row 1912);
+- a realm-owner `create.reserved` list, empty by default, compared case-folded as
+  Ebenezer's is. KO's staff and company words are not carried.
+
+The rule applies to new creates; an existing name outside it is kept.

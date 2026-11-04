@@ -1456,6 +1456,23 @@ and still hides `img_sta`, `img_dex` and `img_map`, as that call does; the stat
 values stay empty and `text_bonus` hidden (Q52). `make live-ko` finds pink text in
 the two rects and none in the other three at each size.
 
+## 10. Character create, end to end (RQ-001, 2026-11-04)
+
+KO's whole create flow is written down as the character lane's contract in
+`content/character-create.md`, with the evidence labelled and addressed there. It
+covers:
+- the login's nation byte and nation select (1298 `005f8340`, `005ed910`–`005edbc0`,
+  `0060c830`);
+- the race/class matrix, which no version uses to disable a race button (1298
+  `006060f0`, 1264 `0043ec90`, 1097 `0043a190`);
+- face 0..3 and hair 0..2;
+- `NewChrValue`'s bases and the 10 bonus points per version;
+- the client's checks and its refusal rows (`005fffd0`, `00600750`);
+- Ebenezer's validation (`00491a02`, `IsValidName` `004a77eb`) and Aujard's call;
+- the operator procedure's slots, nation check, Moradon start and empty inventory.
+
+The decisions it needs are Q94–Q99.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

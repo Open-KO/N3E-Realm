@@ -1398,6 +1398,13 @@ not this item: 1264's Reset writes the five stat values and the bonus, which the
 realm leaves empty and hidden (Q52, "stats hidden"). **Decided nothing at RQ-141
 (Q92):** a look-and-feel difference, put to the maintainer.
 
+**Decides (RQ-144, Q92 (b), the maintainer's 2026-11-03, "Pink Str/Int, as
+1264"):** the 1097 choice's create draws `img_str` and `img_int`, so "Strength" and
+"Intelligence" read pink over their light labels, as 1264's after `0043ee10(104)`,
+and still hides `img_sta`, `img_dex` and `img_map`, as that call does; the stat
+values stay empty and `text_bonus` hidden (Q52). `make live-ko` finds pink text in
+the two rects and none in the other three at each size.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -1426,5 +1433,5 @@ notes.
 | Q89 | §9.16 (RQ-134): 1264's chosen race and class draw `UI_STATE_BUTTON_DOWN` (`0043ec90`, `0043ee10`), the layout's sunken pink tile; the 1097 choice's fixed `on` drew the raised pink on tile. RQ-138 (option (b), the maintainer's): the 1097 choice's Tuarek and priest are the recipe state `down` and draw their `BS_DOWN` tiles, still chosen from the open. |
 | Q90 | §9.16 (RQ-134): the 1264 layout's Puri Tuarek has an untextured `BS_DISABLE` image, so the realm's fixed disabled drew only its label; 1264 never disables a race button (`0043ec90`). RQ-139 (the maintainer's): the 1097 choice leaves it unfixed and unbound, drawing its `BS_NORMAL` grey tile, inert as the other race buttons. |
 | Q91 | §9.16 (RQ-140): after a Tuarek and a priest click 1264 shows `img_warrior` and `img_mage` (darker grey tiles) for the warrior and mage buttons, the rogue a live NORMAL button and the priest down (`0043ec90`, `0043ee10`); the 1097 choice drew the warrior, rogue and mage fixed disabled in their normal grey tile. RQ-142 (option (b), the maintainer's): the 1097 choice hides the warrior and mage buttons for their images and hides `img_rogue` and `img_priest`, the rogue still inert, race and class still chosen from the open. |
-| Q92 | §9.16 (RQ-141): after a priest click 1264 shows `img_str` and `img_int` (`0043ee10(104)`), pink copies drawn over the light "Strength" and "Intelligence"; each open hides all five (`0043ea10`). The 1097 choice hides all five, so its labels are all light. Open: put to the maintainer, nothing applied. |
+| Q92 | §9.16 (RQ-141): after a priest click 1264 shows `img_str` and `img_int` (`0043ee10(104)`), pink copies drawn over the light "Strength" and "Intelligence"; each open hides all five (`0043ea10`). The 1097 choice hid all five, so its labels were all light. RQ-144 (option (b), the maintainer's): the 1097 choice draws `img_str` and `img_int` and hides the other three, the stat values still empty. |
 | Q72 | §9.10 (RQ-120, correcting §8.2): 1097 and 1264 (and 1298, RQ-121) clear the UI flag from the select request until the main procedure, so no arrow, ESC or button reaches the select during the start clip; only the tick's ENTER skips it. RQ-121 (the maintainer) makes the realm's ESC and Exit do nothing then too. §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077), as RQ-120 corrects it: DoJobLeft and DojobRight would start a turn from state 3, but no arrow reaches them during the clip; the realm ignores them then too. |

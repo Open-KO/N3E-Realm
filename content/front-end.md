@@ -937,7 +937,7 @@ box and loading are 1264's.
   draws its chosen race and class (RQ-138, Q89 (b), the maintainer's 2026-11-03,
   "Sunken, as 1264"; §9.16, binary: `0043ec90`, `0043ee10`, `00403a70`); every
   other race, class, face, hair and stat arrow fixed disabled, the bonus points
-  and stat highlights hidden (Q52), but the Puri Tuarek (`btn_race_ka_pt`), whose
+  hidden and the stat values empty (Q52), but the Puri Tuarek (`btn_race_ka_pt`), whose
   disabled image has no texture: it takes no state and no action, so it draws its
   normal grey tile as 1264's race buttons at rest, takes no pointer and does
   nothing when clicked (RQ-139, Q90, the maintainer's 2026-11-03, "Grey button,
@@ -947,7 +947,12 @@ box and loading are 1264's.
   the labels) stand in their place, `img_rogue` and `img_priest` hidden, the
   rogue fixed disabled (its normal tile, inert where 1264's would take a click)
   and the priest `down` (RQ-142, Q91 (b), the maintainer's 2026-11-03, "Match
-  1264, Rogue inert"; §9.16, binary: `0043ec90`, `0043ee10`).
+  1264, Rogue inert"; §9.16, binary: `0043ec90`, `0043ee10`). The stat labels
+  are 1264's after a priest click: `img_str` and `img_int` drawn, pink
+  (0xff8080) copies over the light "Strength" and "Intelligence", and
+  `img_sta`, `img_dex` and `img_map` hidden, so "Health", "Dexterity" and
+  "Magic Power" stay light (RQ-144, Q92 (b), the maintainer's 2026-11-03,
+  "Pink Str/Int, as 1264"; §9.16, binary: `0043ee10`, `0043ea10`).
 - Loading (`UI_US/co_loading_us.uif`, centred; `Text_Version` at (10, 10)):
   1264's layout when no nation has won the last war (`005f9a30`); the realm has
   no war, so no victor (Q80).

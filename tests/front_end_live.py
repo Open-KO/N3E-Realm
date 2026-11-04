@@ -41,7 +41,10 @@ from the player's own KO data.
      fixed `down` (RQ-138, Q89 (b), KO-FINDINGS 9.16: the 1097 choice's Tuarek
      and priest) draw their down image's texels, as 1264 draws its chosen race
      and class (0043ec90, 0043ee10, 00403a70), over 85% of their rect (the
-     rest under the label) and their on image's under half;
+     rest under the label) and their on image's under half; the stat labels
+     the recipe draws (RQ-144, Q92 (b), KO-FINDINGS 9.16: the 1097 choice's
+     img_str and img_int, 1264's after a priest click, 0043ee10) turn their
+     text pink, the hidden ones leaving it light;
    - loading: the progress bar's lit share grows from the start stage (2/3: the
      package and its textures) to the first World (1);
    - message: the box's text rect holds text (RQ-085: 1264's El_MessageBox_us,
@@ -388,6 +391,27 @@ if chosen == "1097":
     assert {"img_rogue", "img_priest"} <= set(create_recipe["hidden"]), create_recipe["hidden"]
 
 
+# RQ-144 (Q92 (b), KO-FINDINGS 9.16, the maintainer's "Pink Str/Int, as
+# 1264"): each stat label img_* is a pink (0xff8080) root string over a light
+# (0xe6e6e6) one with the same text and rect; a priest click shows img_str and
+# img_int (0043ee10(104)). A label the chosen recipe draws turns its text pink;
+# a hidden one leaves the light text over the grey panel, which holds no pink.
+# Each id -> its rect.
+STAT_LABELS = {ident: find(LAYOUTS["create"], ident)["rect"]
+               for ident in ("img_str", "img_sta", "img_dex", "img_int", "img_map")}
+for ident in STAT_LABELS:
+    assert find(LAYOUTS["create"], ident)["color"] & 0xffffff == 0xff8080, ident
+SHOWN_STATS = [ident for ident in STAT_LABELS if ident not in create_recipe.get("hidden", [])]
+if chosen == "1097":
+    assert SHOWN_STATS == ["img_str", "img_int"], SHOWN_STATS
+
+
+def pink_and_light(pixels):
+    """(text pixels nearer the pink label's colour, ones of the light label's)."""
+    return (sum(p[0] >= 200 and p[0] - max(p[1], p[2]) >= 60 for p in pixels),
+            sum(min(p) >= 200 for p in pixels))
+
+
 def extent(tree):
     """The rect around a node's descendants (not its own rect: a group's
     region is KO's hit area, not what it draws)."""
@@ -627,6 +651,13 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
         # The rest lie under the class's label (root strings drawn after the
         # images) or are the image's 16 translucent corner pixels.
         assert share > 0.85, (size, ident, share)
+    for ident, label in STAT_LABELS.items():
+        pink, light = pink_and_light(region(path, (cx + label[0] - root["rect"][0], cy + label[1] - root["rect"][1],
+                                                   cx + label[2] - root["rect"][0], cy + label[3] - root["rect"][1])))
+        if ident in SHOWN_STATS:
+            assert pink > 100 and light == 0, (size, ident, pink, light)
+        else:
+            assert pink == 0 and light > 100, (size, ident, pink, light)
 
     start, rect, _ = shots["loading-start"]
     world = shots["loading-world"][0]

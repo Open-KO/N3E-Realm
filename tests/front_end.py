@@ -493,9 +493,15 @@ assert {"btn_class_warrior", "btn_class_mage", "img_rogue", "img_priest"} <= hid
 assert not {"img_warrior", "img_mage", "btn_class_rogue", "btn_class_priest"} & hidden_1097, hidden_1097
 assert not {"btn_class_warrior", "btn_class_mage"} & set(states_1097), states_1097
 assert states_1097["btn_class_rogue"] == "disabled", states_1097
+# RQ-144 (Q92 (b), KO-FINDINGS 9.16, the maintainer's "Pink Str/Int, as
+# 1264"): a priest click shows img_str and img_int (0043ee10(104)), pink
+# copies over the light "Strength" and "Intelligence", and hides the other
+# three; the stat values stay empty and text_bonus hidden (Q52).
+assert not {"img_str", "img_int"} & hidden_1097, hidden_1097
+assert {"img_sta", "img_dex", "img_map", "text_bonus"} <= hidden_1097, hidden_1097
 print("PASS front-end cook: the recipe state down, the down image in the on state, the 1097 choice's Tuarek and "
       "priest drawn down as 1264's chosen race and class, its Puri Tuarek unfixed and unbound, its warrior and "
-      "mage drawn as their images and its rogue inert")
+      "mage drawn as their images, its rogue inert and its priest's Strength and Intelligence pink")
 
 # RQ-133 (version 22, KO-FINDINGS 9.15): create's nodes drawn only until the
 # race is chosen (1298's 006060f0 hides the class buttons the race cannot take

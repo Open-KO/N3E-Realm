@@ -1375,3 +1375,11 @@ keeps; no cook, format or client change); the cook test would check the recipe a
 writes the player's stats and the bonus; that is not this question.
 **Default taken:** none applied; (b) proposed, the look 1264 shows for the same
 choice with nothing else changed, as Q89 (b), Q90 and Q91 (b) were taken.
+**Decided (maintainer, 2026-11-03), RQ-144:** (b), "Pink Str/Int, as 1264". The
+1097 recipe's create no longer hides `img_str` and `img_int`, so "Strength" and
+"Intelligence" draw pink over their light labels, as 1264's after a priest click;
+it still hides `img_sta`, `img_dex`, `img_map` and `text_bonus`, and the stat
+values stay empty (Q52). Package data only: no cook, format or client change;
+`make live-ko` finds pink text in the two rects and only light text in the other
+three at each size. The 1298 recipe is unchanged (its stat labels are their own
+item).

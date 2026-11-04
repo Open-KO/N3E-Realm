@@ -74,7 +74,7 @@
       },
       "hidden": [
         "btn_class_warrior", "btn_class_mage", "img_rogue", "img_priest",
-        "img_str", "img_sta", "img_dex", "img_int", "img_map", "text_bonus"
+        "img_sta", "img_dex", "img_map", "text_bonus"
       ]
     },
     "loading": {

@@ -82,10 +82,8 @@
         "btn_map_left": "disabled",
         "btn_map_right": "disabled"
       },
-      "hidden": [
-        "btn_race_el_ba", "btn_race_el_rm", "btn_race_el_rf",
-        "img_warrior", "img_rogue", "img_mage", "text_bonus"
-      ]
+      "until_race": ["img_rogue", "img_priest", "btn_class_warrior", "btn_class_mage"],
+      "hidden": ["btn_race_el_ba", "btn_race_el_rm", "btn_race_el_rf", "text_bonus"]
     },
     "loading": {
       "ui": "UI_US/ka_loading_us.uif",

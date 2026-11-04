@@ -420,6 +420,55 @@ assert not {"create_no_race", "create_no_class"} & set(create_1097.get("messages
 print("PASS front-end cook: create's race and class buttons, the 1298 recipe's waiting for both and wording "
       "their refusals with 1298's rows, the 1097 choice's chosen from the open")
 
+# RQ-133 (version 22, KO-FINDINGS 9.15): create's nodes drawn only until the
+# race is chosen (1298's 006060f0 hides the class buttons the race cannot take
+# for their img_*, and the images of the classes it can), the create's
+# `until_race`: flag 8, in a create that binds create_race.
+def until_tree(race=True):
+    return node(0, "root", [button("btn_create"), button("btn_cancel"),
+                            node(8, "edit_name", [node(4, texture=""), text("")]), node(9, "area_character"),
+                            text("text_desc"), node(4, "img_rogue"), node(4, "img_blank", texture=""),
+                            button("btn_race_ka_tu" if race else "btn_race_other"),
+                            button("btn_class_warrior"), button("btn_class_priest")])[1]
+
+
+def until_screens(race=True, specs=None, **create):
+    bindings = dict(CHOICE_BINDINGS) if race else {k: v for k, v in CHOICE_BINDINGS.items() if v != "create_race"}
+    return cook_screens(trees={**trees, "create.uif": until_tree(race)},
+                        specs={**{n: spec(n) for n in fe.SCREENS},
+                               "create": spec("create", bindings=bindings, **create), **(specs or {})})[0]
+
+
+UNTIL = until_screens(until_race=["img_rogue", "btn_class_warrior"], states={"btn_class_warrior": "disabled"})
+until_flags = {i: f for i, _, f in node_records(UNTIL[2]) if i in ("img_rogue", "btn_class_warrior", "btn_class_priest")}
+assert fe.UNTIL_RACE == 8 and until_flags == {"img_rogue": fe.UNTIL_RACE,
+                                              "btn_class_warrior": fe.FIXED_DISABLED | fe.UNTIL_RACE,
+                                              "btn_class_priest": 0}, until_flags
+for reason, kw in (
+        ("create's only", dict(specs={"login": spec("login", until_race=["notice"])})),
+        ("a node named twice or hidden", dict(until_race=["img_rogue", "img_rogue"])),
+        ("a node named twice or hidden", dict(until_race=["img_rogue"], hidden=["img_rogue"])),
+        ("a create that binds no create_race", dict(race=False, until_race=["img_rogue"])),
+        ("a node it names is not drawn", dict(until_race=["img_blank"]))):
+    try:
+        until_screens(**kw)
+    except ValueError as error:
+        assert "until_race: " + reason in str(error), (reason, error)
+        continue
+    raise AssertionError(("cooked until_race", reason, kw))
+# The 1298 recipe (KO-FINDINGS 9.15, RQ-133): before its race click every class
+# button and image draws (the reset 006066b0's 00605950 shows them all, the
+# images under the buttons, which come after them in the layout); the Tuarek
+# click (006060f0(2)) hides the warrior and mage buttons, whose images then
+# show, and the rogue and priest images. So img_warrior and img_mage always
+# draw, and the four until the race. The 1097 choice names none.
+assert create_1298["until_race"] == ["img_rogue", "img_priest", "btn_class_warrior", "btn_class_mage"], \
+    create_1298.get("until_race")
+assert not {"img_warrior", "img_rogue", "img_mage", "img_priest"} & set(create_1298["hidden"]), create_1298["hidden"]
+assert "until_race" not in create_1097["screens"]["create"], create_1097["screens"]["create"]
+print("PASS front-end cook: create's nodes drawn until the race is chosen, the 1298 recipe's class buttons and "
+      "images as 006060f0 shows them, the 1097 choice's none")
+
 
 # RQ-084: a layout from another input (`<name>:<path>`) reads its textures from
 # that input's tree; an unprefixed one from the first.
@@ -934,7 +983,7 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=21, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=22, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0)):
@@ -1805,6 +1854,12 @@ def patch_node(screen_data, index, ident, action=None, flags=None):
 
 CHOICE_CASES = {
     "bad-version-20": blob(version=20),
+    # RQ-133 (version 22): create's nodes drawn until the race is chosen.
+    "bad-version-21": blob(version=21),
+    "ok-until-race": blob(screen_data=UNTIL),
+    "bad-until-race-no-race": blob(screen_data=patch_node(UNTIL, 2, "btn_race_ka_tu", action=0)),
+    "bad-until-race-off-create": blob(screen_data=patch_node(UNTIL, 0, "notice", flags=8)),
+    "bad-node-flags": blob(screen_data=patch_node(UNTIL, 2, "img_rogue", flags=16)),
     "ok-create-choice": blob(screen_data=CHOICE),
     "ok-create-choice-race-only": blob(screen_data=patch_node(CHOICE, 2, "btn_class_priest", action=0)),
     "bad-create-choice-on": blob(screen_data=patch_node(CHOICE, 2, "btn_race_ka_tu", flags=1)),
@@ -2015,6 +2070,10 @@ try:
     # each for its own reason.
     # RQ-130: create's race and class choices, each refusal for its reason.
     for name, reason in (("bad-version-20", "front end version"),
+                         ("bad-version-21", "front end version"),
+                         ("bad-until-race-no-race", "front end until race"),
+                         ("bad-until-race-off-create", "front end until race"),
+                         ("bad-node-flags", "front end node state"),
                          ("bad-create-choice-on", "front end create choice"),
                          ("bad-create-choice-disabled", "front end create choice"),
                          ("bad-create-choice-text", "front end create choice"),
@@ -2022,7 +2081,7 @@ try:
                          ("bad-create-choice-twice", "front end action bound twice")):
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
-    for name in ("ok-create-choice", "ok-create-choice-race-only"):
+    for name in ("ok-create-choice", "ok-create-choice-race-only", "ok-until-race"):
         assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
     for name, reason in (("bad-yes-off-message", "yes/no off the message box"),
                          ("bad-exit-confirm-no-buttons", "exit_confirm without yes and no"),

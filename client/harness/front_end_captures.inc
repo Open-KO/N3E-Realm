@@ -59,9 +59,12 @@
 // buttons pressed as a player does: whether the new character stands and the
 // race and class buttons' draw states (0 normal, 1 down, 2 on, 3 disabled),
 // and the message each Create shows (none: the create was sent):
-//   FRONT_CREATE_CHOICE open=N,R,C empty=M norace=M class=C,N classfirst=M race=R,C,N noclass=M both=R,C,N
-//     create=M sent=0|1
-// (on one line) and the box of each refusal it words:
+//   FRONT_CREATE_CHOICE open=N,R,C until=U empty=M norace=M class=C,N until=U classfirst=M race=R,C,N until=U
+//     noclass=M both=R,C,N create=M sent=0|1 reopen=U
+// (on one line; RQ-133: U the ids of create's nodes drawn only until the race
+// is chosen that draw then, comma-separated, `-` for none; reopen= after a
+// race click, a Cancel and ENTER opening create again) and the box of each
+// refusal it words:
 //   FRONT_CREATE_MESSAGE M|title|text
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
@@ -432,8 +435,14 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       };
       bool sent = false;
       frame();
+      // RQ-133 (version 22): the ids of create's until-race nodes drawn now.
+      const auto until = [&] {
+        std::string ids;
+        for (const auto &id : front->until_race_drawn()) ids += (ids.empty() ? "" : ",") + id;
+        return ids.empty() ? std::string("-") : ids;
+      };
       std::cout << "FRONT_CREATE_CHOICE open=" << stands() << "," << front->action_state(A::create_race) << ","
-                << front->action_state(A::create_class);
+                << front->action_state(A::create_class) << " until=" << until();
       std::cout << " empty=" << create(sent);
       SDL_Event typed{};
       typed.type = SDL_EVENT_TEXT_INPUT;
@@ -442,19 +451,32 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       std::cout << " norace=" << create(sent);
       click(A::create_class);
       frame();
-      std::cout << " class=" << front->action_state(A::create_class) << "," << stands();
+      std::cout << " class=" << front->action_state(A::create_class) << "," << stands() << " until=" << until();
       std::cout << " classfirst=" << create(sent);
       click(A::create_race);
       frame();
       std::cout << " race=" << front->action_state(A::create_race) << "," << front->action_state(A::create_class)
-                << "," << stands();
+                << "," << stands() << " until=" << until();
       std::cout << " noclass=" << create(sent);
       click(A::create_class);
       frame();
       std::cout << " both=" << front->action_state(A::create_race) << "," << front->action_state(A::create_class)
                 << "," << stands();
       const auto last = create(sent);
-      std::cout << " create=" << last << " sent=" << sent << std::endl;
+      std::cout << " create=" << last << " sent=" << sent;
+      // RQ-133: a race click, a Cancel (ESC) and create opened again: each
+      // open shows the until-race nodes again (1298's reset, 006066b0).
+      front->select_at(0);
+      frame();
+      key(SDLK_RETURN);
+      frame();
+      click(A::create_race);
+      frame();
+      key(SDLK_ESCAPE);
+      frame();
+      key(SDLK_RETURN);
+      frame();
+      std::cout << " reopen=" << until() << std::endl;
       for (const auto &b : boxes) std::cout << "FRONT_CREATE_MESSAGE " << b << std::endl;
       front->jump(Screen::select);
     }

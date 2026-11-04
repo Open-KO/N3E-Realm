@@ -2676,7 +2676,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 21, "front end version");
+  need(r.u() == 22, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2740,7 +2740,7 @@ FrontEnd load_front_end(const Release &release) {
       need(n.action == FrontAction::none || bound.insert(n.action).second, "front end action bound twice");
       n.flags = r.u();
       n.mask = r.u();
-      need(n.flags <= 7 && n.mask >= 1 && n.mask <= 15, "front end node state");
+      need(n.flags <= 15 && n.mask >= 1 && n.mask <= 15, "front end node state");
       // Version 21 (RQ-130): create's race and class choices are buttons the
       // player clicks, so neither fixed on nor fixed disabled.
       need((n.action != FrontAction::create_race && n.action != FrontAction::create_class) ||
@@ -2800,6 +2800,12 @@ FrontEnd load_front_end(const Release &release) {
     if (screen != size_t(FrontScreen::create))
       for (auto action : {FrontAction::create_race, FrontAction::create_class})
         need(!bound.contains(action), "front end create choice off create");
+    // Version 22 (RQ-133): a node drawn only until the race is chosen is
+    // create's, in a create that waits for its race (1298's 006060f0).
+    for (const auto &n : fe.screens[screen])
+      need(!(n.flags & FrontNode::UNTIL_RACE) ||
+               (screen == size_t(FrontScreen::create) && bound.contains(FrontAction::create_race)),
+           "front end until race");
   }
   for (auto &s : fe.strings) s = ascii(text(1024));
   // D3DLIGHT9's range is unclamped (the intro's point lights carry 1e6 and
@@ -3058,7 +3064,8 @@ FrontEnd load_front_end(const Release &release) {
     const auto bound = read_nodes(logo.nodes);
     need(bound.empty(), "front end logo action");
     for (const auto &n : logo.nodes)
-      need(n.kind == FrontNode::GROUP || n.kind == FrontNode::IMAGE || n.kind == FrontNode::TEXT,
+      need((n.kind == FrontNode::GROUP || n.kind == FrontNode::IMAGE || n.kind == FrontNode::TEXT) &&
+               !(n.flags & FrontNode::UNTIL_RACE),
            "front end logo node");
     const auto groups = r.count(8);
     auto seconds = [&](float v) { return std::isfinite(v) && v >= 0 && v <= 60; };

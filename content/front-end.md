@@ -20,9 +20,10 @@ RQ-119), where the select's Back lands (version 17, RQ-112), whether the
 select arrow at the end of the row is hidden (version 18, RQ-113),
 whether create is a screen of its own or draws over the select hall, with the
 new character's turn at each slot (version 19, RQ-125), create's slide,
-its panels sliding in each time it opens (version 20, RQ-126), and create's
+its panels sliding in each time it opens (version 20, RQ-126), create's
 race and class buttons, which a create that binds them waits for, with two
-messages (version 21, RQ-130).
+messages (version 21, RQ-130), and create's nodes drawn only until its race is
+chosen (version 22, RQ-133).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
@@ -36,7 +37,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 21, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 22, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -49,7 +50,8 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    - kind (0 image, 1 text, 2 button, 3 edit, 4 progress, 5 group, 6 area,
      7 list), parent (none, `0xffffffff`, for the first node only; otherwise an
      earlier node), rect x0 y0 x1 y1 on the canvas, id (≤64 bytes), action,
-     flags (1 fixed on, 2 fixed disabled, 4 progress foreground), state mask
+     flags (1 fixed on, 2 fixed disabled, 4 progress foreground, 8 drawn
+     only until the race is chosen: version 22, create's, "Actions"), state mask
      (1–15: the button states normal, down, on, disabled it draws in);
    - image: texture, uv u0 v0 u1 v1 in [0, 1];
    - text: text (≤1024 ASCII bytes), font, colour (ARGB), KO string style;
@@ -424,7 +426,9 @@ flag other than 0 or 1 or a text that does not replace, a node bound to
 `yes` or `no` on a screen other than the message box, or `exit_confirm` named
 without nodes bound to both on it (version 14), a node bound to `create_race`
 or `create_class` on a screen other than create, or one that is not a button
-or is fixed on or fixed disabled (version 21), a select ESC other than 0, 1 or
+or is fixed on or fixed disabled (version 21), a node flag above 15, or flag 8
+on a screen other than create, on a create that binds no `create_race` or on
+the logo screen (version 22), a select ESC other than 0, 1 or
 2 (version 15; 2 since version 16), a select Back other than 0 or 1 (version
 17), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
@@ -491,6 +495,18 @@ create the server receives names no race or class, and the server makes the
 character it makes (Q52). A create that binds neither keeps race and class
 chosen from the open and the new character at the slot in focus, as before
 version 21.
+
+Create's nodes drawn until the race is chosen (version 22, RQ-133,
+`specs/KO-FINDINGS.md` §9.15, binary), create screen only, in a create that
+binds `create_race`: a node with flag 8, and its subtree, draws (and takes
+clicks) only while the race is not chosen, so from each open to the race click
+(1298's race click, `006060f0`, hides the class buttons the race cannot take,
+their `img_*` standing in their place, and the images of the classes it can;
+its reset, `006066b0` by `00605950`, shows every class button and image again
+at each open). The recipe names them in the create screen's `until_race`, a
+list of nodes of the layout, each once and none of them `hidden`; the cook
+refuses it on another screen, in a create that binds no `create_race`, and for
+a node that draws nothing.
 
 The message box's styles (version 14, RQ-111, `specs/KO-FINDINGS.md` §9.7,
 `client/render/message_box.h`), message screen only: every message shows in an
@@ -722,8 +738,14 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   `btn_class_priest` `create_class`; states as the 1097 recipe's create (the
   other races and classes, face, hair and the stat arrows disabled), but the
   Tuarek and the priest wait for their clicks; hidden: El Morad's three
-  race buttons (Load shows Karus's and hides El Morad's for a Karus player),
-  the warrior, rogue and mage images and `text_bonus`, as the 1097 recipe.
+  race buttons (Load shows Karus's and hides El Morad's for a Karus player)
+  and `text_bonus`, as the 1097 recipe. The four class images draw, each
+  under its button (RQ-133, version 22, `until_race`, §9.15, binary): each
+  open draws every class button over its `img_*` (`00605950`, by the reset
+  `006066b0`), and the Tuarek click hides the warrior and mage buttons, their
+  greyed images standing in their place, and the rogue and priest images
+  (`006060f0(2)`), so `until_race` names `img_rogue`, `img_priest`,
+  `btn_class_warrior` and `btn_class_mage`.
   The new character stands at the slot turned 213, 143 and 283 degrees at
   slots 0–2 (`create_yaw`; `005fd120`'s `0x406dec5d`, `0x401fbb88`,
   `0x409e0e99` for Karus). The panels slide in each time create opens
@@ -741,10 +763,12 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   at the slot the camera was on for that click (`005fd120`); a Tuarek click
   unchooses the priest; a chosen button draws down; Create says
   `create_no_race`, row 1908, or `create_no_class`, row 1904, each titled row
-  1901, as `005fffd0` and `00600750` post codes 7 and 9 (`messages`). Not yet
-  1298's: after a race click 1298 also hides the class buttons the race cannot
-  take and shows their `img_*` images (`006060f0`), which the recipe hides,
-  drawing those buttons fixed disabled (RQ-130, proposed). After a Cancel
+  1901, as `005fffd0` and `00600750` post codes 7 and 9 (`messages`). Still
+  the realm's: the warrior, rogue and mage buttons are fixed disabled (Q52:
+  every character is a priest), so they take no pointer, where 1298's are
+  normal before the race click (the warrior and mage) and after it (the rogue),
+  lit under the pointer and taking a click; the layout's disabled image is its
+  normal one, so at rest they look as 1298's. After a Cancel
   mid-flight 1298's camera flies on to the empty slot (`005ffb90` leaves it
   alone), the select at rest on the slot it left; the recipe's is put on the
   slot at once. The hall lights `ka_light_0/1` are the files both

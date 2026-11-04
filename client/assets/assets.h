@@ -859,7 +859,10 @@ enum class FrontScreen : uint32_t { login, select, create, loading, message, cou
 enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };
 struct FrontNode {
   static constexpr uint32_t IMAGE = 0, TEXT = 1, BUTTON = 2, EDIT = 3, PROGRESS = 4, GROUP = 5, AREA = 6, LIST = 7;
-  static constexpr uint32_t FIXED_ON = 1, FIXED_DISABLED = 2, FOREGROUND = 4;
+  // UNTIL_RACE (version 22, RQ-133): a create node drawn only until the race
+  // is chosen (1298's 006060f0, KO-FINDINGS 9.15; render/create_choice.h), in
+  // a create that binds create_race.
+  static constexpr uint32_t FIXED_ON = 1, FIXED_DISABLED = 2, FOREGROUND = 4, UNTIL_RACE = 8;
   uint32_t kind = 0, parent = 0, flags = 0, mask = 15;
   FrontAction action = FrontAction::none;
   std::array<float, 4> rect{}, uv{};

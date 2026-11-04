@@ -109,7 +109,12 @@ from the player's own KO data.
      and 00600750 do, a race click unchoosing the class (00604f90); the new
      character stands once the race is clicked, at the slot the camera was
      on for that click (005fd120), and a chosen button draws down; with both
-     clicked Create sends. The chosen package's create waits for neither.
+     clicked Create sends. The chosen package's create waits for neither;
+   - the 1298 recipe's class buttons and images (RQ-133, KO-FINDINGS 9.15):
+     each open draws every class button over its img_* (the reset 006066b0's
+     00605950 shows them all); the race click hides the warrior and mage
+     buttons, their images standing in their place, and the rogue and priest
+     images (006060f0(2)); a Cancel and a new open draw them all again.
 
 No server or stack.
 """
@@ -697,8 +702,15 @@ CREATE_FLY = (f"click=create path={fly_index} frames={fly_frames:.6g} slot=1 foc
 # says create_name (empty), then create_no_race (a class clicked first too),
 # then, a race click having unchosen the class, create_no_class; with both
 # clicked it sends. A chosen button draws down under the pointer.
-CREATE_CHOICE = ("open=0,0,0 empty=create_name norace=create_no_race class=1,0 classfirst=create_no_race "
-                 "race=1,0,1 noclass=create_no_class both=1,1,1 create=none sent=1")
+# RQ-133 (KO-FINDINGS 9.15): the recipe's until-race nodes, in the layout's
+# order, draw at each open and after a class click, none once the race is
+# clicked (006060f0(2) hides the warrior and mage buttons and the rogue and
+# priest images), and all again after a Cancel and a new open (006066b0).
+UNTIL_1298 = "img_rogue,img_priest,btn_class_warrior,btn_class_mage"
+assert sorted(UNTIL_1298.split(",")) == sorted(recipe_1298["screens"]["create"]["until_race"]), recipe_1298
+CREATE_CHOICE = (f"open=0,0,0 until={UNTIL_1298} empty=create_name norace=create_no_race class=1,0 "
+                 f"until={UNTIL_1298} classfirst=create_no_race race=1,0,1 until=- noclass=create_no_class "
+                 f"both=1,1,1 create=none sent=1 reopen={UNTIL_1298}")
 # RQ-125: 1298's in-select create, co_characterCreate_us.uif (row 2's, as
 # 005fab40 loads it), its root at the origin and its panels where its Tick
 # (00606450) clamps their slides: Group_class at (50, H - 30 - h), Group_race at

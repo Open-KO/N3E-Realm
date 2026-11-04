@@ -215,5 +215,10 @@ N3FE version 21 (RQ-130) adds create's race and class (`create_race` and
 `create_class`, create's buttons with no fixed state, and the messages
 `create_no_race` and `create_no_class`, §9.15); the 1298 recipe binds the Tuarek
 and the priest, so its create waits for their clicks as 1298's does (Q87 (b)).
+N3FE version 22 (RQ-133) adds create's nodes drawn only until the race is chosen
+(the create screen's `until_race`, node flag 8, §9.15); the 1298 recipe draws the
+four class images under their buttons and names the rogue and priest images and the
+warrior and mage buttons, so its race click swaps those buttons for their greyed
+images as 1298's `006060f0` does.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

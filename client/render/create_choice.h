@@ -17,7 +17,10 @@
 // A create that binds neither keeps race and class chosen from the open, the
 // new character at the slot in focus (Q52; the 1097 choice). The server
 // still makes the character it makes: the choice gates the client's Create,
-// it sends nothing. No GL; render/front_end.h acts by it and
+// it sends nothing. RQ-133 (version 22): a create node flagged UNTIL_RACE
+// draws only while `race` is not chosen (1298's race click, 006060f0, hides
+// the class buttons the race cannot take and the images of those it can;
+// render/front_end.h View::visible). No GL; render/front_end.h acts by it and
 // tests/front_end.cpp checks it.
 
 #include "assets/assets.h"

@@ -1245,6 +1245,16 @@ the class buttons a race cannot take, which 1298 hides for their `img_*` after t
 race click (the recipe draws them fixed disabled); the stat texts; and the realm's
 fixed `on`, which draws the button's on image where KO's chosen button draws its
 down image (the 1097 choice's create too).
+**Class images carried (RQ-133, KO-FINDINGS §9.15):** 1298's race click hides the
+class buttons the race cannot take, their greyed `img_*` (under the buttons from the
+open) standing in their place, and the images of the classes it can (`006060f0`);
+each open shows them all (`00605950` by `006066b0`). N3FE version 22 adds create
+nodes drawn only until the race is chosen (`until_race`, node flag 8); the 1298
+recipe draws the four images and names `img_rogue`, `img_priest`,
+`btn_class_warrior` and `btn_class_mage`. No look-and-feel choice was needed: the
+nodes are the layout's own, shown and hidden as 1298 does. The warrior, rogue and
+mage buttons stay fixed disabled (Q52), so they take no pointer where 1298's take it;
+their disabled image is their normal one. The 1097 choice is unchanged.
 
 ### Q88 — How long the server waits between a client's frames
 

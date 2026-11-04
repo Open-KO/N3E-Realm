@@ -453,10 +453,10 @@ D-175).
 Since PQ-283 a vertex past four influences keeps every influence, up to 64,
 and draws with all of them (N3SI/N3SJ clips, N3NI/N3MI models, engine 40;
 [influence tables](#influence-tables-n3si-n3sj-n3ni-n3mi-engine-40)). This
-replaces PQ-267's four largest within a bound; the player path refuses such a
-vertex by name
+replaces PQ-267's four largest within a bound
 (evidence,
-D-176).
+D-176). Since RQ-163 the player path keeps them too, as N3SI player clips at
+engine 43 ([animation](animation.md#influence-tables-on-the-player-path-n3si-engine-43)).
 Skin vertex normals without a direction convert since PQ-281: KO lights a
 part vertex with its normal as loaded (not turned by the joints, not
 normalised), so a zero normal gets ambient light only; n3e's lighting uses a

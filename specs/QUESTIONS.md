@@ -1615,7 +1615,9 @@ RQ-003 makes every race's model cookable from its `UPC_DefaultLooks` row
 convert today: the Tuarek, the Wrinkle Tuarek, the Puri Tuarek, the Barbarian (since
 RQ-156) and the El Morad female. The Arch Tuarek needs skin vertices past four
 influences on the player path, and the El Morad male KO's handling of a clip at 0
-frames a second read first. Nothing draws a second race yet: the create screen
+frames a second read first. (RQ-163: the Arch Tuarek converts too, its player scenes
+N3SI, engine 43; its render-detail and appearance parts still need the strict
+readers past four influences.) Nothing draws a second race yet: the create screen
 (RQ-004), the select hall (RQ-005) and the world (RQ-007) each draw one Tuarek. The
 player scenes are about 1.4 MB a state, with 14 base states and more per class.
 
@@ -1629,3 +1631,22 @@ Options:
 form nothing reads, and the create matrix would offer races the select hall and the
 world still draw as the Tuarek. `content` stays the Tuarek; RQ-003 lands the package
 data (`looks`, `player`) and the cook that reads any race.
+
+### Q103 — Player clips past four joint influences
+
+RQ-163: the Arch Tuarek's lower part has 49 drawn vertices with five joint influences
+(local-asset). KO sums every influence for a player as for an NPC (`00419f00`, D-176;
+`CPlayerBase::m_Chr` is a `CN3Chr`, source). D-176 drew them for NPC looks models only
+and had the player path refuse them.
+
+Options:
+- (a) Reduce the player's vertices to four influences (D-175's retired rule): no format
+  change, but not what KO draws.
+- (b) Carry them in the player clips: `N3SI` (N3S1 with D-176's influence table) for
+  `player-<state>.bin`, `combat-<i>.bin` and `player-skill-<i>.bin`, engine 43.
+- (c) More slots in every vertex of every scene (rewrites every model).
+
+**Default taken:** (b), as D-176 chose for the looks models. A package with N3SI player
+clips is engine 43 and must already be engine 38 or later (wire 30); its player clips
+are all N3SI or all N3S1; every other package cooks byte for byte as before
+(`content/animation.md`, "Influence tables on the player path").

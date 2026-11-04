@@ -37,6 +37,41 @@ and texture atlas across its clips. NPC atlas must match `scene.bin` because it
 uses the existing world draw batch. The format retains N3S1 weights/parts and
 introduces no arbitrary graph, attachment or authoring format.
 
+### Influence tables on the player path (N3SI, engine 43)
+
+RQ-163 carries a KO skin vertex with more than four joint influences on the player
+path, as PQ-283 (D-176) does for NPC looks models. KO draws a player with the same
+character class as an NPC (source `src/Client/WarFare/PlayerBase.h`: `CPlayerBase`'s
+`m_Chr` is a `CN3Chr`), whose skin load `004286f0` reads any number of influences and
+whose CPU skinning `00419f00` sums every one with its weight as read (binary, 1298
+`KnightOnLine.exe`, D-176's evidence). The Arch Tuarek's lower part
+(`upc_ka_at_lower.n3cskins`) has 49 drawn vertices with five (local-asset,
+`tests/ko_player_races.py`). This replaces D-176's rule that the player path refuses
+such a vertex.
+
+- `tools/assetc/ko_character.py` keeps every influence on the player path, as on the
+  looks path (`JOINTS_0`/`WEIGHTS_0`, then `JOINTS_1`/`WEIGHTS_1` and on; at most 64).
+- A player clip with a vertex whose further sets carry weight cooks as `N3SI`: N3S1
+  with D-176's influence table between the vertices and the indices
+  ([NPC influence tables](npc.md#influence-tables-n3si-n3sj-n3ni-n3mi-engine-40)). The
+  player clips are `player-<state>.bin`, `combat-<i>.bin` and `player-skill-<i>.bin`.
+  `ko_player` and `ko_skills` cook with `main.cook(..., influences=True)`; any other
+  scene (`scene.bin`, `npc-<state>.bin`, the loot model) stays N3S1, and the plain
+  cook still refuses further sets.
+- The player clips share one mesh, so they are all N3S1 or all N3SI; the cooker
+  refuses a mix. A package with N3SI player clips is engine 43 (wire 30). It must
+  already be engine 38 or later; the cooker refuses it otherwise. A package without
+  them cooks byte for byte as before.
+- Both readers take engine 43. The client reads N3SI only for player clips and only
+  at engine 43, checks the table as it checks a looks model's, and `Scene::skin` adds
+  each further influence after the four slots, in order. The server only hashes the
+  clips, as before.
+
+The render-detail levels (`render-detail.bin`, cooked by `ko_detail`) and the
+appearance parts read KO skins with the strict four-influence reader, so a package
+whose player race is the Arch Tuarek still stops there. No package ships that race
+yet (Q102).
+
 ## Runtime state and time
 
 Priority: authoritative zero HP → death; recent nonzero replicated strike tick →

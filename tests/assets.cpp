@@ -35,6 +35,31 @@ int main(int argc, char **argv) {
       }
       return 0;
     }
+    if (argc >= 4 && std::string(argv[2]) == "--scene") {
+      // --scene name [t ...] (RQ-163): the release's scene `name` (a player
+      // clip, which may be N3SI from engine 43) skinned by the client at each
+      // time t in seconds (default 0, 0.25, 0.5, 0.75 and 1), printed as
+      // --looks prints a looks clip.
+      auto r = n3e::load_release(argv[1]);
+      std::vector<float> times{0.f, .25f, .5f, .75f, 1.f};
+      if (argc > 4) times.clear();
+      for (int i = 4; i < argc; ++i) {
+        size_t end = 0;
+        times.push_back(std::stof(argv[i], &end));
+        if (end != std::string(argv[i]).size() || !std::isfinite(times.back()) || times.back() < 0)
+          throw std::runtime_error("scene time");
+      }
+      auto scene = n3e::load_scene(r, argv[3]);
+      std::cout << std::setprecision(9);
+      for (float t : times) {
+        auto out = scene.skin(scene.sample(t));
+        std::cout << t;
+        for (size_t v = 0; v < scene.indices.size(); ++v)
+          std::cout << ' ' << out[v * 8] << ' ' << out[v * 8 + 1] << ' ' << out[v * 8 + 2];
+        std::cout << "\n";
+      }
+      return 0;
+    }
     if (argc != 2 && argc != 6 && argc != 8 && argc != 11)
       throw std::runtime_error("asset-check package");
     auto r = n3e::load_release(argv[1]);

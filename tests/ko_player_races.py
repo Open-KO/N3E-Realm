@@ -13,7 +13,9 @@ With the pinned client tree (assets/ko; SKIP without it), for every race:
 - every clip the player cook converts (ko_player.clip_indices, all states) is
   in the race's clip table;
 - its idle model converts and cooks, face 0 and hair 0, as the package's
-  player does.
+  player does: N3S1, or N3SI (engine 43, RQ-163) for a race with a drawn
+  vertex past four joint influences, which keeps every influence as KO's
+  skinning sums them (the Arch Tuarek: 49 lower-part vertices with five).
 
 A race whose model the reader still refuses is listed in OPEN with the
 refusal and the item that reads KO's handling of it; the test fails when the
@@ -34,8 +36,6 @@ TREE = pathlib.Path("assets/ko")
 OUT = pathlib.Path("build/ko-player-races")
 # Races the reader refuses today: (the refusal, what is open).
 OPEN = {
-    1: ("past four joint influences", "49 lower-part vertices with five joint influences, which the player's "
-        "N3S1 scenes do not carry (PQ-280)"),
     12: ("animation metadata", "clip 93 (breath_CrossBow0) at 0 frames a second (KO's handling unread)"),
 }
 
@@ -72,9 +72,11 @@ for entry in rules["races"]:
         missing = [(s, i) for s, i in every if i >= len(clips)]
         assert not missing, (race, missing)
         out = OUT / str(race)
-        ko_character.convert(TREE, ko_player.SOURCE, out / "idle", 0, 1.0, definition=definition)
-        main.cook(out / "idle", out / "cooked-idle")
-        assert (out / "cooked-idle/scene.bin").read_bytes()[:4] == b"N3S1"
+        report = ko_character.convert(TREE, ko_player.SOURCE, out / "idle", 0, 1.0, definition=definition)
+        main.cook(out / "idle", out / "cooked-idle", influences=True)
+        many = report.get("many_influences")
+        magic = (out / "cooked-idle/scene.bin").read_bytes()[:4]
+        assert magic == (b"N3SI" if many else b"N3S1"), (race, magic, many)
     except ValueError as error:
         assert race in OPEN, (race, str(error))
         assert OPEN[race][0] in str(error), (race, str(error), OPEN[race])
@@ -82,8 +84,9 @@ for entry in rules["races"]:
         continue
     assert race not in OPEN, "race %d now cooks: drop it from OPEN" % race
     cooked.append(race)
-    print("PASS race %d (%s): %d parts, %d part files over its faces and hairs, %d clips, idle cooks"
-          % (race, entry["looks"], len(positions), len(names), len(clips)))
+    print("PASS race %d (%s): %d parts, %d part files over its faces and hairs, %d clips, idle cooks (%s%s)"
+          % (race, entry["looks"], len(positions), len(names), len(clips), magic.decode(),
+             ": %(vertices)d drawn vertices past four influences, at most %(most)d" % many if many else ""))
 assert sorted(refused) == sorted(OPEN), (refused, OPEN)
 for race in refused:
     print("OPEN race %d: %s" % (race, OPEN[race][1]))

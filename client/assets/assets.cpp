@@ -441,9 +441,9 @@ Release load_release(const std::filesystem::path &root) {
   auto engine = r.u(), protocol = r.u();
   // Engines 38 (PQ-253), 39 (PQ-265: N3MM looks models with render
   // states) and 40 (PQ-283: N3NI / N3MI looks models with influence tables)
-  // add client presentation only and keep wire 30; so do 41 (PQ-272) and
-  // 42 (spec 11: front-end.bin).
-  need(engine >= 1 && engine <= 42 &&
+  // add client presentation only and keep wire 30; so do 41 (PQ-272),
+  // 42 (spec 11: front-end.bin) and 43 (RQ-163: N3SI player clips).
+  need(engine >= 1 && engine <= 43 &&
            (engine >= 38 ? protocol == 30
             : engine >= 15 ? protocol == engine-7
             : engine >= 13 ? protocol == 7
@@ -456,6 +456,7 @@ Release load_release(const std::filesystem::path &root) {
        "incompatible schema/engine/protocol");
   Release result{r.str(), r.str(), hex(sha(r.b)), root};
   result.protocol = protocol;
+  result.engine = engine;
 
   need(!result.game.empty() && result.game.size() <= 32 &&
            result.game.find_first_not_of(
@@ -2207,7 +2208,7 @@ RenderDetail load_render_detail(const Release &release, const Scene &skeleton) {
   auto nl=r.count(4);need(nl==4,"character level count");
   size_t total_vertices=0,total_indices=0;
   auto mesh=[&]() {
-    DetailMesh m; m.scene=skeleton;m.scene.vertices.clear();m.scene.indices.clear();
+    DetailMesh m; m.scene=skeleton;m.scene.vertices.clear();m.scene.indices.clear();m.scene.influences.clear();
     m.scene.collision={};m.scene.tracks.clear();m.scene.texture.clear();
     auto nv=r.count(65536,0),ni=r.count(196608,0);
     need(ni%3==0 && ((nv==0)==(ni==0)),"detail geometry counts");
@@ -2486,10 +2487,16 @@ Scene load_scene(const Release &release, const std::string &name) {
            (release.ready_pose && name == "player-ready.bin") || (release.rest && (name=="player-sit-down.bin"||name=="player-sit-idle.bin"||name=="player-stand-up.bin")),
        "scene name");
   Reader r(release.root / name);
-  r.magic("N3S1");
+  // RQ-163 (content/animation.md): from engine 43 a player clip may be N3SI,
+  // N3S1 with PQ-283's influence table (a KO race whose skin has vertices
+  // past four joint influences); Scene::skin sums every one, as KO's
+  // 00419f00 does. Every other scene stays N3S1.
+  const bool player_clip = combat_name || name.starts_with("player-");
+  const auto magic = r.raw(4);
+  need(magic == "N3S1" || (magic == "N3SI" && player_clip && release.engine >= 43), "cooked magic/version");
   read_scene_head(r, s);
   read_scene_tracks(r, s, s.tracks);
-  read_scene_tail(r, s);
+  read_scene_tail(r, s, magic == "N3SI");
   r.end();
   if(name=="loot-model.bin"){
     need(s.tracks.empty(),"loot model must be static");

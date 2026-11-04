@@ -138,9 +138,12 @@ asset screenshots remain local under `build/ko-gameplay/`. This does not create
   this replaces PQ-267's four largest within a bound, D-175): KO's skinning
   sums every influence, so a converted vertex keeps every influence as read,
   in file order, the first four in glTF `JOINTS_0`/`WEIGHTS_0` and the rest in
-  `JOINTS_1`/`WEIGHTS_1` and on, which only NPC looks clips cook (N3SI,
-  N3SJ); a vertex past 64 rejects, and so does a drawn vertex past four on the
-  player path. `many_influences` in provenance records the drawn vertices past
+  `JOINTS_1`/`WEIGHTS_1` and on, which NPC looks clips cook (N3SI, N3SJ) and,
+  since RQ-163, player clips (N3SI, engine 43: `ko_player` and `ko_skills`
+  cook with `influences=True`; content/animation.md); the plain cook (the
+  Moradon worm path) still rejects them, and a vertex past 64 rejects.
+  The Arch Tuarek's `upc_ka_at_lower.n3cskins` has 49 drawn vertices with five
+  (local-asset). `many_influences` in provenance records the drawn vertices past
   four, the most and the sets; a model without such a vertex writes one set,
   as before. The render detail and appearance readers still reject more than
   four. The bandicoot, rejected for this before PQ-267 (one LOD0 vertex with

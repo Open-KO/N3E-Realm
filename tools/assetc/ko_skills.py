@@ -61,7 +61,7 @@ def cook(assets,root,manifest):
         expected={4:s['animation'],14:2 if s['target']==1 else 7,15:s['level'],16:2040,17:s['cost'],18:0,19:9,20:0,21:s['cast_ms']//100,22:s['cooldown_ms']//100,25:s['survival'],26:3,27:0,28:int(s['range'])}
         if any(int(row[k])!=v for k,v in expected.items()):raise ValueError('starter skill table mismatch')
         target=root/'skills'/str(index);clip=ko_character.convert(assets.root,'Data/UPC_DefaultLooks.tbl.csv',target,s['animation'],1.,definition=definition)
-        main.cook(target,target/'cooked');shutil.copyfile(target/'cooked/scene.bin',root/f'player-skill-{index}.bin')
+        main.cook(target,target/'cooked',influences=True);shutil.copyfile(target/'cooked/scene.bin',root/f'player-skill-{index}.bin')  # N3SI for a race past four influences (RQ-163)
         report.append(dict(source_id=source_id,animation=clip,table=row))
         s['animation']=index
     manifest['skills']=spec;manifest['engine_version']=35;manifest['protocol_version']=28

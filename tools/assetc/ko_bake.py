@@ -500,6 +500,11 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
             # Exploration: Demon's Souls characters from the user's own dump (moradon_des.py).
             import moradon_des
             report['demons_souls']=moradon_des.apply(root,manifest)
+    import main
+    if b'N3SI' in main.player_clip_magics(manifest, root):
+        # RQ-163: a player race past four joint influences cooks N3SI player
+        # clips, engine 43; the package's own race (the Tuarek) does not.
+        manifest['engine_version']=max(manifest['engine_version'],main.PLAYER_INFLUENCES_ENGINE)
     (root / "package.json").write_text(json.dumps(manifest, indent=2))
 
     report["zone"] = zone["provenance"]

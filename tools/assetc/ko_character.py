@@ -874,14 +874,12 @@ def convert(root, source, out, clip_index=1, meters=1.0, definition=None, player
     # PQ-283 (D-176): every influence of a drawn vertex, as read and in file
     # order, the first four in JOINTS_0 / WEIGHTS_0 and the rest in further
     # sets (KO's skinning 00419f00 sums every one). A model without a drawn
-    # vertex past four influences writes the one set, as before.
+    # vertex past four influences writes the one set, as before. The player
+    # path keeps them too (RQ-163, content/animation.md): a player is a CN3Chr
+    # as an NPC is (source PlayerBase.h m_Chr), and its scenes cook as N3SI
+    # (engine 43).
     most = max(len(m[2]["joints"][v]) for m in meshes for v in m[2]["indices"])
     sets = (most + 3) // 4
-    if sets > 1 and player:
-        # Only NPC looks models (N3NI, N3MI) carry further influences; the
-        # player's scenes stay N3S1 (PQ-280).
-        raise ValueError("KO skin vertices past four joint influences are drawn for NPC looks only, "
-                         "not on the player path")
     attributes = {
         k: [] for k in ["POSITION", "NORMAL", "TEXCOORD_0"] + ["%s_%d" % (a, n) for n in range(sets)
                                                                for a in ("JOINTS", "WEIGHTS")]

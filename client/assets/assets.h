@@ -475,6 +475,8 @@ struct Release {
   bool ready_pose = false;
   bool requested_respawn = false;
   uint32_t protocol = 1;
+  // The release's engine version; from 43 the player clips may be N3SI (RQ-163).
+  uint32_t engine = 1;
   uint32_t npc_health = 1;
   float claim_radius=3;
   std::optional<InventoryPolicy> inventory;

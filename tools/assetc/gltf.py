@@ -15,7 +15,8 @@ not drawn), u32 source and u32 destination blend factor (indices into
 BLEND_FACTORS; 0 when the run does not blend). Runs are drawn in order and
 cover the indices exactly.
 
-N3SI / N3SJ (engine 40, PQ-283, D-176; NPC looks clips only): N3S1 / N3SM
+N3SI / N3SJ (engine 40, PQ-283, D-176; NPC looks clips, and N3SI player clips
+from engine 43, RQ-163): N3S1 / N3SM
 with an influence table between the vertices and the indices. A looks glTF
 may carry JOINTS_1 / WEIGHTS_1 and on (at most 16 sets, so 64 influences a
 vertex); a vertex's further influences are its pairs in those sets with a
@@ -24,6 +25,11 @@ of vertices with further influences, then per vertex, in strictly increasing
 order, u32 vertex, u32 n (1-60) and n pairs of u32 skin joint and f32 weight
 (above 0). Each vertex's four slots and further weights sum to 1. A glTF with
 no further weight cooks exactly as with JOINTS_0 / WEIGHTS_0 alone.
+
+With `influences` (the player path only, RQ-163: tools/assetc/ko_player.py and
+the player race's skill clips) a glTF may carry the further sets without
+render states, and a clip with a vertex whose further sets carry weight cooks
+as N3SI: the player scene format of engine 43 (content/animation.md).
 """
 
 import binascii, math, struct, zlib
@@ -123,9 +129,10 @@ def render_state(state):
     return flags, float(state["alpha_reference"]), factors[0], factors[1]
 
 
-def cook(root, source, meta, materials=False, atlas=1024):
+def cook(root, source, meta, materials=False, atlas=1024, influences=False):
     """(scene bytes, dependencies). `materials` admits the N3SM render states
-    and further joint influence sets (NPC looks clips only); every other
+    and further joint influence sets (NPC looks clips only); `influences`
+    admits the further sets alone (the player path, RQ-163); every other
     caller keeps the N3S1 subset. `atlas` 2048 is the front end's (spec 11):
     its models' atlases are up to 2048 texels a side; every other caller keeps
     1024."""
@@ -240,7 +247,7 @@ def cook(root, source, meta, materials=False, atlas=1024):
     prim = primitives[0]
     a = prim["attributes"]
     sets = sum(1 for k in a if k.startswith("JOINTS_"))
-    if (not 1 <= sets <= (MAX_INFLUENCE_SETS if materials else 1)
+    if (not 1 <= sets <= (MAX_INFLUENCE_SETS if materials or influences else 1)
             or set(a) != set(["POSITION", "NORMAL", "TEXCOORD_0"] + ["%s_%d" % (k, n) for k in ("JOINTS", "WEIGHTS")
                                                                       for n in range(sets)])):
         raise ValueError("attribute subset")

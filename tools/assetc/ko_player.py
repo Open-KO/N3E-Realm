@@ -111,7 +111,9 @@ def looks(assets, entry, face=0, hair=0):
 
 def cook(root, out, locomotion=False, ready=False, rest=False, combat=False, race_code=None, game=GAME):
     """The player scenes of race `race_code` (default the package's player
-    race), face 0 and hair 0, one per clip_indices state: out/player-<state>.bin."""
+    race), face 0 and hair 0, one per clip_indices state: out/player-<state>.bin,
+    N3S1, or N3SI when a drawn vertex has more than four joint influences
+    (RQ-163; a package with them is engine 43, tools/assetc/main.py)."""
     entry = race(race_code, game)
     assets=ko.Assets(root)
     definition = looks(assets, entry)['definition']
@@ -120,7 +122,9 @@ def cook(root, out, locomotion=False, ready=False, rest=False, combat=False, rac
         target=out/state
         report=ko.convert(root,SOURCE,target,index,1.0,definition=definition)
         cooked=out/('cooked-'+state)
-        main.cook(target,cooked)
+        # RQ-163: a race with a drawn vertex past four influences (the Arch
+        # Tuarek) cooks N3SI, engine 43; every other race N3S1, as before.
+        main.cook(target,cooked,influences=True)
         shutil.copyfile(cooked/'scene.bin',out/('player-'+state+'.bin'))
         reports[state]=report
     (out/'player-provenance.json').write_text(json.dumps(dict(race=entry['race'],looks=entry['looks'],face=0,hair=0,states=reports),indent=2)+'\n')

@@ -167,8 +167,9 @@ pub fn load(root: &Path) -> Result<Release> {
     // states) and 40 (PQ-283: N3NI / N3MI looks models with influence
     // tables) add client presentation only and keep wire 30; so does 41
     // (PQ-272: N3N4 templates with a drawn scale, sent as `Entity.scale`),
-    // and 42 (spec 11: the KO front end, front-end.bin).
-    if !(1..=42).contains(&engine)
+    // 42 (spec 11: the KO front end, front-end.bin) and 43 (RQ-163: N3SI
+    // player clips, which the client reads and the server only hashes).
+    if !(1..=43).contains(&engine)
         || if engine >= 38 { protocol != 30 } else if engine >= 15 { protocol != engine - 7 } else if engine >= 13 {
             protocol != 7
         } else if engine == 12 {

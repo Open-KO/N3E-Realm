@@ -1015,10 +1015,19 @@ with tempfile.TemporaryDirectory() as td:
     for (vertex, extra), influences in zip(table, (wide, five, six)):
         assert [j for j, _ in extra] == [slot[j] for j, w in influences[4:] if w > 0], (vertex, extra)
         assert max(abs(w - x) for (_, w), (_, x) in zip(extra, [p for p in influences[4:] if p[1] > 0])) < 1e-6
-    # Any other cook of that glTF (the Moradon worm path, a player scene)
-    # refuses the further sets, and the player path refuses by name.
+    # Any other cook of that glTF (the Moradon worm path) refuses the further
+    # sets. The player path keeps them (RQ-163): its scene cooks as N3SI with
+    # the same table, the clip a player scene of an engine 43 package
+    # (tests/player_influences.py).
     expect_bad(lambda: assetc.cook(out, out.parent / "ko-skin-refused"))
-    refused(root, out, joints, points, "past four joint influences are drawn for NPC looks only", player=True)
+    player_report = ko.convert(root, "character.bin", out.parent / "ko-skin-player", 0, 1.0, player=True)
+    assert player_report["many_influences"] == report["many_influences"], player_report["many_influences"]
+    expect_bad(lambda: assetc.cook(out.parent / "ko-skin-player", out.parent / "ko-skin-refused"))
+    assetc.cook(out.parent / "ko-skin-player", out.parent / "ko-skin-player-cooked", influences=True)
+    player_clip = (out.parent / "ko-skin-player-cooked" / "scene.bin").read_bytes()
+    assert player_clip[:4] == b"N3SI", player_clip[:4]
+    _, _, player_tail, _ = npc_looks.split_scene(player_clip)
+    assert player_tail[4 + nv * 64:at] == tail[4 + nv * 64:at], "player table differs from the looks clip's"
     # The package: engine 40 (the cooker refuses it declared 39), N3NI, both
     # readers accept it.
     try:
@@ -1170,8 +1179,8 @@ print(
     "PASS skin bounds (PQ-267, PQ-283): a vertex past four influences keeps every influence as read in glTF "
     "JOINTS_n/WEIGHTS_n (with a skin past 64 joints and a scale node), cooks as an N3SI/N3SJ looks clip and an "
     "N3NI/N3MI model in an engine 40 package both readers accept, and the client's vertices match KO's full sum, "
-    "not the first or largest four; the client refuses forged influence tables, the cooker engine 39, other cooks "
-    "and the player path the further sets, 65 influences and malformed sets refused; a skeleton past 64 joints "
+    "not the first or largest four; the client refuses forged influence tables, the cooker engine 39 and other cooks "
+    "the further sets, the player path keeping them as an N3SI clip with the same table, 65 influences and malformed sets refused; a skeleton past 64 joints "
     "(one with a scale node) skins with its weighted joints in order and matches KO's arithmetic, 65 weighted "
     "joints and 128 joints refused, 64 joints keep every joint; the strict readers keep their bounds"
 )

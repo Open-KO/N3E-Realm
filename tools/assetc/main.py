@@ -152,11 +152,41 @@ def collision_bytes(hf, objects, native=False):
     )
 
 
-def cook(root, out, materials=False):
+# RQ-163 (content/animation.md): the player clips (player-<state>.bin,
+# combat-<i>.bin, player-skill-<i>.bin) may be N3SI, N3S1 with PQ-283's
+# influence table, from engine 43; they share one mesh, so all are N3SI or
+# none. 43 needs an engine 38+ package (wire 30), as KO's player models do.
+PLAYER_INFLUENCES_ENGINE = 43
+
+
+def player_clip_magics(manifest, root):
+    """The set of magics of the package's player clips (each file's first
+    four bytes; a missing or unsafe file is left to the checks that read it)."""
+    def listed(key, field):
+        value = manifest.get(key)
+        value = value.get(field) if isinstance(value, dict) else None
+        return [x for x in value if isinstance(x, dict)] if isinstance(value, list) else []
+    presentation = manifest.get("presentation")
+    names = [s for n, s in presentation.items() if n.startswith("player-")] if isinstance(presentation, dict) else []
+    names += [c.get("source") for c in listed("combat_animation", "clips")]
+    names += ["player-skill-%s.bin" % s.get("animation") for s in listed("skills", "skills")]
+    magics = set()
+    for name in names:
+        try:
+            with open(safe(root, name), "rb") as data:
+                magics.add(data.read(4))
+        except (OSError, ValueError, TypeError):
+            pass
+    return magics
+
+
+def cook(root, out, materials=False, influences=False):
     """Cooks the package at `root` into `out`. `materials` lets the scene's
     glTF carry N3SM render states and further joint influence sets
     (gltf.cook): only ko_npc_looks passes it, for the throwaway package whose
-    scene.bin is a looks clip (PQ-265, PQ-283)."""
+    scene.bin is a looks clip (PQ-265, PQ-283). `influences` lets it carry the
+    further sets alone (an N3SI scene.bin): only the player path passes it,
+    for the throwaway package whose scene.bin is a player clip (RQ-163)."""
     manifest = load(root / "package.json")
     if set(manifest) - {"create", "attachments", "npc_looks", "input", "pick", "postprocess", "item_heads", "skills", "consumables", "combat_animation", "ranged_attack", "rest", "appearance", "party", "friends", "storage_auth", "storage", "wear", "stats", "equipment", "repair", "commerce", "inventory", "render_detail", "exploration", "editing", "world", "world_textures", "world_overlay", "presentation", "camera", "melee", "damage", "npc", "life", "animation", "progression"} != set(
         [
@@ -236,58 +266,66 @@ def cook(root, out, materials=False):
     # PQ-317 (D-187): attachments are engine 38+, which is wire 30 with or
     # without NPC templates; so is the front end (spec 11, engine 42).
     front_end = "front-end.bin" in manifest.get("presentation", {})
+    clip_magics = player_clip_magics(manifest, root)
+    if b"N3SI" in clip_magics and b"N3S1" in clip_magics:
+        raise ValueError("player clips mix N3S1 and N3SI: they share one mesh")
+    player_influences = b"N3SI" in clip_magics
     compatibility = 30 if templated_npc or "attachments" in manifest or front_end else 29 if reference_npc else 28 if "skills" in manifest else 26 if "consumables" in manifest else 25 if 'upper_nodes' in manifest.get('combat_animation',{}) else 24 if 'combat_animation' in manifest else 23 if 'rest' in manifest else 22 if 'appearance' in manifest else 21 if item_drops else 20 if coins else 19 if party_loot else 18 if party_rewards else 17 if "party" in manifest else 16 if "friends" in manifest else 15 if "storage_auth" in manifest else 14 if "storage" in manifest else 13 if "wear" in manifest else 12 if "stats" in manifest else 11 if "equipment" in manifest else 10 if "repair" in manifest else 9 if "commerce" in manifest else 8 if "inventory" in manifest else 7 if "exploration" in manifest else 6 if "editing" in manifest else (5 if manifest["engine_version"] >= 10 else 4) if "progression" in manifest else 3 if "life" in manifest else 2 if "movement" in manifest["gameplay"] else 1
+    engine_needed = max(
+        # PQ-328 (D-186): attachment models are looks models, so a
+        # package with attachments is at least the engine they need.
+        attachments.engine(manifest["attachments"], root) if "attachments" in manifest else 0,
+        # Spec 11: the KO front end (front-end.bin, N3FE) is engine 42.
+        42 if "front-end.bin" in manifest.get("presentation", {}) else 0,
+        # PQ-265 (D-173): N3MM looks models (render states) are engine 39;
+        # PQ-283 (D-176): N3NI / N3MI (influence tables) engine 40;
+        # PQ-272 (D-179): N3N4 templates (a drawn scale) engine 41.
+        41 if scaled_npc else
+        npc_looks.engine(manifest["npc_looks"], root) if "npc_looks" in manifest else
+        37 if templated_npc else
+        36 if reference_npc else
+        35 if "skills" in manifest else
+        33 if "consumables" in manifest else
+        32 if "upper_nodes" in manifest.get("combat_animation",{}) else
+        31 if "combat_animation" in manifest else
+        30 if "rest" in manifest else
+        29 if "appearance" in manifest else
+        28 if item_drops else
+        27 if coins else
+        26 if party_loot else
+        25 if party_rewards else
+        24 if "party" in manifest else
+        23 if "friends" in manifest else
+        22 if "storage_auth" in manifest else
+        21 if "storage" in manifest else
+        20 if "wear" in manifest else
+        19 if "stats" in manifest else
+        18 if "equipment" in manifest else
+        17 if "repair" in manifest else
+        16 if "commerce" in manifest else
+        15 if "inventory" in manifest else
+        14 if "render_detail" in manifest else
+        13 if "exploration" in manifest else
+        12 if "world" in manifest else
+        11 if "editing" in manifest else (10 if manifest["engine_version"] >= 10 else 9) if "progression" in manifest else 8 if "animation" in manifest else 7 if "life" in manifest else 6 if "npc" in manifest else 5
+        if "damage" in manifest
+        else (
+            4
+            if "melee" in manifest
+            else 3 if "camera" in manifest else compatibility
+        )
+    )
+    if player_influences:
+        # RQ-163: N3SI player clips are engine 43, in a package that is
+        # already engine 38+ (so wire 30).
+        if engine_needed < 38:
+            raise ValueError("N3SI player clips need an engine 38+ package")
+        engine_needed = max(engine_needed, PLAYER_INFLUENCES_ENGINE)
     if any(
         type(manifest[k]) is not int or manifest[k] != value
         for k, value in [
             ("content_schema_version", 1),
-            (
-                "engine_version",
-                max(
-                    # PQ-328 (D-186): attachment models are looks models, so a
-                    # package with attachments is at least the engine they need.
-                    attachments.engine(manifest["attachments"], root) if "attachments" in manifest else 0,
-                    # Spec 11: the KO front end (front-end.bin, N3FE) is engine 42.
-                    42 if "front-end.bin" in manifest.get("presentation", {}) else 0,
-                    # PQ-265 (D-173): N3MM looks models (render states) are engine 39;
-                    # PQ-283 (D-176): N3NI / N3MI (influence tables) engine 40;
-                    # PQ-272 (D-179): N3N4 templates (a drawn scale) engine 41.
-                    41 if scaled_npc else
-                    npc_looks.engine(manifest["npc_looks"], root) if "npc_looks" in manifest else
-                    37 if templated_npc else
-                    36 if reference_npc else
-                    35 if "skills" in manifest else
-                    33 if "consumables" in manifest else
-                    32 if "upper_nodes" in manifest.get("combat_animation",{}) else
-                    31 if "combat_animation" in manifest else
-                    30 if "rest" in manifest else
-                    29 if "appearance" in manifest else
-                    28 if item_drops else
-                    27 if coins else
-                    26 if party_loot else
-                    25 if party_rewards else
-                    24 if "party" in manifest else
-                    23 if "friends" in manifest else
-                    22 if "storage_auth" in manifest else
-                    21 if "storage" in manifest else
-                    20 if "wear" in manifest else
-                    19 if "stats" in manifest else
-                    18 if "equipment" in manifest else
-                    17 if "repair" in manifest else
-                    16 if "commerce" in manifest else
-                    15 if "inventory" in manifest else
-                    14 if "render_detail" in manifest else
-                    13 if "exploration" in manifest else
-                    12 if "world" in manifest else
-                    11 if "editing" in manifest else (10 if manifest["engine_version"] >= 10 else 9) if "progression" in manifest else 8 if "animation" in manifest else 7 if "life" in manifest else 6 if "npc" in manifest else 5
-                    if "damage" in manifest
-                    else (
-                        4
-                        if "melee" in manifest
-                        else 3 if "camera" in manifest else compatibility
-                    )
-                ),
-            ),
+            ("engine_version", engine_needed),
             ("protocol_version", compatibility),
         ]
     ):
@@ -366,7 +404,7 @@ def cook(root, out, materials=False):
             or p["schema_version"] != 1
         ):
             raise ValueError("property policy")
-    scene, deps = gltf.cook(root, a["source"], meta, materials)
+    scene, deps = gltf.cook(root, a["source"], meta, materials, influences=influences)
     deps[a["metadata"]] = digest(canonical(meta)).hex()
     hf = meta["heightfield"]
     if set(hf) - {"diagonal"} != {"width", "depth", "origin", "spacing", "heights"}:
@@ -419,7 +457,7 @@ def cook(root, out, materials=False):
         total=0
         for i,clip in enumerate(policy['clips']):
             data=read(safe(root,clip['source']))
-            if data[:4]!=b'N3S1':raise ValueError('combat clip magic')
+            if data[:4] not in (b'N3S1',b'N3SI'):raise ValueError('combat clip magic')  # N3SI: engine 43 (RQ-163)
             total+=len(data)
             if total>combat_animation.MAX_BYTES:raise ValueError('combat clip byte budget')
             extras[combat_animation.filename(i)]=data;deps[clip['source']]=digest(data).hex()
@@ -434,7 +472,7 @@ def cook(root, out, materials=False):
         extras['skills.bin']=skills.cook(policy)
         for i in sorted({s['animation'] for s in manifest['skills']['skills']}):
             name=f'player-skill-{i}.bin';data=read(root/name)
-            if data[:4]!=b'N3S1':raise ValueError('skill clip magic')
+            if data[:4] not in (b'N3S1',b'N3SI'):raise ValueError('skill clip magic')  # N3SI: engine 43 (RQ-163)
             extras[name]=data;deps[name]=digest(data).hex()
     if "appearance" in manifest:
         extras["appearance.bin"]=appearance.cook(manifest["appearance"],manifest["equipment"])
@@ -607,7 +645,7 @@ def cook(root, out, materials=False):
                 radius=struct.unpack('<f',data[4:])[0]
                 if not math.isfinite(radius) or not 0<radius<=100:raise ValueError('loot open radius')
                 extras[name]=data;deps[source]=digest(data).hex();continue
-            if data[:4] not in ((b"N3H1", b"N3H2", b"N3H3", b"N3H4", b"N3H5", b"N3H6", b"N3H7", b"N3H8", b"N3H9", b"N3HA", b"N3HB", b"N3HC", b"N3HD", b"N3HE") if name == "hud.bin" else (b"N3TM",) if name == "target-marker.bin" else (b"N3EF", b"N3E2", b"N3E3", b"N3E4", b"N3E5") if name == "effects.bin" else (b"N3AU", b"N3A2") if name == "audio.bin" else (b"N3FE",) if name == "front-end.bin" else (b"N3S1",)):
+            if data[:4] not in ((b"N3H1", b"N3H2", b"N3H3", b"N3H4", b"N3H5", b"N3H6", b"N3H7", b"N3H8", b"N3H9", b"N3HA", b"N3HB", b"N3HC", b"N3HD", b"N3HE") if name == "hud.bin" else (b"N3TM",) if name == "target-marker.bin" else (b"N3EF", b"N3E2", b"N3E3", b"N3E4", b"N3E5") if name == "effects.bin" else (b"N3AU", b"N3A2") if name == "audio.bin" else (b"N3FE",) if name == "front-end.bin" else (b"N3S1", b"N3SI") if name.startswith("player-") else (b"N3S1",)):
                 raise ValueError("presentation magic")
             extras[name] = data
             deps[source] = digest(data).hex()

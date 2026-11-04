@@ -552,7 +552,7 @@ it was.
 
 | Race | Parts KO sets | Faces, hairs | Converts on the player path |
 |---|---|---|---|
-| 1 Arch Tuarek | all six | 00..03, 00..02 | no: 49 lower-part vertices have five joint influences, which the player's N3S1 scenes do not carry (PQ-280); its 2185 rotation keys of length 0 now read (RQ-156) |
+| 1 Arch Tuarek | all six | 00..03, 00..02 | yes: its 49 lower-part vertices with five joint influences keep all five, as KO sums them, in N3SI player scenes (engine 43, RQ-163); its 2185 rotation keys of length 0 read (RQ-156) |
 | 2 Tuarek | all six | 00..03, 00..02 | yes (the package's player) |
 | 3 Wrinkle Tuarek | upper, face, hands, feet | 00..03, none | yes |
 | 4 Puri Tuarek | all six, on the El Morad female joint | 00..03, 00..02 (03 unreached) | yes |

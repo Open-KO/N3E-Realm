@@ -3,6 +3,7 @@
 #include "platform/net.h"
 #include "platform/tls.h"
 #include "websocket.h"
+#include "round_trip.h"
 #include <chrono>
 #include <cmath>
 #include <memory>
@@ -39,20 +40,28 @@ struct Transport {
     check(ms > 0, "TLS deadline");
     check(net::wait(fd, short(error == SSL_ERROR_WANT_WRITE ? POLLOUT : POLLIN), ms) > 0, "TLS deadline");
   }
-  void open(const std::string &endpoint, const std::string &ca, const std::string &edge_url) {
+  // RQ-136: `times` gets each phase as it completes, from `start`.
+  void open(const std::string &endpoint, const std::string &ca, const std::string &edge_url, double start,
+            ConnectTimes &times) {
     auto colon = endpoint.rfind(':');
     check(colon != std::string::npos, "HOST:PORT required");
     auto host = endpoint.substr(0, colon), port = endpoint.substr(colon + 1);
     double end = now() + 2;
-    if (edge_url.empty())
+    if (edge_url.empty()) {
       fd = ws::connect_tcp(host, port);
-    else {
+      times.tcp = (now() - start) * 1000;
+    } else {
       // Spec 12: the outer handshake gets the inner one's deadline plus 5 s.
       end = now() + 7;
+      times.edge = true;
       edge = std::make_unique<ws::Edge>();
       edge->open(edge_url, ca, end);
       edge->deadline = end;
+      times.tcp = (edge->connected - start) * 1000;
+      times.edge_tls = (edge->secured - edge->connected) * 1000;
+      times.upgrade = (now() - edge->secured) * 1000;
     }
+    const double from = now();
     ctx = SSL_CTX_new(TLS_client_method());
     check(ctx, "TLS context");
     SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
@@ -78,6 +87,7 @@ struct Transport {
       wait(e, end);
     }
     check(SSL_get_verify_result(ssl) == X509_V_OK, "TLS verification failed");
+    times.tls = (now() - from) * 1000;
   }
   void transfer(char *b, size_t n, bool write, double end) {
     if (edge)
@@ -153,15 +163,27 @@ void WorldClient::send(Envelope e) {
   outgoing.push_back(std::move(e));
 }
 void WorldClient::run(std::stop_token stop) {
+  // RQ-136 (spec 12): the round trip and connect phases, on the log only (Q61).
+  const double started = now();
+  RoundTrip rtt(started);
+  ConnectTimes times;
+  bool times_logged = false, finished = false;
+  auto finish = [&] {
+    if (std::exchange(finished, true))
+      return;
+    if (auto l = rtt.end(now()); !l.empty()) log_line(l);
+    if (times.snapshot >= 0 && !std::exchange(times_logged, true)) log_line(times.line());
+  };
   try {
     net::start();
     Transport t;
-    t.open(endpoint, ca, edge);
+    t.open(endpoint, ca, edge, started, times);
     Envelope h;
     auto *hs = h.mutable_handshake();
     hs->set_version(release.protocol);
     hs->set_game(release.game);
     hs->set_content(release.hash);
+    const double handshake_sent = now();
     t.send(h);
     auto response = t.receive();
     if (response.has_error() && (response.error().code() == Error::VERSION ||
@@ -174,13 +196,15 @@ void WorldClient::run(std::stop_token stop) {
     if (response.has_error())
       throw std::runtime_error(response.error().detail());
     check(response.has_snapshot(), "handshake reply");
+    times.handshake = (now() - handshake_sent) * 1000;
+    times.snapshot = (now() - started) * 1000;
     {
       std::lock_guard lock(mutex);
       state.connected = true;
       state.status = "Account - type then ENTER";
     }
     uint64_t seq = 0, session = 0;
-    double next = now(), ping = now(), loot_poll = now();
+    double next = now(), ping = now(), loot_poll = now(), login_sent = 0;
     float speed = 1;
     std::deque<Move> pending;
     while (!stop.stop_requested()) {
@@ -198,8 +222,13 @@ void WorldClient::run(std::stop_token stop) {
         held=turbo; permitted=state.world.turbo_allowed();
         entity=state.world.self(); generation=state.world.permission_generation();
       }
-      for (auto &e : queue)
+      for (auto &e : queue) {
+        if (e.has_login() || e.has_discord_login() || e.has_session_login()) {
+          login_sent = now();
+          times.login_kind = e.has_login() ? "password" : e.has_discord_login() ? "discord" : "session";
+        }
         t.send(e);
+      }
       if (session && now() >= next) {
         // Retain the 20Hz phase rather than accumulating each poll's lateness.
         // A stall skips missed slots; never burst old inputs to catch up.
@@ -235,13 +264,25 @@ void WorldClient::run(std::stop_token stop) {
       }
       if (now() >= ping) {
         Envelope e;
-        e.mutable_ping();
+        // RQ-136: a server before it ignores the nonce and echoes nothing.
+        e.mutable_ping()->set_nonce(rtt.ping(now()));
         t.send(e);
         ping = now() + 1;
       }
+      if (auto l = rtt.minute(now()); !l.empty())
+        log_line(l);
       if (!t.available())
         continue;
       auto e = t.receive();
+      const double received = now();
+      if (e.has_ping())
+        rtt.echo(e.ping().nonce(), received);
+      if (e.has_characters() && login_sent > 0) {
+        times.login = (received - login_sent) * 1000;
+        login_sent = 0;
+        if (!std::exchange(times_logged, true))
+          log_line(times.line());
+      }
       std::lock_guard lock(mutex);
       if(e.has_registry()) state.registry=e.registry();
       if (e.has_login_result()) {
@@ -473,6 +514,7 @@ void WorldClient::run(std::stop_token stop) {
             "ENTER CHAT | F12 RECONNECT";
       }
     }
+    finish();
     Envelope bye;
     bye.mutable_logout();
     t.send(bye);
@@ -482,6 +524,7 @@ void WorldClient::run(std::stop_token stop) {
         break;
     }
   } catch (const std::exception &e) {
+    finish();
     std::lock_guard lock(mutex);
     state.connected = false;
     state.status = (state.disconnect.empty() ? std::string(e.what()) : state.disconnect) + " | F12 RECONNECT";

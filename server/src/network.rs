@@ -240,6 +240,17 @@ mod refusal_tests {
         assert_eq!(line(t + Duration::from_secs(1), "10.0.0.2", "y").as_deref(), Some("handshake refused from 10.0.0.2: y"));
     }
     #[test]
+    fn a_ping_is_echoed_only_with_a_nonce() {
+        // RQ-136: an older client's empty Ping gets nothing back; a nonce comes
+        // back unchanged, as protocol/golden-ping.hex (tests/check.py).
+        assert_eq!(echo(&wire::Ping::default()), None);
+        let reply = echo(&wire::Ping { nonce: 300 }).unwrap();
+        assert_eq!(reply, Envelope { body: Some(Body::Ping(wire::Ping { nonce: 300 })) });
+        let golden = include_str!("../../protocol/golden-ping.hex").trim();
+        assert_eq!(reply.encode_to_vec(), (0..golden.len()).step_by(2)
+            .map(|i| u8::from_str_radix(&golden[i..i + 2], 16).unwrap()).collect::<Vec<_>>());
+    }
+    #[test]
     fn session_close_lines_are_bounded_apart_from_refusals() {
         // PQ-427: a burst of closes spends its own lines, never the refusals'.
         let (mut closes, mut refusals) = (Lines::default(), Lines::default());
@@ -283,7 +294,7 @@ mod refusal_tests {
         // RQ-131: a 2 s gap in the client's stream (a Wi-Fi or tunnel hiccup)
         // ended the session; only a gap of the idle limit does now.
         let (mut client, mut server) = tokio::io::duplex(1024);
-        let ping = Envelope { body: Some(Body::Ping(wire::Ping {})) };
+        let ping = Envelope { body: Some(Body::Ping(wire::Ping::default())) };
         let wire = framed(&ping);
         let started = Instant::now();
         let sender = tokio::spawn(async move {
@@ -326,7 +337,7 @@ mod refusal_tests {
         }
         // A frame trickled in a byte at a time, whole within DEADLINE, is read.
         let (mut client, mut server) = tokio::io::duplex(1024);
-        let ping = Envelope { body: Some(Body::Ping(wire::Ping {})) };
+        let ping = Envelope { body: Some(Body::Ping(wire::Ping::default())) };
         let wire = framed(&ping);
         let sender = tokio::spawn(async move {
             for b in wire {
@@ -587,6 +598,11 @@ async fn logout(world: &WorldService, l: wire::SessionLogout, ip: &str, ready: &
             refusal(5, REQUEST, "dependency")
         }
     }
+}
+/// RQ-136 (spec 12): the reply to a Ping, sent only when its nonce is set. An older
+/// client sends none and is answered nothing, as before.
+fn echo(p: &wire::Ping) -> Option<Envelope> {
+    (p.nonce != 0).then_some(Envelope { body: Some(Body::Ping(wire::Ping { nonce: p.nonce })) })
 }
 /// One line per player logout, bounded like the refusals.
 fn logged_out(line: &str) {
@@ -992,7 +1008,13 @@ async fn peer(
                     ))?;
                     None
                 }
-                Some(Body::Ping(_)) => {
+                Some(Body::Ping(p)) => {
+                    // RQ-136: the echo goes out before the presence write, so the
+                    // client times the path and not Redis; a full reply queue drops
+                    // it (one sample lost), never the session.
+                    if let Some(e) = echo(&p) {
+                        let _ = out.try_send(e);
+                    }
                     if let Some(s) = &selected {
                         let _ = crate::cache::presence(
                             &world.cache,

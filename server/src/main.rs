@@ -373,6 +373,9 @@ async fn main() -> Result<()> {
         std::fs::write(format!("{}-session-logout.bin",args[2]),logout.encode_to_vec())?;
         let login=wire::Envelope{body:Some(wire::envelope::Body::LoginResult(wire::LoginResult{token,expires_at_unix:1_795_996_800,discord_id:"80351110224678912".into(),discord_name:"Nelly".into()}))};
         std::fs::write(format!("{}-login-result.bin",args[2]),login.encode_to_vec())?;
+        // RQ-136: a Ping with a nonce, the client's round-trip probe and the server's echo.
+        let ping=wire::Envelope{body:Some(wire::envelope::Body::Ping(wire::Ping{nonce:300}))};
+        std::fs::write(format!("{}-ping.bin",args[2]),ping.encode_to_vec())?;
         // Spec 11: the character list with levels.
         let characters=wire::Envelope{body:Some(wire::envelope::Body::Characters(wire::Characters{characters:vec![wire::Character{id:129,name:"Nelly".into(),level:30},wire::Character{id:7,name:"Peer".into(),level:1}]}))};
         std::fs::write(format!("{}-characters.bin",args[2]),characters.encode_to_vec())?;

@@ -66,6 +66,7 @@ test-fast:
 	python tests/skills.py
 	build/client/n3e-nameplate-check
 	build/client/n3e-chat-check
+	build/client/n3e-round-trip-check
 	build/client/n3e-refusal-check
 	build/client/n3e-login-check
 	python tests/front_end.py

@@ -33,6 +33,8 @@ public:
   bool readable(int ms);
   // The deadline for the BIO's reads and writes, in now()'s seconds.
   double deadline = 0;
+  // RQ-136: when open() had its TCP connection and its TLS session, in now()'s seconds.
+  double connected = 0, secured = 0;
 
   int read(char *, int);
   int write(const char *, int);

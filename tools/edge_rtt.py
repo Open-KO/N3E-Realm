@@ -15,11 +15,13 @@ server already answers:
 - echo: an empty `Input` envelope before login. The server answers every message it does
   not handle before login with `Error{code: UNAUTHENTICATED}` (server/src/network.rs),
   so this is a round trip through the whole path to the server's connection task (not
-  its tick). It needs no account, token or server change, and logs nothing on the server.
+  its tick). It needs no account, token or server change; the game server logs nothing
+  for it, and `realm-edge` still writes its one line per connection (spec 12).
 - wsping: a WebSocket ping, answered by `realm-edge` on the realm's host (spec 12).
 - connect: DNS, TCP, outer TLS and the WebSocket upgrade (`realm-edge` connects to the
   server before its 101), the inner TLS, and Handshake to its Snapshot. Login to
-  Characters needs an account, so it is not here.
+  Characters needs an account, so it is not here; a logged-in client logs it, and its
+  own round trip, itself (spec 12, "The client's round trip").
 
 --rate 1 is the client's 1 s Ping cadence ("idle"); --rate 20 its 20 Hz Move cadence in
 the world ("moving": the upstream rate, not the World snapshots the server sends back).

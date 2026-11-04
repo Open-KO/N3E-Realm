@@ -121,6 +121,9 @@ target_link_libraries(n3e-lod-check PRIVATE n3e-assets)
 
 add_executable(n3e-chat-check tests/chat.cpp)
 target_include_directories(n3e-chat-check PRIVATE client)
+# RQ-136 (spec 12): the client's round-trip figures (client/network/round_trip.h).
+add_executable(n3e-round-trip-check tests/round_trip.cpp)
+target_include_directories(n3e-round-trip-check PRIVATE client)
 
 # PQ-405 (D-208): the client's refusal routing (client/network/world.h).
 # Spec 02: the client's Discord login (client/network/discord_login.h).

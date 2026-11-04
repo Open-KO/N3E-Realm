@@ -258,6 +258,16 @@ try:
             "PASS two simultaneous graphical clients rendered networked entities",
             flush=True,
         )
+        # RQ-136 (spec 12): each client logged its connect phases to Characters and
+        # its round trip against the server's Ping echo, over plain TCP.
+        for name in ["alpha", "beta"]:
+            text = (B / f"{name}-graphics.txt").read_text()
+            assert re.search(r"^client connect path=tcp tcp_ms=[\d.]+ tls_ms=[\d.]+ handshake_ms=[\d.]+ "
+                             r"snapshot_ms=[\d.]+ login=password login_ms=[\d.]+$", text, re.M), text[-3000:]
+            rtt = re.search(r"^client rtt span=session secs=\d+ n=(\d+) median_ms=[\d.]+ p95_ms=[\d.]+ "
+                            r"worst_ms=[\d.]+ lost=\d+$", text, re.M)
+            assert rtt and int(rtt[1]) >= 2, text[-3000:]
+        print("PASS each client logged its connect phases and its round trip (RQ-136)", flush=True)
     # A duplicate realm process waits out its start-up window (D-139) against
     # the live owner's renewals and is refused; nothing is taken over. Before
     # the alpha session: an idle character can die to an NPC in those 5 s.

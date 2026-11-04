@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import secrets
 import select
 import socket
@@ -358,8 +359,19 @@ try:
         def no_browser(url):
             raise AssertionError(("the client asked Discord again", url))
 
+        def logged_round_trip(text, login):
+            # RQ-136 (spec 12): the client's connect phases through the edge to
+            # Characters, and its round trip against the server's Ping echo.
+            assert re.search(r"^client connect path=edge tcp_ms=[\d.]+ edge_tls_ms=[\d.]+ upgrade_ms=[\d.]+ "
+                             r"tls_ms=[\d.]+ handshake_ms=[\d.]+ snapshot_ms=[\d.]+ login=" + login
+                             + r" login_ms=[\d.]+$", text, re.M), text[-3000:]
+            rtt = re.search(r"^client rtt span=session secs=\d+ n=(\d+) median_ms=[\d.]+ p95_ms=[\d.]+ "
+                            r"worst_ms=[\d.]+ lost=\d+$", text, re.M)
+            assert rtt and int(rtt[1]) >= 5, text[-3000:]
+
         code, text, urls = client("first", browser)
         assert code == 0 and "ENTERED map" in text and len(urls) == 1, (code, text[-3000:])
+        logged_round_trip(text, "discord")
         throttled = run("docker", "exec", name + "-redis", "redis-cli", "--scan", "--pattern",
                         f"n3e:{realm}:ip:*").stdout.split()
         assert f"n3e:{realm}:ip:203.0.113.7" in throttled, throttled
@@ -370,6 +382,8 @@ try:
         stand_in.close_all()
         code, text, urls = client("second", no_browser)
         assert code == 0 and "ENTERED map" in text and urls == [], (code, text[-3000:])
+        logged_round_trip(text, "session")
+        print("PASS the client logged its connect phases through the edge and its round trip (RQ-136)")
         print("PASS 4 after the edge closed its WebSockets, the next start logs in through the edge with the "
               "stored session token; Discord not asked")
 

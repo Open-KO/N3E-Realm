@@ -123,6 +123,7 @@ bool Edge::wait(int error, double end) {
 void Edge::open(const std::string &url, const std::string &ca, double end) {
   auto u = parse(url);
   fd = connect_tcp(u.host, u.port);
+  connected = now();
   ctx = SSL_CTX_new(TLS_client_method());
   check(ctx, "TLS context");
   SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
@@ -141,6 +142,7 @@ void Edge::open(const std::string &url, const std::string &ca, double end) {
     check((e == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE) && wait(e, end), "edge TLS failed");
   }
   check(SSL_get_verify_result(ssl) == X509_V_OK, "edge TLS verification failed");
+  secured = now();
 
   unsigned char nonce[16];
   check(RAND_bytes(nonce, sizeof nonce) == 1, "random");

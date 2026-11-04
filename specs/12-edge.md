@@ -1,6 +1,6 @@
 # 12 — The WebSocket edge: the game wire through Cloudflare
 
-**Status: done 2026-11-01; tests 1–6 pass.** Milestone M7a
+**Status: done 2026-11-01; tests 1–6 pass; test 7 (the client's round trip, RQ-136) 2026-11-03.** Milestone M7a
 in [`00-roadmap.md`](00-roadmap.md). Why: [`architecture.md`](../docs/architecture.md),
 "DDoS", and Q64.
 
@@ -18,8 +18,9 @@ every plan, and we ship the client, so the client can speak WebSocket.
 
 In: an optional `edge` URL in the realm profile; the client's WebSocket transport; a
 bridge service on the host between `cloudflared` and the game port; source addresses
-through the bridge; the host's tunnel. Out: changes to the game wire itself, UDP,
-Cloudflare features beyond DNS, the proxy and Tunnel, any paid Cloudflare product.
+through the bridge; the host's tunnel; the client's round-trip log (RQ-136). Out:
+changes to the game wire itself beyond the Ping's optional nonce, UDP, Cloudflare
+features beyond DNS, the proxy and Tunnel, any paid Cloudflare product.
 
 ## Shape
 
@@ -120,6 +121,43 @@ A Rust binary in this workspace (`edge/`), image `deploy/Dockerfile --target edg
   `releases.openko.net` until CD publishes GitHub Releases (spec 06); then that route
   goes away.
 
+### The client's round trip
+
+The client times its own round trip and connect, so a logged-in session can be
+measured from anywhere (RQ-136). Nothing of it is drawn on KO's screens (Q61); it goes
+to the client's log, stderr, which the launcher's own stderr carries (it starts the
+client with its stdio).
+
+- **Wire.** `Ping` (Envelope field 14) gains `uint64 nonce = 1`. The client's 1 s Ping
+  carries a nonce counting up from 1 per connection; the server sends that Ping back
+  at once, in any session state, before its presence write, through the session's
+  bounded reply queue, and drops the echo (never the session) when that queue is full.
+  A nonce of 0 gets nothing back. Additive, so no protocol version changes: an older
+  client sends no nonce and sees no new frame; against an older server the newer
+  client gets no echo and logs no round-trip figure. The echo is one frame per Ping
+  already counted against the session's 100 frames a second (spec 01), and nothing
+  reaches the tick. Golden vector: `protocol/golden-ping.hex` (nonce 300).
+- **Round trip.** A Ping's round trip runs from its send to the echo's read, on the
+  client's network thread. An echo that skips earlier nonces makes those lost (the
+  server answers in order); a ping unanswered for 10 s is lost; at most 32 wait for an
+  echo, and past that the oldest is lost.
+- **Log lines**, key=value, with no address, host name or account:
+  - `client rtt span=minute secs= n= median_ms= p95_ms= worst_ms= lost=` every 60 s,
+    for the echoes in that minute (nearest-rank percentiles, as `tools/edge_rtt.py`);
+    none for a minute without an echo.
+  - At the connection's end (quit, F12, a drop): the open minute's line, then
+    `client rtt span=session …` with the same keys over the whole connection, its
+    percentiles to 1 ms (1 ms bins) and its worst exact.
+  - Once a connection, when Characters first answers a login (else at its end, if it
+    got its Snapshot): `client connect path=edge|tcp tcp_ms= [edge_tls_ms= upgrade_ms=]
+    tls_ms= handshake_ms= snapshot_ms= login=password|discord|session|none [login_ms=]`.
+    `tcp_ms` includes the DNS lookup; through the edge, `tcp_ms`, `edge_tls_ms` and
+    `upgrade_ms` are the outer connection and `tls_ms` is the inner; `handshake_ms` is
+    Handshake to Snapshot and `snapshot_ms` the total from the connect's start to the
+    Snapshot. `login_ms` runs from the login's send to Characters, so a Discord login
+    includes the server's code exchange with Discord, and none of it includes the
+    player's typing.
+
 ## Failure modes
 
 | Failure | Behaviour |
@@ -159,6 +197,12 @@ A Rust binary in this workspace (`edge/`), image `deploy/Dockerfile --target edg
 6. Manual, on the host: a client outside the home network (a phone hotspot) connects
    to `wss://play.openko.net/v1/wire` and plays; `play.openko.net` resolves only to
    Cloudflare addresses; the router has no forwarded ports.
+7. The client's round trip (RQ-136): a Ping with a nonce is echoed and one without is
+   not (`cargo test -p n3e-server`, the golden vector in `tests/check.py`); the figures
+   and lines (`build/client/n3e-round-trip-check`); a real client through the edge
+   (`tests/edge_live.py --graphical`, Discord and session logins) and over TCP
+   (`tests/multiplayer.py` with graphical clients, password logins) logs its connect
+   line with `login_ms` and a session round-trip line.
 
 ## Measured round trip
 
@@ -217,7 +261,11 @@ more, not a measurement (it needs a second vantage point). Connecting through th
 takes about a quarter of a second, nearly all of it round trips.
 
 Still to measure: a logged-in session (moving with World snapshots and the tick), and a
-player away from the home network; both need the client to time its own round trip.
+player away from the home network. The client now times its own round trip ("The
+client's round trip", above); the figures wait for a release with it on the hosted
+realm and are added here from the clients' `client rtt span=session` and `client
+connect` lines, with where each was measured from (home network or away) and whether
+the player was moving.
 
 ## Open questions
 
@@ -226,4 +274,6 @@ Q64 (why), Q65 (Cloudflare's free-plan WebSocket limits are unpublished).
 Evidence (2026-11-01, this workstation): `tests/edge_live.py --graphical` (tests 1–4
 and the non-`wss` refusal), `cargo test -p realm-edge` (framing, PROXY v2 bytes,
 refusals), the existing suites for test 5; test 6 by the maintainer on Linux and
-Windows from outside the home network.
+Windows from outside the home network. Test 7 (2026-11-03, this workstation):
+`cargo test -p n3e-server`, `make test-fast` (the golden vector and
+`n3e-round-trip-check`), and `make live` with `edge_live` and `multiplayer` graphical.

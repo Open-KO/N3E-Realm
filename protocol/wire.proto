@@ -57,7 +57,10 @@ message Chat { string text = 1; uint64 sender = 2; string sender_name = 3; bool 
 message PrivateMessage { string recipient = 1; string text = 2; }
 message Logout {}
 message LoggedOut {}
-message Ping {}
+// RQ-136 (spec 12, "The client's round trip"): a nonzero nonce asks the server to
+// send this Ping back, unchanged and at once; 0 (every client before it) gets nothing
+// back. Additive, so no wire version change: an older server ignores the field.
+message Ping { uint64 nonce = 1; }
 
 // Strictly increasing action sequence per authenticated session. Repeats never damage.
 message Action { uint64 session = 1; uint64 seq = 2; uint64 target = 3; string action = 4; }

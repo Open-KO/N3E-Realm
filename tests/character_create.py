@@ -120,7 +120,12 @@ with tempfile.TemporaryDirectory(prefix="n3e-create-") as td:
     plan_refused("create needs the package's", config={"races": [2]}, game=game)
     for change, expect in [(dict(content=[5]), "content names a race"), (dict(fixed=dict(rules["fixed"], race=1)), "fixed choice's race 1"),
                            (dict(columns={"stats": [2], "bonus": 7}), "columns"), (dict(front_ends={"1097": "x"}), "front_ends"),
-                           (dict(refusals={"limit": 1}), "refusals"), (dict(extra=1), "needs exactly")]:
+                           (dict(refusals={"limit": 1}), "refusals"), (dict(extra=1), "needs exactly"),
+                           (dict(player=1), "player names a race without a player model"),
+                           (dict(player=True), "player names a race"),
+                           (dict(races=[dict(r, looks="UPC_KA") for r in rules["races"]]), "race 1 looks"),
+                           (dict(races=[{k: v for k, v in r.items() if k != "looks"} for r in rules["races"]]),
+                            "each race needs exactly")]:
         (game / ko_create.SOURCE).write_text(json.dumps({**rules, **change}))
         plan_refused(expect, game=game)
     # realm-config.json's `create` reaches the plan through the front-end choice.

@@ -7,8 +7,9 @@ race and class), RQ-004 (the create screen), RQ-005 (the select hall per charact
 RQ-006 (nation select), RQ-007 (in-world play) and RQ-008 (delete). Where 1097, 1264
 and 1298 differ, each version is recorded and a realm-owner setting is proposed;
 the decisions it needs are Q94–Q99 (`specs/QUESTIONS.md`). RQ-001 changed no code or
-package data; the realm before RQ-002 is under "The realm today (before RQ-002)", and
-RQ-002's wire, package rules and server checks under "The realm's create (RQ-002)".
+package data; the realm before RQ-002 is under "The realm today (before RQ-002)",
+RQ-002's wire, package rules and server checks under "The realm's create (RQ-002)", and
+each race's model under "The realm's races (RQ-003)".
 
 ## Sources
 
@@ -441,8 +442,9 @@ rules; KO's are Moradon's, from the tables above:
 | `stats` | how many stats a character has (Moradon: 5, KO's order str, sta, dex, int, MAP) |
 | `nation` | the account's nation until the realm keeps one per account (RQ-006): Moradon's 1, Karus (Q94, Q101) |
 | `faces`, `hairs` | how many faces and hairs every race offers: KO's 4 and 3 (1298 `00604f90`) |
-| `races` | each race's `race` code, `nation` and `specialties` (KO's classes), as 1298's race click offers them (`006060f0`) |
-| `content` | the races the package has a player model for (Moradon: the Tuarek, 2, until RQ-003) |
+| `races` | each race's `race` code, `nation` and `specialties` (KO's classes), as 1298's race click offers them (`006060f0`), and its `looks`, the stem of its `UPC_DefaultLooks` parts (RQ-003, below) |
+| `content` | the races the package has a player model for (Moradon: the Tuarek, 2; RQ-003, below) |
+| `player` | the race of the package's player scenes, one of `content` (Moradon: 2; RQ-003) |
 | `tables` | the stat tables a realm validates against, by id: each a KO `values` table (`Data/NewChrValue.tbl`) read from the front end's inputs (a `<name>:` prefix as the recipe's paths), its row `key` (row id = race × `race` + specialty × `specialty`: 1264's `{1, 0}`, 1298's `{10000, 1}`) and the `texts` table its refusals are worded from |
 | `columns` | the values table's stat columns and bonus column (KO's 2..6 and 7) |
 | `front_ends` | the table each front-end client draws by default (Q97 (b): 1264's for the 1097 choice, 1298's for the 1298 recipe) |
@@ -526,6 +528,49 @@ each character's `slot`, `nation`, `race` and `specialty`.
 **What stays.** A new character starts at the package's spawn with its `starting`
 items (Q96 (b)); the stats are kept but play does not read them yet (RQ-007); the
 screen still sends a name alone (RQ-004); one nation (RQ-006).
+
+## The realm's races (RQ-003)
+
+**Looks.** KO draws a race from the `UPC_DefaultLooks` row whose key is the race code.
+It sets the row's six parts in part-position order: upper, lower, face, hands, feet,
+hair. The face and hair files are the row's names with the face or hair number as two
+digits before the extension, and an empty name sets no part. (Source
+`GameProcCharacterCreate.cpp` `SetChr`, `PlayerMySelf.cpp` `InitFace` and `InitHair`;
+the 1298 build `005fd120` returns without a row, binary, above.)
+
+**Package data.** Each race in `character-create.json` names its `looks`, the stem of
+its parts (`upc_ka_at`, `upc_ka_tu`, `upc_ka_wt`, `upc_ka_pu`, `upc_el_ba`, `upc_el_rm`,
+`upc_el_rf`). `player` names the race of the package's player scenes
+(`player-<state>.bin`): Moradon's 2, the Tuarek, until RQ-007 draws each race's own.
+`tools/assetc/ko_player.py` cooks any race from its row and refuses a row whose face part
+is not the race's `looks`. The skills' clips (`ko_skills`), the swing-sound timings
+(`ko_audio`) and the 2145 armour (`ko_armour_2145`) take the player race from the
+same entry. No engine module names a race. The Moradon package is byte for byte what
+it was.
+
+**Each race's model** from the pinned tree (local-asset; `tests/ko_player_races.py`):
+
+| Race | Parts KO sets | Faces, hairs | Converts on the player path |
+|---|---|---|---|
+| 1 Arch Tuarek | all six | 00..03, 00..02 | no: its joint has rotation keys of length 0 (2185 of them), which the reader refuses ("non-unit quaternion") |
+| 2 Tuarek | all six | 00..03, 00..02 | yes (the package's player) |
+| 3 Wrinkle Tuarek | upper, face, hands, feet | 00..03, none | yes |
+| 4 Puri Tuarek | all six, on the El Morad female joint | 00..03, 00..02 (03 unreached) | yes |
+| 11 Barbarian | all six | 00..03, 00..02 | no: 19 rotation keys of length 0 |
+| 12 El Morad male | all six | 00..03, 00..02 | no: clip 93, `breath_CrossBow0`, has 0 frames a second ("animation metadata") |
+| 13 El Morad female | all six | 00..03, 00..02 | yes |
+
+Every face and hair the screen reaches is opaque, as the player path draws. Every clip
+table has 136 clips, and each one the reader reads (all but the El Morad male's) has
+the clips the player cook converts. How KO
+draws a zero-length rotation key and a clip at 0 frames a second is unread; the
+reader keeps refusing both until those items read them.
+
+**Not in the package yet** (Q102). Only the player race's model is cooked into the
+package. `content` stays the Tuarek: a race joins it with the item that ships its
+model in the form its first consumer draws (the create screen RQ-004, the select hall
+RQ-005, the world RQ-007). The class data (the create dress, starting items and
+weapons, skills, class rules) is open too.
 
 ## What each item needs
 

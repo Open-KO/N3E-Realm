@@ -1,7 +1,7 @@
 """Moradon starter skills: local tables, binary-confirmed semantics, original clips."""
 import csv,io,json,shutil
 from pathlib import Path
-import ko_character,main
+import ko_character,ko_player,main
 
 # PQ-466 (D-234): 1298's skill start (KnightOnLine.exe 005819e0) checks the
 # range through 00583780, which, out of range, loads text 0xfa9 (4009) from the
@@ -40,9 +40,8 @@ def cook(assets,root,manifest):
     spec=json.loads(Path('games/moradon/skills.json').read_text())
     rows={int(r[0]):r for r in csv.reader(io.StringIO(assets.get('Data/Skill_Magic_Main_us.tbl.csv').decode('utf-8-sig'))) if r[0].isdigit()}
     type3={int(r[0]):r for r in csv.reader(io.StringIO(assets.get('Data/skill_magic_3.tbl.csv').decode('utf-8-sig'))) if r[0].isdigit()}
-    looks=next(r for r in csv.reader(io.StringIO(assets.get('Data/UPC_DefaultLooks.tbl.csv').decode('utf-8-sig'))) if r[0]=='2')
-    parts=looks[4:10];parts[2]=parts[2].replace('_face.n3cpart','_face00.n3cpart');parts[5]=parts[5].replace('_hair.n3cpart','_hair00.n3cpart')
-    definition=dict(name='Male Tuarek',joint=looks[2],animation=looks[3],parts=parts,collision=[],split=[-1]*4,extras=[])
+    # The skills' clips are the package's player race's (ko_player, RQ-003).
+    definition=ko_player.looks(assets,ko_player.race())['definition']
     texts={r[0]:r for r in csv.reader(io.StringIO(assets.get('Data/Texts_us.tbl.csv').decode('utf-8-sig'))) if r and r[0].isdigit()}
     notice=texts.get(str(TOO_FAR))
     if notice is None or len(notice)<2:raise ValueError('1298 Texts_us.tbl has no text %d'%TOO_FAR)

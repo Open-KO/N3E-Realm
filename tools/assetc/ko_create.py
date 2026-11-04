@@ -8,6 +8,9 @@ against (`tables`: each a KO `Data/NewChrValue.tbl` read from the chosen front
 end's inputs, its row key and the text table its refusals are worded from), the
 table each front end draws (Q97 (b)), the refusals' text rows (1298 `00600750`),
 the name rule (Q99) and the fixed choice a create without a race takes (Q52).
+Each race also names its `looks`, the stem of its `UPC_DefaultLooks` parts, and
+`player` is the race of the package's player scenes (tools/assetc/ko_player.py,
+RQ-003).
 The realm owner's `realm-config.json` may name, under `create`, another `table`
 (Q97), the `races` offered (Q94, default `content`) and `reserved` words (Q99).
 
@@ -18,14 +21,17 @@ through the package's `columns` and `key`; no race or specialty id is here.
 """
 import hashlib
 import pathlib
+import re
 
 import create
 import front_end_choice
 
 SOURCE = "character-create.json"
-KEYS = {"stats", "nation", "faces", "hairs", "races", "content", "tables", "columns",
+KEYS = {"stats", "nation", "faces", "hairs", "races", "content", "player", "tables", "columns",
         "front_ends", "refusals", "name", "fixed"}
-RACE_KEYS = {"race", "nation", "specialties"}
+RACE_KEYS = {"race", "nation", "specialties", "looks"}
+# A race's looks stem (UPC_DefaultLooks part names, ko_player.looks checks it).
+LOOKS = re.compile(r"[a-z0-9_]{1,32}\Z")
 TABLE_KEYS = {"values", "key", "texts"}
 FIXED_KEYS = {"race", "specialty", "face", "hair", "points"}
 # realm-config.json's `create`: the realm owner's choices (Q94, Q97, Q99).
@@ -63,10 +69,14 @@ def rules(game):
         ids([race["race"]], "%s race" % path)
         ids([race["nation"]], "%s race %r nation" % (path, race["race"]), high=255)
         ids(race["specialties"], "%s race %r specialties" % (path, race["race"]))
+        if type(race["looks"]) is not str or not LOOKS.match(race["looks"]):
+            raise Refused("%s: race %r looks: 1 to 32 lower-case letters, digits or _" % (path, race["race"]))
     known = [race["race"] for race in races]
     ids(known, "%s races" % path)
     if not set(ids(r["content"], "%s content" % path)) <= set(known):
         raise Refused("%s: content names a race it does not list" % path)
+    if type(r["player"]) is not int or r["player"] not in r["content"]:
+        raise Refused("%s: player names a race without a player model (content)" % path)
     tables = r["tables"]
     if type(tables) is not dict or not tables:
         raise Refused("%s: tables, by id" % path)

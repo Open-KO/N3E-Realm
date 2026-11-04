@@ -2,7 +2,7 @@
 import csv, hashlib, io, json, math, struct, wave
 from pathlib import Path
 from common import u, f, string
-import audio_spatial, ko_character
+import audio_spatial, ko_character, ko_player
 
 RATE=48000
 
@@ -64,7 +64,8 @@ def cook(assets,effects,hud,out,item_icons=None,extra=None):
     for control,paths in hud['sounds'].items():
         for event,path in zip(('hover:','click:'),paths):
             if path:bindings[event+str(control)]=sound(path,9)
-    player=ko_character.animations(assets.get('Chr/upc_ka_tu.n3Anim'))
+    # The package's player race's clip table (ko_player, RQ-003).
+    player=ko_character.animations(assets.get(ko_player.looks(assets,ko_player.race())['definition']['animation']))
     npc=ko_character.animations(assets.get('Chr/mob_worm.n3anim'))
     config=json.loads(Path('games/moradon/combat-animation.json').read_text())
     timings=[]

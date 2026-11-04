@@ -191,6 +191,8 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
 
     # Player metadata is independent of NPC presentation (N3A2), retaining
     # source entry/loop timing and enabling the existing smooth-stop path.
+    # The package's player race (games/moradon/character-create.json `player`, RQ-003).
+    player_race = ko_player.race()
     player = ko_player.cook(characters, root / "player", locomotion=True, ready=True, rest=features,combat=features)
     manifest["animation"] = [ko_character.animation_metadata(player[state]) for state in animation.STATES]
     for index in (2, 3):
@@ -264,7 +266,7 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         base=json.loads(pathlib.Path('games/moradon/features.json').read_text())['equipment']['slots']
         armour=ko_armour_2145.rows(skeletal_install,base,
                                    json.loads(pathlib.Path('games/moradon/ui.json').read_text())['equipment_slots'],
-                                   ko_player.RACE)
+                                   player_race["race"])
         mappings=mappings+armour['rows']
     detail, detail_report = ko_detail.cook(characters,built,player["idle"]["character_metadata"],mappings,
                                            world_root=assets)
@@ -508,7 +510,7 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
     if start is not None:
         report["start"] = start
     report["visuals"] = built["report"]
-    report["player"] = {"race": "male Tuarek", "states": sorted(player),
+    report["player"] = {"race": player_race["race"], "looks": player_race["looks"], "states": sorted(player),
                         "hud_sources": source_assets.sources}
     report["hud"] = hud
     (root / "provenance.json").write_text(json.dumps(report, indent=2) + "\n")

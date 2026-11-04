@@ -4,15 +4,16 @@
   "faces": 4,
   "hairs": 3,
   "races": [
-    {"race": 1, "nation": 1, "specialties": [101]},
-    {"race": 2, "nation": 1, "specialties": [102, 104]},
-    {"race": 3, "nation": 1, "specialties": [103]},
-    {"race": 4, "nation": 1, "specialties": [104]},
-    {"race": 11, "nation": 2, "specialties": [201]},
-    {"race": 12, "nation": 2, "specialties": [201, 202, 203, 204]},
-    {"race": 13, "nation": 2, "specialties": [201, 202, 203, 204]}
+    {"race": 1, "nation": 1, "specialties": [101], "looks": "upc_ka_at"},
+    {"race": 2, "nation": 1, "specialties": [102, 104], "looks": "upc_ka_tu"},
+    {"race": 3, "nation": 1, "specialties": [103], "looks": "upc_ka_wt"},
+    {"race": 4, "nation": 1, "specialties": [104], "looks": "upc_ka_pu"},
+    {"race": 11, "nation": 2, "specialties": [201], "looks": "upc_el_ba"},
+    {"race": 12, "nation": 2, "specialties": [201, 202, 203, 204], "looks": "upc_el_rm"},
+    {"race": 13, "nation": 2, "specialties": [201, 202, 203, 204], "looks": "upc_el_rf"}
   ],
   "content": [2],
+  "player": 2,
   "tables": {
     "1264": {"values": "installer-1264:Data/NewChrValue.tbl", "key": {"race": 1, "specialty": 0},
              "texts": "installer-1264:Data/Texts_us.tbl"},

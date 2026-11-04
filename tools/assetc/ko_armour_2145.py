@@ -279,8 +279,8 @@ def rows(install, slots, areas, race, definition=DEFINITION):
     """The package's 2145 armour from `definition` for a package whose
     equipment slots are `slots` (names) and whose inventory window areas are
     `areas` ({area id: slot index}, ui.json `equipment_slots`); `race` is the
-    KO race of the package's player model (ko_player.RACE), which the
-    definition's character must be. Returns dict(rows: appearance rows,
+    KO race of the package's player model (games/moradon/character-create.json
+    `player`, ko_player.race), which the definition's character must be. Returns dict(rows: appearance rows,
     items: {id: (label, report)} as ko_chrplug_2145.add_items and icons take
     them, slots: the slot names to append, areas: the merged area map,
     character)."""

@@ -322,7 +322,7 @@ need content it can build. Deleting them repo-wide would remove most of `make te
 ### Q51 — Nation select
 
 KO asks a new account for Karus or El Morad. The realm draws every player as the male
-Tuarek (`ko_player.py` `RACE = 2`, Karus). **Default taken (spec 11), accepted by the maintainer 2026-10-31:** no nation
+Tuarek (race 2, Karus: `games/moradon/character-create.json` `player`, RQ-003). **Default taken (spec 11), accepted by the maintainer 2026-10-31:** no nation
 screen; the realm is Karus, so the Karus select hall and loading art. Two nations need
 El Morad player models, nation on the wire and in `characters`, and the server's rules
 for it: a later milestone.
@@ -1607,3 +1607,24 @@ realm-owner settings `create.races`, `create.start`, `create.items`,
 - `create.start` and `create.items` are not added: a new character starts at the
   package's spawn with its `starting` items, as Q96 (b) keeps them, until RQ-003
   gives each class its set.
+
+### Q102 — When a race's model enters the package
+
+RQ-003 makes every race's model cookable from its `UPC_DefaultLooks` row
+(`content/character-create.md`, "The realm's races (RQ-003)"). Four of the seven
+convert today: the Tuarek, the Wrinkle Tuarek, the Puri Tuarek and the El Morad female.
+The other three need KO's handling of a zero-length rotation key and of a clip at 0
+frames a second read first. Nothing draws a second race yet: the create screen
+(RQ-004), the select hall (RQ-005) and the world (RQ-007) each draw one Tuarek. The
+player scenes are about 1.4 MB a state, with 14 base states and more per class.
+
+Options:
+- (a) Cook every convertible race's player scenes into the package now, and widen
+  `content` to them.
+- (b) Keep the package's one player model. A race joins `content` with the item that
+  ships its model in the form its first consumer draws.
+
+**Default taken:** (b). (a) would add about 20 MB a race to the hosted release in a
+form nothing reads, and the create matrix would offer races the select hall and the
+world still draw as the Tuarek. `content` stays the Tuarek; RQ-003 lands the package
+data (`looks`, `player`) and the cook that reads any race.

@@ -195,7 +195,8 @@ certification of every KO file variant.
 ## Male Tuarek and actual HUD follow-up
 
 The current field launcher additionally
-uses `ko_player.py` and `ko_hud.py`. `ko_player` reads race 2 in the existing
+uses `ko_player.py` and `ko_hud.py`. `ko_player` reads the package's player race
+(`games/moradon/character-create.json` `player`, race 2; RQ-003) in the existing
 `Data/UPC_DefaultLooks.tbl.csv`, assembles its six parts with face/hair 00, and
 converts clips 0 (idle), 2 (run), 87 (unarmed punch) and 8 (death). It never selects
 the race-11 barbarian. Source key tracks now allow up to 65,536 keys, still within

@@ -72,6 +72,7 @@ test-fast:
 	python tests/front_end.py
 	python tests/front_end_choice.py
 	python tests/character_create.py
+	python tests/ko_player_races.py
 	build/client/n3e-message-log-check
 	python tests/check.py
 	python tests/isolation_check.py

@@ -482,8 +482,20 @@ assert "on" not in states_1097.values(), states_1097
 assert "btn_race_ka_pt" not in states_1097, states_1097
 assert "btn_race_ka_pt" not in create_1097["screens"]["create"]["bindings"], create_1097["screens"]["create"]
 assert states_1097["btn_race_ka_at"] == states_1097["btn_race_ka_wt"] == "disabled", states_1097
+# RQ-142 (Q91 (b), KO-FINDINGS 9.16, the maintainer's "Match 1264, Rogue
+# inert"): after a Tuarek and a priest click 1264 hides the warrior and mage
+# buttons for img_warrior and img_mage and hides img_rogue and img_priest
+# (0043ec90(2), 0043ee10(104)). The 1097 choice, chosen from the open (Q52),
+# draws that column: the warrior and mage buttons hidden over their images,
+# the rogue still fixed disabled (inert, its normal tile), the priest down.
+hidden_1097 = set(create_1097["screens"]["create"]["hidden"])
+assert {"btn_class_warrior", "btn_class_mage", "img_rogue", "img_priest"} <= hidden_1097, hidden_1097
+assert not {"img_warrior", "img_mage", "btn_class_rogue", "btn_class_priest"} & hidden_1097, hidden_1097
+assert not {"btn_class_warrior", "btn_class_mage"} & set(states_1097), states_1097
+assert states_1097["btn_class_rogue"] == "disabled", states_1097
 print("PASS front-end cook: the recipe state down, the down image in the on state, the 1097 choice's Tuarek and "
-      "priest drawn down as 1264's chosen race and class, its Puri Tuarek unfixed and unbound")
+      "priest drawn down as 1264's chosen race and class, its Puri Tuarek unfixed and unbound, its warrior and "
+      "mage drawn as their images and its rogue inert")
 
 # RQ-133 (version 22, KO-FINDINGS 9.15): create's nodes drawn only until the
 # race is chosen (1298's 006060f0 hides the class buttons the race cannot take

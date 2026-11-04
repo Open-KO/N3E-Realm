@@ -1344,3 +1344,12 @@ choice, with nothing else changed, as Q89 (b) and Q90 were taken. The stat label
 1264 shows after the priest click (`img_str` and `img_int`, pink, which the 1097
 recipe hides) are a separate difference on the same frame, proposed as their own
 item.
+**Decided (maintainer, 2026-11-03), RQ-142:** (b), "Match 1264, Rogue inert". The
+1097 recipe's create hides `btn_class_warrior` and `btn_class_mage` (no longer fixed
+disabled), so `img_warrior` and `img_mage`, which the layout draws before them,
+stand in their place, as 1264's after a Tuarek click; it hides `img_rogue` and
+`img_priest`; the rogue stays fixed disabled (its normal grey tile, no pointer, no
+click) and the priest `down`. Race and class are still chosen from the open (Q52).
+Package data only: no cook, format or client change; `make live-ko` matches the
+warrior and mage rects to their image tiles at each size. The 1298 recipe is
+unchanged (RQ-133's `until_race` already draws 1298's images).

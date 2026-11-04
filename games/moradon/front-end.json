@@ -56,9 +56,7 @@
         "btn_class_priest": "down",
         "btn_race_ka_at": "disabled",
         "btn_race_ka_wt": "disabled",
-        "btn_class_warrior": "disabled",
         "btn_class_rogue": "disabled",
-        "btn_class_mage": "disabled",
         "btn_face_left": "disabled",
         "btn_face_right": "disabled",
         "btn_hair_left": "disabled",
@@ -75,7 +73,7 @@
         "btn_map_right": "disabled"
       },
       "hidden": [
-        "img_warrior", "img_rogue", "img_mage",
+        "btn_class_warrior", "btn_class_mage", "img_rogue", "img_priest",
         "img_str", "img_sta", "img_dex", "img_int", "img_map", "text_bonus"
       ]
     },

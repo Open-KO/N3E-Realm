@@ -744,10 +744,10 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   its ReceiveMessage (`00604f90`) uses it: `btn_create` `create_confirm`,
   `btn_cancel` `back`, `edit_name` `name_field`, `text_desc` `class_desc`,
   and (RQ-130, version 21) `btn_race_ka_tu` `create_race` and
-  `btn_class_priest` `create_class`; states as the 1097 recipe's create (the
-  other races and classes, face, hair and the stat arrows disabled, the Puri
-  Tuarek too: this layout's disabled image is its normal tile), but the
-  Tuarek and the priest wait for their clicks; hidden: El Morad's three
+  `btn_class_priest` `create_class`; states: the other races and classes,
+  face, hair and the stat arrows disabled, the Puri Tuarek too (this layout's
+  disabled image is its normal tile), the Tuarek and the priest waiting for
+  their clicks; hidden: El Morad's three
   race buttons (Load shows Karus's and hides El Morad's for a Karus player)
   and `text_bonus`, as the 1097 recipe. The four class images draw, each
   under its button (RQ-133, version 22, `until_race`, §9.15, binary): each
@@ -941,7 +941,13 @@ box and loading are 1264's.
   disabled image has no texture: it takes no state and no action, so it draws its
   normal grey tile as 1264's race buttons at rest, takes no pointer and does
   nothing when clicked (RQ-139, Q90, the maintainer's 2026-11-03, "Grey button,
-  as 1264"; §9.16, binary: `0043ec90`).
+  as 1264"; §9.16, binary: `0043ec90`). The class column is 1264's after a
+  Tuarek and a priest click: the warrior and mage buttons hidden, so
+  `img_warrior` and `img_mage` (darker grey tiles, drawn before the buttons and
+  the labels) stand in their place, `img_rogue` and `img_priest` hidden, the
+  rogue fixed disabled (its normal tile, inert where 1264's would take a click)
+  and the priest `down` (RQ-142, Q91 (b), the maintainer's 2026-11-03, "Match
+  1264, Rogue inert"; §9.16, binary: `0043ec90`, `0043ee10`).
 - Loading (`UI_US/co_loading_us.uif`, centred; `Text_Version` at (10, 10)):
   1264's layout when no nation has won the last war (`005f9a30`); the realm has
   no war, so no victor (Q80).

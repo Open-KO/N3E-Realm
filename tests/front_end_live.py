@@ -366,6 +366,28 @@ if chosen == "1097":
     assert sorted(NORMAL) == ["btn_race_ka_pt"], sorted(NORMAL)
 
 
+# RQ-142 (Q91 (b), KO-FINDINGS 9.16, the maintainer's "Match 1264, Rogue
+# inert"): a class image the chosen recipe draws with its button hidden stands
+# in the button's place, as 1264's img_warrior and img_mage after a Tuarek
+# click (0043ec90(2) hides those buttons and shows their images). Each (id,
+# the image's rect, its texels).
+def image_tile(tree, ident):
+    image = find(tree, ident)
+    w, h, rgba = ko_front_end.texture(create_tree_of_choice.get(image["texture"]))
+    x0, y0, x1, y1 = image["rect"]
+    u0, v0 = round(image["uv"][0] * w), round(image["uv"][1] * h)
+    return image["rect"], [rgba[((v0 + y) * w + u0 + x) * 4:((v0 + y) * w + u0 + x) * 4 + 3]
+                           for y in range(y1 - y0) for x in range(x1 - x0)]
+
+
+CLASS_IMAGES = {f"img_{c}": image_tile(LAYOUTS["create"], f"img_{c}") for c in ("warrior", "rogue", "mage", "priest")
+                if f"img_{c}" not in create_recipe.get("hidden", [])
+                and f"btn_class_{c}" in create_recipe.get("hidden", [])}
+if chosen == "1097":
+    assert sorted(CLASS_IMAGES) == ["img_mage", "img_warrior"], sorted(CLASS_IMAGES)
+    assert {"img_rogue", "img_priest"} <= set(create_recipe["hidden"]), create_recipe["hidden"]
+
+
 def extent(tree):
     """The rect around a node's descendants (not its own rect: a group's
     region is KO's hit area, not what it draws)."""
@@ -597,6 +619,13 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
                               cx + image[2] - root["rect"][0], cy + image[3] - root["rect"][1]))
         share = sum(a == b for a, b in zip(drawn, tile)) / len(tile)
         # The rest lie under the button's label, a root string over it.
+        assert share > 0.85, (size, ident, share)
+    for ident, (image, tile) in CLASS_IMAGES.items():
+        drawn = region(path, (cx + image[0] - root["rect"][0], cy + image[1] - root["rect"][1],
+                              cx + image[2] - root["rect"][0], cy + image[3] - root["rect"][1]))
+        share = sum(a == b for a, b in zip(drawn, tile)) / len(tile)
+        # The rest lie under the class's label (root strings drawn after the
+        # images) or are the image's 16 translucent corner pixels.
         assert share > 0.85, (size, ident, share)
 
     start, rect, _ = shots["loading-start"]

@@ -1363,6 +1363,15 @@ still does not show: 1264's rogue lights and takes a click, where the realm's th
 are inert. **Decided nothing at RQ-140 (Q91):** a look-and-feel difference, put to the
 maintainer. The stat labels are proposed as their own item.
 
+**Decides (RQ-142, Q91 (b), the maintainer's 2026-11-03, "Match 1264, Rogue
+inert"):** the 1097 choice's create hides the warrior and mage buttons, so
+`img_warrior` and `img_mage` draw in their rects, as 1264's after `0043ec90(2)`; it
+hides `img_rogue` and `img_priest`, so the priest's down tile's edge blends over
+the panel; the rogue stays fixed disabled, its normal grey tile, inert where 1264's
+is a live NORMAL button (`0043ee10`, `00403b30`): race and class stay chosen from
+the open (Q52). `make live-ko` matches the warrior and mage rects to their image
+tiles at each size. The stat labels remain hidden (their own item).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -1390,5 +1399,5 @@ notes.
 | Q75 | §9.1 (RQ-096): 1264's login tick keeps 1097's timer (`007ac9d0`, written only by the tick), so in both a return to the login is silent until it passes 21.66 s. RQ-096 made the realm do the same; RQ-105 (maintainer) starts the track at once on every entry instead and keeps the carried clock off by default. |
 | Q89 | §9.16 (RQ-134): 1264's chosen race and class draw `UI_STATE_BUTTON_DOWN` (`0043ec90`, `0043ee10`), the layout's sunken pink tile; the 1097 choice's fixed `on` drew the raised pink on tile. RQ-138 (option (b), the maintainer's): the 1097 choice's Tuarek and priest are the recipe state `down` and draw their `BS_DOWN` tiles, still chosen from the open. |
 | Q90 | §9.16 (RQ-134): the 1264 layout's Puri Tuarek has an untextured `BS_DISABLE` image, so the realm's fixed disabled drew only its label; 1264 never disables a race button (`0043ec90`). RQ-139 (the maintainer's): the 1097 choice leaves it unfixed and unbound, drawing its `BS_NORMAL` grey tile, inert as the other race buttons. |
-| Q91 | §9.16 (RQ-140): after a Tuarek and a priest click 1264 shows `img_warrior` and `img_mage` (darker grey tiles) for the warrior and mage buttons, the rogue a live NORMAL button and the priest down (`0043ec90`, `0043ee10`); the 1097 choice draws the warrior, rogue and mage fixed disabled in their normal grey tile. Open: put to the maintainer, nothing applied. |
+| Q91 | §9.16 (RQ-140): after a Tuarek and a priest click 1264 shows `img_warrior` and `img_mage` (darker grey tiles) for the warrior and mage buttons, the rogue a live NORMAL button and the priest down (`0043ec90`, `0043ee10`); the 1097 choice drew the warrior, rogue and mage fixed disabled in their normal grey tile. RQ-142 (option (b), the maintainer's): the 1097 choice hides the warrior and mage buttons for their images and hides `img_rogue` and `img_priest`, the rogue still inert, race and class still chosen from the open. |
 | Q72 | §9.10 (RQ-120, correcting §8.2): 1097 and 1264 (and 1298, RQ-121) clear the UI flag from the select request until the main procedure, so no arrow, ESC or button reaches the select during the start clip; only the tick's ENTER skips it. RQ-121 (the maintainer) makes the realm's ESC and Exit do nothing then too. §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077), as RQ-120 corrects it: DoJobLeft and DojobRight would start a turn from state 3, but no arrow reaches them during the clip; the realm ignores them then too. |

@@ -1309,7 +1309,7 @@ live-ko`, `build/live-ko/front-end/1298-1024x768.create.ppm`, sha256
 | **A class click hides its class's two cream labels.** `006062d0(class)` sets each `+0x10c`… node visible when its flag is clear (`SETZ`, vtable `+0x3c`): flags 0 and 2 for the warrior (101, 201), 1 and 2 for the rogue, 3 and 4 for the mage, 0 and 3 for the priest (104, 204), none for −1. So after a priest click `str_01` and `int_01` hide and "STR" and "INT" read cyan, "DEX", "HP" and "MP" cream. It never touches the `*_02` set | 1298 `006062d0` (`006063aa`–`006063b0`) | binary |
 | **Each open and each build show all ten.** `00605950` shows `+0x10c`–`+0x130` (vtable `+0x3c` with 1) and writes the five values (`+0x134`…, vtable `+0x7c`, from the player's `+0x830`…); the reset `006066b0` calls it, then writes the five values and `text_bonus` (`+0x160`) empty (`006dfe28`). The build `005fd120` calls `00605950`, `006060f0(race)` and `006062d0` with the player's class as it stands (`+0x494`, which it never writes), so a race click (class −1) leaves all five cream. A class click runs `006062d0(class)` and, on a change, the build, which ends with the same call; a build with no race (a class clicked first) returns before `00605950`. `006060f0` touches no label | 1298 `00605950`, `006066b0`, `005fd120`, `00604f90`, `006060f0` | binary |
 | **A race click on the same race keeps the cyan.** ReceiveMessage sets the class to −1 on every race click but builds only when the race changes, so after Tuarek, priest, Tuarek the priest button is NORMAL again (`006060f0`) and "STR" and "INT" stay cyan until the next build or open | 1298 `00604f90` | binary |
-| **The realm draws all five cream throughout.** The 1298 recipe hides none of the ten and has no state that changes them. In the open shot (no race, no class) each rect's text is cream: 175, 194, 136, 139 and 159 near-cream pixels in the STR, DEX, HP, INT and MP rects and at most one cyan-leaning pixel at 1024×768, within three pixels of that at the other two sizes; no live suite shoots the create after a class click | `build/live-ko/front-end/1298-*.create.ppm`; `games/moradon/front-end-1298.json` | local-asset |
+| **The realm draws all five cream throughout.** The 1298 recipe hides none of the ten and has no state that changes them. In the open shot (no race, no class) each rect's text is cream: 175, 194, 136, 139 and 159 near-cream pixels in the STR, DEX, HP, INT and MP rects and at most one cyan-leaning pixel at 1024×768, within three pixels of that at the other two sizes; no live suite shoots the create after a class click (since RQ-153 one does: `create-class`) | `build/live-ko/front-end/1298-*.create.ppm`; `games/moradon/front-end-1298.json` | local-asset |
 
 So at each open and after the race click 1298 and the realm both read five cream
 labels; after the priest click 1298 reads "STR" and "INT" cyan (0x80ffff), where the
@@ -1336,8 +1336,10 @@ Tuarek click then draws them again, as 1298's build does. The realm's create bin
 one class, so the flag stands for the priest's pair; the rogue's, warrior's and
 mage's pairs (flags 1 and 2, 0 and 2, 3 and 4) are never clicked (Q52). Checked by
 the client's choice state (`tests/front_end.cpp`) and the 1298 recipe's create in
-`make live-ko` (`tests/front_end_live.py`, the ids drawn after each click); no
-capture after the priest click is pinned. The stat values stay empty (Q52) and the
+`make live-ko` (`tests/front_end_live.py`, the ids drawn after each click), and
+(RQ-153) by its frames: the shot `create-class`, taken after the race and the priest
+click, holds cyan text in the STR and INT rects and cream in DEX, HP and MP at each
+window size, and the open's `create` shot cream in all five. The stat values stay empty (Q52) and the
 1097 choice is unchanged (Q92).
 
 ### 9.16 1264's chosen race and class draw down (RQ-134, 2026-11-03)

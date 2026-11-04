@@ -126,7 +126,9 @@ from the player's own KO data.
      cream "STR" and "INT" draw at each open and hide on a priest click, their
      cyan copies showing (006062d0), draw again on the race click that builds
      (005fd120), stay hidden on a click on the race already chosen (00604f90)
-     and draw again on a new open.
+     and draw again on a new open; in the frames (RQ-153) the five labels'
+     rects hold cream (0xfdf8d0) text at the open, and after the race and the
+     priest click "STR" and "INT" cyan (0x80ffff), "DEX", "HP" and "MP" cream.
 
 No server or stack.
 """
@@ -864,6 +866,34 @@ CREATE_CHOICE = (f"open=0,0,0 until={UNTIL_1298} labels={LABELS_1298} empty=crea
 # (W - w - 50, H - 30 - h), Group_name centred at H - 30 - h.
 create_tree = ko_hud.parse(pinned.get(recipe_1298["screens"]["create"]["ui"]))
 assert recipe_1298["screens"]["create"]["ui"] == "UI_US/co_characterCreate_us.uif", recipe_1298["screens"]["create"]
+# RQ-153 (RQ-145, Q93 (b), KO-FINDINGS 9.15): in Group_class each stat's cream
+# label `*_01` (0xfdf8d0) is drawn over its cyan copy `*_02` (0x80ffff), the
+# same text in the same rect; the open shows all five cream, and after the race
+# and the priest click (the shot create-class) the until-class labels (str_01,
+# int_01) are hidden, so "STR" and "INT" read cyan and "DEX", "HP" and "MP"
+# cream. Each stat -> its rect in Group_class.
+group_class = find(create_tree, "Group_class")
+STATS_1298 = {}
+for stat in ("str", "dex", "sta", "int", "map"):
+    cream, cyan = find(create_tree, f"{stat}_01"), find(create_tree, f"{stat}_02")
+    assert cream["color"] & 0xffffff == 0xfdf8d0 and cyan["color"] & 0xffffff == 0x80ffff, stat
+    assert cream["rect"] == cyan["rect"] and cream["text"] == cyan["text"], stat
+    assert find(group_class, f"{stat}_01") is cream, stat
+    STATS_1298[stat] = cream["rect"]
+CYAN_1298 = [ident.split("_")[0] for ident in LABELS_1298.split(",")]
+# The button bound to create_class, whose placed rect the create-class shot logs.
+CLASS_BUTTON_1298 = find(group_class, next(ident for ident, action in recipe_1298["screens"]["create"]["bindings"].items()
+                                           if action == "create_class"))
+assert CLASS_BUTTON_1298 is not None, recipe_1298["screens"]["create"]["bindings"]
+assert CYAN_1298 == ["str", "int"], CYAN_1298
+
+
+def cyan_and_cream(pixels):
+    """(text pixels of the cyan label's colour, ones of the cream label's)."""
+    return (sum(p[1] >= 200 and p[2] >= 200 and p[2] - p[0] >= 60 for p in pixels),
+            sum(p[0] >= 200 and p[1] >= 200 and p[0] - p[2] >= 25 for p in pixels))
+
+
 bar_tree = ko_hud.parse(pinned.get(recipe_1298["screens"]["select"]["ui"]))
 bar_w = bar_tree["rect"][2] - bar_tree["rect"][0]
 bar_h = bar_tree["rect"][3] - bar_tree["rect"][1]
@@ -952,6 +982,25 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     assert choice and choice.group(1) == CREATE_CHOICE, (size, choice and choice.group(1), CREATE_CHOICE)
     boxes = re.findall(r"^FRONT_CREATE_MESSAGE (.*)$", run.stdout, re.M)
     assert boxes == [choice_boxes[0], choice_boxes[0], choice_boxes[1]], (size, boxes, choice_boxes)
+    # RQ-153: the stat labels in Group_class where the realm drew the panel,
+    # found from the create-class shot's rect= (the class button's, as placed):
+    # all five cream at the open (the create shot, the panel at rest there
+    # too), "STR" and "INT" cyan and the other three cream after the race and
+    # the priest click (create-class, 006062d0(104)). A few pixels of either
+    # colour may be the hall's, seen through the panel.
+    assert "create-class" in shots, (size, sorted(shots))
+    placed_class = tuple(map(int, shots["create-class"][1].split(",")))
+    gx = placed_class[0] - (CLASS_BUTTON_1298["rect"][0] - group_class["rect"][0])
+    gy = placed_class[1] - (CLASS_BUTTON_1298["rect"][1] - group_class["rect"][1])
+    for name in ("create", "create-class"):
+        for stat, r in STATS_1298.items():
+            cyan, cream = cyan_and_cream(region(shots[name][0], (
+                gx + r[0] - group_class["rect"][0], gy + r[1] - group_class["rect"][1],
+                gx + r[2] - group_class["rect"][0], gy + r[3] - group_class["rect"][1])))
+            if name == "create-class" and stat in CYAN_1298:
+                assert cyan > 50 and cream <= 2, (size, name, stat, cyan, cream)
+            else:
+                assert cream > 50 and cyan <= 2, (size, name, stat, cyan, cream)
     print(f"PASS front-end captures 1298 recipe {size}: 1298's select bar at ({x0}, {y0}), unscaled, its ten "
           f"bound nodes where 1298's Load puts them, its info texts filled for a character and empty without; "
           f"its Exit asks yes or no in its centred box at ({bx}, {by}), ESC and No closing it, ENTER and Yes leaving the game; "
@@ -962,5 +1011,6 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
           f"race click; Cancel returns to the select at rest on that slot; its panels slide in as 1298's Tick "
           f"moves them ({len(slide_frames)} frames at 32 a second, Group_class ending at "
           f"{slide_frames[-1][2]}, Group_name at {slide_frames[-1][5]}); it waits for its race and class, "
-          f"Create saying rows 1908 and 1904 under 1901 until both are clicked")
+          f"Create saying rows 1908 and 1904 under 1901 until both are clicked; its stat labels cream at the "
+          f"open, \"STR\" and \"INT\" cyan after the race and the priest click")
 print("PASS KO front end graphical")

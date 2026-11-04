@@ -66,8 +66,10 @@
 // is chosen that draw then, comma-separated, `-` for none; RQ-145: L the same
 // for its nodes drawn until a class is clicked; again= after a second click
 // on the chosen race, a class click then sending the create; reopen= after a
-// race and a class click, a Cancel and ENTER opening create again) and the box
-// of each refusal it words:
+// race and a class click, a Cancel and ENTER opening create again), then
+// (RQ-153) the frame of both= (the race and then the class clicked) as the shot
+// create-class, its FRONT_SHOT line (rect= the class button's) after that
+// line, and the box of each refusal it words:
 //   FRONT_CREATE_MESSAGE M|title|text
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
@@ -84,6 +86,35 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   SDL_GetWindowSizeInPixels(w, &width, &height);
   n3e::Characters list;
   using Screen = n3e::front::Screen;
+  // The frame just drawn written to PREFIX.<name>.ppm, and its FRONT_SHOT
+  // line (returned, so a capture inside another line's report prints after it).
+  auto capture_shot = [&](const std::string &name, n3e::FrontAction bound, bool logo = false) {
+    const std::string path = std::string(prefix) + "." + name + ".ppm";
+    capture(path, width, height);
+    std::ostringstream line;
+    line << "FRONT_SHOT name=" << name << " size=" << width << "x" << height << " path=" << path << " rect=";
+    const auto origin = front->layout_origin(width, height);
+    if (logo) {
+      const float s = origin[2];
+      line << int(origin[0]) << "," << int(origin[1]) << "," << int(origin[0] + 1024 * s) << ","
+           << int(origin[1] + 768 * s);
+    } else if (auto r = front->action_rect(bound, width, height))
+      line << int((*r)[0]) << "," << int((*r)[1]) << "," << int((*r)[2]) << "," << int((*r)[3]);
+    line << " drawn=";
+    const char *sep = "";
+    for (const auto &d : front->drawn()) {
+      const auto &b = d.box;
+      const auto &v = d.viewport;
+      static const char *kinds[] = {"intro", "hall", "create"};
+      line << sep << kinds[d.which] << ":" << int(v[0] + (b[0] + 1) / 2 * v[2]) << ","
+           << int(height - v[1] - (b[3] + 1) / 2 * v[3]) << "," << int(v[0] + (b[2] + 1) / 2 * v[2]) << ","
+           << int(height - v[1] - (b[1] + 1) / 2 * v[3]);
+      sep = ";";
+    }
+    line << " origin=" << origin[0] << "," << origin[1] << "," << origin[2];
+    SDL_GL_SwapWindow(w);
+    return line.str();
+  };
   auto shot = [&](const std::string &name, Screen screen, int characters, const std::string &realm, float progress,
                   n3e::FrontAction bound, const std::string &message, double logo = -1,
                   n3e::FrontMessage kind = n3e::FrontMessage::disconnected, bool waiting = false) {
@@ -102,29 +133,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     const n3e::front::Context context{realm, "ENTER - Log in with Discord", release.version, &list, progress};
     front->draw(width, height, 1.0, context);
     front->draw(width, height, 1.0, context);
-    const std::string path = std::string(prefix) + "." + name + ".ppm";
-    capture(path, width, height);
-    std::cout << "FRONT_SHOT name=" << name << " size=" << width << "x" << height << " path=" << path << " rect=";
-    const auto origin = front->layout_origin(width, height);
-    if (logo >= 0) {
-      const float s = origin[2];
-      std::cout << int(origin[0]) << "," << int(origin[1]) << "," << int(origin[0] + 1024 * s) << ","
-                << int(origin[1] + 768 * s);
-    } else if (auto r = front->action_rect(bound, width, height))
-      std::cout << int((*r)[0]) << "," << int((*r)[1]) << "," << int((*r)[2]) << "," << int((*r)[3]);
-    std::cout << " drawn=";
-    const char *sep = "";
-    for (const auto &d : front->drawn()) {
-      const auto &b = d.box;
-      const auto &v = d.viewport;
-      static const char *kinds[] = {"intro", "hall", "create"};
-      std::cout << sep << kinds[d.which] << ":" << int(v[0] + (b[0] + 1) / 2 * v[2]) << ","
-                << int(height - v[1] - (b[3] + 1) / 2 * v[3]) << "," << int(v[0] + (b[2] + 1) / 2 * v[2]) << ","
-                << int(height - v[1] - (b[1] + 1) / 2 * v[3]);
-      sep = ";";
-    }
-    std::cout << " origin=" << origin[0] << "," << origin[1] << "," << origin[2] << std::endl;
-    SDL_GL_SwapWindow(w);
+    std::cout << capture_shot(name, bound, logo >= 0) << std::endl;
   };
   using A = n3e::FrontAction;
   shot("login", Screen::login, 0, "Local Realm", 0, A::login, "");
@@ -469,6 +478,10 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       frame();
       std::cout << " both=" << front->action_state(A::create_race) << "," << front->action_state(A::create_class)
                 << "," << stands() << " labels=" << labels();
+      // RQ-153: that frame, the race and then the class clicked, as the shot
+      // create-class (rect= the class button's), printed after this line.
+      front->draw(width, height, t, opened);
+      const auto class_shot = capture_shot("create-class", A::create_class);
       // RQ-145: the chosen race clicked again unchooses the class and builds
       // nothing, so the class's marks stay (1298's 00604f90); the class
       // clicked again, Create sends.
@@ -496,6 +509,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       key(SDLK_RETURN);
       frame();
       std::cout << " reopen=" << until() << " labels=" << labels() << std::endl;
+      std::cout << class_shot << std::endl;
       for (const auto &b : boxes) std::cout << "FRONT_CREATE_MESSAGE " << b << std::endl;
       front->jump(Screen::select);
     }

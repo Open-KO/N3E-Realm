@@ -1353,3 +1353,25 @@ click) and the priest `down`. Race and class are still chosen from the open (Q52
 Package data only: no cook, format or client change; `make live-ko` matches the
 warrior and mage rects to their image tiles at each size. The 1298 recipe is
 unchanged (RQ-133's `until_race` already draws 1298's images).
+
+### Q92 — The 1097 choice's stat labels: all light or 1264's pink pair
+
+RQ-141 (KO-FINDINGS §9.16): the 1097 choice's create stands for 1264's after a
+Tuarek click and a priest click (Q52). Each 1264 open hides the five stat labels
+(`0043ea10`), and a class click shows its class's two (`0043ee10`); for the priest
+(104) `img_str` and `img_int`. Each `img_*` is a pink (0xff8080) copy of a light
+(0xe6e6e6) root string, same text and rect, drawn right after it, so 1264 reads
+"Strength" and "Intelligence" in pink and "Health", "Dexterity" and "Magic Power"
+light. The 1097 recipe hides all five `img_*`, so the realm draws all five light.
+Side by side: `build/ghidra/rq141/create-stat-labels.png` (not committed; built
+from the newest `make live-ko` create capture, the pink blended by the light label's
+fitted coverage).
+Options: (a) keep the realm's look (five light labels); (b) match 1264's frame: the
+1097 recipe's create stops hiding `img_str` and `img_int` and still hides `img_sta`,
+`img_dex` and `img_map`; package data only (the layout's own strings, which the cook
+keeps; no cook, format or client change); the cook test would check the recipe and
+`make live-ko` the two rects' pink text. Either way the stat values (`text_str` to
+`text_map`) stay empty and `text_bonus` hidden, as Q52 has them, where 1264's Reset
+writes the player's stats and the bonus; that is not this question.
+**Default taken:** none applied; (b) proposed, the look 1264 shows for the same
+choice with nothing else changed, as Q89 (b), Q90 and Q91 (b) were taken.

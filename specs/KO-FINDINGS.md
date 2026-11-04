@@ -1372,6 +1372,32 @@ is a live NORMAL button (`0043ee10`, `00403b30`): race and class stay chosen fro
 the open (Q52). `make live-ko` matches the warrior and mage rects to their image
 tiles at each size. The stat labels remain hidden (their own item).
 
+**The stat labels after a priest click (RQ-141, 2026-11-03).** Re-read in the same
+image and project (`0043ee10`, `0043ea10` and `0043ec90` decompiled again,
+`-readOnly -noanalysis`, output under `build/ghidra/rq141/`, not committed; Load
+`0043cd00` from RQ-134's output), with the layout above and the realm's capture of
+the 1097 choice's create after RQ-142 (`make live-ko`,
+`build/live-ko/front-end/1024x768.create.ppm`, sha256 `b0e081eb…`, not committed).
+Not run, as above.
+
+| Observation | Where | Label |
+|---|---|---|
+| **Load keeps the five labels in stat order.** Load builds the names `img_str`, `img_sta`, `img_dex`, `img_int`, `img_map` in turn and stores their nodes at `+0xe8`–`+0xf8`, the `text_*` values at `+0xfc`–`+0x10c` and the `area_*` tooltips at `+0x110`–`+0x120`, one loop of five | 1264 `0043cd00` | binary |
+| **Each open hides all five.** Reset (`0043ea10`, from Load and SetChr) hides `+0xe8`–`+0xf8` (vtable `+0x3c` with 0) and writes the five `text_*` values (vtable `+0x7c`) from the player's `+0x734`, `+0x73c`, `+0x744`, `+0x74c` and `+0x754`, and `text_bonus` (`+0x128`) from `+0xb0`. The source's Reset calls UpdateStats, which does the same (`SetVisible(false)`, `SetStringAsInt` of strength, stamina, dexterity, intelligence, magic power and the bonus) | 1264 `0043ea10`; source `UICharacterCreate.cpp` `Reset`, `UpdateStats` | binary; source |
+| **A class click shows its class's two.** `0043ee10` sets the visibility of `+0xe8`–`+0xf8` from five flags, all off but two per class: the warrior (101, 201) `img_str` and `img_sta`; the rogue (102, 202) `img_sta` and `img_dex`; the mage (103, 203) `img_int` and `img_map`; the priest (104, 204) `img_str` and `img_int`. `0043ec90` touches none of them, so after a Tuarek click and before a class click none shows. The source's `UpdateClassButtons` sets the same pairs (it also calls `SetStats`, which the 1264 binary's does not) | 1264 `0043ee10`, `0043ec90`; source `UpdateClassButtons` | binary; source |
+| **Each label is a pink copy over a light one.** The five `img_*` are root strings (children 239–247 by twos), Arial 12 bold, colour 0xff8080, each drawn right after an unnamed light (0xe6e6e6) string with the same text ("Strength", "Health", "Dexterity", "Intelligence", "Magic Power") in the same rect (`img_sta`'s is one pixel shorter at the bottom, 135–156 against 135–157). So a shown label draws the same glyphs pink over the light ones; a hidden one leaves the light label | `UI_US/Ka_CharacterCreate_us.uif` (`4a1b072a…`) | local-asset |
+| **The realm draws the light labels only.** The 1097 recipe hides all five `img_*`. In the capture the "Strength" and "Intelligence" rects (layout (690, 109) and (690, 191), the root at (0, −10)) are the light label blended over the panel tiles (`ui_el_charcreate01_us.dxt`, opaque): 471 and 629 pixels carry text, each fitting light 0xe6e6e6 over its panel texel by one coverage within 0.63 of 255, and all but 4 and 6 of the rest equal the panel within 2. The `text_*` values are empty (the layout's text) and `text_bonus` hidden | `build/live-ko/front-end/1024x768.create.ppm`; `games/moradon/front-end.json` | local-asset |
+
+So in the same frame 1264 reads "Strength" and "Intelligence" in pink (0xff8080 at
+full coverage: green and blue 102 below the light label's) and the other three light,
+where the realm's five are all light. Side by side:
+`build/ghidra/rq141/create-stat-labels.png` (not committed; top the capture, bottom
+the same frame with pink blended over each text pixel of the two rects by the light
+label's fitted coverage, as 1264's string drawn second would). Also on this frame,
+not this item: 1264's Reset writes the five stat values and the bonus, which the
+realm leaves empty and hidden (Q52, "stats hidden"). **Decided nothing at RQ-141
+(Q92):** a look-and-feel difference, put to the maintainer.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -1400,4 +1426,5 @@ notes.
 | Q89 | §9.16 (RQ-134): 1264's chosen race and class draw `UI_STATE_BUTTON_DOWN` (`0043ec90`, `0043ee10`), the layout's sunken pink tile; the 1097 choice's fixed `on` drew the raised pink on tile. RQ-138 (option (b), the maintainer's): the 1097 choice's Tuarek and priest are the recipe state `down` and draw their `BS_DOWN` tiles, still chosen from the open. |
 | Q90 | §9.16 (RQ-134): the 1264 layout's Puri Tuarek has an untextured `BS_DISABLE` image, so the realm's fixed disabled drew only its label; 1264 never disables a race button (`0043ec90`). RQ-139 (the maintainer's): the 1097 choice leaves it unfixed and unbound, drawing its `BS_NORMAL` grey tile, inert as the other race buttons. |
 | Q91 | §9.16 (RQ-140): after a Tuarek and a priest click 1264 shows `img_warrior` and `img_mage` (darker grey tiles) for the warrior and mage buttons, the rogue a live NORMAL button and the priest down (`0043ec90`, `0043ee10`); the 1097 choice drew the warrior, rogue and mage fixed disabled in their normal grey tile. RQ-142 (option (b), the maintainer's): the 1097 choice hides the warrior and mage buttons for their images and hides `img_rogue` and `img_priest`, the rogue still inert, race and class still chosen from the open. |
+| Q92 | §9.16 (RQ-141): after a priest click 1264 shows `img_str` and `img_int` (`0043ee10(104)`), pink copies drawn over the light "Strength" and "Intelligence"; each open hides all five (`0043ea10`). The 1097 choice hides all five, so its labels are all light. Open: put to the maintainer, nothing applied. |
 | Q72 | §9.10 (RQ-120, correcting §8.2): 1097 and 1264 (and 1298, RQ-121) clear the UI flag from the select request until the main procedure, so no arrow, ESC or button reaches the select during the start clip; only the tick's ENTER skips it. RQ-121 (the maintainer) makes the realm's ESC and Exit do nothing then too. §8.1 (RQ-076): 1097 starts the clip on the server's answer and takes ENTER in any state; the realm starts on the press, at rest only. §8.2 (RQ-077), as RQ-120 corrects it: DoJobLeft and DojobRight would start a turn from state 3, but no arrow reaches them during the clip; the realm ignores them then too. |

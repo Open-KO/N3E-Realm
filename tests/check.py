@@ -171,9 +171,34 @@ for bad in [mesh[:-1], mesh + b"variant", mesh[:4] + struct.pack("<i", 1) + mesh
         pass
     else:
         raise AssertionError("KO invalid accepted")
+
+
+# RQ-192: a KO normal component is a cooked float the client reads through
+# Reader::f (finite, |x| <= 1e6); the importer refuses one past it, as it
+# refuses a normal shorter than 1e-6 (the client's own floor is 1e-10).
+def with_normal(n):
+    return mesh[:28] + struct.pack("<8f", 0, 0, 1, *n, 0, 0) + mesh[60:]
+
+
+assert with_normal([0, 0, -1]) == mesh
+past = struct.unpack("<f", struct.pack("<I", struct.unpack("<I", struct.pack("<f", 1e6))[0] + 1))[0]
+for n in [[1e6, 0, 0], [0, -1e6, 0], [0, 0, 2**-19]]:
+    p.write_bytes(with_normal(n))
+    assert ko.import_mesh(p, 0.5)["vertices"][0][3:6] == [n[0], n[1], -n[2]], n
+for n, reason in [([past, 0, 0], "KO normal past the cooked float bound"),
+                  ([0, 0, -past], "KO normal past the cooked float bound"),
+                  ([0, 0, 0], "KO normal"), ([0, 2**-20, 0], "KO normal")]:
+    p.write_bytes(with_normal(n))
+    try:
+        ko.import_mesh(p, 0.5)
+    except ValueError as e:
+        assert str(e) == reason, (n, e)
+    else:
+        raise AssertionError(("KO normal accepted", n))
 p.write_bytes(mesh)
 print(
-    "PASS synthetic KO static reflection/unit calibration, malformed/unsupported rejection"
+    "PASS synthetic KO static reflection/unit calibration, malformed/unsupported rejection, "
+    "normal components within the cooked float bound"
 )
 print(run(sys.executable, "tests/asset_features.py").strip())
 print("PASS CPU foundation suite")

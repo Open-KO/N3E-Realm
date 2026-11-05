@@ -87,5 +87,10 @@ with tempfile.TemporaryDirectory(dir='build') as tmp:
         else:raise AssertionError(('normal cooked',n))
     for n in refused:
         assert not load(template.replace(f(SENTINEL),f(n))),('client accepted a forged normal',n)
+# RQ-192: a normal without three components is named as such, not as not finite.
+for n in [[0,1],[0,1,0,0],[]]:
+    try:render_detail.check_normal(n)
+    except ValueError as e:assert str(e)=='detail vertex normal without three components',e
+    else:raise AssertionError(('normal accepted',n))
 print('PASS detail vertex normals: the cooker refuses exactly what the client reader refuses (zero, non-finite, '
-      'past 1e6, single-precision length at most 1e-10)')
+      'past 1e6, single-precision length at most 1e-10, not three components)')

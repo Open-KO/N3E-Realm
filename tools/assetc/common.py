@@ -86,12 +86,17 @@ def count(n, maximum, minimum=1):
     return n
 
 
+# The client reads every cooked float through Reader::f
+# (client/assets/assets.cpp): finite and magnitude at most 1e6.
+COOKED_FLOAT_BOUND = 1e6
+
+
 def vector(v, n):
     if (
         not isinstance(v, list)
         or len(v) != n
         or any(
-            type(x) not in (int, float) or not math.isfinite(x) or abs(x) > 1e6
+            type(x) not in (int, float) or not math.isfinite(x) or abs(x) > COOKED_FLOAT_BOUND
             for x in v
         )
     ):

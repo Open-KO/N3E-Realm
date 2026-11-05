@@ -47,6 +47,16 @@ def import_mesh(path, meters_per_unit, detail=False, data=None):
     for _ in range(nv):
         p = list(take("8f"))
         finite(p)
+        # RQ-192: the client reads every cooked normal component as a cooked
+        # float (Reader::f: finite, |x| <= COOKED_FLOAT_BOUND) and its norm
+        # refuses a single-precision length at most 1e-10, which the 1e-6
+        # floor below clears. The components are single precision already,
+        # so a cook that copies them writes what was checked; the world
+        # (ko_scene) writes them rotated by the shape's quaternion and does
+        # not check again. No mesh in assets/ko or the 1097, 1264, 2145 and
+        # Steam installs has a component above 1 (local-asset).
+        if any(abs(x) > COOKED_FLOAT_BOUND for x in p[3:6]):
+            raise ValueError("KO normal past the cooked float bound")
         if sum(x * x for x in p[3:6]) < 1e-12:
             raise ValueError("KO normal")
         # Reflect Z, reverse winding: source left-handed Y-up -> engine RH Y-up.

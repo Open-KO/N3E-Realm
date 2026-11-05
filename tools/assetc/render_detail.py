@@ -21,11 +21,11 @@ INFLUENCE_ENGINE = 44
 MAX_FURTHER = 60
 # RQ-191: the client's detail reader (client/assets/assets.cpp
 # load_render_detail) reads each vertex normal's components as cooked floats
-# (Reader::f: finite, magnitude at most 1e6) and refuses a normal whose float
-# length is not above 1e-10 (norm, "zero normal"); serialize refuses the same
-# normal so a cook fails rather than n3e-asset-check. ko_detail rebuilds a
-# KO corner without a normal first (D-177, ko_character.corner_normals).
-COOKED_FLOAT_BOUND = 1e6
+# (Reader::f: finite, magnitude at most COOKED_FLOAT_BOUND, common) and
+# refuses a normal whose float length is not above 1e-10 (norm, "zero
+# normal"); serialize refuses the same normal so a cook fails rather than
+# n3e-asset-check. ko_detail rebuilds a KO corner without a normal first
+# (D-177, ko_character.corner_normals).
 ZERO_NORMAL = 1e-10
 
 
@@ -38,7 +38,9 @@ def check_normal(n):
     length is taken in single precision as the client's norm does (each
     product and sum rounded to a float: exact for these operations, since a
     double holds more than twice a float's precision)."""
-    if len(n) != 3 or not all(math.isfinite(x) for x in n):
+    if len(n) != 3:
+        raise ValueError('detail vertex normal without three components')
+    if not all(math.isfinite(x) for x in n):
         raise ValueError('detail vertex normal not finite')
     try:
         x, y, z = (_f32(c) for c in n)

@@ -260,3 +260,39 @@ with tempfile.TemporaryDirectory() as td:
         assert done.returncode != 0, "client accepted " + reason
     print("PASS world asset rejections: magic, engine pairing, editing prerequisite, "
           "indices, UV bound, atlas slots, normals, atlas grid, trailing bytes")
+
+
+# RQ-192: the scene cook (gltf.cook) writes each NORMAL component as read, and
+# common.vector bounds it at the client's cooked float limit (Reader::f:
+# finite, |x| <= 1e6). A component at the limit cooks and loads; one float
+# past it is refused at the cook.
+def normal_cook(td, n):
+    root = pathlib.Path(td) / "normal-source"
+    out = pathlib.Path(td) / "normal-cooked"
+    shutil.rmtree(root, ignore_errors=True)
+    shutil.rmtree(out, ignore_errors=True)
+    shutil.copytree(ROOT / "tests/fixtures/legacy-demo", root)
+    g = json.loads((root / "fixture.gltf").read_text())
+    a = g["accessors"][g["meshes"][0]["primitives"][0]["attributes"]["NORMAL"]]
+    view = g["bufferViews"][a["bufferView"]]
+    blob = bytearray((root / "fixture.bin").read_bytes())
+    struct.pack_into("<3f", blob, view.get("byteOffset", 0) + a.get("byteOffset", 0), *n)
+    (root / "fixture.bin").write_bytes(blob)
+    assetc.cook(root, out)
+    return out
+
+
+past = struct.unpack("<f", struct.pack("<I", struct.unpack("<I", struct.pack("<f", 1e6))[0] + 1))[0]
+with tempfile.TemporaryDirectory() as td:
+    for n in [[1e6, 0, 0], [0, 0, -1e6]]:
+        cooked = normal_cook(td, n)
+        assert (cooked / "scene.bin").read_bytes().count(struct.pack("<3f", *n)) == 1, n
+        subprocess.check_output([str(ROOT / "build/client/n3e-asset-check"), str(cooked)])
+    for n in [[past, 0, 0], [0, -past, 0], [0, 0, 0]]:
+        try:
+            normal_cook(td, n)
+        except ValueError as e:
+            assert str(e) in ("invalid vector", "skin/normal"), (n, e)
+        else:
+            raise AssertionError(("scene normal cooked", n))
+print("PASS scene normals: components at the cooked float bound cook and load, past it are refused")

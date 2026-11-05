@@ -504,7 +504,7 @@ struct Release {
   uint32_t protocol = 1;
   // The release's engine version; from 43 the player clips may be N3SI (RQ-163),
   // from 44 the render detail N3DI / N3DJ (RQ-164), from 45 the front end's
-  // models N3SI / N3SJ (RQ-165, N3FE version 30) and from 46 the player clips
+  // models N3SI / N3SJ (RQ-165, N3FE version 32 since RQ-005) and from 46 the player clips
   // other than player-idle.bin N3ST, their tracks alone (RQ-188).
   uint32_t engine = 1;
   uint32_t npc_health = 1;
@@ -1180,6 +1180,16 @@ struct FrontCreateDescriptions {
   std::string open;
   std::vector<FrontCreateTip> tips;
 };
+// Version 31 (RQ-005; content/front-end.md item 17): a select character,
+// as KO's AddChr chooses the joint, animation and plugs by race and class
+// (source GameProcCharacterSelect.cpp; 1097 0043ba10, 1298 005fb4f0): the
+// race and the specialties it draws, and the model (the select model's
+// three clips by role, its plugs).
+struct FrontSelectModel {
+  uint32_t race = 0;
+  std::vector<uint32_t> specialties;
+  FrontScene scene;
+};
 struct FrontEnd {
   // The layouts the moves are for: the five screens (FrontScreen), then the logo.
   static constexpr size_t kLogoLayout = size_t(FrontScreen::count);
@@ -1237,6 +1247,12 @@ struct FrontEnd {
   FrontCreateStats create_stats;
   // Version 28 (RQ-175): create's description text (rest none: none).
   FrontCreateDescriptions create_descriptions;
+  // Version 31 (RQ-005): the select characters per race and class (none: the
+  // select model draws every character), and each specialty's class name
+  // (KO's text for its class code; a specialty without one takes the
+  // class_name string).
+  std::vector<FrontSelectModel> select_models;
+  std::map<uint32_t, std::string> class_names;
 };
 FrontEnd load_front_end(const Release &release);
 } // namespace n3e

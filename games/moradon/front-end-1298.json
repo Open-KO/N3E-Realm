@@ -139,7 +139,7 @@
   "strings": {
     "select_info": "Level: {level}\nSpecialty: {class}\nID: {name}",
     "select_hint": "",
-    "class_name": "Priest",
+    "class_name": "Unknown Class",
     "loading_info": "Loading...",
     "version": "Ver. {version}"
   },
@@ -197,7 +197,11 @@
       "animation": "ChrSelect/upc_ka_tu.n3anim",
       "clips": [1, 2, 0],
       "plugs": []
-    }
+    },
+    "class_names": {"table": "Data/Texts_us.tbl",
+      "rows": {"101": 1420, "102": 1418, "103": 1421, "104": 1417, "105": 1409, "106": 1411, "107": 1412, "108": 1414,
+               "109": 1416, "110": 1413, "111": 1415, "112": 1410, "201": 1420, "202": 1418, "203": 1421, "204": 1417,
+               "205": 1402, "206": 1407, "207": 1408, "208": 1401, "209": 1406, "210": 1405, "211": 1403, "212": 1404}}
   },
   "music": {
     "tracks": [

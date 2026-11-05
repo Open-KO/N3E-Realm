@@ -203,11 +203,11 @@ def render_detail_magic(manifest, root):
 
 # RQ-165 (content/front-end.md): front-end.bin whose model records or parts
 # have vertices past four joint influences (N3SI / N3SJ, D-176's table) is
-# N3FE version 30 (ko_front_end.TABLES_VERSION; a file without one stays
-# 29), from engine 45; like 43 and 44 it needs an engine 38+ package (wire
+# N3FE version 32 (ko_front_end.TABLES_VERSION, 30 before RQ-005's select
+# characters; a file without one is 31), from engine 45; like 43 and 44 it needs an engine 38+ package (wire
 # 30), which a front end (engine 42) already is.
 FRONT_END_INFLUENCES_ENGINE = 45
-FRONT_END_TABLES_VERSION = 30
+FRONT_END_TABLES_VERSION = 32
 
 
 def front_end_version(manifest, root):
@@ -381,7 +381,7 @@ def cook(root, out, materials=False, influences=False):
             raise ValueError("N3DI / N3DJ render detail needs an engine 38+ package")
         engine_needed = max(engine_needed, DETAIL_INFLUENCES_ENGINE)
     if front_end_influences:
-        # RQ-165: N3FE version 30 (model records with influence tables) is
+        # RQ-165: N3FE version 32 (model records with influence tables) is
         # engine 45; the front end alone makes the package engine 42+.
         engine_needed = max(engine_needed, FRONT_END_INFLUENCES_ENGINE)
     if any(

@@ -1353,6 +1353,18 @@ def dress(specialty, body=1, parts=(), plugs=()):
             b"".join(u(hand) + u(joint) + MESH for hand, joint in plugs))
 
 
+def select_entry(race, specialties, clips=3, plug=None, scene=None, blends=None):
+    """Version 31 (RQ-005): a select character: its race, the specialties it
+    draws and a model record as the select model's (item 17)."""
+    return (u(race) + u(len(specialties)) + b"".join(u(x) for x in specialties) +
+            character(clips, blends=blends, plug=plug, scene=scene))
+
+
+def class_names_raw(*entries, count=None):
+    """Version 31 (RQ-005): the class names, each (specialty, text)."""
+    return u(len(entries) if count is None else count) + b"".join(u(k) + string(t) for k, t in entries)
+
+
 def path(source=fe.ENTRY, to=0, eye_rate=30.0, eye=((0, 1, 2), (0, 1, 3)), at_rate=30.0, at=((0, 0, 0),)):
     """A version 7 path record (RQ-087)."""
     return (u(source) + u(to) + f([eye_rate]) + u(len(eye)) + b"".join(f(list(v)) for v in eye) + f([at_rate]) +
@@ -1391,12 +1403,12 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=29, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=31, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0),
          creates=None, choices=u(0) + u(0), stats=u(0) + u(0xFFFFFFFF) + u(0), descriptions=None, more_size=1,
-         scene=None):
+         scene=None, selects=u(0), names=u(0)):
     more = (more_size, more_size, bytes(more_size * more_size * 4))
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [more] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
@@ -1426,9 +1438,10 @@ def blob(version=29, slots=1, screen_data=None, font_index=None, light=None, plu
     out += u(1) + u(2) + create_model(plug=plug) if creates is None else creates
     # Version 20 (RQ-126): create's slide, after the placement; version 25
     # (RQ-172): create's race and class buttons, after the slide; version 26
-    # (RQ-173): its stat arrows; version 28 (RQ-175): its description text, last.
+    # (RQ-173): its stat arrows; version 28 (RQ-175): its description text;
+    # version 31 (RQ-005): the select characters and the class names, last.
     descriptions = u(0) + u(0) + string("") + u(0) if descriptions is None else descriptions
-    return out + music + logo + messages + placement + slide + choices + stats + descriptions + extra
+    return out + music + logo + messages + placement + slide + choices + stats + descriptions + selects + names + extra
 
 
 # --- the create models (version 24, RQ-158) -------------------------------------
@@ -1764,6 +1777,80 @@ assert ("messages.login.title.table", "installer-1264:Data/Texts_us.tbl") in fe.
     {"messages": {"login": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1}}}})
 print("PASS front-end message cook: titles and texts from a KO text table's rows or the recipe; %d refusals"
       % len(message_problems))
+
+
+# --- the select characters and class names (version 31, RQ-005) -------------------
+
+# The class names: each specialty's row of the recipe's text table, sorted by
+# specialty; none without `class_names`.
+assert fe.class_names(TEXTS, {}) == (u(0), {})
+names_data, names_report = fe.class_names(TEXTS, {"class_names": {"table": "Data/Texts.tbl",
+                                                                  "rows": {"104": 2, "102": 1}}})
+assert names_report == {102: "Failed", 104: "Enter a name. "}, names_report
+assert names_data == u(2) + u(102) + string("Failed") + u(104) + string("Enter a name. "), names_data
+names_problems = {
+    "not a dict": [],
+    "no table": {"rows": {}},
+    "an extra key": {"table": "Data/Texts.tbl", "rows": {}, "x": 1},
+    "a specialty not a class code": {"table": "Data/Texts.tbl", "rows": {"100": 1}},
+    "a specialty spelled with a zero": {"table": "Data/Texts.tbl", "rows": {"0102": 1}},
+    "a specialty not a number": {"table": "Data/Texts.tbl", "rows": {"rogue": 1}},
+    "a missing row": {"table": "Data/Texts.tbl", "rows": {"102": 9}},
+    "a row outside ASCII": {"table": "Data/Texts.tbl", "rows": {"102": 3}},
+    "65 rows": {"table": "Data/Texts.tbl", "rows": {str(k): 1 for k in range(1, 66)}},
+}
+for reason, names in names_problems.items():
+    try:
+        fe.class_names(TEXTS, {"class_names": names})
+    except ValueError:
+        continue
+    raise AssertionError("front-end cook accepted class names with " + reason)
+# The select characters: each entry's keys and bounds, a race and specialty
+# drawn once, and, with create rules, every specialty of each content race
+# drawn by an entry or by the select character for its own race. These
+# refusals come before any model is cooked.
+DEFAULT_LOOK = {"race": 2, "joint": "j", "animation": "a", "clips": [0, 1, 2], "plugs": []}
+ROGUE = {"race": 2, "specialties": [102], "joint": "j", "animation": "a"}
+assert fe.select_characters(Fixture({}), None, {"character": DEFAULT_LOOK}, pathlib.Path("/nonexistent")) == \
+    (u(0), [])
+TWO_RACES = {"races": [{"race": 2, "specialties": [102, 104]}, {"race": 4, "specialties": [104]}],
+             "content": [2, 4]}
+select_problems = {
+    "not a list": dict(characters={}),
+    "33 entries": dict(characters=[dict(ROGUE, specialties=[100 + k % 12 + 1], race=k + 1) for k in range(33)]),
+    "no joint": dict(characters=[{k: v for k, v in ROGUE.items() if k != "joint"}]),
+    "an extra key": dict(characters=[dict(ROGUE, face=0)]),
+    "race 0": dict(characters=[dict(ROGUE, race=0)]),
+    "race 65536": dict(characters=[dict(ROGUE, race=65536)]),
+    "no specialties": dict(characters=[dict(ROGUE, specialties=[])]),
+    "17 specialties": dict(characters=[dict(ROGUE, specialties=list(range(101, 118)))]),
+    "a specialty twice": dict(characters=[dict(ROGUE, specialties=[102, 102])]),
+    "a race and specialty in two entries": dict(characters=[ROGUE, dict(ROGUE, specialties=[107, 102])]),
+    "five plugs": dict(characters=[dict(ROGUE, plugs=["p"] * 5)]),
+    "two clips": dict(characters=[dict(ROGUE, clips=[0, 1])]),
+    "a content race no entry draws": dict(characters=[ROGUE], rules=TWO_RACES),
+}
+for reason, case in select_problems.items():
+    try:
+        fe.select_characters(Fixture({}), None, dict(character=DEFAULT_LOOK, characters=case["characters"]),
+                             pathlib.Path("/nonexistent"), case.get("rules"))
+    except ValueError:
+        continue
+    raise AssertionError("front-end cook accepted select characters with " + reason)
+# Race 2's specialties need no entry (the select character's race); race 4's
+# needs one, which is cooked (here the stand-in tree has no files to cook).
+try:
+    fe.select_characters(Fixture({}), None, dict(character=DEFAULT_LOOK, characters=[dict(ROGUE, race=4,
+                                                                                           specialties=[104])]),
+                         pathlib.Path("/nonexistent"), TWO_RACES)
+except (KeyError, ValueError, OSError) as error:
+    assert "no select character draws" not in str(error), error
+assert ("select.characters[0].plugs[1]", "q") in fe.recipe_paths(
+    {"select": {"characters": [dict(ROGUE, plugs=["p", "q"])], "class_names": {"table": "t", "rows": {}}}})
+assert ("select.class_names.table", "t") in fe.recipe_paths({"select": {"class_names": {"table": "t"}}})
+print("PASS front-end select characters cook (RQ-005): class names from a KO text table's rows, %d refusals; "
+      "select characters checked before they cook, every content race's specialty drawn, %d refusals"
+      % (len(names_problems), len(select_problems)))
 
 
 # --- create's description text (version 28, RQ-175) ------------------------------
@@ -2782,7 +2869,7 @@ DRESS_CASES = {
     "bad-create-dress-plug-joint": blob(creates=u(1) + u(2) + create_model(dresses=[dress(102, plugs=[(0, 999)])])),
     "bad-create-dress-truncated": blob(creates=u(1) + u(2) + character() + u(0) + u(0) + u(0) + u(1) + u(102)),
 }
-# RQ-165 (version 30, engine 45): model records and parts past four joint
+# RQ-165 (version 30, 32 since RQ-005; engine 45): model records and parts past four joint
 # influences, N3SI (from N3S1) or N3SJ (from N3SM) with D-176's influence
 # table. The demo character's joint-1 vertices weigh joint 1 at 0.5 in their
 # four slots and joint 0 at 0.5 in the table; the reference carries the same
@@ -2849,23 +2936,72 @@ def table_creates(scene, faces=(), hairs=(), dress_parts=()):
 TABLE_CASES = {
     # Every scene with a table: the intro's, the select's, the create model
     # and its face, hair and dress part (N3SI and N3SJ mixed).
-    "ok-influences": blob(version=30, scene=SI, creates=table_creates(
+    "ok-influences": blob(version=32, scene=SI, creates=table_creates(
         SI, [as_part(SI)], [as_part(SJ)], [as_part(SI)])),
-    "ok-influences-n3sj": blob(version=30, scene=SJ, creates=table_creates(
+    "ok-influences-n3sj": blob(version=32, scene=SJ, creates=table_creates(
         SJ, [as_part(SJ)], [as_part(SI)], [as_part(SJ)])),
     "ok-influences-reference": blob(scene=TABLE_REFERENCE, creates=table_creates(
         TABLE_REFERENCE, [as_part(TABLE_REFERENCE)], [as_part(TABLE_REFERENCE)], [as_part(TABLE_REFERENCE)])),
     "ok-influences-original": blob(creates=table_creates(model, [PART], [PART], [PART])),
-    # Version 30 may hold N3S1 alone (the cook writes it only with a table).
-    "ok-version-30-n3s1": blob(version=30),
-    "bad@44-version-30-engine-44": blob(version=30, scene=SI, creates=table_creates(SI)),
-    "bad@42-version-30-engine-42": blob(version=30),
-    "bad-version-31": blob(version=31),
-    "bad-influences-version-29": blob(scene=SI),
-    "bad-influences-n3sj-version-29": blob(creates=table_creates(SJ)),
-    "bad-influences-part-version-29": blob(creates=table_creates(model, [as_part(SI)])),
-    "bad-influences-sum": blob(version=30, scene=influenced(model, extra_weight=0.25)),
-    "bad-influences-part-skeleton": blob(version=30, creates=table_creates(SI, [BENT_PART])),
+    # The tables version (32 since RQ-005) may hold N3S1 alone (the cook
+    # writes it only with a table).
+    "ok-version-32-n3s1": blob(version=32),
+    "bad@44-version-32-engine-44": blob(version=32, scene=SI, creates=table_creates(SI)),
+    "bad@42-version-32-engine-42": blob(version=32),
+    "bad-version-33": blob(version=33),
+    "bad-influences-version-31": blob(scene=SI),
+    "bad-influences-n3sj-version-31": blob(creates=table_creates(SJ)),
+    "bad-influences-part-version-31": blob(creates=table_creates(model, [as_part(SI)])),
+    "bad-influences-sum": blob(version=32, scene=influenced(model, extra_weight=0.25)),
+    "bad-influences-part-skeleton": blob(version=32, creates=table_creates(SI, [BENT_PART])),
+    # RQ-005: a select character with a table only in the tables version.
+    "ok-influences-select-character": blob(version=32, selects=u(1) + select_entry(2, [102], scene=SI)),
+    "bad-influences-select-character-version-31": blob(selects=u(1) + select_entry(2, [102], scene=SI)),
+}
+# RQ-005 (version 31): the select characters per race and class and the
+# class names (item 17), each refusal for its reason.
+SELECTS_OK = u(3) + select_entry(2, [102, 107, 108], plug=0) + select_entry(4, [104]) + select_entry(2, [104, 111])
+NAMES_OK = class_names_raw((102, "Rogue"), (104, "Priest"), (112, "Shadow Knight    "))
+SELECT_CASES = {
+    "bad-version-29": blob(version=29),
+    "bad-version-30": blob(version=30),
+    "ok-select-models": blob(selects=SELECTS_OK, names=NAMES_OK),
+    "ok-select-models-same-specialty-other-race": blob(selects=u(2) + select_entry(2, [104]) + select_entry(4, [104])),
+    "ok-class-names-only": blob(names=NAMES_OK),
+    "bad-select-model-race-0": blob(selects=u(1) + select_entry(0, [102])),
+    "bad-select-model-race-65536": blob(selects=u(1) + select_entry(65536, [102])),
+    "bad-select-model-no-specialty": blob(selects=u(1) + select_entry(2, [])),
+    "bad-select-model-17-specialties": blob(selects=u(1) + select_entry(2, list(range(101, 118)))),
+    "bad-select-model-specialty-0": blob(selects=u(1) + select_entry(2, [0])),
+    "bad-select-model-specialty-65536": blob(selects=u(1) + select_entry(2, [65536])),
+    "bad-select-model-specialty-twice": blob(selects=u(1) + select_entry(2, [102, 102])),
+    "bad-select-model-pair-twice": blob(selects=u(2) + select_entry(2, [102]) + select_entry(2, [107, 102])),
+    "bad-select-model-two-clips": blob(selects=u(1) + select_entry(2, [102], clips=2)),
+    "bad-select-model-plug-joint": blob(selects=u(1) + select_entry(2, [102], plug=999)),
+    "bad-select-model-33": blob(selects=u(33) + b"".join(select_entry(r, [102]) for r in range(1, 34))),
+    "bad-select-model-truncated": blob(selects=u(1) + select_entry(2, [102])[:-1]),
+    "bad-select-models-missing": blob(selects=b"", names=b""),
+    "bad-class-name-0": blob(names=class_names_raw((0, "x"))),
+    "bad-class-name-65536": blob(names=class_names_raw((65536, "x"))),
+    "bad-class-name-twice": blob(names=class_names_raw((102, "Rogue"), (102, "Rogue"))),
+    "bad-class-names-65": blob(names=class_names_raw(*((k, "x") for k in range(1, 66)))),
+    "bad-class-name-text": blob(names=class_names_raw((102, "\x01"))),
+    "bad-class-name-long": blob(names=class_names_raw((102, "x" * 1025))),
+    "bad-class-names-truncated": blob(names=NAMES_OK[:-1]),
+}
+SELECT_REASONS = {
+    "bad-version-29": "front end version", "bad-version-30": "front end version",
+    "bad-select-model-race-0": "front end select character race",
+    "bad-select-model-race-65536": "front end select character race",
+    "bad-select-model-no-specialty": "count", "bad-select-model-17-specialties": "count",
+    "bad-select-model-specialty-0": "front end select character specialty",
+    "bad-select-model-specialty-65536": "front end select character specialty",
+    "bad-select-model-specialty-twice": "front end select character specialty",
+    "bad-select-model-pair-twice": "front end select character specialty",
+    "bad-select-model-two-clips": "front end select clips",
+    "bad-select-model-plug-joint": "front end plug joint",
+    "bad-class-name-0": "front end class name", "bad-class-name-65536": "front end class name",
+    "bad-class-name-twice": "front end class name", "bad-class-name-text": "front end text",
 }
 # RQ-175 (version 28): create's description text (item 16).
 DESC_AREA, DESC_CLASS, DESC_RACE = desc_at["area_character"], desc_at["btn_class_priest"], desc_at["btn_race_ka_tu"]
@@ -2901,6 +3037,7 @@ DESCRIPTION_CASES = {
 }
 cases = {
     **TABLE_CASES,
+    **SELECT_CASES,
     **DESCRIPTION_CASES,
     **DRESS_CASES,
     "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
@@ -3084,19 +3221,36 @@ try:
     sys.stdout.write("".join(l for l in run.stdout.splitlines(True)
                              if not l.startswith(("placed ", "slide ", "skin "))))
     assert run.returncode == 0, run.stdout + run.stderr
-    # RQ-165: model records and parts with influence tables (version 30, engine
+    # RQ-165: model records and parts with influence tables (version 32, engine
     # 45), each refusal for its reason; the client skins every table as the
     # reference's four slots (every influence summed), not as the unsplit model.
-    for name, reason in (("bad@44-version-30-engine-44", "front end version"),
-                         ("bad@42-version-30-engine-42", "front end version"),
-                         ("bad-version-31", "front end version"),
-                         ("bad-influences-version-29", "front end model magic"),
-                         ("bad-influences-n3sj-version-29", "front end model magic"),
-                         ("bad-influences-part-version-29", "front end create part magic"),
+    for name, reason in (("bad@44-version-32-engine-44", "front end version"),
+                         ("bad@42-version-32-engine-42", "front end version"),
+                         ("bad-version-33", "front end version"),
+                         ("bad-influences-version-31", "front end model magic"),
+                         ("bad-influences-n3sj-version-31", "front end model magic"),
+                         ("bad-influences-part-version-31", "front end create part magic"),
+                         ("bad-influences-select-character-version-31", "front end model magic"),
                          ("bad-influences-sum", "weight sum"),
                          ("bad-influences-part-skeleton", "front end create part skeleton")):
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
+    # RQ-005 (version 31): the select characters and class names as loaded,
+    # each refusal for its reason.
+    for name, reason in SELECT_REASONS.items():
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    selects = {l.split(":")[0][len("select-models "):]: l.split(": ", 1)[1]
+               for l in run.stdout.splitlines() if l.startswith("select-models ")}
+    assert selects == {"ok-select-models": "2/102+107+108/3/0 4/104/3/- 2/104+111/3/-",
+                       "ok-select-models-same-specialty-other-race": "2/104/3/- 4/104/3/-",
+                       "ok-influences-select-character": "2/102/3/-"}, selects
+    names = {l.split(":")[0][len("class-names "):]: l.split(": ", 1)[1]
+             for l in run.stdout.splitlines() if l.startswith("class-names ")}
+    assert names == {"ok-select-models": "102=Rogue 104=Priest 112=Shadow Knight    ",
+                     "ok-class-names-only": "102=Rogue 104=Priest 112=Shadow Knight    "}, names
+    print("PASS front-end loader: the select characters per race and class and the class names (version 31), "
+          "%d refusals checked for their reasons" % len(SELECT_REASONS))
     # RQ-194: each mesh vertex float the cook refuses, refused by the loader as a cooked float.
     for k in PAST_VERTICES:
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-hall-mesh-vertex-%d:" % k))
@@ -3114,11 +3268,11 @@ try:
     apart = max(abs(a - b) for (_, a), (_, b) in zip(reference, original))
     assert apart > 0.01, (reference, original)
     for name in ("ok-influences", "ok-influences-n3sj", "ok-influences-reference", "ok-influences-original",
-                 "ok-version-30-n3s1"):
+                 "ok-version-32-n3s1"):
         assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
-    print("PASS front-end loader influences (RQ-165): version 30 model records and parts of N3SI and N3SJ load at "
-          "engine 45 and skin as the four-slot reference (%.3f from the unsplit model); version 30 below engine 45, "
-          "version 31, a table in version 29, a table of another sum and a part off its skeleton refused" % apart)
+    print("PASS front-end loader influences (RQ-165): version 32 model records and parts of N3SI and N3SJ load at "
+          "engine 45 and skin as the four-slot reference (%.3f from the unsplit model); version 32 below engine 45, "
+          "version 33, a table in version 31, a table of another sum and a part off its skeleton refused" % apart)
     # RQ-095: the zone's refusals, each for its own reason.
     for name, reason in (("bad-zone-totals", "front end zone totals"),
                          ("bad-zone-vertex-totals", "front end zone totals"), ("bad-zone-meshes", "count"),

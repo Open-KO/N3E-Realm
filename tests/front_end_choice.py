@@ -315,7 +315,9 @@ with tempfile.TemporaryDirectory(prefix="n3e-front-end-inputs-") as td:
     assert ("select.turn_sound", "b:7") in ko_front_end.recipe_paths({"select": {"turn_sound": "b:7"}})
     assert {"screens.login.ui", "intro.lights[2]", "intro.backdrop.texture", "select.hall", "select.lights[1]",
             "select.character.joint", "select.character.animation", "select.character.plugs[0]",
-            "music.tracks[1].path"} <= set(listed), sorted(listed)
+            "music.tracks[1].path", "select.characters[0].joint", "select.characters[0].plugs[1]",
+            "select.class_names.table"} <= set(listed), sorted(listed)
+    assert listed["select.class_names.table"] == "installer-1264:Data/Texts_us.tbl", listed
 print("PASS front-end inputs: paths read from their trees, the turn sound from its input's sound.tbl")
 
 # --- ko_bake.package refuses before it writes (RQ-078 review) -------------------

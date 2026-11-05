@@ -223,7 +223,7 @@ pub fn load(root: &Path) -> Result<Release> {
     // 42 (spec 11: the KO front end, front-end.bin), 43 (RQ-163: N3SI
     // player clips, which the client reads and the server only hashes) and
     // 44 (RQ-164: N3DI / N3DJ render detail with influence tables, of which
-    // the server reads only the projection), 45 (RQ-165: N3FE version 30,
+    // the server reads only the projection), 45 (RQ-165: N3FE version 30, 32 since RQ-005,
     // front-end models with influence tables, of which the server reads only
     // the header) and 46 (RQ-188: N3ST track-only player clips, which the
     // client reads and the server only hashes).
@@ -1013,14 +1013,16 @@ impl Release {
 }
 
 /// front-end.bin's header (spec 11, content/front-end.md): the N3FE version
-/// this server's client reads (29 since RQ-176: each create model's
-/// specialties dressed, after RQ-175's create description text,
+/// this server's client reads (31 since RQ-005: the select characters per
+/// race and class and the class names, after RQ-176's create models'
+/// specialties dressed, RQ-175's create description text,
 /// RQ-174's face and hair arrows and parts, RQ-173's stat arrows, RQ-172's race and class buttons
 /// bound to KO's codes, RQ-158's create model per race,
 /// RQ-145's create nodes drawn until a class is clicked, RQ-133's nodes
 /// drawn until the race is chosen and RQ-130's create race and class
-/// choices) and the character slot count, 1 to 3. Version 30 (RQ-165) is
-/// 29 whose models may carry influence tables, from engine 45.
+/// choices) and the character slot count, 1 to 3. Version 32 (RQ-165's 30
+/// before RQ-005) is 31 whose models may carry influence tables, from
+/// engine 45.
 /// The bytes of front-end.bin the server reads: magic, version, slot count,
 /// 12 bytes, from the first `HASH_HEAD` bytes it hashed (RQ-185).
 fn front_end_slots(mut p: Reader, engine: u32) -> Result<u32> {
@@ -1028,7 +1030,7 @@ fn front_end_slots(mut p: Reader, engine: u32) -> Result<u32> {
         return Err(bad("front end magic/version"));
     }
     let version = p.u()?;
-    if !(version == 29 || (version == 30 && engine >= 45)) {
+    if !(version == 31 || (version == 32 && engine >= 45)) {
         return Err(bad("front end magic/version"));
     }
     let slots = p.u()?;
@@ -1049,26 +1051,26 @@ mod front_end_tests {
         Reader::from_bytes(b)
     }
     #[test]
-    fn reads_the_slot_count_of_version_29() {
+    fn reads_the_slot_count_of_version_31() {
         for slots in 1..=3 {
-            assert_eq!(front_end_slots(header(b"N3FE", 29, slots), 44).unwrap(), slots);
+            assert_eq!(front_end_slots(header(b"N3FE", 31, slots), 44).unwrap(), slots);
         }
     }
-    // RQ-165: version 30 (models with influence tables) from engine 45 only;
-    // version 29 at every engine that has a front end.
+    // RQ-165: the tables version (32 since RQ-005) from engine 45 only;
+    // version 31 at every engine that has a front end.
     #[test]
-    fn reads_version_30_from_engine_45() {
+    fn reads_version_32_from_engine_45() {
         for slots in 1..=3 {
-            assert_eq!(front_end_slots(header(b"N3FE", 30, slots), 45).unwrap(), slots);
-            assert_eq!(front_end_slots(header(b"N3FE", 29, slots), 45).unwrap(), slots);
+            assert_eq!(front_end_slots(header(b"N3FE", 32, slots), 45).unwrap(), slots);
+            assert_eq!(front_end_slots(header(b"N3FE", 31, slots), 45).unwrap(), slots);
         }
         assert!(
-            front_end_slots(header(b"N3FE", 30, 3), 44).is_err(),
-            "version 30 at engine 44"
+            front_end_slots(header(b"N3FE", 32, 3), 44).is_err(),
+            "version 32 at engine 44"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 30, 3), 42).is_err(),
-            "version 30 at engine 42"
+            front_end_slots(header(b"N3FE", 32, 3), 42).is_err(),
+            "version 32 at engine 42"
         );
     }
     #[test]
@@ -1174,13 +1176,21 @@ mod front_end_tests {
             "version 28 (no create dress)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 31, 3), 45).is_err(),
-            "version 31"
+            front_end_slots(header(b"N3FE", 29, 3), 44).is_err(),
+            "version 29 (no select characters)"
         );
-        assert!(front_end_slots(header(b"N3FX", 29, 3), 44).is_err(), "magic");
-        assert!(front_end_slots(header(b"N3FE", 29, 0), 44).is_err(), "no slots");
         assert!(
-            front_end_slots(header(b"N3FE", 29, 4), 44).is_err(),
+            front_end_slots(header(b"N3FE", 30, 3), 45).is_err(),
+            "version 30 (no select characters)"
+        );
+        assert!(
+            front_end_slots(header(b"N3FE", 33, 3), 45).is_err(),
+            "version 33"
+        );
+        assert!(front_end_slots(header(b"N3FX", 31, 3), 44).is_err(), "magic");
+        assert!(front_end_slots(header(b"N3FE", 31, 0), 44).is_err(), "no slots");
+        assert!(
+            front_end_slots(header(b"N3FE", 31, 4), 44).is_err(),
             "four slots"
         );
         assert!(
@@ -1207,7 +1217,7 @@ mod front_end_tests {
         );
         let path = &temp.0;
         let mut head = b"N3FE".to_vec();
-        for v in [29u32, 3, 1024, 768] {
+        for v in [31u32, 3, 1024, 768] {
             head.extend_from_slice(&v.to_le_bytes());
         }
         let write = |len: u64, tail: &[u8]| {
@@ -1236,9 +1246,9 @@ mod front_end_tests {
         }
         // A file shorter than HASH_HEAD keeps all its bytes, and a short
         // header is refused as truncated.
-        std::fs::write(path, b"N3FE\x1d\0\0\0").unwrap();
+        std::fs::write(path, b"N3FE\x1f\0\0\0").unwrap();
         let (n, _, first) = hash_file(path, MAX_FRONT_END_ASSET).unwrap();
-        assert_eq!((n, first.as_slice()), (8, &b"N3FE\x1d\0\0\0"[..]));
+        assert_eq!((n, first.as_slice()), (8, &b"N3FE\x1f\0\0\0"[..]));
         assert!(front_end_slots(Reader::from_bytes(first), 44).is_err());
         write(MAX_FRONT_END_ASSET + 1, b"");
         let error = hash_file(path, MAX_FRONT_END_ASSET).unwrap_err();

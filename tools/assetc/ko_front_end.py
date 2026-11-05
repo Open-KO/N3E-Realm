@@ -47,9 +47,12 @@ open, the stat areas, class buttons and race buttons under the pointer and
 authored `class_desc` (RQ-175), and (version 29) each create model's
 specialties dressed as KO's build dresses them: the chosen create table's
 parts and hand plugs (RQ-159's dress), the robe's bare lower and a shield on
-its joint (RQ-176), and (version 30, written only for a file that needs
+its joint (RQ-176), and (the tables version, 32 since RQ-005, written only for a file that needs
 it) model records and parts past four joint influences, N3SI or N3SJ with
-D-176's influence table, as KO's skinning sums them (RQ-165; engine 45).
+D-176's influence table, as KO's skinning sums them (RQ-165; engine 45),
+and (version 31; 32 with influence tables) the select characters per race
+and class, as KO's AddChr chooses joint, animation and plugs, and each
+specialty's class name for the select's info (RQ-005).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -81,12 +84,13 @@ import ko_nameplates
 import ko_scene
 import world_chunks
 
-VERSION = 29
+VERSION = 31
 # RQ-165: the version of a file whose model records or parts hold D-176's
 # influence table (N3SI from N3S1, N3SJ from N3SM; content/front-end.md),
-# written only then, so a file without one keeps version 29 and its bytes.
+# written only then, so a file without one keeps the base version and its
+# bytes (29 and 30 before RQ-005's select characters, 31 and 32 since).
 # A package with it is engine 45 (main.FRONT_END_INFLUENCES_ENGINE).
-TABLES_VERSION = 30
+TABLES_VERSION = 32
 # A model record's scene magics (version 4: N3S1 or N3SM; RQ-165: N3SI and
 # N3SJ, the same with an influence table) and the ones with a table.
 MODEL_MAGICS = (b"N3S1", b"N3SM", b"N3SI", b"N3SJ")
@@ -485,6 +489,14 @@ def recipe_paths(config):
     add("select.character.joint", look.get("joint"))
     add("select.character.animation", look.get("animation"))
     each("select.character.plugs", look.get("plugs"))
+    # Version 31 (RQ-005): the select characters per race and class, and the
+    # class names' text table.
+    looks_ = select.get("characters")
+    for at, entry in enumerate(looks_ if type(looks_) is list else []):
+        add("select.characters[%d].joint" % at, section(entry).get("joint"))
+        add("select.characters[%d].animation" % at, section(entry).get("animation"))
+        each("select.characters[%d].plugs" % at, section(entry).get("plugs"))
+    add("select.class_names.table", section(select.get("class_names")).get("table"))
     tracks = section(config.get("music")).get("tracks")
     for at, track in enumerate(tracks if type(tracks) is list else []):
         add("music.tracks[%d].path" % at, section(track).get("path"))
@@ -803,7 +815,7 @@ def model(assets, source, definition, clips, work, own_blends=None, tables=None)
     RQ-165: a model whose drawn vertices have more than four joint influences
     keeps every one, as KO's skinning sums them (00419f00, D-176): its scene
     is N3SI or N3SJ, N3S1 or N3SM with D-176's influence table, and its
-    magic is appended to `tables` (the file is then version 30)."""
+    magic is appended to `tables` (the file is then the tables version, 32)."""
     table = character.animations(assets.get(definition["animation"]), unused_word=True)
     blends = []
     for at, clip in enumerate(clips):
@@ -1903,6 +1915,105 @@ def select_scene(assets, textures, config, work, report=None, tables=None):
     return out + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
 
 
+# Version 31 (RQ-005): at most this many select characters, each drawing at
+# most MAX_SELECT_SPECIALTIES specialties of its race, and at most this many
+# class names (the loader's bounds).
+MAX_SELECT_CHARACTERS = 32
+MAX_SELECT_SPECIALTIES = 16
+MAX_CLASS_NAMES = 64
+SELECT_CHARACTER_KEYS = {"race", "specialties", "joint", "animation", "plugs", "clips"}
+
+
+def select_characters(assets, textures, config, work, rules=None, tables=None):
+    """Item 17's first part (version 31, RQ-005): the select characters, as
+    KO's AddChr chooses its joint, animation and plugs by race and class
+    (source GameProcCharacterSelect.cpp's switch; 1097 0043ba10, 1298
+    005fb4f0, specs/KO-FINDINGS.md 8.1, 8.3, 8.5): the recipe's
+    `select.characters`, each a race, the specialties it draws, its joint,
+    animation and plugs (`clips` the select character's unless named), cooked
+    as the select model is (the race's looks parts, face 0 and hair 0; the
+    start clip's blend the select's own). A character no entry draws (its
+    race and specialty) draws the select character (item 7). With the
+    package's create rules, every specialty of each `content` race is drawn
+    by an entry, or by the select character for its own race, so no
+    character the realm creates stands in the hall as another race.
+    Returns (bytes, report)."""
+    entries = config.get("characters", [])
+    if type(entries) is not list or len(entries) > MAX_SELECT_CHARACTERS:
+        raise ValueError("front-end select.characters: a list of at most %d" % MAX_SELECT_CHARACTERS)
+    default = config["character"]
+    drawn, checked = set(), []
+    for at, entry in enumerate(entries):
+        what = "select.characters[%d]" % at
+        if type(entry) is not dict or not {"race", "specialties", "joint", "animation"} <= set(entry) or \
+                set(entry) - SELECT_CHARACTER_KEYS:
+            raise ValueError("front-end %s: race, specialties, joint and animation, and plugs and clips" % what)
+        race = entry["race"]
+        if type(race) is not int or not 1 <= race <= 65535:
+            raise ValueError("front-end %s.race: 1..65535" % what)
+        specialties = ids_list(entry["specialties"], what + ".specialties", most=MAX_SELECT_SPECIALTIES)
+        for specialty in specialties:
+            if (race, specialty) in drawn:
+                raise ValueError("front-end %s: race %d specialty %d drawn twice" % (what, race, specialty))
+            drawn.add((race, specialty))
+        plugs = entry.get("plugs", [])
+        if type(plugs) is not list or len(plugs) > 4 or any(type(p) is not str for p in plugs):
+            raise ValueError("front-end %s.plugs: at most 4 paths" % what)
+        clips = entry.get("clips", default["clips"])
+        if type(clips) is not list or len(clips) != SELECT_CLIPS or any(type(c) is not int for c in clips):
+            raise ValueError("front-end %s.clips: the front, start and rest clips" % what)
+        checked.append((at, entry, race, specialties, plugs, clips))
+    if rules is not None:
+        offered = {r["race"]: r["specialties"] for r in rules["races"]}
+        for race in rules["content"]:
+            for specialty in offered.get(race, []):
+                if (race, specialty) not in drawn and race != default["race"]:
+                    raise ValueError("front-end select.characters: the package creates race %d specialty %d "
+                                     "(character-create.json content), which no select character draws"
+                                     % (race, specialty))
+    out, report = u(len(checked)), []
+    for at, entry, race, specialties, plugs, clips in checked:
+        tree, joint = character_tree(assets, entry)
+        _, animation = split(assets, entry["animation"])
+        definition = dict(joint=joint, animation=animation, parts=default_parts(tree, race))
+        record = model(tree, joint, definition, clips, work / ("select-%d" % at),
+                       own_blends={START_CLIP: config["start_blend"]}, tables=tables)
+        out += u(race) + u(len(specialties)) + b"".join(u(s) for s in specialties) + record
+        out += u(len(plugs)) + b"".join(plug_record(assets, textures, p) for p in plugs)
+        report.append(dict(race=race, specialties=specialties, joint=entry["joint"], bytes=len(record)))
+    return out, report
+
+
+# KO's class codes (CLASS_KA_WARRIOR 101 .. CLASS_EL_PALADIN 212, source
+# GameDef.h e_Class), the specialties a class name may be given for.
+CLASS_CODES = set(range(101, 113)) | set(range(201, 213))
+
+
+def class_names(assets, config):
+    """Item 17's second part (version 31, RQ-005): each specialty's class
+    name, the text the select's info shows for a character's class (1097
+    0052e3e0, 1298 00613ea0: KO's switch from a class code to a text row,
+    `GetTextByClass` in the source; specs/KO-FINDINGS.md 8.5): the recipe's
+    `select.class_names`, a text table and {specialty: row}, each row read as
+    a message's (`text_row`). A specialty without one shows the `class_name`
+    string (KO's default, the literal "Unknown Class"). Returns (bytes,
+    {specialty: text})."""
+    names = config.get("class_names")
+    if names is None:
+        return u(0), {}
+    if type(names) is not dict or set(names) != {"table", "rows"} or type(names["table"]) is not str or \
+            type(names["rows"]) is not dict or len(names["rows"]) > MAX_CLASS_NAMES:
+        raise ValueError("front-end select.class_names: a table and at most %d rows" % MAX_CLASS_NAMES)
+    out, texts = u(len(names["rows"])), {}
+    for key, row in sorted(names["rows"].items(), key=lambda kv: int(kv[0]) if kv[0].isdigit() else 0):
+        if not key.isdigit() or int(key) not in CLASS_CODES or str(int(key)) != key:
+            raise ValueError("front-end select.class_names: %r is not a KO class code" % key)
+        text = text_row(assets, {"table": names["table"], "row": row}, "select class name %s" % key)
+        out += u(int(key)) + string(text)
+        texts[int(key)] = text
+    return out, texts
+
+
 def create_mode(config):
     """The select's `create` (version 19): `screen` or `hall`."""
     create = config.get("create", "screen")
@@ -2683,7 +2794,7 @@ def write(assets, out, config, work, rules=None, create=None):
             raise ValueError("front-end string length")
         table += u(len(data)) + data
     # RQ-165: the model records and parts with an influence table; any makes
-    # the file version 30.
+    # the file the tables version (32).
     tables = []
     scenes = intro_scene(assets, textures, config["intro"], pathlib.Path(work), tables)
     zone_report = {}
@@ -2705,6 +2816,11 @@ def write(assets, out, config, work, rules=None, create=None):
         pixels = round(size * 96 / 72)
         (w, h, rgba), (height, top, advances) = ko_nameplates.atlas(sources[bold], pixels)
         atlases += u(textures.raw(w, h, rgba)) + u(pixels) + u(height) + u(top) + f(advances)
+    # Version 31 (RQ-005): the select characters per race and class, and the
+    # class names, last (item 17).
+    select_models, select_report = select_characters(assets, textures, config["select"], pathlib.Path(work), rules,
+                                                     tables)
+    names_section, names_report = class_names(assets, config["select"])
     data = b"N3FE" + u(TABLES_VERSION if tables else VERSION) + u(count(config["character_slots"], 3)) + u(CANVAS[0]) + u(CANVAS[1])
     data += u(len(textures.list)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in textures.list)
     tracks, played = music(assets, config.get("music"))
@@ -2715,11 +2831,13 @@ def write(assets, out, config, work, rules=None, create=None):
     # its stat arrows; version 28 (RQ-175): its description text last.
     data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section + message_section + \
         placement_section + b"".join(slides) + choices[0]["data"] + choices[0]["stats"] + choices[0]["descriptions"]
+    data += select_models + names_section
     if len(data) > MAX_FILE:
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)
     return dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), textures=len(textures.list),
                 create_races=[race for race, _ in races], create_models=create_report,
+                select_characters=select_report, class_names=names_report,
                 create_table=None if create is None else create["table"],
                 **(dict(version=TABLES_VERSION, tables=len(tables)) if tables else {}),
                 fonts=len(fonts), music=played, logo=logo_report, messages=message_report, font_substitutes=sorted(str(p) for p in sources.values()),

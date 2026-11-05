@@ -28,15 +28,20 @@ inline constexpr size_t kFrontClip = 0, kStartClip = 1, kRestClip = 2;
 // +0x1c8 as the previous frame, +0x1d4, and the joints blend those two
 // frames, 00445e90), so its pose jumps there.
 struct HallPlayer {
+  size_t slot = 0;                              // the slot it plays in (its clips' lengths and blends)
   size_t clip = kFrontClip, from = kFrontClip;  // the clip, the clip blended from
   float elapsed = 0, blend = 0, from_time = 0;  // ticked time since set; blend time; from's time
   bool loop = false;                            // the clip loops (1298: once flag 0)
 };
 
 struct SelectHall {
+  using Roles = std::array<float, 3>;
   FrontClipMode mode = FrontClipMode::hover;
-  std::array<float, 3> length{1, 1, 1}, blends{};  // per role: the clip's length and blend (seconds)
-  std::array<HallPlayer, 3> players{};
+  // Per slot, per role: the clip's length and blend (seconds). RQ-005: each
+  // slot's character draws its own model (its race and class, AddChr), whose
+  // clips need not be the others'.
+  std::array<Roles, 3> length{Roles{1, 1, 1}, Roles{1, 1, 1}, Roles{1, 1, 1}}, blends{};
+  std::array<HallPlayer, 3> players{HallPlayer{0}, HallPlayer{1}, HallPlayer{2}};
   float theta = 0;      // the front spot's theta (1097 +0x2d0, 1298 +0x398)
   bool spot_on = false;
   int info_slot = -1;   // the slot whose info text shows, -1 none
@@ -47,7 +52,10 @@ struct SelectHall {
   // 0041be40(1, 0, 0, 0, 1)). The spot is off and the info text hidden.
   void reset() {
     players = {};
-    for (auto &p : players) p.loop = mode == FrontClipMode::loop;
+    for (size_t i = 0; i < players.size(); ++i) {
+      players[i].slot = i;
+      players[i].loop = mode == FrontClipMode::loop;
+    }
     theta = 0;
     spot_on = false;
     info_slot = -1;
@@ -59,15 +67,15 @@ struct SelectHall {
     p.clip = clip;
     p.elapsed = 0;
     p.loop = loop;
-    p.blend = blend < 0 ? blends[clip] : blend;
+    p.blend = blend < 0 ? blends[p.slot][clip] : blend;
   }
   float played(const HallPlayer &p) const {
-    const float t = p.elapsed - p.blend, end = length[p.clip];
+    const float t = p.elapsed - p.blend, end = length[p.slot][p.clip];
     if (p.loop && t > 0) return std::fmod(t, end);
     return std::clamp(t, 0.f, end);
   }
   // IsAnimEnd: a clip played once has passed its end, after its blend.
-  bool ended(const HallPlayer &p) const { return !p.loop && p.elapsed - p.blend >= length[p.clip]; }
+  bool ended(const HallPlayer &p) const { return !p.loop && p.elapsed - p.blend >= length[p.slot][p.clip]; }
   // The clip the character in front returns to at rest: the hover mode's by
   // the pointer, the loop mode's front clip looping.
   void front_at_rest(HallPlayer &p, bool over) {

@@ -61,7 +61,8 @@ RQ-169: the Arch Tuarek (1) ships. Each shipped create model is dressed
 from both create tables (1298's from the pinned tree, 1264's from the 1264
 install, SKIP without it): each dress replaces the looks lower part, so the
 dressed model is N3S1 or N3SM and neither it nor its parts hold an influence
-table, and Moradon's front end stays N3FE version 29.
+table, and Moradon's front end stays the version without influence tables
+(N3FE 29 then, 31 since RQ-005).
 """
 import os
 import pathlib
@@ -202,7 +203,7 @@ for entry in rules["races"]:
         # 1097 choice). RQ-169: each dress replaces the looks lower part, so
         # no dressed scene holds an influence table (the Arch Tuarek's
         # undressed N3SI model is not what front-end.bin carries) and
-        # Moradon's front end stays N3FE version 29.
+        # Moradon's front end stays the version without them (31 since RQ-005).
         for client, tree_inputs in DRESS_INPUTS:
             create_plan = ko_create.plan(ko_player.GAME, client, {})
             dress = ko_create.dress(create_plan, tree_inputs, {race})[race]

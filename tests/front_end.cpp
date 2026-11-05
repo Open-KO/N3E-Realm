@@ -140,8 +140,8 @@ void run(n3e::front::SelectHall &hall, int focus, bool over, float seconds) {
 std::string hall_check() {
   using namespace n3e::front;
   SelectHall hall;
-  hall.length = {2, 3, .5f};
-  hall.blends = {.3f, .6f, .25f};
+  hall.length.fill({2, 3, .5f});
+  hall.blends.fill({.3f, .6f, .25f});
   // Hover (1097, 0043f280): only the character in front moves, by the pointer.
   hall.mode = n3e::FrontClipMode::hover;
   hall.reset();
@@ -199,6 +199,20 @@ std::string hall_check() {
   if (hall.ended(hall.players[1])) return "loop: the start clip ended before its blend and length";
   for (int i = 0; i < 3; ++i) hall.starting(1, 1 / 30.f);
   if (!hall.ended(hall.players[1])) return "loop: the start clip did not end";
+  // RQ-005: each slot plays its own character's clips (its race and class's
+  // model, AddChr): slot 2's rest clip is 1 s long with a 0.5 s blend while
+  // the others' stay 0.5 s and 0.25 s.
+  hall.length[2] = {2, 3, 1};
+  hall.blends[2] = {.3f, .6f, .5f};
+  hall.reset();
+  run(hall, 0, false, 2);
+  if (!near(hall.players[1].blend, .25f) || !near(hall.played(hall.players[1]), .5f) ||
+      !near(hall.players[2].blend, .5f) || !near(hall.played(hall.players[2]), 1) || !hall.ended(hall.players[2]))
+    return "loop: a slot does not play its own character's clip lengths and blends";
+  hall.reset();
+  run(hall, 0, false, 1);
+  if (!near(hall.played(hall.players[2]), .5f) || hall.ended(hall.players[2]))
+    return "loop: a slot's rest clip ended at another model's length";
   return "";
 }
 
@@ -1023,6 +1037,27 @@ int main(int argc, char **argv) {
           for (const auto *parts : {&scene.faces, &scene.hairs, &scene.dress_parts})
             for (const auto &part : *parts) skin(part, pose);
         }
+        // RQ-005: then each select character's model.
+        for (const auto &m : fe.select_models) skin(m.scene.model, m.scene.model.sample(0.5f));
+        std::cout << "\n";
+      }
+      // RQ-005 (version 31): select-models NAME: each select character's
+      // race, its specialties (+-joined), its clip count and its plug joints
+      // (+-joined, `-` none); class-names NAME: each specialty=text.
+      if (!fe.select_models.empty()) {
+        std::cout << "select-models " << release.root.filename().string() << ":";
+        for (const auto &m : fe.select_models) {
+          std::cout << " " << m.race << "/";
+          for (size_t i = 0; i < m.specialties.size(); ++i) std::cout << (i ? "+" : "") << m.specialties[i];
+          std::cout << "/" << m.scene.clips.size() << "/";
+          if (m.scene.plugs.empty()) std::cout << "-";
+          for (size_t i = 0; i < m.scene.plugs.size(); ++i) std::cout << (i ? "+" : "") << m.scene.plugs[i].joint;
+        }
+        std::cout << "\n";
+      }
+      if (!fe.class_names.empty()) {
+        std::cout << "class-names " << release.root.filename().string() << ":";
+        for (const auto &[specialty, text] : fe.class_names) std::cout << " " << specialty << "=" << text;
         std::cout << "\n";
       }
       // RQ-174: a package whose create models carry face or hair parts: each

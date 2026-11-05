@@ -247,6 +247,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       auto &set = race_plugs.emplace_back();
       for (auto &plug : model.plugs) set.push_back(upload(plug.mesh));
     }
+    // RQ-005 (version 31): each select character's plugs, after them.
+    for (auto &model : fe.select_models) {
+      auto &set = race_plugs.emplace_back();
+      for (auto &plug : model.scene.plugs) set.push_back(upload(plug.mesh));
+    }
     // RQ-176 (version 29): each scene's dresses' hand plugs.
     for (size_t k = 0; k < scene_count(); ++k) {
       auto &scene = dress_plugs.emplace_back();
@@ -306,14 +311,12 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (node.action == FrontAction::realm_group) realm_height = node.rect[3] - node.rect[1];
     }
     seats.mode = fe.front_clip;
-    for (size_t i = 0; i < seats.length.size(); ++i) {
-      seats.length[i] = clip_length(1, i);
-      seats.blends[i] = fe.select.blends[i];
-    }
+    for (size_t slot = 0; slot < seats.length.size(); ++slot) seat_clips(slot, 1);
     fe.intro.model.texture.clear();
     fe.select.model.texture.clear();
     fe.create.model.texture.clear();
     for (auto &model : fe.create_models) model.model.texture.clear();
+    for (auto &model : fe.select_models) model.scene.model.texture.clear();
     for (auto *set : {&fe.create.faces, &fe.create.hairs, &fe.create.dress_parts})
       for (auto &part : *set) part.texture.clear();
     for (auto &model : fe.create_models)
@@ -435,6 +438,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // The character in front as the last select frame showed it; the test
   // client checks the hover, its blends, the spot and the info text.
   FrontPose front_pose() const { return front_shown; }
+  // RQ-005 (version 31): the class text the select's info shows for `c`.
+  std::string character_class(const Character &c) const { return class_text(&c); }
   FrontTurn front_turn() const { return turn_shown; }
   // RQ-125 (version 19): whether create draws over the hall (a test hook).
   bool create_over_hall() const { return over_hall(); }
@@ -599,7 +604,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     logo_time = t;
   }
   struct Drawn {
-    size_t which;                  // 0 intro, 1 select, 2 create
+    size_t which;                  // 0 intro, 1 hall (RQ-005: any select model), 2 create
     std::array<float, 4> box;      // x0 y0 x1 y1 in the viewport's NDC, y up
     std::array<int, 4> viewport;   // GL viewport: x, y (from the bottom), w, h
     uint32_t race = 0;             // create: the race code of the model drawn (RQ-172)
@@ -609,6 +614,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // own) and the hand plugs drawn (RQ-176).
     uint32_t dress = 0;
     int dress_parts = -1, dress_plugs = 0;
+    // hall (RQ-005): the select character drawn (its index in the file's,
+    // -1 the select model) and the plugs its model carries.
+    int select = -1, plugs = 0;
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) {
@@ -838,7 +846,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::vector<std::vector<std::vector<GLuint>>> part_textures;
   GLuint lit = 0, flat = 0, vao = 0, vbo = 0;
   std::vector<Buffer> statics, zone_meshes, intro_plugs, select_plugs, create_plugs;
-  std::vector<std::vector<Buffer>> race_plugs;  // RQ-172: each further create model's
+  // RQ-172: each further create model's; RQ-005: then each select character's.
+  std::vector<std::vector<Buffer>> race_plugs;
   // RQ-176 (version 29): per scene, per dress, its hand plugs' buffers.
   std::vector<std::vector<std::vector<Buffer>>> dress_plugs;
   std::vector<std::vector<Scene>> clips;  // per scene: each clip's poses
@@ -1577,10 +1586,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const auto &scene = scene_at(which);
     const auto mvp = detail::mul(vp, model);
     std::array<float, 4> box{1e9f, 1e9f, -1e9f, -1e9f};
-    const int worn = which >= 2 ? dress_at(which) : -1;
+    const bool create = is_create(which);
+    const int worn = create ? dress_at(which) : -1;
     const FrontDress *dress = worn >= 0 ? &scene.dresses[size_t(worn)] : nullptr;
     if (!dress || dress->body) draw_skinned(scene.model, models[which], pose, vp, model, mvp, box);
-    if (which >= 2) {
+    if (create) {
       const auto &looks = part_textures[which];
       if (dress && !dress->body)
         for (auto part : dress->parts)
@@ -1592,11 +1602,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     std::array<int, 4> viewport{};
     glGetIntegerv(GL_VIEWPORT, viewport.data());
-    drawn_boxes.push_back({std::min<size_t>(which, 2), box, viewport, which >= 2 ? scene_race(which) : 0,
-                           which >= 2 && choice.face < scene.faces.size() ? int(choice.face) : -1,
-                           which >= 2 && choice.hair < scene.hairs.size() ? int(choice.hair) : -1,
+    drawn_boxes.push_back({which == 0 ? 0u : create ? 2u : 1u, box, viewport, create ? scene_race(which) : 0,
+                           create && choice.face < scene.faces.size() ? int(choice.face) : -1,
+                           create && choice.hair < scene.hairs.size() ? int(choice.hair) : -1,
                            dress ? dress->specialty : 0u, dress && !dress->body ? int(dress->parts.size()) : -1,
-                           dress ? int(dress->plugs.size()) : 0});
+                           dress ? int(dress->plugs.size()) : 0, select_model_of(which), int(scene.plugs.size())});
     const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : which == 2 ? create_plugs
                                                                                        : race_plugs[which - 3];
     auto attach = [&](const FrontPlug &plug, const Buffer &buffer) {
@@ -1645,12 +1655,54 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // The camera still turning to the slot in focus (1097: state 1).
   bool turning() const { return at_slot != focus; }
   // The scenes by index: 0 intro, 1 select, 2 the first create model, then
-  // (version 24, RQ-158) each further create model in file order.
-  size_t scene_count() const { return 3 + fe.create_models.size(); }
+  // (version 24, RQ-158) each further create model in file order, then
+  // (version 31, RQ-005) each select character in file order.
+  size_t scene_count() const { return 3 + fe.create_models.size() + fe.select_models.size(); }
+  size_t first_select_model() const { return 3 + fe.create_models.size(); }
+  bool is_create(size_t which) const { return which >= 2 && which < first_select_model(); }
   const FrontScene &scene_at(size_t which) const {
+    if (which >= first_select_model()) return fe.select_models[which - first_select_model()].scene;
     return which == 0 ? fe.intro : which == 1 ? fe.select : which == 2 ? fe.create : fe.create_models[which - 3];
   }
-  uint32_t scene_race(size_t which) const { return which >= 2 ? fe.create_races[which - 2] : 0; }
+  // The select character scene `which` is (its index in the file's), -1 for
+  // another scene.
+  int select_model_of(size_t which) const {
+    return which >= first_select_model() ? int(which - first_select_model()) : -1;
+  }
+  uint32_t scene_race(size_t which) const { return is_create(which) ? fe.create_races[which - 2] : 0; }
+  // RQ-005 (version 31): the scene a listed character draws in the hall, as
+  // KO's AddChr picks the joint, animation and plugs by race and class
+  // (1097 0043ba10, 1298 005fb4f0): the select character naming its race and
+  // specialty, else the select model (scene 1).
+  size_t hall_scene(const Character &c) const {
+    for (size_t k = 0; k < fe.select_models.size(); ++k) {
+      const auto &m = fe.select_models[k];
+      if (m.race == c.race() && std::find(m.specialties.begin(), m.specialties.end(), c.specialty()) !=
+                                    m.specialties.end())
+        return first_select_model() + k;
+    }
+    return 1;
+  }
+  size_t slot_scene(int slot) const {
+    return list && slot >= 0 && slot < characters_shown() ? hall_scene(list->characters(slot)) : 1;
+  }
+  // The slot's clip lengths and blends from the scene its character draws.
+  void seat_clips(size_t slot, size_t scene) {
+    for (size_t role = 0; role < seats.length[slot].size(); ++role) {
+      seats.length[slot][role] = clip_length(scene, role);
+      seats.blends[slot][role] = scene_at(scene).blends[role];
+    }
+  }
+  // RQ-005 (version 31): a character's class name, KO's text for its class
+  // code (1097 0052e3e0, 1298 00613ea0), or the class_name string for a
+  // specialty the package names none for (KO's "Unknown Class").
+  const std::string &class_text(const Character *c) const {
+    if (c) {
+      const auto at = fe.class_names.find(c->specialty());
+      if (at != fe.class_names.end()) return at->second;
+    }
+    return fe.strings[size_t(FrontString::class_name)];
+  }
   // RQ-172: the create model the new character draws: the chosen race's
   // (1298's build 005fd120 builds the race's looks row; none for a race the
   // package ships no create model for, as 005fd120 builds nothing without a
@@ -1678,10 +1730,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::vector<Node> pose(size_t scene, size_t clip, double t, bool loop) {
     return clip_scene(scene, clip).sample(clip_time(scene, clip, t, loop));
   }
-  std::vector<Node> posed(const HallPlayer &p) const {
-    auto now = clip_scene(1, p.clip).sample(seats.played(p));
+  std::vector<Node> posed(const HallPlayer &p, size_t scene) const {
+    auto now = clip_scene(scene, p.clip).sample(seats.played(p));
     if (p.elapsed >= p.blend) return now;
-    return blend_pose(clip_scene(1, p.from).sample(p.from_time), std::move(now), p.elapsed / p.blend);
+    return blend_pose(clip_scene(scene, p.from).sample(p.from_time), std::move(now), p.elapsed / p.blend);
   }
   void reset_hall() { seats.reset(); }
   void enter_select() {
@@ -1739,6 +1791,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // was at for that click (render/create_choice.h).
   void hall(int width, int height, double dt, double now) {
     const bool rest = !turning();
+    // RQ-005: each slot's clips are its character's model's.
+    for (size_t slot = 0; slot < seats.length.size(); ++slot) seat_clips(slot, slot_scene(int(slot)));
     if (paths()) {
       if (!rest && path_camera.ended()) at_slot = focus;
     } else if (!rest && select_turn_tick(angle, slot_angle(at_slot), slot_angle(focus), float(dt)))
@@ -1780,12 +1834,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (!(fe.zone[i].mesh.flags & FrontMesh::BLEND)) draw_zone(i, vp);
     for (size_t i = 0; i < statics.size(); ++i) draw_mesh(statics[i], fe.hall[i], vp, detail::identity());
     const auto &front = seats.players.at(size_t(focus));
-    front_shown = {uint32_t(front.clip), seats.played(front), clip_length(1, front.clip),
+    front_shown = {uint32_t(front.clip), seats.played(front), clip_length(slot_scene(focus), front.clip),
                    front.blend > 0 ? std::min(1.f, front.elapsed / front.blend) : 1.f, seats.theta, seats.spot_on,
                    seats.info_slot >= 0};
     for (int i = 0; i < characters_shown(); ++i) {
       const auto &slot = fe.slots[i];
-      draw_character(1, posed(seats.players.at(size_t(i))), vp, detail::translate_yaw(slot.position, slot.yaw));
+      const auto scene = slot_scene(i);
+      draw_character(scene, posed(seats.players.at(size_t(i)), scene), vp,
+                     detail::translate_yaw(slot.position, slot.yaw));
     }
     if (in_hall_create() && !turning() && choice.stands() && figure_scene() >= 0) {
       const auto &slot = fe.slots[size_t(choice.stands_at(focus))];
@@ -1921,7 +1977,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::string filled(FrontString key, const Context &context, const Character *c) const {
     auto s = fe.strings[size_t(key)];
     s = detail::replace(s, "{version}", context.version);
-    s = detail::replace(s, "{class}", fe.strings[size_t(FrontString::class_name)]);
+    s = detail::replace(s, "{class}", class_text(c));
     if (c) {
       s = detail::replace(s, "{level}", std::to_string(std::max<uint32_t>(1, c->level())));
       s = detail::replace(s, "{name}", c->name());
@@ -2006,7 +2062,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
             const auto &c = list->characters(seats.info_slot);
             value = n.action == FrontAction::char_name    ? c.name()
                     : n.action == FrontAction::char_level ? std::to_string(std::max<uint32_t>(1, c.level()))
-                                                          : fe.strings[size_t(FrontString::class_name)];
+                                                          : class_text(&c);
           }
           break;
         // RQ-175 (version 28): create's description text in its colour (KO's

@@ -386,6 +386,27 @@ OnKeyPress runs the same skip); the 1298 recipe's stays Back.* *RQ-119: the 1298
 recipe's ESC now does nothing but skip a path (N3FE version 16, `select.escape`
 `none`, §9.9).*
 
+### 8.5 Each select character by race and class, and its class name (RQ-005, 2026-11-05)
+
+Read in the 1097 image (`ko1097-unpacked.exe`, RQ-074's Ghidra project; output under
+`build/ghidra/rq005/`, not committed) and the 1298 binary (RQ-109's decompile of
+`00613ea0`), with the later source's `AddChr` and `GetTextByClass`.
+
+| Observation | Where | Label |
+|---|---|---|
+| AddChr picks the joint, animation and plugs by race, and for the Tuarek, the El Morad man and woman by class too (§8.1's 1097 row; §8.3's 1298 per-race files). The source's switch returns without a character for a race or class it does not name (`default: return;`). The parts are the race's `UPC_DefaultLooks` row's, an item's where the slot holds one, the face and hair the row's file with the character's number | `GameProcCharacterSelect.cpp` `AddChr`; 1097 `0043ba10`; 1298 `005fb4f0` | source; binary |
+| **1097's class text.** The info text (`004402a0`, string 1201 "Level : %d \nSpecialty : %s \nID : %s") takes the class from `0052e3e0(record + 0x14, out)`: a switch on the class code that loads a string resource (`LoadStringA`): 101 and 201 → 0x58c (1420), 102 and 202 → 0x58a (1418), 103 and 203 → 0x58d (1421), 104 and 204 → 0x589 (1417), 105 → 0x581, 106 → 0x583, 107 → 0x584, 108 → 0x586 (and through `004840d0`) 109 → 0x588, 110 → 0x585, 111 → 0x587, 112 → 0x582, 205 → 0x57a, 206 → 0x57f, 207 → 0x580, 208 → 0x579, 209 → 0x57e, 210 → 0x57d, 211 → 0x57b, 212 → 0x57c; 1–12 → 0x518–0x523 (1304–1315, KO's class kinds); any other the literal "Unknown Class" (`005a4cfc`) | 1097 `004402a0`, `0052e3e0` | binary |
+| **1298's is the same map.** `00613ea0` (from the bar's `006074c0`) maps the same codes to the same row numbers through the text table (`00616a90` for 1–12, `00615080` for the others), and any other to "Unknown Class" (`006d8e08`) | 1298 `00613ea0` | binary |
+| The pinned tree's and the 1264 install's `Texts_us.tbl` hold the same texts at those rows: 1417 "Priest", 1418 "Rogue", 1420 "Warrior", 1421 "Magician", 1401–1416 the sixteen advanced classes (eight per nation) ("Kasar Hood" … "Sorcerer"; 1410 "Shadow Knight" with four trailing spaces), 1419 "Unconfirmed Specialty " (no code names it), 1304–1315 the class kinds | the pinned tree's and `installer-1264`'s `Data/Texts_us.tbl` | local-asset |
+
+**Decides (RQ-005):** `front-end.bin` version 31 carries the select characters per race
+and class (item 17) and each specialty's class name from those rows; the client draws
+each listed character with its race and class's select character and shows its class
+name. The 1097 choice gives the Tuarek rogue (102, 107, 108) 1097's
+`upc_ka_tu_rog.n3joint` with the bow and quiver; the priest stays the select model. The
+1298 recipe needs none (one file per race). A character the switch would not draw stands
+as the select model (Q118). Not yet: its own face, hair and items (follow-ups).
+
 ## 9. The front end per client (RQ-078, 2026-11-02)
 
 Which KO client a realm's front end looks and behaves like is the realm owner's
@@ -782,7 +803,7 @@ them). Not run (Wine is approved for 1097 and 1264 only). The source agrees wher
 | **ReceiveMessage: a click (message 1) on each button.** `btn_exit` posts a box of row 1502 ("Are you sure you want to exit? ") untitled, style 4 and behaviour 1 (the source's `MB_YESNO`, `BEHAVIOR_EXIT`); `btn_delete`, for a slot 0–2 holding a character with the select at rest (`+0x394` 5), posts row 1501 ("Character deletion has been disabled currently") untitled, style 0; `btn_back` calls `004512f0` on `00818984`, activates the login procedure (`00646b50(008189a8)`) and sets its byte `+0x21`, which makes its Init connect, ask for the server list and hide the bar (§9.5), so Back returns to the server list; `btn_start` calls `005ff870`, `btn_create` `005ff920`, `btn_right` DojobRight (`005fe450`) and `btn_left` DoJobLeft (`005fe3c0`), each on the select procedure (`008189b4`). Nothing runs unless the UI flag `00818994 + 0xb4` is set | 1298 `00607160`; source `UICharacterSelect.cpp` `ReceiveMessage` (exit and delete the same) | binary; source |
 | **Start is the centre click.** `005ff870` closes the message boxes (`00646c30(−1)`); for an empty slot in focus (`00818a20`) it sets the select state 6, hides the bar and shows the in-select create UI (`+0x388`); otherwise it sets the main procedure's zone fields and the character's name and calls the procedure's `+0x18`, the same body as the select tick's left click in the centre rect (`005faf10`, §8), without that click's state-5 test (the bar is hidden while the camera moves) | 1298 `005ff870`, `005faf10` | binary |
 | **Create takes the slot in focus, or the first empty one, or says none.** `005ff920` closes the boxes; for an empty slot in focus it opens create as Start does; otherwise it takes the first of slots 0–2 that is empty as the focus (`00818a20`, `+0x390`), flies the camera there by the path from the current slot (`005fa670`: 2–7, `ka_left_right` and `ka_right_left` among them), sets state 6, hides the bar and shows create; with every slot taken it posts row 7675 ("Cannot create additional characters.") untitled | 1298 `005ff920`; the pinned tree's `Data/Texts_us.tbl` rows 7675, 1501, 1502 | binary; local-asset |
-| **The info texts.** `006074c0`, from the front-clip tick at rest (`005fef90`) with the slot in focus, sets `str_id`, `str_job` and `str_lev` to the empty string (`006dfe28`, in the zero-filled tail of the data section) for an empty slot; otherwise `str_id` to the character's name, `str_job` to its class's text (`00613ea0`: rows from 1304, the pinned tree's 1307 "Priest" among them) and `str_lev` to its level by `"%d"` (`006d3a54`) | 1298 `006074c0`, `00613ea0`, `005fef90` | binary |
+| **The info texts.** `006074c0`, from the front-clip tick at rest (`005fef90`) with the slot in focus, sets `str_id`, `str_job` and `str_lev` to the empty string (`006dfe28`, in the zero-filled tail of the data section) for an empty slot; otherwise `str_id` to the character's name, `str_job` to its class's text (`00613ea0`: a class code's row, the priest's 1417 "Priest"; *corrected by RQ-005, §8.5: rows 1304–1315 are its cases 1–12, KO's class kinds, not a character's class*) and `str_lev` to its level by `"%d"` (`006d3a54`) | 1298 `006074c0`, `00613ea0`, `005fef90` | binary |
 
 **Decides (RQ-109):** the 1298 recipe (not offered) cooks 1298's own select,
 `co_CharacterSelect_us.uif`, in place of the pinned tree's `ka_characterselect_us.uif`

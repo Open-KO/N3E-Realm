@@ -2028,3 +2028,28 @@ cook refuses a clip whose atlas, skeleton or mesh is not the base's byte for byt
 (`content/animation.md`, "Track-only player clips"). Moradon opts in (RQ-190,
 `moradon-player-clips-tracks`): `games/moradon/features.json` carries the key, so every
 feature cook is engine 46 and its release hash moved (a new hosted realm, Q63).
+
+### Q118 — A character the select hall has no model for
+
+RQ-005: KO's AddChr draws a select character only for a race and class its switch
+names (source `GameProcCharacterSelect.cpp`: `default: return;`, leaving the slot
+without a character; 1097 `0043ba10`, 1298 `005fb4f0`). The realm's select
+characters (`front-end.bin` item 17) are package data, so a listed character may be of
+a race and specialty the package gives no select character: an older character
+created before the package's rules (race 0, Q100), or a race the realm owner added to
+`content` without one.
+
+Options:
+- (a) As KO: draw nothing in that slot (the slot still holds the character; its info
+  text and start work).
+- (b) Draw the select model (item 7), as every character was drawn before RQ-005.
+- (c) Refuse such a package at the cook.
+
+**Default taken:** (b), with (c) for the races the package creates: the cook refuses a
+`content` race's specialty that no select character draws, unless the race is the
+select model's own, so only a character from before the rules (race 0) or one of a
+race the package no longer offers stands as the select model. An empty slot that holds
+a character would read as a bug to a player, and (b) is what the hall showed until
+now. The info text shows the class name the package gives the specialty, or the
+`class_name` string ("Unknown Class", KO's default in both `0052e3e0` and
+`00613ea0`).

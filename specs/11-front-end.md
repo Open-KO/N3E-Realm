@@ -82,8 +82,9 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 29, engine 42 (so wire 30), or
-version 30, engine 45, when its models carry influence tables (RQ-165), at most
+An optional presentation file, N3FE version 31, engine 42 (so wire 30), or
+version 32, engine 45, when its models carry influence tables (RQ-165; 29 and 30
+before RQ-005's select characters), at most
 256 MiB (RQ-183: the cook, the client and the server each refuse a larger one).
 Its layout, bounds and the action set are in `content/front-end.md`. The client
 treats it as optional: **a package without it gets today's panels**, which is how
@@ -137,6 +138,12 @@ replace the panels when the client has a Discord realm config.
   plugs; N3FE version 2), one per race of the package's `models.create`, each with
   its race code, the select race's first (N3FE version 24, RQ-158); a create with
   race buttons draws the chosen race's (N3FE version 25, RQ-172).
+- **Select characters** (N3FE version 31, RQ-005). Models for the select hall per
+  race and class, as KO's AddChr chooses their joint, animation and plugs, each
+  with the race and specialties it draws; a character none draws stands as the
+  select model. And each specialty's class name (KO's text for its class code),
+  which the select's `{class}` and `char_class` show; a specialty without one
+  shows the `class_name` string.
 - **Music** (N3FE version 3, RQ-018; version 5, RQ-083). Up to 4 tracks, each MPEG-1
   or MPEG-2 Layer III frames (every frame checked at load) or, since version 5,
   16-bit PCM samples (KO 1097's WAVs), each ≤ 16 MiB, looping or not, with an
@@ -361,8 +368,9 @@ create chose them (0 for one created without the package's create rules) and its
 visible equipment (`appearance`, as `Entity.appearance`), and `CreateCharacter`
 carries KO's create packet's fields; both, the refusals and the package's create
 rules (`create.bin`) are `content/character-create.md`, "The realm's create". The
-select screen still shows the package's label for the class and one model (Q52;
-RQ-005 draws each character).
+select hall draws each character with the package's select character for its race
+and specialty and shows its class's name (RQ-005, N3FE version 31); its face, hair
+and visible equipment are not drawn there yet (RQ-005's follow-ups).
 
 ### Server
 
@@ -583,6 +591,24 @@ CPU (`make test`):
    (`tests/front_end_influences.py`, synthetic); the Arch Tuarek's and the El
    Morad male's create models in their looks parts cook N3SI
    (`tests/ko_player_races.py`, local-asset).
+   RQ-005 superseded these versions: the tables version is 32 and the plain one 31
+   (30 and 29 are refused with every older version), so the loader refuses 32
+   below engine 45, 33, and a table in 31; the cook takes 32 at engine 45 only and
+   31 at 42; the server refuses 32 at engine 44 and 29, 30 and 33 at 45.
+   RQ-005 (version 31, select characters and class names): the loader takes a
+   synthetic file's select characters (race, specialties, model with its three
+   clips and plugs) and class names, and refuses a race or specialty out of range
+   or a pair named twice, a specialty count outside 1–16, a model without three
+   clips, a class name's specialty out of range or twice and a count past its
+   bound; the cook refuses each malformed `select.characters` entry and
+   `select.class_names` table, and a `content` race and class no select character
+   draws unless it is the default select model's race (Q118) (`tests/front_end.py`);
+   the hall keeps each slot's clip lengths and blends apart (`hall_check`,
+   `tests/front_end.cpp`); on the 1097 choice the client draws a Tuarek priest, a
+   Tuarek rogue and a race 0 character as `models=-1,0,-1 plugs=1,2,1
+   classes=Priest|Rogue|Unknown_Class`, and on the 1298 recipe with the select
+   model and no plugs, with the same classes (`FRONT_HALL`,
+   `tests/front_end_live.py`, local-asset).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.

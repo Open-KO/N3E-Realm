@@ -594,7 +594,7 @@ Release load_release(const std::filesystem::path &root) {
   // add client presentation only and keep wire 30; so do 41 (PQ-272),
   // 42 (spec 11: front-end.bin), 43 (RQ-163: N3SI player clips), 44
   // (RQ-164: N3DI / N3DJ render detail with influence tables), 45
-  // (RQ-165: N3FE version 30, front-end models with influence tables) and
+  // (RQ-165: N3FE version 32 since RQ-005, front-end models with influence tables) and
   // 46 (RQ-188: N3ST track-only player clips).
   need(engine >= 1 && engine <= 46 &&
            (engine >= 38 ? protocol == 30
@@ -2910,13 +2910,15 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  // RQ-165 (content/front-end.md): version 30 is 29 whose model records and
-  // parts may be N3SI or N3SJ, N3S1 or N3SM with D-176's influence table (a
-  // KO race past four joint influences, the Arch Tuarek's create model),
-  // from engine 45; Scene::skin sums every influence, as KO's 00419f00.
+  // RQ-165 (content/front-end.md): the tables version is the base version
+  // whose model records and parts may be N3SI or N3SJ, N3S1 or N3SM with
+  // D-176's influence table (a KO race past four joint influences, the Arch
+  // Tuarek's create model), from engine 45; Scene::skin sums every
+  // influence, as KO's 00419f00. RQ-005: version 31 (32 with tables) adds
+  // the select characters per race and class and the class names (item 17).
   const auto version = r.u();
-  need(version == 29 || (version == 30 && release.engine >= 45), "front end version");
-  const bool tables = version == 30;
+  need(version == 31 || (version == 32 && release.engine >= 45), "front end version");
+  const bool tables = version == 32;
   // A model record's or part's scene: N3S1 or N3SM, or with tables N3SI or N3SJ.
   auto scene_magic = [&](const std::string &magic, Scene &s, const char *what) {
     need(magic == "N3S1" || magic == "N3SM" || (tables && (magic == "N3SI" || magic == "N3SJ")), what);
@@ -3296,7 +3298,7 @@ FrontEnd load_front_end(const Release &release) {
   // once); the first is the one create draws, the others are kept for the
   // create screen per race (RQ-004).
   // Version 27 (RQ-174): each model's face and hair parts by number (0-32
-  // each): a byte length and an N3S1 or N3SM scene (version 30: or N3SI or
+  // each): a byte length and an N3S1 or N3SM scene (version 32: or N3SI or
   // N3SJ) with no tracks, its nodes, joints and instance scale the model's,
   // so the model's pose skins it.
   auto create_parts = [&](const Scene &body, std::vector<Scene> &out, uint32_t most = 32) {
@@ -3679,6 +3681,44 @@ FrontEnd load_front_end(const Release &release) {
   need(rest == 0 ? desc.color == 0 && desc.open.empty() && tips == 0
                  : desc_bound && (rest == 1 || desc.open.empty()),
        "front end create descriptions");
+  // 17. Version 31 (RQ-005): the select characters, as KO's AddChr chooses
+  // its joint, animation and plugs by race and class (source
+  // GameProcCharacterSelect.cpp; 1097 0043ba10, 1298 005fb4f0): up to 32,
+  // each a race (1-65535), its specialties (1-16, each 1-65535; a race and
+  // specialty pair at most once in the file) and a model record with three
+  // clips (the front, start and rest clips) and its plugs, as the select
+  // model's. A character drawn by none draws the select model (item 7).
+  const auto select_models = r.count(32, 0);
+  for (uint32_t i = 0; i < select_models; ++i) {
+    FrontSelectModel m;
+    m.race = r.u();
+    need(m.race >= 1 && m.race <= 65535, "front end select character race");
+    const auto specialties = r.count(16);
+    for (uint32_t k = 0; k < specialties; ++k) {
+      const auto specialty = r.u();
+      need(specialty >= 1 && specialty <= 65535 &&
+               std::none_of(fe.select_models.begin(), fe.select_models.end(),
+                            [&](const FrontSelectModel &o) {
+                              return o.race == m.race && std::find(o.specialties.begin(), o.specialties.end(),
+                                                                   specialty) != o.specialties.end();
+                            }) &&
+               std::find(m.specialties.begin(), m.specialties.end(), specialty) == m.specialties.end(),
+           "front end select character specialty");
+      m.specialties.push_back(specialty);
+    }
+    model(m.scene);
+    need(m.scene.clips.size() == 3, "front end select clips");
+    fe.select_models.push_back(std::move(m));
+  }
+  // Then the class names (1097 0052e3e0, 1298 00613ea0: KO's text for a
+  // class code): up to 64, each a specialty (1-65535, once) and its text
+  // (ASCII, at most 1024 bytes).
+  const auto names = r.count(64, 0);
+  for (uint32_t i = 0; i < names; ++i) {
+    const auto specialty = r.u();
+    need(specialty >= 1 && specialty <= 65535 && !fe.class_names.contains(specialty), "front end class name");
+    fe.class_names.emplace(specialty, ascii(text(1024)));
+  }
   r.end();
   return fe;
 }

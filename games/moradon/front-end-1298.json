@@ -84,6 +84,28 @@
       ],
       "points": "text_bonus",
       "stat_row": "class",
+      "descriptions": {
+        "colour": "ffffff00",
+        "rest": "chosen",
+        "areas": {
+          "area_str": {"table": "Data/Texts_us.tbl", "row": 3219},
+          "area_dex": {"table": "Data/Texts_us.tbl", "row": 3202},
+          "area_sta": {"table": "Data/Texts_us.tbl", "row": 3220},
+          "area_int": {"table": "Data/Texts_us.tbl", "row": 3210},
+          "area_map": {"table": "Data/Texts_us.tbl", "row": 3201}
+        },
+        "classes": {
+          "btn_class_warrior": {"table": "Data/Texts_us.tbl", "row": 3217},
+          "btn_class_rogue": {"table": "Data/Texts_us.tbl", "row": 3215},
+          "btn_class_mage": {"table": "Data/Texts_us.tbl", "row": 3212},
+          "btn_class_priest": {"table": "Data/Texts_us.tbl", "row": 3213}
+        },
+        "races": {
+          "btn_race_ka_at": {"table": "Data/Texts_us.tbl", "row": 3211},
+          "btn_race_ka_tu": {"table": "Data/Texts_us.tbl", "row": 3216},
+          "btn_race_ka_wt": {"table": "Data/Texts_us.tbl", "row": 3218}
+        }
+      },
       "hidden": ["btn_race_el_ba", "btn_race_el_rm", "btn_race_el_rf"]
     },
     "loading": {
@@ -118,7 +140,6 @@
     "select_info": "Level: {level}\nSpecialty: {class}\nID: {name}",
     "select_hint": "",
     "class_name": "Priest",
-    "class_desc": "Priests heal and shield their party and fight with a mace. Every character in this realm is a Tuarek priest.",
     "loading_info": "Loading...",
     "version": "Ver. {version}"
   },

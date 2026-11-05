@@ -2859,7 +2859,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 27, "front end version");
+  need(r.u() == 28, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -3543,6 +3543,37 @@ FrontEnd load_front_end(const Release &release) {
          "front end create stat");
     need(action != FrontAction::create_points || fe.create_stats.points == i, "front end create points");
   }
+  // 16. Version 28 (RQ-175): create's description text: its rest (0 none, 1
+  // keep, 2 chosen), colour and open text (none: 0 and empty; chosen: empty,
+  // as 1298's Load row is never drawn), then up to 32 tips, each a create node
+  // (an area for group 0, a button for 1 and 2), its group, in group order,
+  // each node once, and its text. With a rest, create binds class_desc.
+  auto &desc = fe.create_descriptions;
+  const auto rest = r.u();
+  need(rest <= 2, "front end create descriptions");
+  desc.rest = FrontCreateDescriptions::Rest(rest);
+  desc.color = r.u();
+  desc.open = ascii(text(1024));
+  const auto tips = r.count(32, 0);
+  std::set<uint32_t> tip_nodes;
+  uint32_t last_group = 0;
+  for (uint32_t i = 0; i < tips; ++i) {
+    FrontCreateTip t;
+    t.node = r.u();
+    t.group = r.u();
+    t.text = ascii(text(1024));
+    need(t.node < created.size() && t.group <= FrontCreateTip::RACE && t.group >= last_group &&
+             created[t.node].kind == (t.group == FrontCreateTip::AREA ? FrontNode::AREA : FrontNode::BUTTON) &&
+             tip_nodes.insert(t.node).second,
+         "front end create description tip");
+    last_group = t.group;
+    desc.tips.push_back(std::move(t));
+  }
+  bool desc_bound = false;
+  for (const auto &n : created) desc_bound |= n.action == FrontAction::class_desc;
+  need(rest == 0 ? desc.color == 0 && desc.open.empty() && tips == 0
+                 : desc_bound && (rest == 1 || desc.open.empty()),
+       "front end create descriptions");
   r.end();
   return fe;
 }

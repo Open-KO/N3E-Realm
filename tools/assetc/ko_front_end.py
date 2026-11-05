@@ -41,7 +41,10 @@ and arrows, the points text and whether the stat row is the race's and
 class's (1298's) or the race's (1264's), with the message create_points_left
 (RQ-173), and (version 27) create's face and hair arrows, with each create
 model's face and hair parts by number in place of its face 0 and hair 0
-(RQ-174).
+(RQ-174), and (version 28) create's description text: KO's text rows for the
+open, the stat areas, class buttons and race buttons under the pointer and
+(1298's) the chosen class and race, in KO's colour, in place of the strings'
+authored `class_desc` (RQ-175).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -72,7 +75,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 27
+VERSION = 28
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -210,8 +213,29 @@ REQUIRED = {"login": {"login", "exit", "login_group", "realm_group", "realm_list
             "loading": {"progress"},
             "message": {"message", "ok"}}
 # The client's strings, in file order. {level}, {class}, {name} and {version}
-# are the only substitutions the client makes.
-STRINGS = ("select_info", "select_hint", "class_name", "class_desc", "loading_info", "version")
+# are the only substitutions the client makes. Version 28 (RQ-175): the
+# authored `class_desc` is gone; the node bound to class_desc draws create's
+# descriptions (item 16), or its layout's text without them.
+STRINGS = ("select_info", "select_hint", "class_name", "loading_info", "version")
+# Version 28 (RQ-175, specs/KO-FINDINGS.md 10.6): create's `descriptions`,
+# KO's text_desc. Its MouseProc (1298 00605bf0, 1264 0043eb00) sets the text's
+# colour (0xffffff00 in both) and, for the pointer inside a stat area, a class
+# button or a race button (IsIn on the rect, whatever the node's state or
+# visibility), that node's tooltip: three loops in that order, each stopping at
+# its first hit, a later loop's hit over an earlier's. Off them, `rest` says:
+# `keep` (1264's): the text stays what it was, from the open's text (Load
+# 0043cd00's row 6124 or 6125, each Init loading the layout again) on;
+# `chosen` (1298's): the chosen class button's tooltip (state DOWN), else the
+# chosen race button's, else nothing, written every tick, so Load 00603850's
+# row is never drawn and a recipe with `chosen` names no `open`.
+DESCRIPTION_RESTS = {"keep": 1, "chosen": 2}
+DESCRIPTION_GROUPS = (("areas", 9), ("classes", 1), ("races", 1))  # (recipe key, UIF type), KO's loop order
+DESCRIPTION_KEYS = {"colour", "rest", "open"} | {key for key, _ in DESCRIPTION_GROUPS}
+MAX_TIPS = 32
+# KO text bytes the realm's fonts (ASCII 32-126) draw as an ASCII character
+# (Q113): the 1264 install's Texts_us.tbl writes "ally's" with CP949's right
+# single quotation mark (A1 AF) in rows 3207, 3209 and 3217.
+DRAWN_AS = {b"\xa1\xaf": b"'"}
 # Node flags. Version 22's UNTIL_RACE (8, RQ-133) is gone in version 25: the
 # class buttons' stand-in images (the create screen's `classes`) do its work.
 # CLASS_HIDES (16; version 23's UNTIL_CLASS, RQ-145, Q93 (b), KO-FINDINGS 9.15)
@@ -424,6 +448,12 @@ def recipe_paths(config):
     section = lambda value: value if type(value) is dict else {}
     for name, spec in section(config.get("screens")).items():
         add("screens.%s.ui" % name, section(spec).get("ui"))
+        # Version 28 (RQ-175): create's description rows.
+        described = section(section(spec).get("descriptions"))
+        add("screens.%s.descriptions.open.table" % name, section(described.get("open")).get("table"))
+        for key, _ in DESCRIPTION_GROUPS:
+            for node, ref in section(described.get(key)).items():
+                add("screens.%s.descriptions.%s.%s.table" % (name, key, node), section(ref).get("table"))
     intro = section(config.get("intro"))
     add("intro.character", intro.get("character"))
     each("intro.lights", intro.get("lights"))
@@ -1122,6 +1152,47 @@ def create_stats(name, spec, root, bindings, states, hidden, taken):
     return out
 
 
+def create_descriptions(name, spec, root, hidden, assets):
+    """Version 28 (RQ-175): the create screen's `descriptions` (DESCRIPTION_RESTS):
+    {colour: 8 hex digits ARGB, rest: keep or chosen, open: a text (keep only),
+    areas, classes, races: {node: text}}, each text a KO row or a string
+    (text_row), each node a stat area (UIF area) or a button in KO's loop
+    order, named once, not hidden. Returns None without them, else {rest,
+    colour, open, tips: [(node, group, text)]} in group order."""
+    value = spec.get("descriptions")
+    if value is None:
+        return None
+    if name != "create":
+        raise ValueError("front-end descriptions: create's only")
+    if type(value) is not dict or set(value) - DESCRIPTION_KEYS or not {"colour", "rest"} <= set(value):
+        raise ValueError("front-end descriptions: {colour, rest, open, areas, classes, races}")
+    colour = value["colour"]
+    if type(colour) is not str or len(colour) != 8 or any(c not in "0123456789abcdefABCDEF" for c in colour):
+        raise ValueError("front-end descriptions colour: 8 hex digits, ARGB")
+    if value["rest"] not in DESCRIPTION_RESTS:
+        raise ValueError("front-end descriptions rest: one of %s" % ", ".join(DESCRIPTION_RESTS))
+    if "open" in value and value["rest"] != "keep":
+        raise ValueError("front-end descriptions open: a `chosen` rest writes the text every tick, so no open "
+                         "text is ever drawn")
+    out = dict(rest=DESCRIPTION_RESTS[value["rest"]], colour=int(colour, 16),
+               open=text_row(assets, value["open"], "descriptions open") if "open" in value else "", tips=[])
+    seen = set()
+    for group, (key, kind) in enumerate(DESCRIPTION_GROUPS):
+        entries = value.get(key, {})
+        if type(entries) is not dict:
+            raise ValueError("front-end descriptions %s: {node: text}" % key)
+        for address, ref in entries.items():
+            node = resolve(root, address)
+            if node["kind"] != kind or id(node) in hidden or id(node) in seen:
+                raise ValueError("front-end descriptions %s %r: %s, not hidden, named once"
+                                 % (key, address, "an area" if kind == 9 else "a button"))
+            seen.add(id(node))
+            out["tips"].append((node, group, text_row(assets, ref, "descriptions %s %r" % (key, address))))
+    if len(out["tips"]) > MAX_TIPS:
+        raise ValueError("front-end descriptions: at most %d nodes" % MAX_TIPS)
+    return out
+
+
 def screen(name, spec, assets, textures, fonts, find=(), placements=None, required=None, refused=(), slides=None,
            choices=None):
     """One screen's nodes in draw order, on the canvas. CN3UIBase::Load adds
@@ -1140,7 +1211,8 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
     `choices`: a list create's race and class buttons (version 25, item 14)
     are appended to, as {data: the section's bytes, races: [(race, default)],
     classes: [specialties], stats: item 15's bytes (version 26), stat_count,
-    looks: the face and hair arrows' actions it binds (version 27)}."""
+    looks: the face and hair arrows' actions it binds (version 27),
+    descriptions: item 16's bytes (version 28)}."""
     tree, ui = split(assets, spec["ui"])
     root = ko_hud.parse(tree.get(ui))
     # Every address resolves on KO's tree as read, before anything moves or is added.
@@ -1158,6 +1230,8 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
     taken = {id(n) for n, *_ in chosen["races"]} | {id(n) for n, *_ in chosen["classes"]} | chosen["images"] | \
         chosen["labels"]
     arrows = create_stats(name, spec, root, bindings, states, hidden, taken)
+    # Version 28 (RQ-175): create's description text.
+    described = create_descriptions(name, spec, root, hidden, assets)
     wanted = [id(resolve(root, a)) for a in find]
     for extra in spec.get("added", []):
         # A string KO's layout lacks (a status line, say), in UIF
@@ -1290,9 +1364,22 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
         stat_record = u(len(arrows["stats"])) + b"".join(u(found[id(v)]) + u(found[id(d)]) + u(found[id(a)])
                                                          for v, d, a in arrows["stats"])
         stat_record += u(found[id(arrows["points"])] if arrows["stats"] else NO_NODE) + u(arrows["row"])
+        # Version 28 (RQ-175): item 16, the description text: its rest (0 none),
+        # colour and open text, then each node's tooltip with its group.
+        if described is None:
+            description_record = u(0) + u(0) + string("") + u(0)
+        else:
+            if "class_desc" not in seen:
+                raise ValueError("front-end descriptions: no create node bound to class_desc draws them")
+            if any(id(n) not in found for n, _, _ in described["tips"]):
+                raise ValueError("front-end descriptions: a node they name is not drawn")
+            description_record = u(described["rest"]) + u(described["colour"]) + string(described["open"]) + \
+                u(len(described["tips"])) + b"".join(u(found[id(n)]) + u(group) + string(text)
+                                                     for n, group, text in described["tips"])
         choices.append(dict(data=record, races=[(race, default) for _, race, default in chosen["races"]],
                             classes=[codes for _, codes, *_ in chosen["classes"]], stats=stat_record,
-                            stat_count=len(arrows["stats"]), looks=[a for a in CREATE_LOOKS if a in seen]))
+                            stat_count=len(arrows["stats"]), looks=[a for a in CREATE_LOOKS if a in seen],
+                            descriptions=description_record))
     data = u(len(nodes)) + b"".join(nodes)
     if placements is not None:
         # A move of a node that draws nothing (hidden) is not written.
@@ -2123,19 +2210,23 @@ def text_row(assets, ref, what):
     of a client's encrypted text table ({"table": path, "row": id}; the
     1264 and 1298 clients load `Data\\Texts` plus `_us.tbl` and look a row up
     by id, 005d2350 in 1264). ASCII, at most MAX_TEXT bytes; KO's trailing
-    spaces are kept."""
+    spaces are kept, and the byte pairs DRAWN_AS names are drawn as their
+    ASCII character (Q113)."""
     if type(ref) is str:
         text = ref
     elif type(ref) is dict and set(ref) == {"table", "row"} and type(ref["table"]) is str and \
             type(ref["row"]) is int and ref["row"] > 0:
         import ko_tbl
-        types, rows = ko_tbl.parse(ko_tbl.decrypt(assets.get(ref["table"])))
+        types, rows = ko_tbl.parse(ko_tbl.decrypt(assets.get(ref["table"])), raw_strings=True)
         if types[:2] != TEXT_TYPES:
             raise ValueError("front-end %s: %s columns %s" % (what, ref["table"], types[:2]))
         found = [r[1] for r in rows if r[0] == ref["row"]]
         if len(found) != 1:
             raise ValueError("front-end %s: %d rows %d in %s" % (what, len(found), ref["row"], ref["table"]))
         text = found[0]
+        for kept, drawn in DRAWN_AS.items():
+            text = text.replace(kept, drawn)
+        text = text.decode("ascii", errors="replace")
     else:
         raise ValueError("front-end %s: a string or {\"table\", \"row\"}" % what)
     if not text.isascii() or len(text) > MAX_TEXT or any(c != "\n" and not " " <= c <= "~" for c in text):
@@ -2323,9 +2414,9 @@ def write(assets, out, config, work, rules=None):
     message_section, message_report = messages_section(config, assets)
     # Version 20 (RQ-126): create's slide, after the placement; version 25
     # (RQ-172): create's race and class buttons after it; version 26 (RQ-173):
-    # its stat arrows last.
+    # its stat arrows; version 28 (RQ-175): its description text last.
     data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section + message_section + \
-        placement_section + b"".join(slides) + choices[0]["data"] + choices[0]["stats"]
+        placement_section + b"".join(slides) + choices[0]["data"] + choices[0]["stats"] + choices[0]["descriptions"]
     if len(data) > MAX_FILE:
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)

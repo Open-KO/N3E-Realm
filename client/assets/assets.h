@@ -906,7 +906,9 @@ enum class FrontAction : uint32_t {
   create_face_down, create_face_up, create_hair_down, create_hair_up, count
 };
 enum class FrontScreen : uint32_t { login, select, create, loading, message, count };
-enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };
+// Version 28 (RQ-175): the authored class_desc is gone; the node bound to
+// FrontAction::class_desc draws create's descriptions (FrontCreateDescriptions).
+enum class FrontString : uint32_t { select_info, select_hint, class_name, loading_info, version, count };
 struct FrontNode {
   static constexpr uint32_t IMAGE = 0, TEXT = 1, BUTTON = 2, EDIT = 3, PROGRESS = 4, GROUP = 5, AREA = 6, LIST = 7;
   // Version 25 (RQ-172; content/front-end.md, "Actions"): a stat label of
@@ -1122,6 +1124,28 @@ struct FrontCreateStats {
   uint32_t points = FrontCreateClass::kNone;
   bool by_class = false;
 };
+// Version 28 (RQ-175; content/front-end.md item 16): create's description
+// text, KO's text_desc (the node bound to class_desc). KO's MouseProc (1298
+// 00605bf0, 1264 0043eb00) draws it in `color` and, each tick, writes the
+// tooltip of the stat area, class button or race button whose rect holds the
+// pointer (whatever the node's state or visibility): the groups in that
+// order, each its first hit, a later group's hit over an earlier's. Off them,
+// keep (1264's) leaves the text as it was, `open` from each open on (Load
+// 0043cd00, row 6124); chosen (1298's) writes the chosen class button's
+// tooltip, else the chosen race button's, else nothing (render/create_choice.h).
+// none: the node draws its layout's text, and no tips.
+struct FrontCreateTip {
+  static constexpr uint32_t AREA = 0, CLASS = 1, RACE = 2;
+  uint32_t node = 0, group = AREA;
+  std::string text;
+};
+struct FrontCreateDescriptions {
+  enum class Rest : uint32_t { none, keep, chosen };
+  Rest rest = Rest::none;
+  uint32_t color = 0;
+  std::string open;
+  std::vector<FrontCreateTip> tips;
+};
 struct FrontEnd {
   // The layouts the moves are for: the five screens (FrontScreen), then the logo.
   static constexpr size_t kLogoLayout = size_t(FrontScreen::count);
@@ -1177,6 +1201,8 @@ struct FrontEnd {
   std::vector<FrontCreateClass> create_class_buttons;
   // Version 26 (RQ-173): create's stat arrows (none: no stats).
   FrontCreateStats create_stats;
+  // Version 28 (RQ-175): create's description text (rest none: none).
+  FrontCreateDescriptions create_descriptions;
 };
 FrontEnd load_front_end(const Release &release);
 } // namespace n3e

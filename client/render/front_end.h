@@ -272,6 +272,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       hair_bound |= n.action == FrontAction::create_hair_down || n.action == FrontAction::create_hair_up;
     }
     choice.bind_looks(face_bound, hair_bound);
+    // RQ-175 (version 28): its description text.
+    description.package = fe.create_descriptions;
+    description.open();
     create_role.assign(created.size(), {});
     for (size_t k = 0; k < fe.create_stats.stats.size(); ++k) {
       const auto &st = fe.create_stats.stats[k];
@@ -835,6 +838,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     int button = -1;
   };
   std::vector<CreateRole> create_role;
+  // RQ-175 (version 28): create's description text (KO's text_desc).
+  CreateDescription description;
   // The node of the button pressed and of the one a release acts on (-1 none).
   int pressed_node = -1, acted_node = -1;
   bool waiting = false;  // RQ-108: a login under way (login_waiting)
@@ -949,7 +954,23 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // RQ-130 (version 21): each open starts with nothing chosen that the
   // package's create waits for (1298's Init 005fab40 and Cancel 005ffb90);
   // RQ-172: but the package's choice at the open.
-  void open_choice() { choice.open(); }
+  // RQ-175: the description text from the open's (1264's Load, each Init).
+  void open_choice() { choice.open(), description.open(); }
+  // RQ-175 (version 28): KO's MouseProc pass over the description's tips
+  // (create_choice.h CreateDescription), with the pointer where it is and each
+  // tip's node where this frame draws it (the slide included), inclusive at
+  // every edge as CN3UIBase::IsIn (004017b0).
+  void describe() {
+    if (!description.active()) return;
+    auto over = [&](uint32_t node) {
+      const auto r = rect(FrontScreen::create, node);
+      return pointer[0] >= r[0] && pointer[0] <= r[2] && pointer[1] >= r[1] && pointer[1] <= r[3];
+    };
+    std::optional<uint32_t> class_node, race_node;
+    if (choice.klass >= 0) class_node = choice.classes[size_t(choice.klass)].node;
+    if (choice.race >= 0) race_node = choice.races[size_t(choice.race)].node;
+    description.pass(over, class_node, race_node);
+  }
   std::array<int, 2> slide_extent() const {
     return scaled ? std::array<int, 2>{int(fe.canvas_width), int(fe.canvas_height)} : placed_size;
   }
@@ -1874,6 +1895,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   }
   void ui(FrontScreen screen, const Context &context, double now) {
     const auto &nodes = fe.screens[size_t(screen)];
+    if (screen == FrontScreen::create) describe();
     const auto shown = visible(screen);
     std::vector<int> state(nodes.size(), 0);
     // CN3UIBase::Render draws a node's children only when it draws the node: a
@@ -1900,6 +1922,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         break;
       case FrontNode::TEXT: {
         std::string value = n.text;
+        uint32_t color = n.color;
         switch (n.action) {
         case FrontAction::notice: value = context.notice; break;
         case FrontAction::char_info:
@@ -1928,7 +1951,15 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
                                                           : fe.strings[size_t(FrontString::class_name)];
           }
           break;
-        case FrontAction::class_desc: value = filled(FrontString::class_desc, context, nullptr); break;
+        // RQ-175 (version 28): create's description text in its colour (KO's
+        // text_desc, create_choice.h CreateDescription); without one, or on
+        // another screen, the layout's text.
+        case FrontAction::class_desc:
+          if (screen == FrontScreen::create && description.active()) {
+            value = description.shown;
+            color = description.package.color;
+          }
+          break;
         // RQ-173 (version 26): a stat's value and the points left, as each
         // build's 00605950 and each arrow write them (SetStringAsInt), empty
         // from the open until a build (006066b0).
@@ -1944,7 +1975,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         case FrontAction::title: value = message ? message->title : std::string(); break;
         default: break;
         }
-        text(value, n.font, n.color, n.style, r);
+        text(value, n.font, color, n.style, r);
         break;
       }
       case FrontNode::EDIT:

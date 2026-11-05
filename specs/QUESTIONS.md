@@ -1913,3 +1913,44 @@ Options:
 is exactly KO's: the arrows work before the race and nothing is ever moved; for a
 package with different ranges every value shown is one the server takes. Changing
 it is client-only (`client/render/create_choice.h`).
+
+### Q113 — KO text bytes the realm's fonts cannot draw: CP949's apostrophe
+
+RQ-175 (KO-FINDINGS §10.6): the 1264 install's `Texts_us.tbl` writes "ally's" with
+CP949's right single quotation mark (bytes `A1 AF`) in rows 3207, 3209 and 3217, the
+warrior and priest descriptions the 1097 choice's create shows on hover (3217, the
+Karus warrior). The realm's front-end fonts draw ASCII 32–126 only; KO draws the two
+bytes with the system's code page (a right quote on a Korean Windows, "¡¯" on a
+US one).
+
+Options:
+- (a) Draw the pair as ASCII's apostrophe (`'`), the character the text means.
+- (b) Leave the tooltip out (the hover keeps the text as it was).
+- (c) Draw the two bytes as a US Windows would ("ally¡¯s"), with glyphs the realm's
+  font atlas would need to add.
+
+**Default taken:** (a), in the cook for every KO text row (`DRAWN_AS` in
+`tools/assetc/ko_front_end.py`); any other byte past ASCII still refuses the row.
+Changing it is cook-only.
+
+### Q114 — The 1298 recipe's Puri Tuarek description, Korean in the US table
+
+RQ-175 (KO-FINDINGS §10.6): 1298's Load gives the Puri Tuarek's race button row 3214,
+which the pinned (1298) `Texts_us.tbl` holds in Korean (CP949), the only Karus race,
+class or stat row that is not English; the 1264 install's table holds it in English
+("Puri Tuarek is a female Karus character that can become a Priest to use purified
+mental energies to perform healing magic and curse magic."). The realm's fonts draw
+ASCII only, and the 1298 recipe reads the pinned tree alone. The button is fixed
+disabled there (Q109 (a)), but KO's hover takes its tooltip whatever its state.
+
+Options:
+- (a) No tooltip for it: over the Puri Tuarek the text is what it is off the buttons
+  (the chosen class's, else the chosen race's, else nothing).
+- (b) The 1264 install's English row 3214 (KO's words for the same tooltip), the
+  1298 recipe reading that install for it.
+- (c) An authored English text.
+
+**Default taken:** (a), the 1298 recipe's `descriptions` names no `btn_race_ka_pt`.
+The 1097 choice (the one Moradon offers) draws 1264's English row. Changing it is
+recipe-only (`games/moradon/front-end-1298.json`; (b) adds the 1264 input to that
+recipe).

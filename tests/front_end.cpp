@@ -49,6 +49,7 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -765,6 +766,54 @@ int main(int argc, char **argv) {
                  "race takes them into its range; without arrows the fixed choice's\n";
   }
   {
+    // RQ-175 (version 28, KO-FINDINGS 10.6): the description text. Each pass
+    // (KO's MouseProc, 1298 00605bf0, 1264 0043eb00) takes the tip whose rect
+    // holds the pointer: the stat areas, then the class buttons, then the race
+    // buttons, each group its first hit, a later group's over an earlier's.
+    // Off them, keep (1264's) leaves the text as it was, the open's from each
+    // open; chosen (1298's) shows the chosen class's tip, else the chosen
+    // race's, else nothing.
+    using T = n3e::FrontCreateTip;
+    using Rest = n3e::FrontCreateDescriptions::Rest;
+    n3e::front::CreateDescription d;
+    d.package.color = 0xffffff00;
+    d.package.open = "\n\nKarus Character Window.";
+    // Nodes 1-2 stat areas, 3-4 class buttons, 5-6 race buttons; node 7 an
+    // area under class 3 in a later group (overlaps are not in KO's layouts).
+    d.package.tips = {{1, T::AREA, "str"}, {2, T::AREA, "dex"}, {3, T::CLASS, "warrior"}, {4, T::CLASS, "rogue"},
+                      {5, T::RACE, "arch"}, {6, T::RACE, "tuarek"}};
+    std::string fail;
+    auto want = [&](const char *step, bool ok) { if (!ok && fail.empty()) fail = step; };
+    auto at = [](std::set<uint32_t> under) { return [under](uint32_t node) { return under.contains(node); }; };
+    const std::optional<uint32_t> none;
+    d.package.rest = Rest::keep;
+    d.open();
+    want("keep open", d.active() && d.pass(at({}), none, none) == "\n\nKarus Character Window.");
+    want("keep area", d.pass(at({2}), none, none) == "dex");
+    want("keep stays", d.pass(at({}), 4, 6) == "dex");
+    want("keep first of group", d.pass(at({3, 4}), none, none) == "warrior");
+    want("keep later group", d.pass(at({1, 4, 6}), none, none) == "tuarek");
+    d.open();
+    want("keep reopen", d.pass(at({}), none, none) == "\n\nKarus Character Window.");
+    d.package.rest = Rest::chosen;
+    d.package.open.clear();
+    d.open();
+    want("chosen none", d.pass(at({}), none, none).empty());
+    want("chosen race", d.pass(at({}), none, 6) == "tuarek");
+    want("chosen class over race", d.pass(at({}), 4, 6) == "rogue");
+    want("chosen hover", d.pass(at({1}), 4, 6) == "str");
+    want("chosen off again", d.pass(at({}), 4, 6) == "rogue");
+    want("chosen untipped", d.pass(at({}), 9, 5) == "arch");
+    n3e::front::CreateDescription off;
+    want("none", !off.active());
+    if (!fail.empty()) {
+      std::cerr << "FAIL create descriptions: " << fail << "\n";
+      return 1;
+    }
+    std::cout << "PASS create descriptions: the tip under the pointer by KO's loop order; off the tips 1264's text "
+                 "stays (the open's from each open), 1298's is the chosen class's, else the race's, else empty\n";
+  }
+  {
     // RQ-004: Moradon's rules as create.bin carries them (one race of two
     // specialties, KO's 1..20 letters, digits, _ : ;), a reserved word.
     using n3e::CreateRules;
@@ -915,6 +964,16 @@ int main(int argc, char **argv) {
         std::cout << "create-stats " << release.root.filename().string() << ":";
         for (const auto &st : fe.create_stats.stats) std::cout << " " << st.value << "/" << st.down << "/" << st.up;
         std::cout << " points=" << fe.create_stats.points << " row=" << fe.create_stats.by_class << "\n";
+      }
+      // RQ-175: create's description text: its rest, colour and open, then
+      // each tip's node and group.
+      if (fe.create_descriptions.rest != n3e::FrontCreateDescriptions::Rest::none) {
+        const auto &d = fe.create_descriptions;
+        std::cout << "create-descriptions " << release.root.filename().string() << ": rest=" << uint32_t(d.rest)
+                  << " colour=" << std::hex << d.color << std::dec << " open=" << d.open.size() << " tips=";
+        for (size_t k = 0; k < d.tips.size(); ++k)
+          std::cout << (k ? "," : "") << d.tips[k].node << "/" << d.tips[k].group << "/" << d.tips[k].text.size();
+        std::cout << "\n";
       }
       // RQ-158: a package with more than one create model: each race, then
       // each model's clip count and joint count (the first create's).

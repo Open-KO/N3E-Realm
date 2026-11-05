@@ -77,7 +77,31 @@
         {"value": "text_map", "down": "btn_map_left", "up": "btn_map_right"}
       ],
       "points": "text_bonus",
-      "stat_row": "race"
+      "stat_row": "race",
+      "descriptions": {
+        "colour": "ffffff00",
+        "rest": "keep",
+        "open": {"table": "installer-1264:Data/Texts_us.tbl", "row": 6124},
+        "areas": {
+          "area_str": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3219},
+          "area_sta": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3220},
+          "area_dex": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3202},
+          "area_int": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3210},
+          "area_map": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3201}
+        },
+        "classes": {
+          "btn_class_warrior": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3217},
+          "btn_class_rogue": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3215},
+          "btn_class_mage": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3212},
+          "btn_class_priest": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3213}
+        },
+        "races": {
+          "btn_race_ka_at": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3211},
+          "btn_race_ka_tu": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3216},
+          "btn_race_ka_wt": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3218},
+          "btn_race_ka_pt": {"table": "installer-1264:Data/Texts_us.tbl", "row": 3214}
+        }
+      }
     },
     "loading": {
       "ui": "installer-1264:UI_US/co_loading_us.uif",
@@ -114,7 +138,6 @@
     "select_info": "Level: {level}\nSpecialty: {class}\nID: {name}",
     "select_hint": "Press ENTER to create a character.",
     "class_name": "Priest",
-    "class_desc": "Priests heal and shield their party and fight with a mace. Every character in this realm is a Tuarek priest.",
     "loading_info": "Loading...",
     "version": "Ver. {version}"
   },

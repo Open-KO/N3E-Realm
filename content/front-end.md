@@ -38,17 +38,17 @@ Moradon's default, 1097, `games/moradon/front-end.json`); the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
 its header. A package with it is engine 42, so wire 30 (as engines 38–41). Its bound is
 64 MiB (`FRONT_END_FILE`, `MAX_FRONT_END_ASSET`, `kFrontEndFile`), since it holds
-the character models and the UI art (Moradon's 1097 choice: 57,417,972 bytes with
+the character models and the UI art (Moradon's 1097 choice: 57,419,400 bytes with
 three create models, RQ-158, its race and class buttons, RQ-172, its stat
-arrows, RQ-173, and its create models' four faces and three hairs, RQ-174;
-the 1298 recipe's 59,297,737).
+arrows, RQ-173, its create models' four faces and three hairs, RQ-174, and its
+description text, RQ-175; the 1298 recipe's 59,299,044).
 
 Integers are little-endian u32, reals f32; strings are a u32 length and that many
 bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 27, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 28, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -74,8 +74,9 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    A node draws only when its parent does. A button's state images carry one
    mask bit each; its other children draw in every state.
 5. Strings, each ≤1024 ASCII bytes, in order: `select_info`, `select_hint`,
-   `class_name`, `class_desc`, `loading_info`, `version`. The client substitutes
-   only `{level}`, `{class}`, `{name}` and `{version}`.
+   `class_name`, `loading_info`, `version` (version 28 drops `class_desc`, which
+   followed `class_name`: its text is item 16's). The client substitutes only
+   `{level}`, `{class}`, `{name}` and `{version}`.
 6. The intro scene: camera, lights, global ambient (3 reals), the model, its
    plugs (count ≤4), then the backdrop: a texture index and a rect in 1024×768
    units that the client scales by the window's width and height separately
@@ -296,6 +297,15 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    race's, as 1264's, 1 the race's and class's, as 1298's; 0 without stats).
    Every node bound to those four actions is one stat's or the points text.
    The client's use is "Actions" below.
+16. Create's description text (version 28, RQ-175; `client/render/create_choice.h`;
+   `specs/KO-FINDINGS.md` §10.6, binary): the rest (0 none, 1 keep, as 1264's,
+   2 chosen, as 1298's), the colour (ARGB), the open text (≤1024 ASCII bytes;
+   empty with rest 0 or 2) and a tip count (≤32), each tip a create node (an
+   area for group 0, a button for groups 1 and 2), its group (0 the stat areas,
+   1 the class buttons, 2 the race buttons, never decreasing: KO's loop order)
+   and its text (≤1024 ASCII bytes), each node once. Rest 0 is no descriptions:
+   colour 0, no open text and no tips. Otherwise create binds `class_desc`.
+   The client's use is "Actions" below.
 
 The client samples as KO sets its devices: UIF images with point sampling on whole
 screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
@@ -508,7 +518,12 @@ create, an arrow that is not a button or is fixed on or disabled, a value or
 points text that is not a text node, item 15's bounds and references above
 (version 26), a node bound to `create_face_down`, `create_face_up`,
 `create_hair_down` or `create_hair_up` on a screen other than create, or one
-that is not a button or is fixed on or disabled (version 27), a select ESC other than 0, 1 or
+that is not a button or is fixed on or disabled (version 27), a description
+rest above 2, a tip on a node outside create, of a group above 2 or below the
+last tip's, not an area for group 0 or a button for groups 1 and 2, or named
+twice, more than 32 tips, a rest 0 with a colour, open text or tips, and a rest
+1 or 2 without a create node bound to `class_desc` or a rest 2 with open text
+(version 28; version 27 is refused as every older version is), a select ESC other than 0, 1 or
 2 (version 15; 2 since version 16), a select Back other than 0 or 1 (version
 17), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
@@ -531,8 +546,10 @@ The closed set, by index: none, `login`, `exit`, `login_group`, `realm_group`,
 `create_stat`, `create_points` (version 26), `create_face_down`,
 `create_face_up`, `create_hair_down`, `create_hair_up` (version 27). A group bound to `login_group` or
 `realm_group` is shown in its state only; `realm_list` lists the realm from
-`realm.json`; `notice`, `char_info`, `class_desc`, `version`, `info`,
-`message` and `title` (the message's title, item 11) are texts the client fills; `name_field` is the name entry (RQ-004: printable ASCII up to the package's longest name, `create.bin`); `char_view`
+`realm.json`; `notice`, `char_info`, `class_desc` (version 28: create's
+description text, item 16, below; without one, the layout's own text),
+`version`, `info`, `message` and `title` (the message's title, item 11) are
+texts the client fills; `name_field` is the name entry (RQ-004: printable ASCII up to the package's longest name, `create.bin`); `char_view`
 is where create draws the character.
 
 1298's select bar (version 13, RQ-109, `specs/KO-FINDINGS.md` §9.6,
@@ -646,6 +663,19 @@ model without that part (the Wrinkle Tuarek's hair: its value moves, nothing
 is drawn). A create that binds a face or hair arrow draws and sends the
 fixed choice's face or hair for the one it does not bind (Q110).
 
+The description text (version 28, RQ-175, item 16; `specs/KO-FINDINGS.md`
+§10.6, binary: 1298's MouseProc `00605bf0`, 1264's `0043eb00`), create screen
+only: the node bound to `class_desc` draws in item 16's colour (KO's
+`0xffffff00`, set before the first frame, so the layout's colour is never
+drawn). Each frame create shows, before it draws, the client takes the text of
+the tip whose node's rect, where the frame draws it, holds the pointer
+(edges included), the last group's hit winning and within a group the first
+tip's, whatever the node's state or visibility (KO's `IsIn` reads the rect
+only). Off every tip, rest 1 (`keep`, 1264's) leaves the text as it was, the
+open text from each open; rest 2 (`chosen`, 1298's) shows the chosen class
+button's tip, else the chosen race button's, else nothing (an assign, not a
+join).
+
 `create_confirm` then refuses, in `005fffd0`'s order (1264's `0043a340`), an
 empty name (`create_name`), no race (`create_no_race`), no class
 (`create_no_class`), (version 26, RQ-173) with stat arrows, points left
@@ -700,6 +730,20 @@ The recipe binds the face and hair arrows in the create screen's `bindings`
 (version 27, RQ-174), each action once; an arrow takes no fixed state. The
 cook refuses them on another screen, on a node that is not a button or has a
 state, twice, and without the package's create rules.
+
+The recipe gives the description text in the create screen's `descriptions`
+(version 28, RQ-175): `{"colour": "AARRGGBB", "rest": "keep" | "chosen",
+"open": <text>, "areas": {"<area>": <text>, ...}, "classes": {"<button>":
+<text>, ...}, "races": {"<button>": <text>, ...}}`, each text a client table
+row (`{"table": "<path>", "row": N}`, read as the messages' are), each group
+in KO's loop order, `open` with `keep` only and optional. The cook refuses
+them on another screen, an unknown key, a missing colour or rest, a colour
+that is not 8 hex digits, an unknown rest, `open` with `chosen`, a node of
+the wrong kind (an area in `areas`, a button in the others), hidden or named
+twice, more than 32 tips, a text the realm's fonts cannot draw (non-ASCII;
+CP949's `A1 AF`, a right single quotation mark, is drawn as ASCII's
+apostrophe, Q113), a node that draws nothing, and descriptions without a node
+bound to `class_desc`.
 
 A recipe screen's `states` fixes a node's button state: `on` and `disabled` are
 flags 1 and 2. `down` (RQ-138, Q89 (b), `specs/KO-FINDINGS.md` §9.16, binary) is
@@ -965,7 +1009,14 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   class click that changes the class writes its row and resets the points;
   Create says `create_points_left`, row 1913 titled 1901 (`005fffd0` code 10,
   after codes 7 and 9), until every point is spent, then sends the five
-  stats.
+  stats. (RQ-175, version 28, item 16) `descriptions`, rest `chosen`, colour
+  `ffffff00`, the pinned tree's `Data/Texts_us.tbl` rows as Load `00603850`
+  gives them: `area_str` 3219, `area_dex` 3202, `area_sta` 3220, `area_int`
+  3210, `area_map` 3201; the classes 3217, 3215, 3212, 3213; the races `ka_at`
+  3211, `ka_tu` 3216, `ka_wt` 3218, the Puri Tuarek's 3214 left out as Korean
+  (Q114). `text_desc` is empty in yellow from the open, shows the tip under
+  the pointer, and off them the chosen class's text, else the Tuarek's after
+  its click (MouseProc `00605bf0`; KO-FINDINGS §10.6).
   Each open draws every class button over its `img_*` (`00605950`, by the
   reset `006066b0`), each live, as 1298's are NORMAL before the race click; the
   Tuarek click hides the warrior and mage buttons, their greyed images standing
@@ -1191,7 +1242,17 @@ box and loading are 1264's.
   Tuarek chosen, writes the priest's row and 10 points, a class click builds
   nothing, and the left arrows work without a class; Create says
   `create_points_left`, row 1913 titled 1901 (`0043a340` code 10), until every
-  point is spent, then sends the five stats.
+  point is spent, then sends the five stats. (RQ-175, version 28, item 16)
+  `descriptions`, rest `keep`, colour `ffffff00`, the 1264 install's
+  `Data/Texts_us.tbl` rows as its Load `0043cd00` gives them: open 6124
+  ("Karus Character Window." after two line breaks), `area_str` 3219,
+  `area_sta` 3220, `area_dex` 3202, `area_int` 3210, `area_map` 3201
+  ("Unconfirmed nation", as 1264 shows it); the classes 3217, 3215, 3212,
+  3213 (the warrior's "ally's" drawn with ASCII's apostrophe, Q113); the races
+  `ka_at` 3211, `ka_tu` 3216, `ka_wt` 3218, `ka_pt` 3214, the disabled and
+  unbound ones too (IsIn reads the rect only). `text_desc` shows row 6124 in
+  yellow at each open and the last tip the pointer was over after (MouseProc
+  `0043eb00`; KO-FINDINGS §10.6).
 - Loading (`UI_US/co_loading_us.uif`, centred; `Text_Version` at (10, 10)):
   1264's layout when no nation has won the last war (`005f9a30`); the realm has
   no war, so no victor (Q80).

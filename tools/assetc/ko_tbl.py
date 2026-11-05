@@ -60,11 +60,12 @@ def encrypt(plain, key=KEY):
     return bytes(out)
 
 
-def parse(plain):
+def parse(plain, raw_strings=False):
     """`006264d0` / `006359b0`: (column types, rows) of a decrypted table.
 
     Every row is a list of Python values: int for types 1-6, float for 8 and 9,
-    str for 7."""
+    str for 7 (with `raw_strings`, bytes as the table holds them: RQ-175's
+    description rows map a byte pair the ASCII decode would lose)."""
     offset = 0
 
     def take(size):
@@ -94,7 +95,8 @@ def parse(plain):
                 length = struct.unpack("<i", take(4))[0]
                 if not 0 <= length <= MAX_STRING:
                     raise ValueError("KO table: a %d-byte string" % length)
-                row.append(take(length).decode("ascii", errors="replace"))
+                field = take(length)
+                row.append(field if raw_strings else field.decode("ascii", errors="replace"))
             else:
                 fmt = FIXED[t]
                 row.append(struct.unpack(fmt, take(struct.calcsize(fmt)))[0])

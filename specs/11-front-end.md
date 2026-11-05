@@ -95,7 +95,9 @@ replace the panels when the client has a Discord realm config.
 - **Actions** form a closed engine set, by index: `none`, `login`, `exit`,
   `login_group`, `realm_group`, `realm_list`, `realm_connect`, `notice`,
   `select_prev`, `select_next`, `back`, `char_info`, `create_confirm`, `name_field`,
-  `char_view`, `class_desc`, `progress`, `version`, `info`, `message`, `ok`, `title`,
+  `char_view`, `class_desc` (N3FE version 28, RQ-175: create's description
+  text, KO's own tooltips from the client's table, `content/front-end.md`
+  item 16), `progress`, `version`, `info`, `message`, `ok`, `title`,
   `login_closed` (N3FE version 12, RQ-108: a login node drawn only while the login
   group is not, KO's copyright line; RQ-110: every layout hides its login group
   while a login is under way, as 1264 and 1298 do, whether it binds one or not),
@@ -115,8 +117,8 @@ replace the panels when the client has a Discord realm config.
   - create: `create_confirm`, `back`, `name_field`, `char_view`;
   - loading: `progress`;
   - message: `message`, `ok`.
-- **Strings.** `select_info`, `select_hint`, `class_name`, `class_desc`,
-  `loading_info`, `version`; the client fills `{level}`, `{class}`, `{name}`,
+- **Strings.** `select_info`, `select_hint`, `class_name`, `loading_info`,
+  `version` (`class_desc` until N3FE version 28); the client fills `{level}`, `{class}`, `{name}`,
   `{version}`.
 - **Scenes.** The intro (camera, lights, the model with its clip and plugs, the moon
   as a screen quad) and the select hall (camera, lights, `character_slots` slots with
@@ -282,7 +284,12 @@ replace the panels when the client has a Discord realm config.
   with 1264's rows, the race and class with 1298's) copies the row's stats and
   bonus, a right arrow spends a point while any is left, a left arrow returns one
   while the stat is above the row's, and the values and the points left are written
-  as KO writes them (KO-FINDINGS §10.4); each open starts with no points (Q111). The 1298 recipe binds the Tuarek and the four classes and
+  as KO writes them (KO-FINDINGS §10.4); each open starts with no points (Q111). The
+  description text (N3FE version 28, RQ-175) is KO's own: the tooltip of the stat
+  area, class button or race button under the pointer, in KO's yellow, and off them
+  1264's last tooltip (row 6124 from each open) or 1298's chosen class's, else
+  chosen race's, else nothing, from the recipe client's table (KO-FINDINGS §10.6;
+  Q113, Q114). The 1298 recipe binds the Tuarek and the four classes and
   waits for both, the messages 1298's rows 1908 and 1904 under 1901; the 1097
   choice binds the same with the Tuarek and the priest chosen at each open (Q52),
   `create_no_class` 1264's row 1904 under 1901. Version 22's nodes until the race

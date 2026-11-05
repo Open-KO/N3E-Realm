@@ -1341,18 +1341,17 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=27, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=28, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0),
-         creates=None, choices=u(0) + u(0), stats=u(0) + u(0xFFFFFFFF) + u(0)):
+         creates=None, choices=u(0) + u(0), stats=u(0) + u(0xFFFFFFFF) + u(0), descriptions=None):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
     out += u(1) + u(len(tex) - 1 if font_index is None else font_index) + u(16) + u(12) + u(4) + f([6] * 95)
     out += b"".join(screen_data or screens)
-    out += b"".join(string(s) for s in (strings or ["Level: {level}", "ENTER", "Priest", "Heals.", "Loading",
-                                                    "Ver. {version}"]))
+    out += b"".join(string(s) for s in (strings or ["Level: {level}", "ENTER", "Priest", "Loading", "Ver. {version}"]))
     lights = u(1) + raw_light(light or LIGHT)
     out += CAMERA + lights + f([0, 0, 0]) + character(plug=plug, blends=blends) + u(0) + f([100, 50, 400, 350])
     spot = dict(LIGHT, kind=fe.SPOT, theta=0.5, phi=0.6, range=6.0)
@@ -1374,8 +1373,9 @@ def blob(version=27, slots=1, screen_data=None, font_index=None, light=None, plu
     out += u(1) + u(2) + create_model(plug=plug) if creates is None else creates
     # Version 20 (RQ-126): create's slide, after the placement; version 25
     # (RQ-172): create's race and class buttons, after the slide; version 26
-    # (RQ-173): its stat arrows, last.
-    return out + music + logo + messages + placement + slide + choices + stats + extra
+    # (RQ-173): its stat arrows; version 28 (RQ-175): its description text, last.
+    descriptions = u(0) + u(0) + string("") + u(0) if descriptions is None else descriptions
+    return out + music + logo + messages + placement + slide + choices + stats + descriptions + extra
 
 
 # --- the create models (version 24, RQ-158) -------------------------------------
@@ -1558,6 +1558,136 @@ assert ("messages.login.title.table", "installer-1264:Data/Texts_us.tbl") in fe.
     {"messages": {"login": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1}}}})
 print("PASS front-end message cook: titles and texts from a KO text table's rows or the recipe; %d refusals"
       % len(message_problems))
+
+
+# --- create's description text (version 28, RQ-175) ------------------------------
+
+# KO's text_desc (KO-FINDINGS 10.6): the create screen's `descriptions` name
+# its colour, its rest (keep: 1264's 0043eb00, the text staying as it was from
+# Load 0043cd00's open row on; chosen: 1298's 00605bf0, the chosen class's,
+# else race's tooltip, else nothing, every tick) and each stat area's, class
+# button's and race button's tooltip, KO's loop order, cooked as item 16 after
+# the stat arrows: rest, colour, open, then each tip's node, group and text.
+# The text node is the one bound to class_desc; the authored class_desc
+# string is gone (strings, version 28).
+assert fe.STRINGS == ("select_info", "select_hint", "class_name", "loading_info", "version"), fe.STRINGS
+desc_plain = bytearray(ko_tbl.build(fe.TEXT_TYPES, [[6124, "\n\nKarus Character Window."],
+                                                    [3217, "protect ally??s magicians.  "], [3214, "Puri ?"]]))
+at = desc_plain.index(b"??")
+desc_plain[at:at + 2] = b"\xa1\xaf"
+desc_plain[-1] = 0xB8
+DESC_TABLE = ko_tbl.encrypt(bytes(desc_plain))
+DESC_KEEP = {"colour": "ffffff00", "rest": "keep", "open": row(6124), "areas": {"area_character": "Looks."},
+             "classes": {"btn_class_priest": row(3217)}, "races": {"btn_race_ka_tu": "Tuarek."}}
+DESC_CHOSEN = {"colour": "ffffff00", "rest": "chosen", "areas": {"area_character": "Looks."},
+               "classes": {"btn_class_priest": "Heals."}, "races": {"btn_race_ka_tu": "Tuarek."}}
+
+
+def desc_cook(descriptions, **create):
+    spec_create = {"races": CHOICE_RACES, "classes": {"btn_class_priest": CHOICE_CLASSES["btn_class_priest"] | {
+        "labels": ["int_01"]}}, "class_labels": "hide", "stats": STATS, "points": "text_bonus",
+                   "stat_row": "class", "descriptions": descriptions, **create}
+    spec_create = {k: v for k, v in spec_create.items() if v is not None}
+    assets = Fixture({**trees, "create.uif": stats_tree(), "Data/Texts.tbl": DESC_TABLE})
+    textures, fonts, choices = fe.Textures(assets), {}, []
+    specs = {**{n: spec(n) for n in fe.SCREENS}, "create": spec("create", **spec_create)}
+    data = [fe.screen(n, specs[n], assets, textures, fonts, choices=choices) for n in fe.SCREENS]
+    return data, choices[0]
+
+
+def desc_section(rest, colour, open_text, tips):
+    return u(rest) + u(colour) + string(open_text) + u(len(tips)) + b"".join(
+        u(n) + u(g) + string(t) for n, g, t in tips)
+
+
+NO_DESCRIPTIONS = desc_section(0, 0, "", [])
+assert STAT_CHOICE["descriptions"] == NO_DESCRIPTIONS and choice_cook()[1]["descriptions"] == NO_DESCRIPTIONS
+DESC_DATA, DESC_CHOICE = desc_cook(DESC_KEEP)
+desc_at = {i: k for k, (i, _, _) in enumerate(node_records(DESC_DATA[2]))}
+# The 1264 install's "ally's" (CP949's right single quotation mark, A1 AF) is
+# drawn with ASCII's apostrophe (Q113).
+assert DESC_CHOICE["descriptions"] == desc_section(1, 0xFFFFFF00, "\n\nKarus Character Window.", [
+    (desc_at["area_character"], 0, "Looks."), (desc_at["btn_class_priest"], 1, "protect ally's magicians.  "),
+    (desc_at["btn_race_ka_tu"], 2, "Tuarek.")]), DESC_CHOICE["descriptions"]
+_, DESC_CHOSEN_CHOICE = desc_cook(DESC_CHOSEN)
+assert DESC_CHOSEN_CHOICE["descriptions"] == desc_section(2, 0xFFFFFF00, "", [
+    (desc_at["area_character"], 0, "Looks."), (desc_at["btn_class_priest"], 1, "Heals."),
+    (desc_at["btn_race_ka_tu"], 2, "Tuarek.")]), DESC_CHOSEN_CHOICE["descriptions"]
+# In KO's group order whatever the recipe's key order.
+_, reordered = desc_cook({"races": DESC_CHOSEN["races"], **DESC_CHOSEN})
+assert reordered["descriptions"] == DESC_CHOSEN_CHOICE["descriptions"]
+desc_problems = (
+    ("create's only", dict(specs={"login": spec("login", descriptions=DESC_CHOSEN)})),
+    ("{colour, rest, open, areas, classes, races}", dict(descriptions={**DESC_CHOSEN, "hover": {}})),
+    ("{colour, rest, open, areas, classes, races}", dict(descriptions={"rest": "keep"})),
+    ("{colour, rest, open, areas, classes, races}", dict(descriptions=[])),
+    ("8 hex digits", dict(descriptions={**DESC_CHOSEN, "colour": "0xffffff00"})),
+    ("8 hex digits", dict(descriptions={**DESC_CHOSEN, "colour": 0xFFFFFF00})),
+    ("rest: one of", dict(descriptions={**DESC_CHOSEN, "rest": "join"})),
+    ("no open text is ever drawn", dict(descriptions={**DESC_CHOSEN, "open": "x"})),
+    ("an area, not hidden", dict(descriptions={**DESC_CHOSEN, "areas": {"btn_race_ka_tu": "x"}})),
+    ("a button, not hidden", dict(descriptions={**DESC_CHOSEN, "classes": {"area_character": "x"}})),
+    ("a button, not hidden", dict(descriptions={**DESC_CHOSEN, "races": {"text_bonus": "x"}})),
+    ("a button, not hidden, named once",
+     dict(descriptions={**DESC_CHOSEN, "races": {"btn_class_priest": "x"}})),
+    ("a button, not hidden", dict(descriptions={**DESC_CHOSEN, "classes": {"btn_face_left": "x"}},
+                                  hidden=["btn_face_left"])),
+    ("{node: text}", dict(descriptions={**DESC_CHOSEN, "areas": ["area_character"]})),
+    ("not printable ASCII", dict(descriptions={**DESC_KEEP, "races": {"btn_race_ka_tu": row(3214)}})),
+    ("rows 9 in", dict(descriptions={**DESC_KEEP, "open": row(9)})),
+    ("no create node bound to class_desc",
+     dict(descriptions=DESC_CHOSEN, bindings={k: v for k, v in BINDINGS["create"].items() if v != "class_desc"})),
+)
+for reason, kw in desc_problems:
+    specs = kw.pop("specs", None)
+    try:
+        if specs:
+            desc_assets = Fixture({**trees, "create.uif": stats_tree()})
+            desc_textures = fe.Textures(desc_assets)
+            for n in fe.SCREENS:
+                fe.screen(n, {**spec(n), **specs.get(n, {})}, desc_assets, desc_textures, {}, choices=[])
+        else:
+            desc_cook(**kw)
+    except ValueError as error:
+        assert reason in str(error), (reason, error)
+        continue
+    raise AssertionError(("cooked create descriptions", reason, kw))
+try:
+    fe.create_descriptions("create", {"descriptions": {"colour": "ffffff00", "rest": "chosen", "areas": {
+        "a%d" % i: "x" for i in range(33)}}}, {"kind": 0, "id": "root", "children": [
+            {"kind": 9, "id": "a%d" % i, "children": []} for i in range(33)]}, set(), None)
+    raise AssertionError("cooked 33 description tips")
+except ValueError as error:
+    assert "at most 32 nodes" in str(error), error
+# The recipes: KO's colour and rows, by each client's Load (1298 00603850:
+# the stat areas str, dex, sta, int, map; 1264 0043cd00: str, sta, dex, int,
+# map; both the Karus classes 3217, 3215, 3212, 3213 and races 3211, 3216,
+# 3218, 3214) from that client's table; 1264's open row 6124 and rest keep,
+# 1298's rest chosen and no open (its Load's 6124 is never drawn). 1298's
+# Puri Tuarek row is Korean in the pinned US table, so its recipe names no
+# tooltip for it (Q114).
+for recipe, table, rest, areas, races in (
+        (create_1298, "Data/Texts_us.tbl", "chosen", ("str", 3219, "dex", 3202, "sta", 3220, "int", 3210, "map", 3201),
+         ("at", 3211, "tu", 3216, "wt", 3218)),
+        (create_1097["screens"]["create"], "installer-1264:Data/Texts_us.tbl", "keep",
+         ("str", 3219, "sta", 3220, "dex", 3202, "int", 3210, "map", 3201),
+         ("at", 3211, "tu", 3216, "wt", 3218, "pt", 3214))):
+    described = recipe["descriptions"]
+    rows = lambda pairs, prefix: [(prefix + pairs[i], {"table": table, "row": pairs[i + 1]})  # noqa: E731
+                                  for i in range(0, len(pairs), 2)]
+    assert described["colour"] == "ffffff00" and described["rest"] == rest, described
+    assert described.get("open") == ({"table": table, "row": 6124} if rest == "keep" else None), described
+    assert list(described["areas"].items()) == rows(areas, "area_"), described["areas"]
+    assert list(described["classes"].items()) == rows(("warrior", 3217, "rogue", 3215, "mage", 3212,
+                                                       "priest", 3213), "btn_class_"), described["classes"]
+    assert list(described["races"].items()) == rows(races, "btn_race_ka_"), described["races"]
+    assert recipe["bindings"]["text_desc"] == "class_desc", recipe["bindings"]
+assert "class_desc" not in create_1097["strings"], create_1097["strings"]
+assert ("screens.create.descriptions.races.btn_race_ka_tu.table", "installer-1264:Data/Texts_us.tbl") in \
+    fe.recipe_paths(create_1097) and ("screens.create.descriptions.open.table",
+                                      "installer-1264:Data/Texts_us.tbl") in fe.recipe_paths(create_1097)
+print("PASS front-end cook: create's description text as item 16 (rest, colour, open, tips in KO's loop order), "
+      "CP949's apostrophe drawn as ASCII's, %d refusals; both recipes name KO's rows and colour" % (len(desc_problems) + 1))
 
 
 def message_raw(*entries, count=None):
@@ -2410,7 +2540,40 @@ CHOICE_CASES = {
     "bad-create-look-off-create": blob(screen_data=patch_node(bar_screens, 1, "btn_delete",
                                                               action=fe.ACTIONS.index("create_face_up"))),
 }
+# RQ-175 (version 28): create's description text (item 16).
+DESC_AREA, DESC_CLASS, DESC_RACE = desc_at["area_character"], desc_at["btn_class_priest"], desc_at["btn_race_ka_tu"]
+DESC_TIPS = [(DESC_AREA, 0, "Looks."), (DESC_CLASS, 1, "Heals."), (DESC_RACE, 2, "Tuarek.")]
+
+
+def desc_blob(descriptions, screen_data=DESC_DATA):
+    return blob(screen_data=screen_data, choices=DESC_CHOICE["data"], stats=DESC_CHOICE["stats"],
+                descriptions=descriptions)
+
+
+DESCRIPTION_CASES = {
+    "bad-version-27": blob(version=27),
+    "ok-create-descriptions": desc_blob(DESC_CHOICE["descriptions"]),
+    "ok-create-descriptions-chosen": desc_blob(DESC_CHOSEN_CHOICE["descriptions"]),
+    "ok-create-descriptions-none": desc_blob(NO_DESCRIPTIONS),
+    "bad-desc-rest-3": desc_blob(desc_section(3, 0xFFFFFF00, "", DESC_TIPS)),
+    "bad-desc-none-colour": desc_blob(desc_section(0, 0xFFFFFF00, "", [])),
+    "bad-desc-none-open": desc_blob(desc_section(0, 0, "x", [])),
+    "bad-desc-none-tip": desc_blob(desc_section(0, 0, "", DESC_TIPS[:1])),
+    "bad-desc-chosen-open": desc_blob(desc_section(2, 0xFFFFFF00, "x", DESC_TIPS)),
+    "bad-desc-group-order": desc_blob(desc_section(1, 0xFFFFFF00, "", [DESC_TIPS[1], DESC_TIPS[0]])),
+    "bad-desc-group-3": desc_blob(desc_section(1, 0xFFFFFF00, "", [(DESC_RACE, 3, "x")])),
+    "bad-desc-area-button": desc_blob(desc_section(1, 0xFFFFFF00, "", [(DESC_CLASS, 0, "x")])),
+    "bad-desc-button-area": desc_blob(desc_section(1, 0xFFFFFF00, "", [(DESC_AREA, 1, "x")])),
+    "bad-desc-node-range": desc_blob(desc_section(1, 0xFFFFFF00, "", [(9999, 0, "x")])),
+    "bad-desc-twice": desc_blob(desc_section(1, 0xFFFFFF00, "", [DESC_TIPS[0], DESC_TIPS[0]])),
+    "bad-desc-33": desc_blob(desc_section(1, 0xFFFFFF00, "", [DESC_TIPS[0]] * 33)),
+    "bad-desc-text": desc_blob(desc_section(1, 0xFFFFFF00, "", [(DESC_AREA, 0, "\x01")])),
+    "bad-desc-open-text": desc_blob(desc_section(1, 0xFFFFFF00, "a\tb", [])),
+    "bad-desc-unbound": desc_blob(DESC_CHOICE["descriptions"], patch_node(DESC_DATA, 2, "text_desc", action=0)),
+    "bad-desc-truncated": desc_blob(DESC_CHOICE["descriptions"][:-1]),
+}
 cases = {
+    **DESCRIPTION_CASES,
     "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
     # RQ-130 (version 21): create's race and class choices.
     **CHOICE_CASES,
@@ -2577,7 +2740,7 @@ cases = {
     "bad-light-range": blob(light=dict(LIGHT, range=2e8)),
     "bad-light-attenuation": blob(light=dict(LIGHT, attenuation=[0, 0, 0])),
     "bad-plug-joint": blob(plug=999),
-    "bad-string": blob(strings=["\x01"] * 6),
+    "bad-string": blob(strings=["\x01"] * 5),
 }
 work = pathlib.Path(tempfile.mkdtemp(prefix="n3e-front-end-"))
 try:
@@ -2683,6 +2846,37 @@ try:
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
     assert any(l.startswith("refused bad-create-parts-truncated:") for l in run.stdout.splitlines())
+    # RQ-175: create's description text, each refusal for its reason; the
+    # loaded rest, colour, open and tips as the cook wrote them.
+    for name, reason in (("bad-version-27", "front end version"),
+                         ("bad-desc-rest-3", "front end create descriptions"),
+                         ("bad-desc-none-colour", "front end create descriptions"),
+                         ("bad-desc-none-open", "front end create descriptions"),
+                         ("bad-desc-none-tip", "front end create descriptions"),
+                         ("bad-desc-chosen-open", "front end create descriptions"),
+                         ("bad-desc-group-order", "front end create description tip"),
+                         ("bad-desc-group-3", "front end create description tip"),
+                         ("bad-desc-area-button", "front end create description tip"),
+                         ("bad-desc-button-area", "front end create description tip"),
+                         ("bad-desc-node-range", "front end create description tip"),
+                         ("bad-desc-twice", "front end create description tip"),
+                         ("bad-desc-33", "count"),
+                         ("bad-desc-text", "front end text"),
+                         ("bad-desc-open-text", "front end text"),
+                         ("bad-desc-unbound", "front end create descriptions")):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    assert any(l.startswith("refused bad-desc-truncated:") for l in run.stdout.splitlines())
+    desc_lines = {l.split(":")[0]: l.split(": ", 1)[1] for l in run.stdout.splitlines()
+                  if l.startswith("create-descriptions ")}
+    tips_line = lambda texts: ",".join("%d/%d/%d" % (n, g, len(t)) for (n, g, _), t in zip(DESC_TIPS, texts))  # noqa
+    assert desc_lines == {
+        "create-descriptions ok-create-descriptions": "rest=1 colour=ffffff00 open=25 tips=" + tips_line(
+            ["Looks.", "protect ally's magicians.  ", "Tuarek."]),
+        "create-descriptions ok-create-descriptions-chosen": "rest=2 colour=ffffff00 open=0 tips=" + tips_line(
+            ["Looks.", "Heals.", "Tuarek."])}, desc_lines
+    for name in ("ok-create-descriptions", "ok-create-descriptions-chosen", "ok-create-descriptions-none"):
+        assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
     part_lines = {l.split(":")[0]: l.split(": ", 1)[1] for l in run.stdout.splitlines() if l.startswith("create-parts ")}
     assert part_lines == {"create-parts ok-create-parts": "2/4/3 3/4/0", "create-parts ok-create-parts-32": "2/32/32"}, \
         part_lines

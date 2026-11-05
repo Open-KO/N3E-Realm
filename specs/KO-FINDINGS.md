@@ -1594,6 +1594,40 @@ model's face and hair parts by index (item 8). The client steps and clamps as
 sends the values. The range is `create.bin`'s per race rather than a constant; with
 KO's one range for every race this is KO's behaviour (Q112).
 
+### 10.6 The create's description text (RQ-175, 2026-11-05)
+
+Read statically in 1298's `KnightOnLine.exe` and the 1264 client as §10.4 does
+(same projects and hashes; Load `00603850` and MouseProc `00605bf0` recovered again,
+1264's Load `0043cd00` and its MouseProc `0043eb00`, the create vtable `00648e00`'s
+slot 20; output under `build/ghidra/rq175/`, not committed), with `objdump` for the
+1298 UI manager's mouse pass (`005789c0`–`00578c4d`), `IsIn` (`004017b0`, 1264
+`00401790`) and the references to `006dfe28`, and both clients' `Texts_us.tbl`
+(decrypted, `ko_tbl`). The source's `CUICharacterCreate::Load` and `MouseProc`
+match 1264. Not run (1298 is never run; 1264 reaches create only from a game
+server's select).
+
+| Observation | Where | Label |
+|---|---|---|
+| **Load sets the tooltips and the open text.** 1298's Load gives each stat area (`area_str`, `area_dex`, `area_sta`, `area_int`, `area_map` at `+0x148`–`+0x158`) rows 3219, 3202, 3220, 3210, 3201; the class buttons (`+0xec`–`+0xf8`, warrior, rogue, mage, priest) Karus rows 3217, 3215, 3212, 3213 (El Morad 3209, 3208, 3205, 3207); the Karus race buttons (`+0xdc`–`+0xe8`, `ka_at`, `ka_tu`, `ka_wt`, `ka_pt`) 3211, 3216, 3218, 3214 and El Morad's (`+0xcc`–`+0xd4`) 3203, 3206, 3204; and `text_desc` (`+0x15c`) row 6124 for Karus, 6125 for El Morad. 1264's Load gives the same rows, its areas in the order str, sta, dex, int, map (`+0x110`–`+0x120`), its four race buttons at `+0xb8`, its class buttons at `+0xc8`, `text_desc` at `+0x124` (pushes `0x17ec`, `0x17ed`) | 1298 `00603850` (`00603c5a`–`00603c9b`, `006043cf`–`006043ef`, `00604b25`–`00604c5e`, `00604dfe`, `00604e6b`); 1264 `0043cd00` (`0043d348`–`0043d3cf`, `0043cea5`, `0043cef8`) | binary |
+| **Both MouseProcs colour the text and take the tooltip under the pointer.** Each sets `text_desc`'s colour (`+0xcc`) to `0xffffff00`, then runs three loops, the stat areas, the class buttons, the race buttons (1298: the player's nation's, `00818794 + 0x490` 2 the El Morad four), each stopping at the first node whose rect holds the pointer and taking its tooltip (`+0x3c`); a later loop's hit replaces an earlier's. `IsIn` compares the rect only (left ≤ x ≤ right, top ≤ y ≤ bottom, `+0x80`–`+0x8c`), so a disabled, hidden or covered button still gives its tooltip | 1298 `00605bf0` (`00605c90`–`00605da4`), `004017b0`; 1264 `0043eb00`, `00401790` | binary |
+| **1264 writes the text only on a hit.** Each hit calls the string's SetString (vtable `+0x78`) at once; off every node nothing is written, so the text stays the last tooltip, or Load's row 6124 from the open on. Its create Init (`00439550`) builds and loads a new UI each time (`operator new(0x144)`, vtable `+0x5c`, `+0x8`), so each open starts from row 6124 | 1264 `0043eb00`, `00439550`; source `CUICharacterCreate::MouseProc` | binary; source |
+| **1298 writes it every pass: the hover, else the chosen class, else the chosen race, else nothing.** It builds a local string from `006dfe28` (empty), assigns the hit's tooltip, and when the string is still empty assigns the tooltip of the race button in state 3 (DOWN), then that of the class button in state 3 (an assign, not an append: `_Grow` to the tooltip's length and a copy to the start, `00605f09`–`00605f2e` and `00606039`–`0060606e`), so the chosen class's text wins over the race's and there is no join. It then sets `text_desc` to the string (`00606073`, vtable `+0x78`) whatever it holds | 1298 `00605bf0` (`00605da9`–`00606080`) | binary |
+| **So 1298 never shows Load's row.** The UI manager's mouse pass (`005789c0`) calls each child's MouseProc (`00578b96`) without testing its visibility (only a focused window of style `0x100` takes the pass alone, `00578a16`–`00578a39`), and 1298's MouseProc tests only that `text_desc` exists, so from the select's first tick after Load (`005fab40`) the hidden create writes an empty text; while it shows, the pass runs before the frame draws (§9.15). Load's 6124 could last at most until that first pass | 1298 `005789c0`–`00578c4d`, `00605c76`–`00605c86` | binary |
+| **`006dfe28` is the empty string.** It lies past the raw data of its section (`0x6dfe28` − `0x6d3000` = `0xce28` > `0xce00`), so it is zero at load; 1,658 references read it (string copies, pushes, `mov al`) and none stores to it. So 1298's build (`00605950`), which sets `text_desc` and `edit_name` from it, empties both: a race or class click that builds clears a typed name (RQ-135's question) | the 1298 image's section table and references | binary |
+| **The rows.** Both tables hold row 6124 "\n\nKarus Character Window." and 6125 "\n\nEl Morad Character Window. ". The pinned (1298) table's Karus race row 3214 (the Puri Tuarek) is Korean (CP949); its others are English. The 1264 install's table holds "Unconfirmed nation" at 3201 (the MP area's row in both clients, 1298's table "This is the stat that affects the character's power for magic attacks.  "), English at 3214, "Arch Tearek" at 3211, and CP949's right single quotation mark (`A1 AF`) in "ally's" in 3207, 3209 and 3217 | `Data/Texts_us.tbl`, the pinned tree and the 1264 install | local-asset |
+| **The layouts.** 1298's `text_desc` is in `Group_race` (33, 268)–(178, 554), Batang 11, colour `0xfffdf8d0`, style 0 (wrapped); 1264's (754, 357)–(952, 630), Arial 11, `0xffc0c0c0`, centred. Neither colour is drawn: MouseProc sets yellow before the first frame | the pinned tree's `co_characterCreate_us.uif`, the 1264 install's `Ka_CharacterCreate_us.uif` | local-asset |
+
+**Decides (RQ-175):** N3FE version 28 carries the description text as item 16: the
+colour, the rest (`keep`, 1264's: the text stays as the last hover left it, row 6124
+from each open; `chosen`, 1298's: the chosen class's tooltip, else the chosen race's,
+else nothing, every frame, so no open text) and each stat area's, class button's and
+race button's tooltip in KO's loop order, from that client's table. The client runs
+the pass each frame create shows, with the rects where that frame draws them. The
+earlier reading in `content/character-create.md` (the race's text joined with the
+class's) was wrong: 1298 shows one or the other, the class's first. Two texts the
+realm's fonts cannot draw: CP949's apostrophe is drawn as ASCII's (Q113), and the
+1298 recipe gives the Puri Tuarek no tooltip (Q114).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

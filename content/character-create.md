@@ -328,9 +328,10 @@ plugs name:
 
 ## Descriptions
 
-1298 Load `00603850` and MouseProc `00605bf0`, binary. Text rows (the pinned
-`Texts_us.tbl`; the US rows for the four Karus race tooltips are Korean text,
-local-asset):
+1298 Load `00603850` and MouseProc `00605bf0`, 1264 Load `0043cd00` and MouseProc
+`0043eb00`, binary (KO-FINDINGS §10.6). Text rows, the same in both clients (in each
+client's `Texts_us.tbl`; the pinned 1298 table's Puri Tuarek row 3214 is Korean,
+the 1264 install's English, local-asset):
 
 | What | Karus | El Morad |
 |---|---|---|
@@ -340,16 +341,24 @@ local-asset):
 | Mage | 3212 | 3205 |
 | Priest | 3213 | 3207 |
 | Races | ka_at 3211, ka_tu 3216, ka_wt 3218, ka_pt 3214 | el_ba 3203, el_rm 3206, el_rf 3204 |
-| Stat areas | str 3219, dex 3202, sta 3220, int 3210, map 3201 | the same |
+| Stat areas | str 3219, dex 3202, sta 3220, int 3210, map 3201 (1264's Load: str, sta, dex, int, map) | the same |
 
-**Hover.** MouseProc sets `text_desc`'s colour to `0xffffff00` and its text to the
-tooltip of the stat area, class button or race button under the pointer. Off them it
-shows the chosen race's text joined with the chosen class's, or nothing when none is
-chosen. The join was read loosely: RQ-004 confirms its order and separator.
+**Hover.** Both MouseProcs set `text_desc`'s colour to `0xffffff00` and take the
+tooltip of the stat area, class button or race button whose rect holds the pointer,
+in that order, a later group's over an earlier's, whatever the button's state or
+visibility. Off them the two clients differ:
+- **1264** writes nothing, so the text stays the last tooltip, or row 6124 from the
+  open on (each open loads the layout again).
+- **1298** writes, every tick, the chosen class's tooltip, else the chosen race's,
+  else nothing. There is no join: the class's text replaces the race's (an earlier
+  reading here said "joined"; RQ-175 read it as an assign). Its Load's row 6124 is
+  written over by the first pass, which runs while the create is still hidden, so it
+  is never drawn.
 
 **What a build writes.** `00605950`, run by each build, also sets `text_desc` and
-`edit_name` from the global `006dfe28`, which is empty in the image. So a build
-probably clears a typed name. Its writers are RQ-135's (binary, open).
+`edit_name` from `006dfe28`, the image's empty string (no instruction writes it,
+KO-FINDINGS §10.6). So in 1298 a build clears a typed name, which is RQ-135's to
+carry; the description text it empties is written again by the next pass.
 
 ## Names
 
@@ -922,6 +931,27 @@ recipe's is 59,297,737, both under 67,108,864, leaving the 1097 choice about
 parts). The package hash changes, so the hosted realm's next deploy is a new
 realm (Q63).
 
+**The description text (RQ-175; N3FE version 28, `content/front-end.md` item 16
+and "Actions").** The authored `class_desc` string is gone: the node bound to
+`class_desc` (KO's `text_desc`) draws the create screen's `descriptions`, KO's own
+rows from the recipe's client's table, in KO's yellow (`0xffffff00`). Each frame the
+client takes the tooltip of the stat area, class button or race button whose rect
+holds the pointer, in KO's loop order ("Descriptions" above; KO-FINDINGS §10.6).
+Off them:
+- the 1097 choice (`rest` `keep`, 1264's): the text stays the last tooltip, row 6124
+  ("Karus Character Window.") from each open;
+- the 1298 recipe (`rest` `chosen`, 1298's): the chosen class's tooltip, else the
+  chosen race's, else nothing.
+
+Two texts the realm's fonts cannot draw: the 1264 table's "ally's" in CP949 is drawn
+with ASCII's apostrophe (Q113), and the 1298 recipe names no tooltip for the Puri
+Tuarek, whose 1298 row is Korean (Q114). The 1264 table's MP-area row 3201 reads
+"Unconfirmed nation", as 1264 shows it. The recipes name Karus's rows; El Morad's
+(6125 and the El Morad column above) wait for RQ-006 to give an account a nation.
+The 1097 choice's `front-end.bin` grows from 57,417,972 to 57,419,400 bytes, the
+1298 recipe's from 59,297,737 to 59,299,044. The package hash changes, so the hosted
+realm's next deploy is a new realm (Q63).
+
 ## What each item needs
 
 - **RQ-002 (wire and server).**
@@ -975,8 +1005,8 @@ realm (Q63).
 
 | What | Where it goes |
 |---|---|
-| `006dfe28`'s writers: whether a build clears a typed name | RQ-135 |
-| The hover text's join order and separator | RQ-004 |
+| ~~`006dfe28`'s writers~~: read in RQ-175, none (KO-FINDINGS §10.6); a 1298 build clears a typed name | RQ-135 carries it |
+| ~~The hover text's join order and separator~~: read in RQ-175, no join (above) | — |
 | 1097's nation-select click path | RQ-006 |
 | 1298's delete-last-character return | RQ-006/RQ-008 |
 | The 1298 list parse | RQ-005 |

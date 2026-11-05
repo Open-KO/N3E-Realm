@@ -53,7 +53,9 @@
 // faces or hairs for the race, clamped at both ends (KO's 0..3 and 0..2), with
 // or without a race or class; no open writes them, so they are kept from
 // open to open; the new character draws its face and hair parts by them
-// (InitFace and InitHair, vtable +0x28 and +0x24) and Create sends them. No
+// (InitFace and InitHair, vtable +0x28 and +0x24) and Create sends them.
+// RQ-175 (version 28): the description text (CreateDescription, KO's
+// text_desc and its MouseProc, 1298 00605bf0 and 1264 0043eb00, binary). No
 // GL; render/front_end.h acts by it and tests/front_end.cpp checks it.
 
 #include "assets/assets.h"
@@ -371,6 +373,62 @@ struct CreateChoice {
     if (!class_chosen()) return FrontMessage::create_no_class;
     if (!arrows.stats.empty() && points > 0) return FrontMessage::create_points_left;
     return std::nullopt;
+  }
+};
+
+// RQ-175 (version 28; content/front-end.md item 16, KO-FINDINGS 10.6):
+// create's description text, as KO's MouseProc writes text_desc each tick
+// (1298 00605bf0, 1264 0043eb00): the tooltip of the stat area, class button
+// or race button whose rect holds the pointer (CN3UIBase::IsIn, 004017b0:
+// left <= x <= right and top <= y <= bottom, whatever the node's state or
+// visibility), three loops in that order, each stopping at its first hit, a
+// later loop's hit written over an earlier's. Off them 1264 (keep) writes
+// nothing, so the text stays the last one written from the open's row 6124
+// on (each Init loads the layout again, Load 0043cd00); 1298 (chosen) writes
+// the chosen class button's tooltip (the one in state DOWN), else the chosen
+// race button's, else the empty string (006dfe28), which is why its Load
+// row 6125/6124 is never drawn. The colour is the package's (KO's
+// 0xffffff00) from the first frame: both MouseProcs set it before the first
+// Render.
+struct CreateDescription {
+  FrontCreateDescriptions package;
+  std::string shown;  // keep: the text as it was left
+  bool active() const { return package.rest != FrontCreateDescriptions::Rest::none; }
+  void open() { shown = package.open; }
+  // The tip under the pointer: -1 none. `over(node)` says whether node's
+  // rect, where it is drawn this frame, holds the pointer.
+  template <class Over> int tip_at(Over over) const {
+    int hit = -1;
+    uint32_t found_group = ~0u;
+    for (size_t i = 0; i < package.tips.size(); ++i) {
+      const auto &t = package.tips[i];
+      if (t.group == found_group) continue;  // the group's loop stopped at its first hit
+      if (over(t.node)) hit = int(i), found_group = t.group;
+    }
+    return hit;
+  }
+  // The text of the tip a chosen button carries in `group` (none: no tip).
+  std::optional<std::string> tip_of(std::optional<uint32_t> node, uint32_t group) const {
+    if (!node) return std::nullopt;
+    for (const auto &t : package.tips)
+      if (t.group == group && t.node == *node) return t.text;
+    return std::nullopt;
+  }
+  // One pass (KO's MouseProc, each tick): the text drawn. `class_node` and
+  // `race_node` are the chosen class's and race's buttons, if any.
+  template <class Over>
+  const std::string &pass(Over over, std::optional<uint32_t> class_node, std::optional<uint32_t> race_node) {
+    const int tip = tip_at(over);
+    if (package.rest == FrontCreateDescriptions::Rest::keep) {
+      if (tip >= 0) shown = package.tips[size_t(tip)].text;
+      return shown;
+    }
+    shown = tip >= 0 ? package.tips[size_t(tip)].text : std::string();
+    if (shown.empty()) {
+      if (auto race = tip_of(race_node, FrontCreateTip::RACE)) shown = *race;
+      if (auto klass = tip_of(class_node, FrontCreateTip::CLASS)) shown = *klass;
+    }
+    return shown;
   }
 };
 

@@ -294,7 +294,10 @@ race's parts at face 0 and hair 0 (what render detail cooks) have one. Some
 other faces and hairs do (El Morad `upc_el_ba_face03` LODs 1-3,
 `upc_el_rm_hair01` LOD 3, `upc_el_rf_hair02` LOD 2; local-asset), and would
 take the same rule. The gap is D-177's: KO lights those corners with ambient
-light only.
+light only. `render_detail.serialize` refuses any vertex normal the client's
+detail reader refuses (a component not finite or past the cooked float bound
+10⁶, or a single-precision length at most 10⁻¹⁰; RQ-191), so such a normal
+fails the cook rather than `n3e-asset-check` (`tests/render_detail.py`).
 
 ## Attached characters (N3AT, PQ-328)
 

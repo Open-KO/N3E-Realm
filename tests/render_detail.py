@@ -55,3 +55,37 @@ with tempfile.TemporaryDirectory(dir='build') as tmp:
     valid=render_detail.serialize(**args)
     check(args,False,valid[:-1]);check(args,False,valid+b'\0')
 print('PASS N3D1 four-level skinning, per-instance reversible attachment LOD and malformed bounds')
+
+# RQ-191: serialize refuses a vertex normal exactly when the client's detail
+# reader would (cooked float bound, then norm's single-precision length above
+# 1e-10). A refused normal is forged into otherwise valid bytes to show the
+# client refuses it too; an accepted one cooks and loads.
+def f32_step(x,step):
+    bits=struct.unpack('<I',struct.pack('<f',x))[0]+step
+    return struct.unpack('<f',struct.pack('<I',bits))[0]
+edge=struct.unpack('<f',struct.pack('<f',1e-10))[0]
+above,at=(edge,f32_step(edge,-1)) if edge>1e-10 else (f32_step(edge,1),edge)
+assert at<=1e-10<above
+SENTINEL=[.6,0,.8]
+def with_normal(n):
+    """args whose level 0 has `n` as its first vertex's normal."""
+    return {**args,'levels':[([([0,0,0],n,[0,0],[0,0,0,0],[1,0,0,0],0)]+vertices[1:3],[0,1,2])]+[geometry]*3}
+accepted=[[0,1,0],[0,above,0],[1e6,0,0],[0,0,-1e6],[above,above,above]]
+refused=[[0,0,0],[0,at,0],[0,-at,0],[float('nan'),0,0],[0,float('inf'),0],[0,0,float('-inf')],
+         [f32_step(1e6,1),0,0],[1e-23,1e-23,1e-23]]
+with tempfile.TemporaryDirectory(dir='build') as tmp:
+    def load(payload):
+        (pathlib.Path(tmp)/'render-detail.bin').write_bytes(payload)
+        return subprocess.run(['build/client/n3e-lod-check',tmp],capture_output=True,text=True).returncode==0
+    template=render_detail.serialize(**with_normal(SENTINEL))
+    assert template.count(f(SENTINEL))==1 and load(template)
+    for n in accepted:
+        assert load(render_detail.serialize(**with_normal(n))),('client refused a cooked normal',n)
+    for n in refused+[[1e39,0,0]]:
+        try:render_detail.serialize(**with_normal(n))
+        except ValueError as e:assert 'detail vertex normal' in str(e),e
+        else:raise AssertionError(('normal cooked',n))
+    for n in refused:
+        assert not load(template.replace(f(SENTINEL),f(n))),('client accepted a forged normal',n)
+print('PASS detail vertex normals: the cooker refuses exactly what the client reader refuses (zero, non-finite, '
+      'past 1e6, single-precision length at most 1e-10)')

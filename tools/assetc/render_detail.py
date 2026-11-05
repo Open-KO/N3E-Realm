@@ -19,6 +19,37 @@ BLEND_FACTOR_COUNT = 10
 # influence of a vertex. A package with one is engine 44.
 INFLUENCE_ENGINE = 44
 MAX_FURTHER = 60
+# RQ-191: the client's detail reader (client/assets/assets.cpp
+# load_render_detail) reads each vertex normal's components as cooked floats
+# (Reader::f: finite, magnitude at most 1e6) and refuses a normal whose float
+# length is not above 1e-10 (norm, "zero normal"); serialize refuses the same
+# normal so a cook fails rather than n3e-asset-check. ko_detail rebuilds a
+# KO corner without a normal first (D-177, ko_character.corner_normals).
+COOKED_FLOAT_BOUND = 1e6
+ZERO_NORMAL = 1e-10
+
+
+def _f32(x):
+    return struct.unpack('<f', struct.pack('<f', x))[0]
+
+
+def check_normal(n):
+    """A detail vertex normal the client reader accepts; returns it. Its
+    length is taken in single precision as the client's norm does (each
+    product and sum rounded to a float: exact for these operations, since a
+    double holds more than twice a float's precision)."""
+    if len(n) != 3 or not all(math.isfinite(x) for x in n):
+        raise ValueError('detail vertex normal not finite')
+    try:
+        x, y, z = (_f32(c) for c in n)
+    except OverflowError:
+        raise ValueError('detail vertex normal past the cooked float bound') from None
+    if any(abs(c) > COOKED_FLOAT_BOUND for c in (x, y, z)):
+        raise ValueError('detail vertex normal past the cooked float bound')
+    length = _f32(math.sqrt(_f32(_f32(_f32(x * x) + _f32(y * y)) + _f32(z * z))))
+    if not length > ZERO_NORMAL:
+        raise ValueError('detail vertex normal without direction (length at most %g)' % ZERO_NORMAL)
+    return n
 
 
 def check_state(state):
@@ -53,7 +84,9 @@ def serialize(view, thresholds, workload, world_count, textures, radius, levels,
     joint influences; when one carries weight past its four slots the file is
     N3DI (N3D2's layout) or N3DJ (N3D3's) with an influence table in every
     geometry, and without one the bytes are as before. Without `influences`
-    such a vertex is refused."""
+    such a vertex is refused. A vertex normal the client reader refuses (not
+    finite, past the cooked float bound or without direction: check_normal)
+    is refused."""
     if states is not None and (not appearances or len(states) != len(appearances)):
         raise ValueError('appearance render state count')
     meshes = list(levels) + [g for g, _ in attachments] + [m for _, ms in appearances for m in ms]
@@ -80,6 +113,7 @@ def serialize(view, thresholds, workload, world_count, textures, radius, levels,
         b=bytearray(u(len(vertices))+u(len(indices)))
         table=[]
         for k,(p,n,uv,joints,weights,slot) in enumerate(vertices):
+            check_normal(n)
             b+=f(p+n+uv)+b''.join(u(j) for j in joints[:4])+f(weights[:4])+u(slot)
             pairs=further((p,n,uv,joints,weights,slot)) if len(joints)>4 else []
             if pairs:table.append((k,pairs))

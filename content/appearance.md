@@ -275,6 +275,27 @@ order and the table the rest, as the N3SI player clips do
   a cook without such corners writes no key, so every default package keeps
   its bytes and pins.
 
+### Body normals without a direction (RQ-187)
+
+KO's character render `004196a0` skins each body part (`00419f00` writes
+positions only) and draws it through the part draw `00412570`, whose vertex
+build (`00440730` calling `004401b0` / `00440440`) copies each vertex's
+normal as loaded (binary, 1298 `KnightOnLine.exe`), so a zero normal gets no
+directional light (D-177). The client's detail reader refuses a zero normal,
+and n3e's lighting needs a direction. As the player scenes and the 1298
+appearance parts already do (`ko_character.corner_normals`), `ko_detail`
+writes a drawn body corner whose normal is shorter than 10⁻⁶ with its own
+triangle's normal and every other corner as read; the provenance's
+`render_detail.rebuilt_normals` lists each part and level with one (part,
+level, vertices, corners) and is absent otherwise, so other cooks keep their
+bytes. The Arch Tuarek's `Item\upc_ka_at_feet.n3cskins` LOD 3 has two such
+vertices (four corners; local-asset, `tests/ko_player_races.py`); no other
+race's parts at face 0 and hair 0 (what render detail cooks) have one. Some
+other faces and hairs do (El Morad `upc_el_ba_face03` LODs 1-3,
+`upc_el_rm_hair01` LOD 3, `upc_el_rf_hair02` LOD 2; local-asset), and would
+take the same rule. The gap is D-177's: KO lights those corners with ambient
+light only.
+
 ## Attached characters (N3AT, PQ-328)
 
 A 2233/2145 addition: the 2233 client (PQ-314, a secondary reference) draws

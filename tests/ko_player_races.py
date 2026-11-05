@@ -20,7 +20,13 @@ With the pinned client tree (assets/ko; SKIP without it), for every race:
   cooks with each of its parts also worn as a 1298 appearance part
   (ko_appearance.part_levels): N3D2, or N3DI (engine 44, RQ-164) when a drawn
   vertex has more than four influences, kept in the influence tables of the
-  body's level 0 and of each key that wears such a part.
+  body's level 0 and of each key that wears such a part. RQ-187: a drawn
+  body corner whose normal has no direction (squared length below 1e-12)
+  is written with its triangle's normal (D-177, ko_character.corner_normals),
+  since the client's detail reader refuses a zero normal; the provenance's
+  `rebuilt_normals` names each part and LOD with one (the Arch Tuarek's
+  upc_ka_at_feet LOD 3: two vertices, four corners); no other race's parts
+  at face 0 and hair 0 have one.
 
 A race whose model the reader still refuses is listed in OPEN with the
 refusal and the item that reads KO's handling of it; the test fails when the
@@ -138,6 +144,20 @@ for entry in rules["races"]:
                 for i, name in enumerate(definition["parts"])]
         detail, detail_report = ko_detail.cook(TREE, dict(atlas=None), definition, rows)
         tables = detail_report.get("many_influences")
+        # RQ-187: each body part and LOD with a drawn normal without direction.
+        zero = []
+        for name in definition["parts"]:
+            _, lods = ko_character.skins(assets.get(ko_character.part(assets.get(name))["skin"]), influences=True)
+            for level, lod in enumerate(lods):
+                bad = {v for v in lod["indices"] if sum(x * x for x in lod["vertices"][v][3:]) < 1e-12}
+                if bad:
+                    zero.append(dict(part=name, level=level, vertices=len(bad),
+                                     corners=sum(1 for v in lod["indices"] if v in bad)))
+        assert detail_report.get("rebuilt_normals", []) == zero, (race, detail_report.get("rebuilt_normals"), zero)
+        assert (race == 1) == bool(zero), (race, zero)
+        if race == 1:
+            assert [(z["part"].lower(), z["level"], z["vertices"], z["corners"]) for z in zero] == [
+                ("item\\upc_ka_at_feet.n3cpart", 3, 2, 4)], zero
         assert detail[:4] == (b"N3DI" if many else b"N3D2"), (race, detail[:4], tables)
         assert bool(tables) == bool(many), (race, tables, many)
         if tables:
@@ -211,8 +231,10 @@ for entry in rules["races"]:
           "render detail with its parts worn cooks (%s%s)"
           % (race, entry["looks"], len(positions), len(names), len(clips), magic.decode(),
              ": %(vertices)d drawn vertices past four influences, at most %(most)d" % many if many else "",
-             detail[:4].decode(), ": %d corners past four in level 0 and in keys %s"
-             % (tables["levels"][0], sorted(tables["appearances"])) if tables else ""))
+             detail[:4].decode(), (": %d corners past four in level 0 and in keys %s"
+             % (tables["levels"][0], sorted(tables["appearances"])) if tables else "")
+             + "".join("; %(part)s LOD %(level)d: %(vertices)d normals rebuilt (%(corners)d corners)" % z
+                       for z in zero)))
 # RQ-166: the largest player scene's combat clips fit the combat clip budget.
 largest = max(idle_bytes, key=idle_bytes.get)
 entry = ko_player.race(largest)

@@ -47,7 +47,7 @@ def cook(assets_root,built,definition,mappings=(),world_root=None):
     spans=[max(m[a][3] for m in world)-min(m[a][3] for m in world) for a in range(3)]
     # 0041c300: joint bounds, +/-.25 padding for each extent below .5.
     radius=math.sqrt(sum((v+.5 if v<.5 else v)**2 for v in spans))*.5
-    body_slots=[]
+    body_slots=[];rebuilt=[]
     for name in definition['parts']:
         part=character.part(assets.get(name));slot=len(textures);body_slots.append(slot)
         # 0064b9b0 default LOD_Chr=0 is incremented and clamped to one.
@@ -57,8 +57,17 @@ def cook(assets_root,built,definition,mappings=(),world_root=None):
         _,skins=character.skins(assets.get(part['skin']),influences=True)
         for level,skin in enumerate(skins):
             vertices,indices=levels[level];base=len(vertices)
+            # RQ-187: a drawn corner whose normal has no direction takes its
+            # triangle's (D-177, ko_character.corner_normals, as the player
+            # scene and ko_appearance.part_levels do): the Arch Tuarek's
+            # upc_ka_at_feet LOD 3 has two. KO's part draw 00412570 copies the
+            # normal as loaded (00440730 -> 004401b0 / 00440440, binary).
+            # Every other corner keeps its normal as read.
+            normals,fixed=character.corner_normals(skin)
+            if fixed:rebuilt.append(dict(part=name,level=level,vertices=len(fixed),
+                                         corners=sum(1 for i in skin['indices'] if i in fixed)))
             for corner,index in enumerate(skin['indices']):
-                p=skin['origins'][index];n=skin['vertices'][index][3:]
+                p=skin['origins'][index];n=normals[corner]
                 uv=skin['uv'][skin['uv_indices'][corner]]
                 vertices.append(([p[0],p[1],-p[2]],[n[0],n[1],-n[2]],uv,
                                  skin['joints'][index],skin['weights'][index],slot))
@@ -73,7 +82,8 @@ def cook(assets_root,built,definition,mappings=(),world_root=None):
     payload=render_detail.serialize(view,THRESHOLDS,[30,60,100],world_count,textures,radius,levels,appearances=appearances,
                                     states=states,influences=True)
     report=dict(view=view,character_radius=radius,character_triangles=[len(x[1])//3 for x in levels],
-                textures=len(textures),**influence_report(levels,appearances),native_mip_levels=sum(len(c) for c in textures),
+                textures=len(textures),**influence_report(levels,appearances),
+                **(dict(rebuilt_normals=rebuilt) if rebuilt else {}),native_mip_levels=sum(len(c) for c in textures),
                 native_pixel_bytes=sum(len(p) for c in textures for _,_,p in c),
                 world_sources=sources,character_sources=assets.sources,
                 texture_policy=dict(character_skip=1,shape_skip=0,terrain_skip=0),

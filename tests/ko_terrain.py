@@ -1180,6 +1180,59 @@ print("PASS KO alpha parts (PQ-379): RF_ALPHABLENDING parts carry their factors,
 print("PASS KO opaque parts (PQ-382, D-202): every opaque part is cut at zero, an RF_NOTUSELIGHT one is unlit, "
       "alpha parts set neither bit; N3W1 + N3L5 and N3W4")
 
+# RQ-193: the bake writes object normals rotated by the OPD's quaternion, which
+# nothing normalises, and positions scaled by its scale, bounded only at the
+# sentinel limit. The writers refuse a vertex the client's reader refuses
+# (world_chunks.vertex_row; tests/world_chunks.py shows the parity), so the
+# bake fails, as for an alpha part it cannot draw. The probe mesh's normals are
+# (0, 1, 0); the unnormalised quaternion (0.5, 0, 0.5, 0) (|q|^2 = 1/2, no y)
+# takes them to (0, 0, 0) exactly. A scale or a position under the sentinel
+# limit can put a vertex past 1e6.
+rq193_zone = large_zone.write(B / "rq193-zone", samples=33)
+(rq193_zone["assets"] / "Object" / "orig_probe.n3pmesh").write_bytes(pmesh(vertices=3, indices=3))
+probe_part = (("orig_probe.n3pmesh", ("orig_stone_0.dxt",), 0.0),)
+
+
+def rq193_bake(**shape):
+    rq193_zone["opd"].write_bytes(shapes.build(name="orig_large_zone", width=128.0, depth=128.0, shapes=[
+        dict(label="upright", position=(10.0, 1.0, 20.0), parts=probe_part),
+        dict(dict(label="odd", position=(30.0, 1.0, 40.0), parts=probe_part), **shape)]))
+    return ko_scene.bake_world(rq193_zone["gtd"], rq193_zone["opd"], rq193_zone["assets"], rq193_zone["tct"])
+
+
+turned = rq193_bake(rotation=(0.0, 0.0, 1.0, 0.0))
+assert not turned["chunked"] and turned["world"][:4] == b"N3W1"
+assert turned["built"]["report"]["objects"]["placements"] == 2
+flat = dict(rotation=(0.5, 0.0, 0.5, 0.0))
+for shape, reason in ((flat, "world vertex normal without direction"),
+                      (dict(scale=(1e7, 1.0, 1.0)), "world vertex float not finite or past the cooked float bound"),
+                      (dict(position=(2e6, 1.0, 40.0)), "world vertex float not finite or past the cooked float bound")):
+    assert all(abs(c) < ko_shapes.SENTINEL_LIMIT for c in shape.get("scale", ()) + shape.get("position", ()))
+    try:
+        rq193_bake(**shape)
+    except ValueError as error:
+        assert str(error).startswith(reason), (shape, error)
+    else:
+        raise AssertionError(("baked a world vertex the client refuses", shape))
+# Chunked (N3W2 to N3W6): the turned placement is written, the flat one refused.
+rq193_bake(rotation=(0.0, 0.0, 1.0, 0.0))
+chunked_turned = ko_scene.expand(rq193_zone["gtd"], rq193_zone["opd"], rq193_zone["assets"], turned["heightfield"],
+                                 detail=True, color_map=rq193_zone["tct"], chunked=True)
+assert ko_scene.world2_bytes(chunked_turned)[:4] == b"N3W4"
+rq193_zone["opd"].write_bytes(shapes.build(name="orig_large_zone", width=128.0, depth=128.0, shapes=[
+    dict(label="odd", position=(30.0, 1.0, 40.0), parts=probe_part, **flat)]))
+chunked_flat = ko_scene.expand(rq193_zone["gtd"], rq193_zone["opd"], rq193_zone["assets"], turned["heightfield"],
+                               detail=True, color_map=rq193_zone["tct"], chunked=True)
+try:
+    ko_scene.world2_bytes(chunked_flat)
+except ValueError as error:
+    assert str(error).startswith("world vertex normal without direction"), error
+else:
+    raise AssertionError("wrote an N3W2 world vertex without a normal")
+print("PASS KO world vertices (RQ-193): a placement whose unnormalised rotation leaves a normal without "
+      "direction, or whose scale or position puts a vertex past 1e6 under the sentinel limit, is refused at "
+      "write (N3W1 and N3W2)")
+
 # PQ-392 (D-205): the bind points and warp gates 1298 shows at load (event types
 # 0 and 5, 005b4690) are placed like static shapes, whatever their NPC fields and
 # 0x1000 kind; the other event types are not. The multi-texture "magic" part is

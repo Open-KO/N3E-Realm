@@ -410,6 +410,12 @@ def object_geometry(opd_path, assets, atlas, half, chunks=None, parents=None, he
             base = len(vertices)
             for v in mesh["vertices"]:
                 local = [(v[0] + ax) * sx, (v[1] + ay) * sy, (v[2] - az) * sz]
+                # RQ-193: nothing normalises the OPD's quaternion, and the
+                # scale is bounded only at the sentinel limit, so a rotated
+                # normal can lose its direction and a scaled position can pass
+                # the client's cooked float bound; the writers refuse such a
+                # vertex (world_chunks.vertex_row) and the bake fails, as it
+                # does for an alpha point past the bound or a scale not above 0.
                 wx, wy, wz = _rotate(q, local)
                 n = _rotate(q, v[3:6])
                 # The mesh's own UVs are kept, including the ones outside
@@ -654,14 +660,15 @@ def world_bytes(built):
     The cell stride and padding are part of the asset because the client tiles
     inside a cell; it cannot do that without knowing the grid. N3W1 cannot
     carry a single-layer unlit vertex (D-203): `bake_world` writes such a
-    world chunked.
+    world chunked. A vertex the client's reader refuses is refused
+    (`world_chunks.vertex_row`, RQ-193).
     """
     if has_unlit_vertices(built):
         raise ValueError("N3W1 cannot carry single-layer unlit vertices (N3W5, D-203)")
     out = bytearray(b"N3W1" + u(ATLAS) + u(ATLAS) + u(CELL) + u(PAD)
                     + built["atlas"])
     out += u(len(built["vertices"]))
-    out += b"".join(f(v) for v in built["vertices"])
+    out += b"".join(world_chunks.vertex_row(v) for v in built["vertices"])
     out += u(len(built["indices"])) + b"".join(u(i) for i in built["indices"])
     return bytes(out)
 

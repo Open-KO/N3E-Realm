@@ -567,3 +567,70 @@ with tempfile.TemporaryDirectory(dir="build") as td:
           "server admits the world; without the bit it stays N3W2 / N3W3; N3W5 over the bit, one frame, fps 0 or "
           "1001 and a slot at the texture count are refused by the client; the writer refuses bad records, a "
           "terrain patch's and vertices off frame 0; no N3L file carries one; a kind 0 sequence part loads")
+
+# RQ-193: the writer refuses a world vertex exactly when the client's vertex
+# reader would (read_world_vertices: twelve cooked floats, finite and within
+# 1e6; the normal's single-precision length above 1e-10; UVs within 1024). An
+# accepted row is written and loads; a refused one is forged into otherwise
+# valid bytes (when it packs) to show the client refuses it too. The KO bake's
+# own case (rotated normals, scaled positions) is tests/ko_terrain.py's.
+def f32_step(x, step):
+    bits = struct.unpack("<I", struct.pack("<f", x))[0] + step
+    return struct.unpack("<f", struct.pack("<I", bits))[0]
+
+
+edge = struct.unpack("<f", struct.pack("<f", 1e-10))[0]
+above, at = (edge, f32_step(edge, -1)) if edge > 1e-10 else (f32_step(edge, 1), edge)
+assert at <= 1e-10 < above
+past = f32_step(1e6, 1)
+nan, inf = float("nan"), float("inf")
+VERTEX = 16  # the first progressive part's first vertex
+
+
+def with_row(vertices, **columns):
+    out = [list(v) for v in vertices]
+    for name, value in columns.items():
+        at_ = dict(p=0, n=3, uv=6)[name]
+        out[VERTEX][at_:at_ + len(value)] = value
+    return out
+
+
+_, base_vertices, base_built = fx.small()
+sentinel = with_row(base_vertices, n=[.6, 0, .8])
+accepted = [dict(n=[0, above, 0]), dict(n=[1e6, 0, 0]), dict(n=[0, 0, -1e6]), dict(n=[above, above, above]),
+            dict(n=[1e-10, 1e-10, 1e-10]), dict(p=[2, 1e6, 28]), dict(p=[2, -1e6, 28]),
+            dict(uv=[1024, -1024, 1024, -1024])]
+refused_rows = [dict(n=[0, 0, 0]), dict(n=[0, at, 0]), dict(n=[0, -at, 0]), dict(n=[1e-23, 1e-23, 1e-23]),
+                dict(n=[nan, 0, 0]), dict(n=[0, inf, 0]), dict(n=[past, 0, 0]), dict(p=[2, past, 28]),
+                dict(p=[-past, 4, 28]), dict(p=[2, 4, nan]), dict(p=[2, -inf, 28]),
+                dict(uv=[f32_step(1024, 1), 0, 0, 0]), dict(uv=[0, 0, 0, -f32_step(1024, 1)])]
+with tempfile.TemporaryDirectory(dir="build") as td:
+    template = world_chunks.serialize(fx.COUNT, sentinel, base_built, (0, 0), 16, 2)
+    row = struct.pack("<12f", *sentinel[VERTEX])
+    assert template.count(row) == 1
+    assert client(fx.package(td, "rq193-template", template)).returncode == 0
+    for k, change in enumerate(accepted):
+        v = with_row(sentinel, **change)
+        world = world_chunks.serialize(fx.COUNT, v, base_built, (0, 0), 16, 2)
+        assert world == template.replace(row, struct.pack("<12f", *v[VERTEX])), change
+        c = client(fx.package(td, "rq193-accepted-%d" % k, world))
+        assert c.returncode == 0, ("client refused a written vertex", change, c.stderr)
+    for k, change in enumerate(refused_rows + [dict(p=[1e39, 4, 28]), dict(n=[0, -1e39, 0])]):
+        v = with_row(sentinel, **change)
+        for what, write in (("N3W2", lambda: world_chunks.serialize(fx.COUNT, v, base_built, (0, 0), 16, 2)),
+                            ("row", lambda: world_chunks.vertex_row(v[VERTEX]))):
+            try:
+                write()
+            except ValueError as e:
+                assert str(e).startswith("world vertex "), e
+            else:
+                raise AssertionError(("wrote a vertex the client refuses", what, change))
+    for k, change in enumerate(refused_rows):
+        v = with_row(sentinel, **change)
+        forged = fx.package(td, "rq193-refused-%d" % k, template.replace(row, struct.pack("<12f", *v[VERTEX])))
+        why = "world UV" if "uv" in change else "zero normal" if "n" in change and all(
+            x == x and abs(x) <= 1e6 for x in change["n"]) else "cooked finite bound"
+        assert why in refused(forged, "forged vertex %r" % (change,), by_server=False), (change, why)
+print("PASS world vertices (RQ-193): the writer refuses exactly the rows the client's vertex reader refuses "
+      "(a float not finite or past 1e6, a normal whose single-precision length is at most 1e-10, a UV past "
+      "1024); an accepted row is written and loads")

@@ -89,6 +89,21 @@ def count(n, maximum, minimum=1):
 # The client reads every cooked float through Reader::f
 # (client/assets/assets.cpp): finite and magnitude at most 1e6.
 COOKED_FLOAT_BOUND = 1e6
+# The client's norm (client/assets/assets.cpp) refuses a normal whose
+# single-precision length is not above 1e-10 ("zero normal").
+ZERO_NORMAL = 1e-10
+
+
+def f32(x):
+    """x rounded to single precision (OverflowError past the float range)."""
+    return struct.unpack("<f", struct.pack("<f", x))[0]
+
+
+def normal_length(x, y, z):
+    """The length the client's norm takes of single-precision components x, y,
+    z: each product and sum rounded to a float (exact for these operations,
+    since a double holds more than twice a float's precision)."""
+    return f32(math.sqrt(f32(f32(f32(x * x) + f32(y * y)) + f32(z * z))))
 
 
 def vector(v, n):

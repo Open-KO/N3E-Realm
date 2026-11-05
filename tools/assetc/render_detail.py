@@ -22,33 +22,27 @@ MAX_FURTHER = 60
 # RQ-191: the client's detail reader (client/assets/assets.cpp
 # load_render_detail) reads each vertex normal's components as cooked floats
 # (Reader::f: finite, magnitude at most COOKED_FLOAT_BOUND, common) and
-# refuses a normal whose float length is not above 1e-10 (norm, "zero
-# normal"); serialize refuses the same normal so a cook fails rather than
-# n3e-asset-check. ko_detail rebuilds a KO corner without a normal first
-# (D-177, ko_character.corner_normals).
-ZERO_NORMAL = 1e-10
-
-
-def _f32(x):
-    return struct.unpack('<f', struct.pack('<f', x))[0]
+# refuses a normal whose float length is not above ZERO_NORMAL (1e-10; norm,
+# "zero normal"; common); serialize refuses the same normal so a cook fails
+# rather than n3e-asset-check. ko_detail rebuilds a KO corner without a
+# normal first (D-177, ko_character.corner_normals).
 
 
 def check_normal(n):
     """A detail vertex normal the client reader accepts; returns it. Its
-    length is taken in single precision as the client's norm does (each
-    product and sum rounded to a float: exact for these operations, since a
-    double holds more than twice a float's precision)."""
+    length is taken in single precision as the client's norm does
+    (common.normal_length)."""
     if len(n) != 3:
         raise ValueError('detail vertex normal without three components')
     if not all(math.isfinite(x) for x in n):
         raise ValueError('detail vertex normal not finite')
     try:
-        x, y, z = (_f32(c) for c in n)
+        x, y, z = (f32(c) for c in n)
     except OverflowError:
         raise ValueError('detail vertex normal past the cooked float bound') from None
     if any(abs(c) > COOKED_FLOAT_BOUND for c in (x, y, z)):
         raise ValueError('detail vertex normal past the cooked float bound')
-    length = _f32(math.sqrt(_f32(_f32(_f32(x * x) + _f32(y * y)) + _f32(z * z))))
+    length = normal_length(x, y, z)
     if not length > ZERO_NORMAL:
         raise ValueError('detail vertex normal without direction (length at most %g)' % ZERO_NORMAL)
     return n

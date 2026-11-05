@@ -65,7 +65,10 @@ Runtime collision stays at full authoritative detail. Character/attachment LOD,
 alpha blending/billboards, fine non-full-tile color-map fallback, and historical
 camera/environment settings remain separate support limits. Finite static
 placements with positive LOD scale and positive parent Y visibility scale are
-supported; unsupported transforms fail the LOD bake. Local reference assets and
+supported; unsupported transforms fail the LOD bake. A placement whose scale,
+position or unnormalised rotation writes a world vertex the client's reader
+refuses (a float past the cooked bound 10⁶, a normal whose single-precision
+length is at most 10⁻¹⁰) fails the world bake too (RQ-193). Local reference assets and
 raw binary output are never bundled or required downloads.
 
 KFC opt-in package capabilities: [N3I1 bags](../../content/inventory.md) and

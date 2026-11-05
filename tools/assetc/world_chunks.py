@@ -34,7 +34,7 @@ slot. `serialize` writes N3W6 only when a part sets the bit.
 import math
 import struct
 
-from common import f, u
+from common import COOKED_FLOAT_BOUND, ZERO_NORMAL, f, normal_length, u
 from world_textures import MAX_TEXTURES
 
 MAX_FILE = 384 * 1024 * 1024
@@ -86,6 +86,39 @@ SEQUENCE_FPS = 1000.0
 # D-203 (PQ-388): the second-layer slot of a single-layer unlit vertex. Only
 # N3W5 carries it; every other slot names a texture below the world's count.
 UNLIT_VERTEX = -1.0
+# RQ-193: the client reads a world vertex (client/assets/assets.cpp
+# read_world_vertices, N3W1 to N3W6) as twelve cooked floats (Reader::f:
+# finite, magnitude at most COOKED_FLOAT_BOUND), its normal through norm
+# (single-precision length above ZERO_NORMAL) and its four UVs within WORLD_UV;
+# `vertex_row` refuses at write the row the client would refuse at load.
+WORLD_UV = 1024.0
+# A double sum of squares of single-precision components at least this large
+# leaves the client's single-precision length above ZERO_NORMAL whatever its
+# rounding (the largest product is then a normal float, and each rounding is
+# within 2**-24 relative or 2**-150 absolute), so the length is near twice the
+# bound; below it the length is taken as the client takes it (normal_length).
+NORMAL_CLEAR = 4 * ZERO_NORMAL * ZERO_NORMAL
+
+
+def vertex_row(v):
+    """The 48 bytes of a 12-float world vertex (position, normal, two UV
+    layers, two slots) as N3W1 and the chunked worlds carry it; a row the
+    client's vertex reader refuses (a float not finite or past the cooked
+    float bound, a normal without direction, a UV past WORLD_UV) is refused.
+    The slots are the writer's to check (they depend on its texture count)."""
+    try:
+        row = struct.pack("<12f", *v)
+    except OverflowError:
+        raise ValueError("world vertex float not finite or past the cooked float bound") from None
+    x = struct.unpack("<12f", row)
+    if not all(abs(c) <= COOKED_FLOAT_BOUND for c in x):  # NaN fails too
+        raise ValueError("world vertex float not finite or past the cooked float bound")
+    nx, ny, nz = x[3:6]
+    if not (nx * nx + ny * ny + nz * nz >= NORMAL_CLEAR or normal_length(nx, ny, nz) > ZERO_NORMAL):
+        raise ValueError("world vertex normal without direction (length at most %g)" % ZERO_NORMAL)
+    if not all(abs(c) <= WORLD_UV for c in x[6:10]):
+        raise ValueError("world vertex UV past %g" % WORLD_UV)
+    return row
 
 
 def has_alpha(parts):
@@ -320,7 +353,7 @@ def serialize(textures, vertices, built, origin, size, side):
                         ("parents", len(chunk_parents)), ("work", work)):
             totals[name] += n
         body = bytearray(u(len(order)))
-        rows = [struct.pack("<12f", *vertices[i]) for i in order]
+        rows = [vertex_row(vertices[i]) for i in order]
         for row in rows:
             first, second = struct.unpack_from("<2f", row, 40)
             if second == UNLIT_VERTEX:

@@ -6,6 +6,14 @@
 #include <cmath>
 #include <iomanip>
 #include <iostream>
+#include <optional>
+#include <set>
+// RQ-189: `name` is a player clip the client holds as a pose source beside
+// player-idle.bin (n3e::load_player_clip): a package with animation.bin, a
+// player clip other than player-idle.bin.
+static bool shared_clip(const n3e::Release &r, const std::string &name) {
+  return r.animation && name != "player-idle.bin" && (name.starts_with("player-") || name.starts_with("combat-"));
+}
 int main(int argc, char **argv) {
   try {
     if (argc >= 4 && std::string(argv[2]) == "--looks") {
@@ -39,7 +47,8 @@ int main(int argc, char **argv) {
       // --scene name [t ...] (RQ-163): the release's scene `name` (a player
       // clip, which may be N3SI from engine 43) skinned by the client at each
       // time t in seconds (default 0, 0.25, 0.5, 0.75 and 1), printed as
-      // --looks prints a looks clip.
+      // --looks prints a looks clip. A player clip other than player-idle.bin
+      // is posed on player-idle.bin's mesh, as the client draws it (RQ-189).
       auto r = n3e::load_release(argv[1]);
       std::vector<float> times{0.f, .25f, .5f, .75f, 1.f};
       if (argc > 4) times.clear();
@@ -49,10 +58,15 @@ int main(int argc, char **argv) {
         if (end != std::string(argv[i]).size() || !std::isfinite(times.back()) || times.back() < 0)
           throw std::runtime_error("scene time");
       }
-      auto scene = n3e::load_scene(r, argv[3]);
+      const std::string name = argv[3];
+      const bool clip = shared_clip(r, name);
+      auto scene = n3e::load_scene(r, clip ? std::string("player-idle.bin") : name);
+      std::optional<n3e::Scene> pose;
+      if (clip) pose = n3e::load_player_clip(r, name, scene);
+      const auto &source = pose ? *pose : scene;
       std::cout << std::setprecision(9);
       for (float t : times) {
-        auto out = scene.skin(scene.sample(t));
+        auto out = scene.skin(source.sample(t));
         std::cout << t;
         for (size_t v = 0; v < scene.indices.size(); ++v)
           std::cout << ' ' << out[v * 8] << ' ' << out[v * 8 + 1] << ' ' << out[v * 8 + 2];
@@ -83,7 +97,7 @@ int main(int argc, char **argv) {
       for (size_t k = 0; k < detail.appearances.size(); ++k)
         for (size_t i = 0; i < detail.appearances[k].levels.size(); ++i)
           meshes.push_back({"appearance" + std::to_string(k + 1) + "-" + std::to_string(i), &detail.appearances[k].levels[i]});
-      auto clip = n3e::load_scene(r, argv[3]);
+      auto clip = shared_clip(r, argv[3]) ? n3e::load_player_clip(r, argv[3], skeleton) : n3e::load_scene(r, argv[3]);
       std::cout << std::setprecision(9);
       for (float t : times) {
         auto pose = clip.sample(t);
@@ -95,6 +109,46 @@ int main(int argc, char **argv) {
           std::cout << "\n";
         }
       }
+      return 0;
+    }
+    if (argc == 3 && std::string(argv[2]) == "--player-clips") {
+      // --player-clips (RQ-189): every player clip loaded as the client holds
+      // it (player-idle.bin whole, the others through load_player_clip); the
+      // clip count, how many scenes hold an atlas and a mesh, the bytes they
+      // hold (atlas, vertices, influences, indices, nodes, joints, keys) and
+      // the load time.
+      auto r = n3e::load_release(argv[1]);
+      if (!r.animation) throw std::runtime_error("player clips need animation.bin");
+      auto start = std::chrono::steady_clock::now();
+      std::vector<n3e::Scene> clips{n3e::load_scene(r, "player-idle.bin")};
+      std::vector<std::string> names;
+      for (const char *state : {"walk", "attack", "death", "run", "backward", "ready", "sit-down", "sit-idle", "stand-up"}) {
+        const std::string s = state;
+        if ((s == "run" || s == "backward") && !r.locomotion) continue;
+        if (s == "ready" && !r.ready_pose) continue;
+        if ((s == "sit-down" || s == "sit-idle" || s == "stand-up") && !r.rest) continue;
+        names.push_back("player-" + s + ".bin");
+      }
+      if (r.combat_animation)
+        for (size_t i = 0; i < r.combat_animation->clips.size(); ++i) names.push_back("combat-" + std::to_string(i) + ".bin");
+      if (r.skills) {
+        std::set<unsigned> seen;
+        for (const auto &skill : r.skills->entries)
+          if (seen.insert(skill.animation).second) names.push_back("player-skill-" + std::to_string(skill.animation) + ".bin");
+      }
+      for (const auto &name : names) clips.push_back(n3e::load_player_clip(r, name, clips.front()));
+      const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start).count();
+      size_t atlases = 0, meshes = 0;
+      uint64_t bytes = 0;
+      for (const auto &c : clips) {
+        atlases += !c.texture.empty();
+        meshes += !c.vertices.empty() || !c.indices.empty();
+        bytes += c.texture.size() + c.vertices.size() * sizeof(n3e::Vertex) + c.influences.size() * sizeof(n3e::Influence) +
+                 c.indices.size() * sizeof(uint32_t) + c.nodes.size() * sizeof(n3e::Node) + c.joints.size() * sizeof(n3e::Joint);
+        for (const auto &t : c.tracks) bytes += t.keys.size() * sizeof(t.keys[0]);
+      }
+      std::cout << "PLAYER_CLIPS clips=" << clips.size() << " atlases=" << atlases << " meshes=" << meshes << " bytes=" << bytes
+                << " ms=" << ms << "\n";
       return 0;
     }
     if (argc != 2 && argc != 6 && argc != 8 && argc != 11)
@@ -184,7 +238,7 @@ int main(int argc, char **argv) {
     }
     auto s = n3e::load_scene(r);
     if(r.loot_model)n3e::load_scene(r,"loot-model.bin");
-    if(r.skills){auto base=n3e::load_scene(r,"player-idle.bin");for(const auto&skill:r.skills->entries){auto clip=n3e::load_scene(r,"player-skill-"+std::to_string(skill.animation)+".bin");if(!base.compatible(clip))throw std::runtime_error("skill skeleton");for(int joint:skill.cast_joints)if(joint>=int(clip.joints.size()))throw std::runtime_error("skill joint index");clip.animate(.5f);}}
+    if(r.skills){auto base=n3e::load_scene(r,"player-idle.bin");for(const auto&skill:r.skills->entries){auto clip=n3e::load_player_clip(r,"player-skill-"+std::to_string(skill.animation)+".bin",base);for(int joint:skill.cast_joints)if(joint>=int(clip.joints.size()))throw std::runtime_error("skill joint index");base.skin(clip.sample(.5f));}}
     if (r.presentation) {
       auto hud = n3e::load_hud(r);
       if (hud.target_health != float(r.npc_health))
@@ -208,9 +262,12 @@ int main(int argc, char **argv) {
               "sit-down", "sit-idle", "stand-up"}) {
           if (remaining-- == 0)
             break;
-          auto clip =
-              n3e::load_scene(r, std::string(role) + "-" + state + ".bin");
-          if (!base.compatible(clip))
+          // RQ-189: a player clip but idle loads as the client holds it,
+          // checked against player-idle.bin as it loads.
+          const auto name = std::string(role) + "-" + state + ".bin";
+          const bool shared = !npc && shared_clip(r, name);
+          auto clip = shared ? n3e::load_player_clip(r, name, base) : n3e::load_scene(r, name);
+          if (!shared && !base.compatible(clip))
             throw std::runtime_error("incompatible animation skeleton/mesh");
           float duration = 0;
           for (auto &track : clip.tracks)
@@ -253,9 +310,9 @@ int main(int argc, char **argv) {
       auto base=n3e::load_scene(r,"player-idle.bin");
       for(auto node:r.combat_animation->upper_nodes)if(node>=base.nodes.size()||std::none_of(base.joints.begin(),base.joints.end(),[&](const auto&j){return j.node==node;}))throw std::runtime_error("combat mask is not a skeleton joint");
       for(size_t i=0;i<r.combat_animation->clips.size();++i){
-        auto clip=n3e::load_scene(r,"combat-"+std::to_string(i)+".bin");float duration=0;
+        auto clip=n3e::load_player_clip(r,"combat-"+std::to_string(i)+".bin",base);float duration=0;
         for(const auto&t:clip.tracks)duration=std::max(duration,t.keys.back().time*r.combat_animation->clips[i].stretch);
-        if(!base.compatible(clip)||std::abs(duration-r.combat_animation->clips[i].duration)>.001f)throw std::runtime_error("combat animation geometry/duration");
+        if(std::abs(duration-r.combat_animation->clips[i].duration)>.001f)throw std::runtime_error("combat animation geometry/duration");
       }
     }
     if (r.ready_pose) {

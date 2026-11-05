@@ -18,6 +18,12 @@ On the PQ-253 engine 38 fixture (tests/npc_looks_live.py, synthetic). Checks:
   plus 46);
 - the client refuses N3ST at engine 45, as player-idle.bin, as an NPC clip,
   with trailing bytes and with a track past player-idle.bin's nodes.
+
+RQ-189: the client parses player-idle.bin once and holds its atlas and mesh
+alone; every other player clip is a pose source posed on that mesh, N3ST or
+whole (`n3e-asset-check --player-clips`: one atlas and one mesh, the same bytes
+held for both packages), and it refuses a whole clip whose atlas or mesh is not
+player-idle.bin's.
 """
 import json
 import os
@@ -115,6 +121,14 @@ def skinned(package, name):
                                     ".75", "1"], text=True)
 
 
+def held(package):
+    """The client's player clips as held (RQ-189), without the load time."""
+    out = subprocess.check_output(["build/client/n3e-asset-check", str(package), "--player-clips"], text=True)
+    fields = dict(f.split("=") for f in out.split()[1:])
+    del fields["ms"]
+    return {k: int(v) for k, v in fields.items()}
+
+
 def forge(package, change, engine):
     """A copy of `package` with its files changed by `change(files)` and the
     release index rewritten at `engine` (tools/assetc/main.py's layout)."""
@@ -180,6 +194,23 @@ for p in (package, whole):
 for name in names:
     assert skinned(package, name) == skinned(whole, name), name
 
+# RQ-189: one atlas and one mesh held for every player clip, N3ST or whole.
+kept = held(package)
+assert kept == held(whole) and kept["clips"] == len(names) and kept["atlases"] == 1 and kept["meshes"] == 1, \
+    (kept, held(whole))
+
+
+def other_atlas(files):
+    data = bytearray(files["combat-0.bin"])
+    data[12] ^= 1  # the first texel after N3S1, width and height
+    files["combat-0.bin"] = bytes(data)
+
+
+tmp, bad = forge(whole, other_atlas, 38)
+with tmp:
+    code, text = readers(bad)[0]
+    assert code != 0 and "player clip skeleton/mesh" in text, text[-300:]
+
 # N3SI player clips (RQ-163): the shared tail carries the influence table.
 table = cook("tracks-n3si", 46, table=True)
 table_whole = cook("whole-n3si", 43, tracks=None, table=True)
@@ -189,6 +220,7 @@ for p in (table, table_whole):
     assert [code for code, _ in readers(p)] == [0, 0], readers(p)
 for name in names:
     assert skinned(table, name) == skinned(table_whole, name), name
+assert held(table) == held(table_whole) and held(table)["meshes"] == 1
 assert skinned(table, "combat-0.bin") != skinned(package, "combat-0.bin")
 
 
@@ -217,5 +249,6 @@ for what, change, engine, why in [
 print("PASS player clip tracks (RQ-188): %d player clips, %d bytes as whole scenes, %d with N3ST (%.1f%%); "
       "engine 46 only (38 and 45 refused), another mode and a differing mesh refused, the plain cook unchanged; "
       "both readers accept it and the client draws every clip as the whole-scene package does, N3SI too; the "
-      "client refuses N3ST at 45, as player-idle.bin, as an NPC clip, with trailing bytes and past the skeleton"
-      % (len(names), before, after, 100.0 * after / before))
+      "client refuses N3ST at 45, as player-idle.bin, as an NPC clip, with trailing bytes and past the skeleton; "
+      "the client holds one atlas and one mesh for them (%d bytes), N3ST or whole, and refuses a whole clip with "
+      "another atlas" % (len(names), before, after, 100.0 * after / before, kept["bytes"]))

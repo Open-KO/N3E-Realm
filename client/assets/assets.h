@@ -618,8 +618,20 @@ struct Scene {
   std::vector<float> animate(float time) const;
   bool compatible(const Scene &other) const;
   float ground_height(float x, float z) const;
+  // RQ-189: this scene without its atlas, mesh, influence table, render runs
+  // and collision (width and height 0): its nodes, joints, tracks, scale and
+  // attachment, all that sample(), joint_position() and joint_matrix() read.
+  Scene pose_source() const;
 };
 Scene load_scene(const Release &release, const std::string &name = "scene.bin");
+// RQ-189 (content/animation.md): player clip `name`, any but player-idle.bin,
+// as the client holds it beside `idle`, player-idle.bin already parsed: the
+// clip's pose source (Scene::pose_source), its tracks on idle's skeleton, so
+// idle's atlas and mesh are the only copy and are drawn for every clip. An
+// N3ST clip is read without parsing player-idle.bin again; a whole scene is
+// parsed, must be compatible with idle ("player clip skeleton/mesh") and is
+// dropped but for its pose source.
+Scene load_player_clip(const Release &release, const std::string &name, const Scene &idle);
 // One looks entry's model (N3NM; N3MM at engine 39; N3NI, N3MI at 40): four scenes, one per
 // state, sharing one skeleton. Only the first carries the atlas, the mesh and
 // the render runs; the others hold the nodes, joints and their own tracks,

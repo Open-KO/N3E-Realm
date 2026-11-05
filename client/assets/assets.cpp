@@ -2652,7 +2652,9 @@ static void read_scene_tail(Reader &r, Scene &s, bool influences = false) {
   s.attachment = r.u();
   need(s.attachment < s.nodes.size(), "attachment");
 }
-Scene load_scene(const Release &release, const std::string &name) {
+// `idle` (RQ-189): the clip is read beside player-idle.bin already parsed, and
+// only its pose source is kept (load_player_clip).
+static Scene load_scene(const Release &release, const std::string &name, const Scene *idle) {
   Scene s;
   bool combat_name=false;
   if(release.combat_animation)for(size_t i=0;i<release.combat_animation->clips.size();++i)
@@ -2675,6 +2677,7 @@ Scene load_scene(const Release &release, const std::string &name) {
   // past four joint influences); Scene::skin sums every one, as KO's
   // 00419f00 does. Every other scene stays N3S1.
   const bool player_clip = combat_name || name.starts_with("player-");
+  need(!idle || (player_clip && name != "player-idle.bin"), "scene name");
   const auto magic = r.raw(4);
   // RQ-188 (content/animation.md): from engine 46 a player clip other than
   // player-idle.bin may be N3ST, its track list alone; the atlas, skeleton,
@@ -2682,7 +2685,8 @@ Scene load_scene(const Release &release, const std::string &name) {
   // N3S1 / N3SI scene, and the tracks are bounded by its nodes.
   if (magic == "N3ST") {
     need(player_clip && name != "player-idle.bin" && release.engine >= 46, "cooked magic/version");
-    s = load_scene(release, "player-idle.bin");
+    // RQ-189: beside an already parsed player-idle.bin, its pose source alone.
+    s = idle ? idle->pose_source() : load_scene(release, "player-idle.bin");
     s.tracks.clear();
     read_scene_tracks(r, s, s.tracks);
     r.end();
@@ -2693,6 +2697,12 @@ Scene load_scene(const Release &release, const std::string &name) {
   read_scene_tracks(r, s, s.tracks);
   read_scene_tail(r, s, magic == "N3SI");
   r.end();
+  if (idle) {
+    // RQ-189: a whole player clip repeats player-idle.bin's atlas and mesh;
+    // the client keeps idle's alone.
+    need(idle->compatible(s), "player clip skeleton/mesh");
+    return s.pose_source();
+  }
   if(name=="loot-model.bin"){
     need(s.tracks.empty(),"loot model must be static");
     for(float v:s.scale)need(v<=100,"loot model scale");
@@ -2703,6 +2713,21 @@ Scene load_scene(const Release &release, const std::string &name) {
   }
   s.collision = load_collision(release.root / "collision.bin");
   if(release.commerce&&name=="scene.bin")for(const auto &shop:release.commerce->shops)need(std::isfinite(s.ground_height(shop.position[0],shop.position[2])),"shop not on map");
+  return s;
+}
+Scene load_scene(const Release &release, const std::string &name) { return load_scene(release, name, nullptr); }
+Scene load_player_clip(const Release &release, const std::string &name, const Scene &idle) {
+  return load_scene(release, name, &idle);
+}
+Scene Scene::pose_source() const {
+  Scene s;
+  s.width = s.height = 0;
+  s.channels = channels;
+  s.nodes = nodes;
+  s.joints = joints;
+  s.tracks = tracks;
+  s.scale = scale;
+  s.attachment = attachment;
   return s;
 }
 // A looks model file (N3NM, N3MM, N3NI, N3MI): four scenes sharing one

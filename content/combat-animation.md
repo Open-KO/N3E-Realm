@@ -552,4 +552,6 @@ cost of the clip format, not of the race: since RQ-188 a package may cook its pl
 clips as N3ST, their tracks alone over `player-idle.bin`'s atlas and mesh (engine 46,
 [track-only player clips](animation.md#track-only-player-clips-n3st-engine-46-rq-188)),
 which takes the Arch Tuarek's 19 combat clips to 570,712 bytes. The budget counts the
-files as shipped, so it applies unchanged.
+files as shipped, so it applies unchanged. In memory the client holds the atlas and mesh
+once for every player clip, N3ST or whole, since RQ-189
+([one atlas and mesh in memory](animation.md#one-atlas-and-mesh-in-memory-rq-189)).

@@ -246,6 +246,9 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
       marker_ground.collision=n3e::target_marker_ground(scene.collision,release.world_chunked,
                                                         release.world_chunked||!world_asset?nullptr:&*world_asset);
     std::vector<n3e::Scene> player_scenes;
+    // RQ-189: with animation.bin every player clip shares player-idle.bin's
+    // atlas and mesh (content/animation.md); only player_scenes.front() holds them.
+    const bool shared_player_mesh = release.animation.has_value();
     std::vector<float> player_durations;
     std::map<uint64_t, PlayerPose> poses;
     std::map<uint64_t, CombatPose> combat_poses;
@@ -270,15 +273,25 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
           // Stable state indices even for a package without extra locomotion
           // clips.
           while (player_scenes.size() < 6) {
-            player_scenes.push_back(player_scenes.front());
+            player_scenes.push_back(shared_player_mesh ? player_scenes.front().pose_source() : player_scenes.front());
             player_durations.push_back(player_durations.front());
           }
         }
-        player_scenes.push_back(n3e::load_scene(release, name));
-        if (player_scenes.back().texture != player_scenes.front().texture ||
-            player_scenes.back().width != player_scenes.front().width ||
-            player_scenes.back().height != player_scenes.front().height)
-          throw std::runtime_error("player clips must share a texture atlas");
+        // RQ-189: player-idle.bin is parsed once and holds the only copy of
+        // the player's atlas and mesh; every other clip is its pose source
+        // (n3e::load_player_clip checks a whole scene against it), drawn with
+        // player_scenes.front()'s mesh. A package without animation.bin
+        // (before engine 30) requires only the atlas to match, so each of its
+        // clips keeps and draws its own mesh, as before.
+        if (shared_player_mesh && !player_scenes.empty())
+          player_scenes.push_back(n3e::load_player_clip(release, name, player_scenes.front()));
+        else {
+          player_scenes.push_back(n3e::load_scene(release, name));
+          if (player_scenes.back().texture != player_scenes.front().texture ||
+              player_scenes.back().width != player_scenes.front().width ||
+              player_scenes.back().height != player_scenes.front().height)
+            throw std::runtime_error("player clips must share a texture atlas");
+        }
         float duration = .001f;
         for (const auto &track : player_scenes.back().tracks)
           duration = std::max(duration, track.keys.back().time);
@@ -291,7 +304,8 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
         npc_scenes.push_back(n3e::load_scene(release, name));
       for (const auto *set : {&player_scenes, &npc_scenes})
         for (size_t i = 0; i < set->size(); ++i) {
-          if (!set->front().compatible((*set)[i]))
+          // The player's clips were checked as they loaded (RQ-189).
+          if (set != &player_scenes && !set->front().compatible((*set)[i]))
             throw std::runtime_error("incompatible animation skeleton/mesh");
           float duration = 0;
           for (const auto &track : (*set)[i].tracks)
@@ -337,12 +351,12 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
       for(auto node:release.combat_animation->upper_nodes)
         if(node>=player_scenes.front().nodes.size()||std::none_of(player_scenes.front().joints.begin(),player_scenes.front().joints.end(),[&](const auto&j){return j.node==node;}))throw std::runtime_error("combat mask is not a skeleton joint");
       for(size_t i=0;i<release.combat_animation->clips.size();++i){
-        auto scene=n3e::load_scene(release,"combat-"+std::to_string(i)+".bin");
+        auto scene=n3e::load_player_clip(release,"combat-"+std::to_string(i)+".bin",player_scenes.front());
         const auto&clip=release.combat_animation->clips[i];float duration=0;
         // PQ-420 (D-217): a ranged cast's clip plays over the cast time.
         if(clip.stretch!=1)for(auto&t:scene.tracks)for(auto&k:t.keys)k.time*=clip.stretch;
         for(const auto&t:scene.tracks)duration=std::max(duration,t.keys.back().time);
-        if(!player_scenes.front().compatible(scene)||std::abs(duration-clip.duration)>.001f)throw std::runtime_error("combat animation geometry/duration");
+        if(std::abs(duration-clip.duration)>.001f)throw std::runtime_error("combat animation geometry/duration");
         player_scenes.push_back(std::move(scene));player_clips.push_back(clip);player_durations.push_back(clip.duration+clip.blend);
       }
 #if N3E_HARNESS
@@ -536,7 +550,7 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     if (!player_scenes.empty()) {
       player_box = n3e::targeting::model_box(player_scenes[0], player_scenes[0].sample(0), release.pick);
       if (player_scenes.size() > 3)
-        player_dead_box = n3e::targeting::model_box(player_scenes[3], player_scenes[3].sample(last_frame(player_scenes[3])), release.pick);
+        player_dead_box = n3e::targeting::model_box(player_scenes[shared_player_mesh ? 0 : 3], player_scenes[3].sample(last_frame(player_scenes[3])), release.pick);
     }
     if (npc_scenes.size() > 3) {
       npc_box = n3e::targeting::model_box(npc_scenes[0], npc_scenes[0].sample(0), release.pick);
@@ -1040,7 +1054,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     std::map<unsigned,n3e::Scene> skill_scenes;
     if(release.skills)for(const auto&skill:release.skills->entries){
       auto [it,added]=skill_scenes.try_emplace(skill.animation);
-      if(added){it->second=n3e::load_scene(release,"player-skill-"+std::to_string(skill.animation)+".bin");if(!player_scenes.front().compatible(it->second))throw std::runtime_error("skill skeleton mismatch");}
+      if(added)it->second=n3e::load_player_clip(release,"player-skill-"+std::to_string(skill.animation)+".bin",player_scenes.front());
     }
     AudioDevice audio;
     // RQ-071 (Q70): KO 1298's Option.ini [Sound] Effect=0 silences every sound
@@ -3464,14 +3478,15 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
               // the death clip has played (KO regenerates it at PSA_DEATH).
               auto player_pick_box=[&]{return pose.state==3&&player_dead_box&&now-pose.since>=player_durations[3]?*player_dead_box:*player_box;};
               unsigned clip_index=release.combat_animation?combat_pose.clip(*release.combat_animation,entity,pose.state):pose.state;
-              const auto &model = player_scenes[clip_index];
+              // RQ-189: every clip is drawn with player-idle.bin's mesh.
+              const auto &model = player_scenes[shared_player_mesh ? 0 : clip_index];
               float t = std::max(0.f, float(now - pose.since));
               t = (pose.state == 2 || pose.state == 3)
                       ? std::min(t, player_durations[pose.state])
                       : std::fmod(t, player_durations[pose.state]);
               auto node_pose = release.animation && (!release.combat_animation||release.combat_animation->upper_nodes.empty())
                   ? animations[entity.id()].update(player_scenes,player_clips.data(),clip_index,pose.attack_key,pose.since,now,false,pose.state)
-                  : model.sample(t);
+                  : player_scenes[clip_index].sample(t);
               if(release.combat_animation&&!release.combat_animation->upper_nodes.empty()){
                 unsigned base_clip=combat_pose.clip(*release.combat_animation,entity,pose.base_state);
                 node_pose=layers[entity.id()].update(animations[entity.id()],player_scenes,player_clips.data(),clip_index,pose.state,pose.attack_key,pose.since,now,base_clip,pose.base_state,pose.base_since,release.combat_animation->upper_nodes,pose.state==2&&combat_pose.layered);

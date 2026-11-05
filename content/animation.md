@@ -110,12 +110,7 @@ cooks; `player_clips.tracks_only` against each race's `player-idle.bin`): the Ar
 Tuarek's 19 combat clips go from 49,919,260 bytes to 570,712, and Moradon's (Tuarek)
 from 27,009,388 to 580,312, with all 31 of its player clips from 44,566,812 to
 2,836,692; every one of those clips has `player-idle.bin`'s atlas and mesh byte for
-byte. Runtime memory per clip is unchanged: the client still gives each clip its own
-parsed copy of `player-idle.bin`'s atlas and mesh. So with N3ST the 64 MiB combat clip
-budget no longer bounds that memory: up to 64 combat clips, each with a copy, come to
-roughly 218 MB at the 1024 x 1024 atlas bound (64 x 3,403,796 bytes,
-[clip byte budget](combat-animation.md#clip-byte-budget-rq-166)), until the client
-shares one parse across the player clips (queued as `player-clips-share-parse`).
+byte.
 
 Moradon opts in (RQ-190): `games/moradon/features.json` carries the key, so every
 `ko_bake.py --features` cook (the realm's package, the classic and 1097 Moradons, the
@@ -125,6 +120,40 @@ joins; `ko_bake` raises the engine as it does for the other opt-in formats. Its
 plain cooks (engine 14) carry no feature set and ship their clips whole. The client
 skins every clip to the same vertices as before (`tests/ko_bake_pin.py`, its pins
 moved for it).
+
+### One atlas and mesh in memory (RQ-189)
+
+Until RQ-189 the client gave every player clip its own parsed copy of the atlas and
+mesh (and of `collision.bin`), parsing `player-idle.bin` again for each N3ST clip; with
+N3ST the 64 MiB combat clip budget no longer bounded that, and 64 combat clips at the
+1024 x 1024 atlas bound came to roughly 218 MB (64 x 3,403,796 bytes,
+[clip byte budget](combat-animation.md#clip-byte-budget-rq-166)). Now, in a package
+with `animation.bin` (every package from engine 30, so every one with combat or skill
+clips or N3ST):
+
+- `player-idle.bin` is parsed once, whole, and holds the only copy of the player's
+  atlas and mesh; the GPU already took its one texture from it.
+- Every other player clip (`player-<state>.bin`, `combat-<i>.bin`,
+  `player-skill-<i>.bin`) is held as a pose source (`n3e::load_player_clip`,
+  `Scene::pose_source`): its tracks on `player-idle.bin`'s nodes and joints, its scale
+  and attachment node, no atlas, mesh, influence table or collision. An N3ST clip is
+  read beside the parsed `player-idle.bin` without parsing it again; a whole clip is
+  parsed, must be `Scene::compatible` with it, as before, and keeps only its pose
+  source. The client refuses a mismatch as `player clip skeleton/mesh` while it loads,
+  in place of the viewer's earlier per-set messages.
+- Every clip is posed from its own tracks and skinned and drawn with
+  `player-idle.bin`'s mesh. A compatible clip's parsed mesh is that mesh, so the
+  drawn vertices are unchanged (`n3e-asset-check --scene` poses a player clip on
+  `player-idle.bin`'s mesh as the client does; all 31 of Moradon's clips skin to the
+  same vertices as before).
+
+A package without `animation.bin` (a player presentation before engine 30, where it is
+optional from engine 9) only requires its four to six clips to share the atlas, so each keeps and draws its own mesh,
+as before. Measured on Moradon's package (31 player clips, N3ST; the clips held as the
+viewer holds them, a scratch program on `libn3e-assets`): 43,706,280 bytes of atlas and
+mesh and a peak RSS of 89,564 KiB before, 1,409,880 bytes and 23,188 KiB after;
+`n3e-asset-check --player-clips` reports one atlas and one mesh. At the atlas bound the
+player's clips hold one 3.4 MB copy, not one per clip.
 
 ## Runtime state and time
 

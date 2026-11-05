@@ -783,7 +783,7 @@ async fn peer(
                         Err(refusal) => Err(refusal),
                         Ok(valid) => match world
                             .db
-                            .create(account.unwrap(), valid, world.owner.clone(), r.player_spawn()?, r.character_slots)
+                            .create(account.unwrap(), valid, world.owner.clone(), r.create_spawn()?, r.character_slots)
                             .await
                         {
                             Ok(()) => Ok(()),

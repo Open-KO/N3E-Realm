@@ -21,9 +21,18 @@
   package's inventory, equipment and wear, refusing an item the bag lacks, a
   count over its stack, a set the bag cannot hold, and a weapon that does not
   attack or that the package's player may not wear.
+- RQ-154 (Q96): create.bin version 2 carries the realm owner's start and each
+  specialty's starting items (the server's layout, one synthetic digest on
+  both sides); realm-config.json's create.start (KO's zone and map position)
+  and create.items (groups as `starting`'s, a set possibly empty) are planned
+  and refused when malformed; ko_create.starting lets a realm owner's group
+  replace the package's set for its specialties and refuses the reward item;
+  ko_create.complete cooks the start as engine metres (refusing another zone
+  or a position off the map) and each offered specialty's set.
 - A package carrying create.bin passes the client's asset check and the
   server's content check, which reads its rules; a create.bin with a bad magic
-  or version, rehashed into the release, fails both.
+  or version, rehashed into the release, fails both, and so do starting items
+  in a package without an inventory and a start off the ground.
 """
 import copy
 import json
@@ -55,11 +64,18 @@ SECTION = dict(
     name=dict(min=1, max=20, punctuation="_:;"), reserved=["staff"],
     refusals=dict(limit="No more.", mismatch="", taken="Taken.", failed="", name="Bad name.", stats=""),
     fixed=dict(race=7, specialty=71, face=0, hair=0, stats=[20, 30, 45]))
-# server/src/create.rs tests::SYNTHETIC_SHA256: the same rules, built by hand.
-SYNTHETIC_SHA256 = "c86175f18617f5c22ca89196b05e3b1d6a1bab6e7c071f273028a4ea99907c00"
+# server/src/create.rs tests::SYNTHETIC_SHA256 and KITTED_SHA256: the same
+# rules, built by hand, without and with a start and starting items (RQ-154).
+SYNTHETIC_SHA256 = "7d7b89d81e821be5a03de5ceb9247a82ab786c253e0480c7fcef6d534b68adb5"
+KITTED_SHA256 = "47b6e87f8be6d055d833e78e8272879c214ff3011145d74eef5db70f147acbb1"
+KITTED = dict(SECTION, start=[1.5, -2.25], items=[
+    dict(specialty=70, items=[["demo:item/blade", 1], ["demo:item/potion", 5]]), dict(specialty=80, items=[])])
 cooked = create.cook(SECTION)
 assert digest(cooked).hex() == SYNTHETIC_SHA256, digest(cooked).hex()
-assert create.cook({k: v for k, v in SECTION.items() if k != "fixed"})[-4:] == u(0)
+assert digest(create.cook(KITTED)).hex() == KITTED_SHA256, digest(create.cook(KITTED)).hex()
+# No fixed choice, no start and no items: three zero words at the end.
+assert create.cook({k: v for k, v in SECTION.items() if k != "fixed"})[-12:] == u(0) * 3
+assert create.cook(dict(SECTION, items=[])) == cooked
 
 
 def refused(section, expect):
@@ -94,6 +110,17 @@ for path, value, expect in [
     (("fixed", "stats"), [19, 30, 46], "fixed choice"), (("fixed", "stats"), [20, 30, 44], "fixed choice"),
     (("fixed", "race"), 8, "fixed choice"), (("fixed", "specialty"), 70, "fixed choice"),
     (("fixed", "face"), 4, "fixed choice"),
+    # RQ-154: the start in engine metres, and at most one set per offered specialty.
+    (("start",), [1.0], "create start"), (("start",), [float("nan"), 0.0], "create start"),
+    (("start",), [0, 2e6], "create start"), (("items",), {}, "create items"),
+    (("items",), [dict(specialty=72, items=[])], "specialty 72"),
+    (("items",), [dict(specialty=70, items=[]), dict(specialty=70, items=[])], "specialty 70"),
+    (("items",), [dict(specialty=70, items=[], weapon=None)], "create items fields"),
+    (("items",), [dict(specialty=70, items=[["a:b", 0]])], "create items 70"),
+    (("items",), [dict(specialty=70, items=[["a:b", 10000]])], "create items 70"),
+    (("items",), [dict(specialty=70, items=[["a:b", 1], ["a:b", 2]])], "create items 70"),
+    (("items",), [dict(specialty=70, items=[["a b", 1]])], "create items 70"),
+    (("items",), [dict(specialty=70, items=[["a:%d" % i, 1] for i in range(65)])], "create items 70"),
 ]:
     refused(changed(path, value), expect)
 refused({k: v for k, v in SECTION.items() if k != "refusals"}, "create fields")
@@ -130,6 +157,23 @@ plan_refused("no create table for front end '2145'", client="2145")
 plan_refused("has no player model", config={"races": [2, 12]})
 plan_refused("create.races", config={"races": []})
 plan_refused("create.reserved", config={"reserved": ["two words"]})
+# RQ-154 (Q96): the realm owner's start and starting items.
+assert (plan["start"], plan["items"]) == (None, []), plan
+assert ko_create.plan(MORADON, "1097", {"start": {"zone": 21, "position": [312, 402.5]}})["start"] == \
+    {"zone": 21, "position": [312, 402.5]}
+for start in ({"zone": 21}, {"zone": 21, "position": [312, 402], "nation": 1}, {"zone": 0, "position": [1, 1]},
+              {"zone": 21, "position": [312]}, {"zone": 21, "position": [-1, 2]}, {"zone": "21", "position": [1, 1]},
+              {"zone": 21, "position": [1, float("inf")]}, [21, 312, 402]):
+    plan_refused("create.start is exactly {zone, position}", config={"start": start})
+NONE = {"specialties": [104], "items": [], "weapon": None}
+assert ko_create.plan(MORADON, "1097", {"items": [NONE]})["items"] == [NONE]
+for items, expect in [({}, "create.items is a list of groups"), ([dict(NONE, extra=1)], "create.items is a list"),
+                      ([dict(NONE, specialties=[])], "create.items specialties"),
+                      ([NONE, dict(NONE, specialties=[104])], "at most once (twice: 104)"),
+                      ([dict(NONE, specialties=[105])], "no race has: 105"),
+                      ([dict(NONE, items=[["demo:item/blade", 0]])], "items, 0 to 64"),
+                      ([dict(NONE, weapon="demo:item/blade")], "weapon is one of its items, or null")]:
+    plan_refused(expect, config={"items": items})
 with tempfile.TemporaryDirectory(prefix="n3e-create-") as td:
     game = pathlib.Path(td)
     assert ko_create.plan(game, "1097", {}) is None
@@ -419,7 +463,54 @@ for change in (dict(title=1), dict(race=2), dict(attributes=[61, 0, 0, 0, 0])):
 assert ko_create.starting(plan, swap("equipment", "items", "demo:item/blade", race=1, attributes=[60, 60, 60, 50, 50]))
 starting_refused("starting needs the package's inventory, equipment and wear",
                  package={k: v for k, v in PACKAGE.items() if k != "wear"})
-print("PASS starting items: each specialty's set in the package's bag, its weapon one the player may wear")
+starting_refused("item demo:item/token is the progression's reward item", dict(items=kit + [["demo:item/token", 1]]))
+# RQ-154 (Q96): a realm owner's create.items group replaces the package's set
+# for its specialties (KO's operator: none), checked as the package's is.
+POTIONS = {"specialties": [102], "items": [["demo:item/potion", 20], ["demo:item/twohand", 1]], "weapon": "demo:item/twohand"}
+mine = ko_create.starting(dict(plan, items=[NONE, POTIONS]), PACKAGE)
+assert mine[104] == dict(items=[], weapon=None) and mine[102] == dict(items=POTIONS["items"], weapon="demo:item/twohand"), mine
+assert all(mine[s] == kits[s] for s in kits if s not in (102, 104)), mine
+assert ko_create.starting(dict(plan, rules=dict(rules, starting=None), items=[NONE]), PACKAGE) == {104: dict(items=[], weapon=None)}
+for group, expect in [(dict(POTIONS, weapon="demo:item/potion"), "realm-config.json create.items [102]: weapon demo:item/potion"),
+                      (dict(POTIONS, items=[["demo:item/potion", 21]], weapon=None), "21 over its stack limit"),
+                      (dict(POTIONS, items=[["demo:item/token", 1]], weapon=None), "reward item")]:
+    try:
+        ko_create.starting(dict(plan, items=[group]), PACKAGE)
+        raise AssertionError("started (%s)" % expect)
+    except front_end_choice.Refused as error:
+        assert expect in str(error), (expect, str(error))
+print("PASS starting items: each specialty's set in the package's bag, its weapon one the player may wear; "
+      "a realm owner's create.items replaces it")
+
+# --- RQ-154: the start and the items cooked into the create section -----------------
+base, base_report = ko_create.build(plan, good)
+done = ko_create.complete(copy.deepcopy(base), dict(base_report), plan, PACKAGE, 21, 512.0)
+# Moradon by default: no start (the package's spawn), and the package's starting
+# items for each specialty the offered race (the Tuarek) has.
+assert "start" not in done and done["items"] == [dict(specialty=102, items=kit), dict(specialty=104, items=kit)], done
+create.cook(done)
+report_ = dict(base_report)
+placed = ko_create.complete(copy.deepcopy(base), report_, dict(plan, start={"zone": 21, "position": [312, 402]},
+                                                              items=[NONE]), PACKAGE, 21, 512.0)
+# KO's x and z from the map's corner, as ko_start's areas: x - half, half - z.
+assert placed["start"] == [56.0, -146.0] and report_["start"] == dict(zone=21, position=[312, 402], engine=[56.0, -146.0])
+assert placed["items"] == [dict(specialty=102, items=kit), dict(specialty=104, items=[])], placed["items"]
+assert "items" not in ko_create.complete(copy.deepcopy(base), {}, dict(plan, rules=dict(rules, starting=None)), PACKAGE, 21, 512.0)
+# Offered races that share a specialty (the Tuarek's 102 and 104, the Puri
+# Tuarek's 104) give each specialty one kit, in the order the races first name it.
+shared = dict(plan, races=[2, 4], rules=dict(rules, content=[2, 4]))
+shared_section, shared_report = ko_create.build(shared, good)
+shared_done = ko_create.complete(shared_section, dict(shared_report), shared, PACKAGE, 21, 512.0)
+assert [k["specialty"] for k in shared_done["items"]] == [102, 104], shared_done["items"]
+create.cook(shared_done)
+for start, expect in [({"zone": 1, "position": [1, 1]}, "zone 1 is not the package's zone 21"),
+                      ({"zone": 21, "position": [513, 1]}, "position [513, 1] leaves the 512 m map")]:
+    try:
+        ko_create.complete(copy.deepcopy(base), {}, dict(plan, start=start), PACKAGE, 21, 512.0)
+        raise AssertionError("placed (%s)" % expect)
+    except front_end_choice.Refused as error:
+        assert expect in str(error), (expect, str(error))
+print("PASS create start and items: KO's map position as engine metres, each offered specialty's set")
 
 # --- a package with create.bin through both readers ------------------------------
 with tempfile.TemporaryDirectory(dir="build", prefix="character-create-") as td:
@@ -438,7 +529,16 @@ with tempfile.TemporaryDirectory(dir="build", prefix="character-create-") as td:
             assert (r.returncode == 0) == good, (r.stdout, r.stderr)
         return results[1].stdout
 
-    assert "create races=2 specialties=3 stats=3 nation=1 fixed=true" in check(True).splitlines()
+    def check_server(good):
+        r = subprocess.run(["target/debug/n3e-server", "--check-content"], env={**os.environ, "N3E_PACKAGE": str(out)},
+                           capture_output=True, text=True)
+        assert (r.returncode == 0) == good, (r.stdout, r.stderr)
+        return r.stdout if good else r.stderr
+
+    # A point on the fixture's ground (the content check's height probe).
+    START = [1.0, 1.0]
+
+    assert "create races=2 specialties=3 stats=3 nation=1 fixed=true start=none items=0" in check(True).splitlines()
     files = {p.name: p.read_bytes() for p in out.iterdir() if p.name not in ("release.bin", "release.sha256")}
 
     def repack(data):
@@ -450,9 +550,18 @@ with tempfile.TemporaryDirectory(dir="build", prefix="character-create-") as td:
             index += string(name) + u(len(body)) + digest(body)
         (out / "release.bin").write_bytes(index)
 
-    for bad in (b"N3CX" + cooked[4:], cooked[:4] + u(2) + cooked[8:]):
+    for bad in (b"N3CX" + cooked[4:], cooked[:4] + u(1) + cooked[8:]):
         repack(bad)
         check(False)
+    # RQ-154: a start on the ground is read; one off the map, and starting
+    # items in a package without an inventory, are refused by the server.
+    repack(create.cook(dict(SECTION, start=START)))
+    assert "create races=2 specialties=3 stats=3 nation=1 fixed=true start=%g,%g items=0" % tuple(START) \
+        in check_server(True).splitlines()
+    for bad, why in ((dict(SECTION, start=[5000.0, 5000.0]), "create start not walkable"),
+                     (dict(SECTION, items=[dict(specialty=70, items=[])]), "create items need an inventory")):
+        repack(create.cook(bad))
+        assert why in check_server(False)
     repack(cooked)
     check(True)
 print("PASS create.bin through the client's asset check and the server's content check")

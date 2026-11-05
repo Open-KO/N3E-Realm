@@ -1,19 +1,24 @@
-"""The package's character-create rules, `create.bin` (N3CC version 1, RQ-002).
+"""The package's character-create rules, `create.bin` (N3CC version 2, RQ-002, RQ-154).
 
 The manifest's `create` section (content/character-create.md, "The realm's
 create"): the stats a character has, the nation an account has until the realm
 keeps one (RQ-006), the races a create may name with each one's nation, face and
 hair counts and specialties (each with its bonus points and base stats), the
 name rule, the reserved words, the wording of each refusal and the fixed choice
-a create without a race takes (Q52). The server checks every create against
-them (server/src/create.rs reads the same layout); no game's ids are here.
+a create without a race takes (Q52). Version 2 (RQ-154, Q96) adds where a new
+character starts, when the realm owner names it (`start`, engine metres; else
+the package's spawn), and the bag items each specialty starts with (`items`;
+a specialty without a set starts with the package's `starting` items). The
+server checks every create against them (server/src/create.rs reads the same
+layout); no game's ids are here.
 """
+import math
 import re
 
-from common import string, u
+from common import f, string, u
 
 MAGIC = b"N3CC"
-VERSION = 1
+VERSION = 2
 MAX_STATS = 8
 MAX_RACES = 32
 MAX_SPECIALTIES = 16
@@ -26,11 +31,19 @@ MAX_VALUE = 1000
 # Refusals in the wire's CreateCharacter.Result order (KO's 1, 2, 3, 4, 5, 17).
 REFUSALS = ("limit", "mismatch", "taken", "failed", "name", "stats")
 KEYS = {"stats", "nation", "races", "name", "reserved", "refusals"}
-OPTIONAL = {"fixed"}
+OPTIONAL = {"fixed", "start", "items"}
 RACE_KEYS = {"race", "nation", "faces", "hairs", "specialties"}
 SPECIALTY_KEYS = {"specialty", "bonus", "base"}
 NAME_KEYS = {"min", "max", "punctuation"}
 FIXED_KEYS = {"race", "specialty", "face", "hair", "stats"}
+KIT_KEYS = {"specialty", "items"}
+# A starting set's stacks (the bag holds at most 64) and each stack's count and
+# item id (server/src/inventory.rs: ids up to 96 bytes after the game's prefix).
+MAX_KIT = 64
+MAX_COUNT = 9999
+MAX_ITEM = 128
+# A start's engine metres (common.vector's bound).
+MAX_METRES = 1e6
 WORD = re.compile(r"[!-@\[-~]{1,%d}\Z" % MAX_WORD)  # printable ASCII, no space or upper case
 
 
@@ -107,6 +120,30 @@ def check(value):
         refused = choice(value, fixed)
         if refused:
             raise ValueError("create fixed choice: %s" % refused)
+    start = value.get("start")
+    if start is not None and (type(start) is not list or len(start) != 2 or any(
+            type(v) not in (int, float) or not math.isfinite(v) or abs(v) > MAX_METRES for v in start)):
+        raise ValueError("create start: [x, z], finite engine metres within %g" % MAX_METRES)
+    kits = value.get("items")
+    if kits is not None:
+        offered = {s["specialty"] for r in races for s in r["specialties"]}
+        if type(kits) is not list or len(kits) > len(offered):
+            raise ValueError("create items: at most one set per specialty")
+        named = set()
+        for kit in kits:
+            if type(kit) is not dict or set(kit) != KIT_KEYS:
+                raise ValueError("create items fields: %s" % ", ".join(sorted(KIT_KEYS)))
+            sid = kit["specialty"]
+            if sid not in offered or sid in named:
+                raise ValueError("create items: specialty %r is not one the races offer, or named twice" % (sid,))
+            named.add(sid)
+            stacks = kit["items"]
+            if type(stacks) is not list or len(stacks) > MAX_KIT or any(
+                    type(i) is not list or len(i) != 2 or type(i[0]) is not str or not 1 <= len(i[0]) <= MAX_ITEM or
+                    not all("!" <= c <= "~" for c in i[0]) or type(i[1]) is not int or not 1 <= i[1] <= MAX_COUNT
+                    for i in stacks) or len({i[0] for i in stacks}) != len(stacks):
+                raise ValueError("create items %d: up to %d distinct [item, count] pairs, count 1..%d"
+                                 % (sid, MAX_KIT, MAX_COUNT))
     return value
 
 
@@ -149,4 +186,11 @@ def cook(value):
     else:
         data += u(1) + u(fixed["race"]) + u(fixed["specialty"]) + u(fixed["face"]) + u(fixed["hair"])
         data += b"".join(u(v) for v in fixed["stats"])
+    start = value.get("start")
+    data += u(0) if start is None else u(1) + f([float(v) for v in start])
+    kits = value.get("items") or []
+    data += u(len(kits))
+    for kit in kits:
+        data += u(kit["specialty"]) + u(len(kit["items"]))
+        data += b"".join(string(item) + u(n) for item, n in kit["items"])
     return data

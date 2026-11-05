@@ -510,7 +510,7 @@ mod tests {
             wear:None, stats:None, thresholds:None,
             equipment:None,
             capacity:64,currency:"demo:currency/coin".into(),limit:1000,coins:10,
-            items:vec![crate::inventory::Item{id:p.item.clone(),label:"Token".into(),stack:1,durability:0,starting:0}],hash:vec![7;32],
+            items:vec![crate::inventory::Item{id:p.item.clone(),label:"Token".into(),stack:1,durability:0,starting:0}],hash:vec![7;32],kits:None,
         };
         let initial_bag=crate::inventory::execute(&mut c,&o,&s,&bag_policy,&p.item,&wire::BagRequest::default())?.state.unwrap();
         // Dedicated lease renewer keeps long fault/deadline tests authoritative.

@@ -863,10 +863,10 @@ Release load_release(const std::filesystem::path &root) {
     result.front_end=true;
   }
   // RQ-002: the character-create rules the server checks a create against;
-  // hashed above, the client checks its magic and version (its create screen
-  // reads them in RQ-004).
+  // hashed above, the client checks its magic and version (2 since RQ-154: the
+  // start and starting items; its create screen reads them in RQ-004).
   if(files.erase("create.bin")){
-    Reader c(root/"create.bin");c.magic("N3CC");need(c.u()==1,"create version");
+    Reader c(root/"create.bin");c.magic("N3CC");need(c.u()==2,"create version");
     result.create=true;
   }
   result.loot_model=files.erase("loot-model.bin")!=0;

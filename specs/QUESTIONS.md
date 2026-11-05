@@ -1500,6 +1500,14 @@ specialty's items and the weapon among them it can use, checked by the cook
 `starting` items for every specialty, so `create.items`' default (RQ-154) gives a
 new character what it gets today. Which weapon is Q107.
 
+RQ-154 lands both settings (`content/character-create.md`, "Start and starting
+items"): `create.start` is KO's zone (the package's, the realm being one zone) and map
+position, cooked as engine metres; `create.items` takes `starting`'s groups, a set
+possibly empty (KO's operator, option (a)'s items), and each specialty a group does
+not name keeps `starting`. Both go into `create.bin` (N3CC version 2); a new character
+starts at the start with its specialty's set. Moradon names neither, so its players
+start as before.
+
 ### Q97 — Which version's create table the realm validates against
 
 The base stats and the dress differ by version (`content/character-create.md`,
@@ -1613,7 +1621,7 @@ realm-owner settings `create.races`, `create.start`, `create.items`,
 - `create.start` and `create.items` are not added: a new character starts at the
   package's spawn with its `starting` items, as Q96 (b) keeps them, until RQ-003
   gives each class its set (RQ-160 has: `character-create.json` `starting`, which
-  RQ-154's `create.items` takes as its default).
+  RQ-154's `create.items` takes as its default). RQ-154 adds both (Q96).
 
 ### Q102 — When a race's model enters the package
 
@@ -1753,3 +1761,22 @@ Options:
 **Default taken:** (a). The cook checks that the weapon is an equipment item that
 attacks and that the package's player may wear. RQ-007 gives each class its own
 weapon when play has class rules.
+
+### Q108 — Whether a new character starts with its weapon worn
+
+RQ-154 cooks each specialty's starting items into `create.bin` and a new character's
+bag starts with them (`content/character-create.md`, "Start and starting items").
+Each set names the weapon among them the specialty can use (RQ-160, Q107). KO's
+operator procedure gives a new character no item, so no KO version shows a worn
+starting weapon (local-asset, Q96). The realm's bag has always started with every
+starting item in a bag slot and the equipment slots empty (`server/src/inventory.rs`).
+
+Options:
+- (a) Every starting item in the bag, as before; the weapon is checked, not cooked.
+- (b) The weapon starts in its equipment slot: `create.bin` carries it, and the bag's
+  first build equips it under the equipment rule.
+
+**Default taken:** (a). Nothing a player gets changes, and the equipment rule a worn
+start would pass through is RQ-007's to widen with class rules. `create.start`'s zone
+must be the package's (the realm is one zone); a start in another zone waits for a
+realm of several zones.

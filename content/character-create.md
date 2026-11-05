@@ -473,11 +473,13 @@ character". The source's enum is in `GameProcCharacterCreate.h`.
 | Puri Tuarek button | live in code (`0043a190`); its own layout not read, the 1097 choice draws 1264's (§9.2) | a plain button with an untextured disabled image; live in code | a live check button | `create.races`: the races offered (Q94) |
 | Race/class matrix, face 0..3, hair 0..2, 10 bonus points, client checks | the same | the same | the same | none; package data (RQ-003) |
 | Nation select | `Co_NationSelect.uif`, no question read | asks 10420 | asks 10420 | none; the layout follows the front end (RQ-006) |
-| Starting zone | the server's, not the client's | the server's | the server's | `create.start` (Q96) |
+| Starting zone | the server's, not the client's | the server's | the server's | `create.start` (Q96; RQ-154) |
+| Starting items | the server's: none from the operator's procedure | the same | the same | `create.items` (Q96; RQ-154) |
 
-The settings are a proposal for RQ-002 to land in `games/moradon/realm-config.json`
-(today `{"front_end": "1097"}`). The cook checks them against the package. No engine
-module names a race, class or zone.
+RQ-002 landed `create.table`, `create.races` and `create.reserved`, RQ-154
+`create.start` and `create.items`, in `games/<game>/realm-config.json` (Moradon's
+`{"front_end": "1097"}`, with no `create`). The cook checks them against the package.
+No engine module names a race, class, zone or item.
 
 ## The realm today (before RQ-002)
 
@@ -519,10 +521,11 @@ rules; KO's are Moradon's, from the tables above:
 | `starting` | each specialty's starting set (RQ-160, below): groups of `specialties` sharing `items` (`[item, count]` pairs of the package's bag items) and the `weapon` among them it can use, every specialty of `races` in one group; or null, every specialty starting with the package's `starting` items |
 
 The realm owner's `realm-config.json` may add `create`: `table` (Q97, default the
-front end's), `races` (Q94, default `content`; only races in `content`) and
+front end's), `races` (Q94, default `content`; only races in `content`),
 `reserved` (Q99, words no name may contain, compared without regard to case;
-default none). `create.start` and `create.items` are not settings yet (Q101);
-`create.items`' default is `starting` (RQ-160, RQ-154).
+default none), `start` (Q96, where a new character starts; default the package's
+spawn) and `items` (Q96, what some specialties start with; default `starting`).
+The last two are RQ-154's, "Start and starting items" below.
 
 **The cook.** `make realm-assets` (`ko_bake.py --features`) checks both files with
 the front-end choice, before the survey (`tools/assetc/ko_create.py` `plan`, through
@@ -531,28 +534,33 @@ end's inputs (`build`). It refuses a malformed file or setting, a table the pack
 lacks, a race without a player model, a `content` race without a create model
 (`models.create`, RQ-158), a table row whose race or specialty the
 package lacks, a missing row the offered races need, a fixed choice the rules
-refuse, a create dress that does not resolve (RQ-159, above), and a starting set
-that does not fit the package (RQ-160, below). The package's manifest gets a `create` section, which
-`tools/assetc/create.py` cooks into `create.bin` (N3CC version 1, little-endian u32s
-and u32-length ASCII strings):
+refuse, a create dress that does not resolve (RQ-159, above), a starting set
+that does not fit the package (RQ-160, below), and a start in another zone or off the
+map (RQ-154, below). The package's manifest gets a `create` section, which
+`tools/assetc/create.py` cooks into `create.bin` (N3CC version 2, little-endian u32s,
+f32s and u32-length ASCII strings; version 1, RQ-002's, ended after `fixed`):
 
 ```
-"N3CC" 1 stats nation race_count
+"N3CC" 2 stats nation race_count
   per race: race nation faces hairs specialty_count
     per specialty: specialty bonus base[stats]
 name_min name_max punctuation reserved_count reserved[...]
 refusal text × 6 (limit, mismatch, taken, failed, name, stats; empty keeps the engine's)
 fixed (0 or 1) [race specialty face hair stats[stats]]
+start (0 or 1) [x z]                       (f32 engine metres; 0: the package's spawn)
+kit_count, per kit: specialty item_count, per item: item count
 ```
 
 Bounds: 1..8 stats, nation 1..255, 1..32 races of 1..16 specialties, ids 1..65535,
 1..256 faces and hairs, bonus and base 0..1000, name 1..24 bytes, up to 256 reserved
 words (lower-case printable ASCII, 1..24 bytes), refusal texts printable ASCII up to
-200 bytes. The server (`server/src/create.rs`) and the client
+200 bytes; a start finite and within 10^6 m; at most one kit per specialty the races
+offer, each up to 64 distinct items (printable ASCII ids of 1..128 bytes), counts
+1..9999. The server (`server/src/create.rs`) and the client
 (`client/assets/assets.cpp`, magic and version only until RQ-004 reads it) refuse
 any other file; the server's `--check-content` prints `create races=… specialties=…
-stats=… nation=… fixed=…`. A package without `create.bin` creates by name alone, as
-before. The Moradon package is the only one with rules; its table is 1264's for the
+stats=… nation=… fixed=… start=<x,z or none> items=<kits>`. A package without
+`create.bin` creates by name alone, as before. The Moradon package is the only one with rules; its table is 1264's for the
 1097 choice, the same bases as 1298's (above), so the fixed Tuarek priest's stats are
 60 / 60 / 70 / 50 / 60.
 
@@ -594,9 +602,10 @@ for a name kept from before). The list is in slot order; a character whose bag d
 not decode is listed without `appearance` (logged), not dropped. Spec 03's account view lists
 each character's `slot`, `nation`, `race` and `specialty`.
 
-**What stays.** A new character starts at the package's spawn with its `starting`
-items (Q96 (b); RQ-154 gives it its specialty's set); the stats are kept but play does not read them yet (RQ-007); the
-screen still sends a name alone (RQ-004); one nation (RQ-006).
+**What stays.** A new character starts at the package's spawn, or the realm owner's
+`create.start`, with its specialty's starting items (Q96 (b); RQ-154, below); the stats
+are kept but play does not read them yet (RQ-007); the screen still sends a name alone
+(RQ-004); one nation (RQ-006).
 
 ## The realm's races (RQ-003)
 
@@ -698,10 +707,53 @@ checks it, in the `--features` cook, against the package's inventory, equipment 
 
 Moradon's set is the package's `starting` items for every specialty, its weapon the
 practice blade (Q107 (a)). The package has no weapon of a rogue's, mage's or priest's
-kind, and the realm's equipment rule has no class (RQ-162, RQ-007). Nothing is cooked
-from `starting` yet: `create.bin`, the provenance and every pin are as before, and a new
-character still gets the package's `starting` items. RQ-154's `create.items` takes it
-as its default.
+kind, and the realm's equipment rule has no class (RQ-162, RQ-007). RQ-154 cooks each
+offered specialty's set into `create.bin` (below); the weapon is checked, not cooked,
+and stays in the bag as the package's starting blade does.
+
+## Start and starting items (RQ-154, Q96)
+
+KO's operator procedure starts every character in zone 21, Moradon, at (312, 402),
+with no items (`CREATE_NEW_CHAR`, local-asset; "Starting state" above). The realm
+starts it where the package or the realm owner says, with its specialty's set (Q96
+(b)). Two realm-owner settings in `realm-config.json`'s `create`:
+
+| Setting | Form | Default |
+|---|---|---|
+| `start` | `{"zone": <KO zone id>, "position": [x, z]}`: KO's map position in metres from the map's corner, as `START_POSITION` and `CREATE_NEW_CHAR` name it (KO's operator: `{"zone": 21, "position": [312, 402]}`) | the package's spawn (the surveyed start) |
+| `items` | groups as `starting`'s: `specialties`, `items` (`[item, count]` pairs of the package's bag items, none allowed: KO's operator gives none) and `weapon` (one of them, or null); each specialty in one group at most | `starting` for every specialty a group does not name |
+
+**The cook** (`tools/assetc/ko_create.py`: `plan` checks the shapes before the survey,
+`starting` and `complete` the rest in the `--features` cook) refuses:
+- a malformed `start` or `items`; a group naming a specialty no race has, or one
+  another group names;
+- a start whose zone is not the package's (the realm is one zone; Moradon's is 21), or
+  whose position leaves the map;
+- a set that `starting` refuses (RQ-160, above), and one naming the progression's
+  reward item, which no bag may start with.
+
+It cooks the start as engine metres (`x - half`, `half - z`, as `ko_start` maps a start
+area; Moradon's map is 512 m, so KO's (312, 402) is (56, -146)), recorded in the
+provenance's `create.start`, and each specialty the offered races have that has a set
+(the realm owner's group, else `starting`'s) as a kit in `create.bin` (above).
+
+**The server** refuses a package whose start is not on the ground
+(`movement::ground`, as the package's spawn), and one with kits but no inventory or a
+kit that is not the bag's: an item the bag lacks or twice, the reward item, a count
+past its stack, or a set that with the reward slots does not leave the bag a free slot
+(`inventory::Policy::validate_kit`). `accounts::create` stores the new character at the
+start (`content::Release::create_spawn`: the start on the ground, else the package's
+spawn) with its specialty. The bag is built when the character is first loaded
+(`inventory::load`, as before): with its specialty's kit when it has one, otherwise
+(a specialty without a set, or a character created without the package's rules) the
+items' own `starting` counts. An empty kit starts the bag with only the reward slots.
+
+Moradon names neither setting: a new character starts at the package's spawn with the
+package's `starting` items, as before RQ-154, now cooked as specialties 102 and 104's
+kits (`create.bin` 384 → 842 bytes; the package hash changes, so the hosted realm's
+next deploy is a new realm, Q63). `tests/character_create.py` checks the cook and the
+readers; `tests/character_create_db.py` creates characters against Postgres and checks
+where each stands and what its bag starts with.
 
 ## What each item needs
 

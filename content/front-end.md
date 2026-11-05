@@ -591,8 +591,8 @@ and plays whatever the file says. Two files in the package source hold it:
 
 - `games/<game>/realm-config.json`, the realm owner's choices:
   `{"front_end": "<client>"}`, and optionally `create`, the character-create
-  choices (RQ-002: `table`, `races`, `reserved`; `content/character-create.md`,
-  "The realm's create"). It takes no other key (a misspelt one is refused, not
+  choices (RQ-002: `table`, `races`, `reserved`; RQ-154: `start`, `items`;
+  `content/character-create.md`, "The realm's create"). It takes no other key (a misspelt one is refused, not
   ignored). Moradon's is `"1097"` (Q71), with no `create`.
 - `games/<game>/front-ends.json`, the clients the package can cook, by id
   (lower-case letters, digits and `-`, up to 32): each a `recipe`, the

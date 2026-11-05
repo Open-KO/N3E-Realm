@@ -496,9 +496,12 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
             # create against create.bin.
             import ko_create
             manifest['create'],report['create']=ko_create.build(front['create'],front_inputs)
-            # RQ-160: each specialty's starting set fits the package's bag and
-            # names a weapon its player may wear; RQ-154 cooks it (create.items).
-            ko_create.starting(front['create'],manifest)
+            # RQ-160, RQ-154 (Q96): each specialty's starting set (the package's,
+            # or the realm owner's create.items) fits the package's bag and names
+            # a weapon its player may wear, and is cooked with the realm owner's
+            # create.start, KO's zone and map position, into create.bin.
+            ko_create.complete(manifest['create'],report['create'],front['create'],manifest,
+                               zone['zone_id'],report['extent_metres'])
         if des:
             # Exploration: Demon's Souls characters from the user's own dump (moradon_des.py).
             import moradon_des

@@ -567,7 +567,9 @@ async fn main() -> Result<()> {
         // RQ-002: the character-create rules the server checks creates against.
         if let Some(c) = &r.create {
             let specialties: usize = c.races.iter().map(|r| r.specialties.len()).sum();
-            println!("create races={} specialties={specialties} stats={} nation={} fixed={}", c.races.len(), c.stats, c.nation, c.fixed.is_some());
+            // RQ-154: the realm owner's start and the specialties with starting items.
+            let start = c.start.map_or("none".into(), |[x, z]| format!("{x},{z}"));
+            println!("create races={} specialties={specialties} stats={} nation={} fixed={} start={start} items={}", c.races.len(), c.stats, c.nation, c.fixed.is_some(), c.kits.len());
         }
         return Ok(());
     }

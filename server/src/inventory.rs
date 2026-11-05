@@ -27,7 +27,13 @@ pub struct Policy {
     pub coins: u32,
     pub items: Vec<Item>,
     pub hash: Vec<u8>,
+    /// Each specialty's starting items (RQ-154, create.bin), which a new
+    /// character of that specialty's bag starts with instead of the items'
+    /// `starting` counts; None without create items.
+    pub kits: Option<Kits>,
 }
+/// Starting items (id, count) by specialty.
+pub type Kits = Arc<std::collections::BTreeMap<u32, Vec<(String, u32)>>>;
 pub(crate) fn id(s: &str, game: &str) -> bool {
     s.strip_prefix(&format!("{game}:")).is_some_and(|v| {
         !v.is_empty()
@@ -94,6 +100,7 @@ impl Policy {
             coins,
             items,
             hash,
+            kits: None,
         })
     }
     pub fn validate_reward(&self, reward: &str, count: u32) -> Result<()> {
@@ -105,6 +112,24 @@ impl Policy {
                 > self.capacity as usize
         {
             return Err(bad("inventory reward compatibility"));
+        }
+        Ok(())
+    }
+    /// A specialty's starting items (RQ-154): each a bag item, not the reward
+    /// item, at most its stack, once; the set fits beside `count` reward slots
+    /// and leaves a slot free, as the items' own `starting` counts must.
+    pub fn validate_kit(&self, kit: &[(String, u32)], reward: &str, count: u32) -> Result<()> {
+        let mut seen = BTreeSet::new();
+        for (id, quantity) in kit {
+            if id == reward
+                || !seen.insert(id)
+                || !self.items.iter().any(|i| i.id == *id && (1..=i.stack).contains(quantity))
+            {
+                return Err(bad("create starting item"));
+            }
+        }
+        if kit.len() >= self.capacity as usize || kit.len() + count as usize > self.capacity as usize {
+            return Err(bad("create starting capacity"));
         }
         Ok(())
     }
@@ -205,15 +230,37 @@ pub(crate) fn load(
         return Err(bad("inventory reward identity"));
     }
     p.validate_reward(reward, count)?;
+    // RQ-154 (Q96): a character created with a specialty that has starting
+    // items starts with them; any other with the items' `starting` counts.
+    let kit = match &p.kits {
+        Some(kits) => t
+            .query_one("SELECT specialty FROM characters WHERE id=$1", &[&s.id])?
+            .get::<_, Option<i32>>(0)
+            .and_then(|v| kits.get(&(v as u32))),
+        None => None,
+    };
     let mut slots = Vec::new();
-    for item in &p.items {
-        if item.starting > 0 {
+    if let Some(kit) = kit {
+        p.validate_kit(kit, reward, count)?;
+        for (id, quantity) in kit {
+            let item = p.items.iter().find(|i| i.id == *id).ok_or_else(|| bad("create starting item"))?;
             slots.push(wire::ItemStack {
                 instance: serial(t)?,
-                item: item.id.clone(),
-                quantity: item.starting,
+                item: id.clone(),
+                quantity: *quantity,
                 durability: item.durability,
             });
+        }
+    } else {
+        for item in &p.items {
+            if item.starting > 0 {
+                slots.push(wire::ItemStack {
+                    instance: serial(t)?,
+                    item: item.id.clone(),
+                    quantity: item.starting,
+                    durability: item.durability,
+                });
+            }
         }
     }
     let durability = p.items.iter().find(|i| i.id == reward).unwrap().durability;
@@ -539,7 +586,7 @@ pub(crate) fn grant_drop(t:&mut postgres::Transaction<'_>,realm:&str,actor:i64,i
 #[cfg(test)] mod stack_tests {
     use super::*;
     #[test] fn merge_conserves_quantities_and_identities(){
-        let policy=Policy{storage:None,wear:None,stats:None,thresholds:None,equipment:None,capacity:4,currency:"x".into(),limit:100,coins:0,hash:vec![],items:vec![Item{id:"stack".into(),label:"Stack".into(),stack:20,durability:5,starting:0}]};
+        let policy=Policy{storage:None,wear:None,stats:None,thresholds:None,equipment:None,capacity:4,currency:"x".into(),limit:100,coins:0,hash:vec![],kits:None,items:vec![Item{id:"stack".into(),label:"Stack".into(),stack:20,durability:5,starting:0}]};
         for a in 1..=20 {for b in 1..=20 {for full in [false,true] {
             let item=|id,qty|wire::ItemStack{instance:id,item:"stack".into(),quantity:qty,durability:5};
             let mut slots=vec![if full {item(3,20)}else{Default::default()},item(1,a),item(2,b)];
@@ -553,5 +600,91 @@ pub(crate) fn grant_drop(t:&mut postgres::Transaction<'_>,realm:&str,actor:i64,i
         }}}
         let mut slots=vec![wire::ItemStack{instance:1,item:"stack".into(),quantity:4,durability:4},wire::ItemStack{instance:2,item:"stack".into(),quantity:4,durability:5}];
         let original=slots.clone();move_or_merge(&mut slots,0,1,&policy);assert_eq!(slots[0],original[1]);assert_eq!(slots[1],original[0]);
+    }
+}
+
+/// RQ-154 (Q96): a character created under create.bin's rules starts at the
+/// realm owner's start with its specialty's starting items; a specialty with
+/// an empty set starts with none (KO's operator), and a character created
+/// without a specialty with the items' own `starting` counts. Run by
+/// tests/character_create_db.py against a package it cooks with a start and sets.
+#[cfg(test)]
+mod kit_tests {
+    use super::*;
+    #[test]
+    #[ignore = "isolated postgres and N3E_PACKAGE supplied by tests/character_create_db.py"]
+    fn durable_starting_items() -> Result<()> {
+        let url = std::env::var("N3E_TEST_DATABASE_URL")?;
+        persistence::migrate(&url, persistence::MIGRATIONS)?;
+        let release = crate::content::load(Path::new(&std::env::var("N3E_PACKAGE")?))?;
+        let rules = &release.rules;
+        let policy = release.create.as_deref().ok_or_else(|| bad("the package has no create rules"))?;
+        let bag = rules.inventory.as_deref().ok_or_else(|| bad("the package has no inventory"))?;
+        let kits = bag.kits.as_ref().ok_or_else(|| bad("the inventory has no starting sets"))?;
+        let start = policy.start.ok_or_else(|| bad("the package has no create start"))?;
+        let mut c = persistence::connect(&url)?;
+        let realm = format!("rq154-{}", std::process::id());
+        let generation = persistence::acquire(&mut c, &realm, "kits")?;
+        let o = Arc::new(Owner { realm: realm.clone(), owner: "kits".into(), generation });
+        crate::settlements::convert(&mut c, &o, rules.progression.as_ref().unwrap(), &release.game, 20)?;
+        let account: i64 = c
+            .query_one(
+                "INSERT INTO accounts(name,salt,password_hash) VALUES($1,$2,$3) RETURNING id",
+                &[&realm, &&[0u8; 16][..], &&[0u8; 32][..]],
+            )?
+            .get(0);
+        let runtime = tokio::runtime::Runtime::new()?;
+        let db = Database::start(url, Default::default())?;
+        // The package's first race: each specialty's choice at its base, the
+        // points in the last stat.
+        let race = &policy.races[0];
+        let mut created = Vec::new();
+        for (slot, s) in race.specialties.iter().enumerate() {
+            let mut stats = s.base.clone();
+            *stats.last_mut().unwrap() += s.bonus;
+            let q = wire::CreateCharacter {
+                name: format!("Kit{slot}"),
+                slot: slot as u32,
+                race: race.id,
+                specialty: s.id,
+                stats,
+                ..Default::default()
+            };
+            let valid = crate::create::check(Some(policy), &q, release.character_slots).map_err(|r| bad(&r.to_string()))?;
+            runtime.block_on(db.create(account, valid, o.clone(), release.create_spawn()?, release.character_slots))?;
+            created.push((q.name, Some(s.id)));
+        }
+        runtime.block_on(db.create(account, crate::create::Valid::named("Plain"), o.clone(), release.create_spawn()?, 8))?;
+        created.push(("Plain".into(), None));
+        let mut empty = false;
+        for (name, specialty) in created {
+            let row = c.query_one("SELECT id,x,y,z FROM characters WHERE realm=$1 AND name=$2", &[&realm, &name])?;
+            let (id, x, y, z): (i64, f32, f32, f32) = (row.get(0), row.get(1), row.get(2), row.get(3));
+            assert_eq!([x, z], start, "{name} starts at the realm owner's start");
+            assert_eq!(y, crate::movement::ground(&release.collision, x, z), "{name} stands on the ground");
+            let s = Selected { id, generation: 0, life_revision: 0, dead: false, ready_ticks: 0, entity: Default::default() };
+            let mut t = c.transaction()?;
+            let state = load(&mut t, &s, &o, bag, &rules.item)?;
+            t.commit()?;
+            let held: Vec<(String, u32)> = state
+                .slots
+                .iter()
+                .filter(|i| i.instance != 0 && i.item != rules.item)
+                .map(|i| (i.item.clone(), i.quantity))
+                .collect();
+            let want: Vec<(String, u32)> = match specialty.and_then(|v| kits.get(&v)) {
+                Some(kit) => kit.clone(),
+                None => bag.items.iter().filter(|i| i.starting > 0).map(|i| (i.id.clone(), i.starting)).collect(),
+            };
+            assert_eq!(held, want, "{name} ({specialty:?})");
+            empty |= want.is_empty();
+            for i in state.slots.iter().filter(|i| i.instance != 0) {
+                let def = bag.items.iter().find(|d| d.id == i.item).unwrap();
+                assert_eq!(i.durability, def.durability, "{name} {}", i.item);
+            }
+        }
+        assert!(empty, "the package names a specialty with an empty set");
+        println!("PASS create start and starting items: each specialty's set, an empty set, the package's starting items");
+        Ok(())
     }
 }

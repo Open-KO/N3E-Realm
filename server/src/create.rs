@@ -3,8 +3,10 @@
 //! specialty's base stats and bonus points, the name rule, the refusal wording,
 //! and the fixed choice a create without a race takes (Q52). The server checks a
 //! `CreateCharacter` against them and never trusts the client's fields
-//! (content/character-create.md, "The realm's create"; Q95). This module knows no
-//! game's race, specialty or stat: every number is the package's.
+//! (content/character-create.md, "The realm's create"; Q95). Version 2 (RQ-154,
+//! Q96) adds the realm owner's start for a new character and the bag items each
+//! specialty starts with. This module knows no game's race, specialty, stat or
+//! item: every number and id is the package's.
 use crate::{
     content::{bad, Reader, Result},
     wire,
@@ -21,6 +23,15 @@ pub const MAX_NAME: u32 = 24;
 /// The longest refusal text and reserved word.
 pub const MAX_TEXT: usize = 200;
 pub const MAX_WORD: usize = 24;
+/// The file's version: 2 adds the start and the starting items (RQ-154).
+pub const VERSION: u32 = 2;
+/// Most stacks a specialty starts with, the most of one stack, the longest
+/// item id (the bag holds at most 64 stacks of 9999), and a start's bound in
+/// engine metres.
+pub const MAX_KIT: u32 = 64;
+pub const MAX_COUNT: u32 = 9999;
+pub const MAX_ITEM: usize = 128;
+pub const MAX_METRES: f32 = 1e6;
 /// Without create rules: today's rule, 1..24 ASCII letters, digits, `_` and `-`.
 pub const LEGACY_NAME: usize = 24;
 
@@ -116,6 +127,12 @@ pub struct Policy {
     /// keeps the engine's.
     pub refusals: Vec<String>,
     pub fixed: Option<Fixed>,
+    /// Where a new character starts (engine x, z), the realm owner's
+    /// `create.start`; None starts it at the package's spawn.
+    pub start: Option<[f32; 2]>,
+    /// The bag items (id, count) each specialty starts with, by specialty; a
+    /// specialty without a set starts with the package's `starting` items.
+    pub kits: std::collections::BTreeMap<u32, Vec<(String, u32)>>,
 }
 
 /// A create the rules accept, as the server stores it. Without create rules only
@@ -163,7 +180,7 @@ impl Policy {
         Self::read(Reader::open(path)?)
     }
     pub fn read(mut r: Reader) -> Result<Self> {
-        if r.take(4)? != b"N3CC" || r.u()? != 1 {
+        if r.take(4)? != b"N3CC" || r.u()? != VERSION {
             return Err(bad("create magic/version"));
         }
         let stats = r.u()?;
@@ -253,6 +270,46 @@ impl Policy {
             }),
             _ => return Err(bad("create fixed flag")),
         };
+        let start = match r.u()? {
+            0 => None,
+            1 => {
+                let p = [r.f()?, r.f()?];
+                if p.iter().any(|v| !v.is_finite() || v.abs() > MAX_METRES) {
+                    return Err(bad("create start"));
+                }
+                Some(p)
+            }
+            _ => return Err(bad("create start flag")),
+        };
+        let offered: Vec<u32> = races
+            .iter()
+            .flat_map(|r| r.specialties.iter().map(|s| s.id))
+            .collect();
+        let n = r.u()?;
+        if n as usize > offered.len() {
+            return Err(bad("create items count"));
+        }
+        let mut kits = std::collections::BTreeMap::new();
+        for _ in 0..n {
+            let (specialty, stacks) = (r.u()?, r.u()?);
+            if !offered.contains(&specialty) || kits.contains_key(&specialty) || stacks > MAX_KIT {
+                return Err(bad("create items specialty"));
+            }
+            let mut kit: Vec<(String, u32)> = Vec::new();
+            for _ in 0..stacks {
+                let item = text(&mut r, MAX_ITEM, "create item")?;
+                let count = r.u()?;
+                if item.is_empty()
+                    || !item.bytes().all(|b| b.is_ascii_graphic())
+                    || kit.iter().any(|(i, _)| *i == item)
+                    || !(1..=MAX_COUNT).contains(&count)
+                {
+                    return Err(bad("create item"));
+                }
+                kit.push((item, count));
+            }
+            kits.insert(specialty, kit);
+        }
         r.end()?;
         let policy = Policy {
             stats,
@@ -264,6 +321,8 @@ impl Policy {
             reserved,
             refusals,
             fixed,
+            start,
+            kits,
         };
         if let Some(f) = &policy.fixed {
             // The fixed choice is one the rules accept, in the default nation.
@@ -401,10 +460,18 @@ pub(crate) mod tests {
         [u(v.len() as u32), v.as_bytes().to_vec()].concat()
     }
     /// A synthetic two-nation rule set: race 7 (nation 1) with specialties 70
-    /// and 71, race 8 (nation 2) with 80; three stats.
+    /// and 71, race 8 (nation 2) with 80; three stats; no start, no items.
     pub(crate) fn bytes(fixed: Option<[u32; 7]>) -> Vec<u8> {
+        with(fixed, None, &[])
+    }
+    /// The same rules with a start and starting items (RQ-154).
+    pub(crate) fn with(
+        fixed: Option<[u32; 7]>,
+        start: Option<[f32; 2]>,
+        kits: &[(u32, &[(&str, u32)])],
+    ) -> Vec<u8> {
         let mut b = b"N3CC".to_vec();
-        for v in [1, 3, 1, 2] {
+        for v in [VERSION, 3, 1, 2] {
             b.extend(u(v));
         }
         for v in [7, 1, 4, 3, 2, 70, 5, 40, 30, 20, 71, 5, 20, 30, 40] {
@@ -430,7 +497,35 @@ pub(crate) mod tests {
                 }
             }
         }
+        match start {
+            None => b.extend(u(0)),
+            Some([x, z]) => {
+                b.extend(u(1));
+                b.extend(x.to_le_bytes());
+                b.extend(z.to_le_bytes());
+            }
+        }
+        b.extend(u(kits.len() as u32));
+        for (specialty, items) in kits {
+            b.extend(u(*specialty));
+            b.extend(u(items.len() as u32));
+            for (item, count) in *items {
+                b.extend(s(item));
+                b.extend(u(*count));
+            }
+        }
         b
+    }
+    /// The synthetic rules with a start and two specialties' sets, one empty.
+    pub(crate) fn kitted() -> Vec<u8> {
+        with(
+            Some([7, 71, 0, 0, 20, 30, 45]),
+            Some([1.5, -2.25]),
+            &[
+                (70, &[("demo:item/blade", 1), ("demo:item/potion", 5)]),
+                (80, &[]),
+            ],
+        )
     }
     pub(crate) fn policy() -> Policy {
         Policy::read(Reader::from_bytes(bytes(Some([7, 71, 0, 0, 20, 30, 45])))).unwrap()
@@ -456,20 +551,31 @@ pub(crate) mod tests {
     }
 
     /// tests/character_create.py cooks the same rules with tools/assetc/create.py
-    /// and checks this digest, so the cook and this reader share one layout.
+    /// and checks these digests (without and with a start and items), so the
+    /// cook and this reader share one layout.
     pub(crate) const SYNTHETIC_SHA256: &str =
-        "c86175f18617f5c22ca89196b05e3b1d6a1bab6e7c071f273028a4ea99907c00";
+        "7d7b89d81e821be5a03de5ceb9247a82ab786c253e0480c7fcef6d534b68adb5";
+    pub(crate) const KITTED_SHA256: &str =
+        "47b6e87f8be6d055d833e78e8272879c214ff3011145d74eef5db70f147acbb1";
+    fn hex(b: &[u8]) -> String {
+        openssl::sha::sha256(b)
+            .iter()
+            .fold(String::new(), |mut s, x| {
+                use std::fmt::Write;
+                let _ = write!(s, "{x:02x}");
+                s
+            })
+    }
 
     #[test]
     fn reads_the_rules_and_refuses_malformed_files() {
-        let digest = openssl::sha::sha256(&bytes(Some([7, 71, 0, 0, 20, 30, 45])));
-        let hex = digest.iter().fold(String::new(), |mut s, x| {
-            use std::fmt::Write;
-            let _ = write!(s, "{x:02x}");
-            s
-        });
-        assert_eq!(hex, SYNTHETIC_SHA256);
+        assert_eq!(
+            hex(&bytes(Some([7, 71, 0, 0, 20, 30, 45]))),
+            SYNTHETIC_SHA256
+        );
+        assert_eq!(hex(&kitted()), KITTED_SHA256);
         let p = policy();
+        assert_eq!((p.start, p.kits.len()), (None, 0));
         assert_eq!((p.stats, p.nation, p.races.len()), (3, 1, 2));
         assert_eq!(
             p.races[0].specialties[1],
@@ -500,8 +606,9 @@ pub(crate) mod tests {
             );
         }
         let good = bytes(None);
-        // Magic, version, truncation and trailing bytes.
-        for (at, v) in [(0, b'X'), (4, 2)] {
+        // Magic, version (1 is RQ-002's, without the start and items),
+        // truncation and trailing bytes.
+        for (at, v) in [(0, b'X'), (4, 1), (4, 3)] {
             let mut b = good.clone();
             b[at] = v;
             assert!(Policy::read(Reader::from_bytes(b)).is_err());
@@ -520,6 +627,54 @@ pub(crate) mod tests {
             Policy::read(Reader::from_bytes(b)).is_err(),
             "duplicate race"
         );
+        // RQ-154: the start and each specialty's set, in the file's order.
+        let k = Policy::read(Reader::from_bytes(kitted())).unwrap();
+        assert_eq!(k.start, Some([1.5, -2.25]));
+        assert_eq!(
+            k.kits.get(&70).unwrap(),
+            &[
+                ("demo:item/blade".to_string(), 1),
+                ("demo:item/potion".to_string(), 5)
+            ]
+        );
+        assert_eq!(k.kits.get(&80).map(Vec::len), Some(0));
+        assert!(!k.kits.contains_key(&71));
+        // A start off the bound or not finite, a specialty no race offers or
+        // named twice, a stack count of 0 or past 9999, an item twice or
+        // empty, a set past 64 stacks.
+        type Sets = Vec<(u32, Vec<(&'static str, u32)>)>;
+        let bad_kits: [(Option<[f32; 2]>, Sets); 9] = [
+            (Some([f32::NAN, 0.]), vec![]),
+            (Some([0., 2e6]), vec![]),
+            (None, vec![(72, vec![])]),
+            (None, vec![(70, vec![]), (70, vec![])]),
+            (None, vec![(70, vec![("a:b", 0)])]),
+            (None, vec![(70, vec![("a:b", 10000)])]),
+            (None, vec![(70, vec![("a:b", 1), ("a:b", 2)])]),
+            (None, vec![(70, vec![("", 1)])]),
+            (
+                None,
+                vec![(
+                    70,
+                    (0..65)
+                        .map(|i| (&*Box::leak(format!("a:{i}").into_boxed_str()), 1))
+                        .collect(),
+                )],
+            ),
+        ];
+        for (start, kits) in bad_kits {
+            let kits: Vec<(u32, &[(&str, u32)])> =
+                kits.iter().map(|(s, k)| (*s, k.as_slice())).collect();
+            let b = with(None, start, &kits);
+            assert!(
+                Policy::read(Reader::from_bytes(b)).is_err(),
+                "{start:?} {kits:?}"
+            );
+        }
+        let mut b = with(None, None, &[]);
+        let at = b.len() - 8;
+        b[at..at + 4].copy_from_slice(&2u32.to_le_bytes());
+        assert!(Policy::read(Reader::from_bytes(b)).is_err(), "start flag");
     }
 
     #[test]

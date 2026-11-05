@@ -739,6 +739,15 @@ pub fn load(root: &Path) -> Result<Release> {
         }
     }
     if let Some(p) = &inventory { p.validate_reward(&rules.item, rules.slots)?; }
+    // RQ-154 (Q96): each specialty's starting items, from create.bin, are
+    // bag items that fit beside the reward slots; the bag starts with them.
+    if let Some(kits) = create.as_ref().map(|c| &c.kits).filter(|k| !k.is_empty()) {
+        let p = inventory.as_mut().ok_or_else(|| bad("create items need an inventory"))?;
+        for kit in kits.values() {
+            p.validate_kit(kit, &rules.item, rules.slots)?;
+        }
+        p.kits = Some(std::sync::Arc::new(kits.clone()));
+    }
     if commerce {
         let mut policy=crate::commerce::Policy::load(&root.join("commerce.bin"),&game,inventory.as_ref().unwrap(),&rules.item)?;
         for shop in &policy.shops { if !crate::movement::ground(&collision,shop.position[0],shop.position[2]).is_finite(){return Err(bad("shop not on map"));} }
@@ -815,6 +824,12 @@ pub fn load(root: &Path) -> Result<Release> {
         return Err(bad("NPC spawn not walkable"));
     }
     if exploration && !crate::movement::ground(&collision,rules.spawn_x,rules.spawn_z).is_finite(){return Err(bad("player spawn not walkable"));}
+    // RQ-154 (Q96): the realm owner's start for a new character stands on the map.
+    if let Some([x, z]) = create.as_ref().and_then(|c| c.start) {
+        if !crate::movement::ground(&collision, x, z).is_finite() {
+            return Err(bad("create start not walkable"));
+        }
+    }
     Ok(Release {
         appearance,
         assets,
@@ -910,6 +925,20 @@ fn npc_looks(
     Ok(())
 }
 impl Release {
+    /// Where a new character starts (RQ-154, Q96): the realm owner's
+    /// `create.start` on the ground, else the package's spawn.
+    pub fn create_spawn(&self) -> Result<[f32; 3]> {
+        match self.create.as_ref().and_then(|c| c.start) {
+            Some([x, z]) => {
+                let y = crate::movement::ground(&self.collision, x, z);
+                if !y.is_finite() {
+                    return Err(bad("create start not walkable"));
+                }
+                Ok([x, y, z])
+            }
+            None => self.player_spawn(),
+        }
+    }
     /// Exploration packages already declare a surveyed spawn in gameplay data.
     pub fn player_spawn(&self)->Result<[f32;3]> {
         if self.assets.contains_key("exploration.bin"){let x=self.rules.spawn_x;let z=self.rules.spawn_z;

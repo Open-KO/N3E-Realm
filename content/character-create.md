@@ -976,6 +976,28 @@ the cook (Q115). The 1097 choice's `front-end.bin` grows from 57,419,400 to
 parts take room too). The package hash changes, so the hosted realm's next deploy is
 a new realm (Q63).
 
+**The size of every race's create model (RQ-182; local-asset, the pinned tree).**
+Cooked as RQ-165 and RQ-170 would add them (`content/front-end.md`, the bound):
+
+| Race | 1097 choice (1264's table) | 1298 recipe (1298's table) |
+|---|---|---|
+| 1 Arch Tuarek (N3SI) | 2,342,872 | 2,341,276 |
+| 2 Tuarek | 1,589,064 | 2,569,280 (4 dress parts) |
+| 3 Wrinkle Tuarek | 1,175,838 | 1,171,694 |
+| 4 Puri Tuarek | 2,118,130 | 2,121,378 |
+| 11 Barbarian | 1,665,772 | 1,658,380, one plug refused |
+| 12 El Morad male (N3SI) | 1,644,968 | 4,678,215 (12 dress parts) |
+| 13 El Morad female | 1,660,456 | 4,164,940 (12 dress parts) |
+
+Each record's bytes with its race code; the textures its plugs add to the table
+come on top (0.26 MB a 256 × 256 texture).
+Found on the way, for RQ-170 and RQ-006: on 1298's table the Barbarian's plug
+`Item/1_2641_00_0.n3cplug` is refused by the mesh reader ("KO normal"), as are
+the 1097 choice's El Morad halls `ChrSelect/el_chairs.n3shape` and
+`el_elmo_chairs.n3shape`, and 1298's El Morad select zone (10000) names four
+object files the pinned tree lacks (`Object/obj_war_duntree01_ip00`–`ip02`,
+`_po.n3pmesh`).
+
 ## What each item needs
 
 - **RQ-002 (wire and server).**

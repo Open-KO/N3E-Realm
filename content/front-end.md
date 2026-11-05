@@ -46,6 +46,37 @@ arrows, RQ-173, its create models' four faces and three hairs, RQ-174, its
 description text, RQ-175, and its create dress, RQ-176; the 1298 recipe's
 61,843,732).
 
+The bound against what is still to come (RQ-182; local-asset, the pinned trees:
+both recipes cooked with each section's bytes counted, KO's textures stored as
+RGBA8 and each model's atlas as N3S1's RGB or N3SM's RGBA):
+
+| Bytes (MB) | 1097 choice | 1298 recipe |
+|---|---|---|
+| Texture table (item 2) | 17.2: the UI art 6.3 (the logo's 1.0 with it), the hall's 5.2, the intro's 2.1, the font atlases 2.8, the dress plugs' 0.8 | 34.8: the select zone's 63 textures 20.6, the UI art 8.4, the intro's 2.1, the font atlases 2.4, the dress plugs' 1.3 |
+| Intro scene (item 6) | 16.4, its model's 2048 × 1804 RGBA atlas 14.8 (40% of it empty) | 16.4, the same |
+| Select scene (item 7, its meshes and model) | 1.4 | 3.0 |
+| Create models (item 8) | 4.9 | 5.9 |
+| Music (item 9) | 18.5 (1097's PCM) | 1.7 (MPEG) |
+| Total | 58.46 | 61.84 |
+
+A create model's atlases (its own and its parts') are 64–79% of its bytes. With
+every race's create model (races 1, 11, 12 and 13 added, the N3SI ones as RQ-165
+would carry them) the 1097 choice is 66,298,836 bytes, 0.8 MB under the bound
+(1264's table dresses each race in one set, its own parts), and the 1298 recipe
+76,259,455, 9.2 MB over (its table dresses the El Morad male and female in four
+sets each, 12 dress parts: 4.7 and 4.2 MB a race). RQ-006 then adds El Morad's
+select hall (the 1097 choice's `el_chairs`, about 5.1 MB as `ka_chairs` is; the
+1298 recipe's zone 10000, about 22 MB as `karus_intro` is, not measured: four of
+its object files are missing from the pinned tree), its select character and the
+nation select's art: about 75–77 MB and 102–108 MB, before any per-race select
+model RQ-005 carries here. Compressed with zstd -3 the two files are 26.0 and
+16.7 MB today. RQ-182's choice, filed as its own item: raise the bound to
+256 MiB rather than split the file or compress its textures, since no byte of
+the file changes, the engine already reads files of that order whole
+(`render-detail.bin` 128 MiB, `world-textures.bin` 384 MiB), a bound on the
+decoded size would remain under any compression, and the atlases that make up
+most of the models would not keep KO's DXT blocks.
+
 Integers are little-endian u32, reals f32; strings are a u32 length and that many
 bytes. Engine space is KO's with z negated (KO is left-handed).
 

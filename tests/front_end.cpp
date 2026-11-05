@@ -29,6 +29,10 @@
 // RQ-130: create's race and class choices (client/render/create_choice.h) as
 // 1298's in-select create takes its race and class clicks (00604f90, 005fd120)
 // and refuses its Create (005fffd0), and a create that binds neither.
+// RQ-004: the create screen's name entry and Create against the package's
+// rules (create.bin, Q99) and without them, the choice it sends (the fixed
+// one, Q100), the first free slot, and the client's own check of a choice as
+// the server's Policy::choice checks it (Q95).
 #include "assets/assets.h"
 #include "assets/front_place.h"
 #include "render/create_choice.h"
@@ -543,6 +547,69 @@ int main(int argc, char **argv) {
                  "builds the character at the camera's slot on the click that changes a value, refuses no race "
                  "then no class, marks the clicked class until an open or a build; a create that binds neither "
                  "keeps both chosen\n";
+  }
+  {
+    // RQ-004: Moradon's rules as create.bin carries them (one race of two
+    // specialties, KO's 1..20 letters, digits, _ : ;), a reserved word.
+    using n3e::CreateRules;
+    using namespace n3e::front;
+    CreateRules rules;
+    rules.stats = 5, rules.nation = 1, rules.name_min = 1, rules.name_max = 20, rules.punctuation = "_:;";
+    rules.races = {{2, 1, 4, 3, {{102, 10, {60, 60, 70, 50, 50}}, {104, 10, {60, 60, 70, 50, 50}}}}};
+    rules.reserved = {"gm"};
+    rules.refusals[size_t(CreateRules::Refusal::name)] = "You cannot use this character ID. ";
+    rules.fixed = CreateRules::Fixed{2, 104, 0, 0, {60, 60, 70, 50, 60}};
+    const std::optional<CreateRules> with = rules, without;
+    std::string fail;
+    auto want = [&](const char *step, bool ok) { if (!ok && fail.empty()) fail = step; };
+    // The edit takes any printable ASCII up to the rule's longest name; Create
+    // checks the letters, as KO's.
+    std::string typed;
+    for (char c : std::string("Ab-c d\x7f\tefghijklmnopqrstuvwxyz"))
+      if (create_name_takes(with, typed, c)) typed += c;
+    want("takes", typed == "Ab-c defghijklmnopqr");
+    typed.clear();
+    for (char c : std::string("abcdefghijklmnopqrstuvwxyz0")) if (create_name_takes(without, typed, c)) typed += c;
+    want("takes legacy", typed.size() == 24);
+    want("valid", create_name_valid(with, "Tuarek_:;9") && create_name_valid(with, std::string(20, 'a')));
+    want("refused", !create_name_valid(with, "") && !create_name_valid(with, std::string(21, 'a')) &&
+                        !create_name_valid(with, "a-b") && !create_name_valid(with, "a b") &&
+                        !create_name_valid(with, "xGMx"));
+    want("legacy", create_name_valid(without, "a-b_c") && !create_name_valid(without, "a:b") &&
+                       !create_name_valid(without, ""));
+    want("prompt", create_name_prompt(with) == "Enter a name: 1 to 20 letters, digits, _, : or ;." &&
+                       create_name_prompt(without) == "Enter a name: 1 to 24 letters, digits, _ or -.");
+    want("refused words", create_name_refused(with) == "You cannot use this character ID. " &&
+                              create_name_refused(without) == "character name invalid");
+    // The fixed choice in the slot given; race 0 (by name) without rules or a fixed choice.
+    const auto q = create_request(with, 1);
+    want("request", q.slot == 1 && q.race == 2 && q.specialty == 104 && q.face == 0 && q.hair == 0 &&
+                        q.stats == std::vector<uint32_t>{60, 60, 70, 50, 60});
+    auto unfixed = rules;
+    unfixed.fixed.reset();
+    want("by name", create_request(without, 1).race == 0 && create_request(unfixed, 1).race == 0);
+    want("free slot", create_free_slot(std::vector<uint32_t>{}, 3) == 0 &&
+                          create_free_slot(std::vector<uint32_t>{0, 2}, 3) == 1 &&
+                          create_free_slot(std::vector<uint32_t>{1, 0, 2}, 3) == -1);
+    // The server's choice checks (Q95).
+    using R = CreateRules::Refusal;
+    const std::vector<uint32_t> base{60, 60, 70, 50, 50};
+    want("choice", !n3e::create_choice_refusal(rules, 1, 2, 102, 3, 2, {70, 60, 70, 50, 50}));
+    want("mismatch", n3e::create_choice_refusal(rules, 2, 2, 102, 0, 0, {70, 60, 70, 50, 50}) == R::mismatch &&
+                         n3e::create_choice_refusal(rules, 1, 3, 102, 0, 0, {70, 60, 70, 50, 50}) == R::mismatch &&
+                         n3e::create_choice_refusal(rules, 1, 2, 101, 0, 0, {70, 60, 70, 50, 50}) == R::mismatch);
+    want("stats", n3e::create_choice_refusal(rules, 1, 2, 102, 4, 0, {70, 60, 70, 50, 50}) == R::stats &&
+                      n3e::create_choice_refusal(rules, 1, 2, 102, 0, 3, {70, 60, 70, 50, 50}) == R::stats &&
+                      n3e::create_choice_refusal(rules, 1, 2, 102, 0, 0, base) == R::stats &&
+                      n3e::create_choice_refusal(rules, 1, 2, 102, 0, 0, {80, 50, 70, 50, 50}) == R::stats &&
+                      n3e::create_choice_refusal(rules, 1, 2, 102, 0, 0, {70, 60, 70, 50}) == R::stats);
+    if (!fail.empty()) {
+      std::cerr << "FAIL create rules: " << fail << "\n";
+      return 1;
+    }
+    std::cout << "PASS create rules: the name entry takes printable ASCII up to the rule's longest, Create refuses "
+                 "what the rule refuses in the package's words; the fixed choice sent in the first free slot, race 0 "
+                 "without one; a choice checked as the server's\n";
   }
   {
     // RQ-111 (KO-FINDINGS 9.7, 1298 00527a40, 00527c60, 00526d00): exit_confirm

@@ -43,6 +43,7 @@ struct Output {
   Command command = Command::none;
   uint64_t character = 0;  // select
   std::string name;        // create
+  CreateRequest create;    // create (RQ-004): the rest of KO's create packet
   // An audio.bin key the viewer plays once, unpositioned, stopping the
   // previous play of the same key (RQ-077: the select arrows' turn sound).
   const char *sound = nullptr;
@@ -159,7 +160,9 @@ inline std::string replace(std::string s, const std::string &key, const std::str
 
 class View {
  public:
-  explicit View(FrontEnd data) : fe(std::move(data)) {
+  // `rules`: the package's create.bin (RQ-004), none without one.
+  explicit View(FrontEnd data, std::optional<CreateRules> rules = std::nullopt)
+      : fe(std::move(data)), create_rules(std::move(rules)) {
     using namespace detail;
     // RQ-101: KO 1264's WinMain makes the logo the first procedure
     // (00602506: ProcActiveSet of the logo, once per process).
@@ -547,8 +550,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     const auto ui = layout();
     if (e.type == SDL_EVENT_TEXT_INPUT && state == Screen::create) {
+      // RQ-004: any printable ASCII up to the rule's longest name; Create
+      // checks the letters (create_choice.h).
       for (const char *c = e.text.text; *c; ++c)
-        if (name.size() < 24 && (std::isalnum((unsigned char)*c) || *c == '_' || *c == '-')) name += *c;
+        if (create_name_takes(create_rules, name, *c)) name += *c;
       return out;
     }
     if (e.type == SDL_EVENT_KEY_DOWN && !e.key.repeat) {
@@ -748,6 +753,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::array<int, 2> screen_size{0, 0};          // the window those pixels are of
   bool pending_create = false;
   std::string name;
+  // RQ-004: the package's create rules (create.bin), none without them.
+  std::optional<CreateRules> create_rules;
   const Characters *list = nullptr;
   // UI batch: x, y, u, v, r, g, b, a per vertex, flushed per texture.
   std::vector<float> batch;
@@ -1158,7 +1165,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     case FrontAction::create_confirm:
       if (state == Screen::create && !pending_create) {
         if (name.empty()) {
-          show_message(FrontMessage::create_name, "Enter a name: 1 to 24 letters, digits, _ or -.");
+          show_message(FrontMessage::create_name, create_name_prompt(create_rules));
           break;
         }
         // RQ-130: then no race, then no class (005fffd0's codes 7 and 9).
@@ -1166,10 +1173,28 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
           show_message(*refused, *refused == FrontMessage::create_no_race ? "Choose a race." : "Choose a class.");
           break;
         }
+        // RQ-004: then the name's letters (005fffd0's code 5, row 1906 under
+        // 1901), in the box and words a refused create shows: the package's
+        // rule and its wording of the server's same refusal.
+        if (!create_name_valid(create_rules, name)) {
+          show_message(FrontMessage::create_refused, create_name_refused(create_rules));
+          break;
+        }
+        // The first slot the list leaves free (the hall draws the list in
+        // slot order, so the new character stands where it is drawn).
+        std::vector<uint32_t> held;
+        if (list)
+          for (const auto &c : list->characters()) held.push_back(c.slot());
+        const int slot = create_free_slot(held, int(fe.slots.size()));
+        if (slot < 0) {
+          show_message(FrontMessage::create_full, "No more characters can be made in this realm.");
+          break;
+        }
         pending_create = true;
         known = list ? list->characters_size() : 0;
         out.command = Command::create;
         out.name = name;
+        out.create = create_request(create_rules, uint32_t(slot));
       }
       break;
     default: break;

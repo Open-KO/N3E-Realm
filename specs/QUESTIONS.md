@@ -1579,6 +1579,12 @@ Options:
 
 The rule applies to new creates; an existing name outside it is kept.
 
+RQ-004 (first part) gives the create screen the same rule from `create.bin`: its edit
+takes any printable ASCII up to the rule's longest name, and Create refuses a name the
+rule refuses after KO's empty-name, race and class checks, in the server's words for
+that refusal (KO's row 1906), sending nothing (1298 `005fffd0`, code 5). KO's edit has
+no length of its own (source `CN3UIEdit::Load`); the stop at 20 is the realm's bound.
+
 ### Q100 — The create until the screen sends a choice
 
 RQ-002 makes the server check every create against the package's rules
@@ -1601,6 +1607,11 @@ points in the fifth stat (MP, the priest's), so its stats are the chosen table's
 base plus ten MP (60 / 60 / 70 / 50 / 60 with 1264's or 1298's table). The cook
 refuses a fixed choice the rules refuse. RQ-004 sends the player's choice and
 removes the fixed one.
+
+RQ-004's first part moves the KO screens to (c): the client reads `create.bin` and
+sends its fixed choice whole, in the first free slot, until the screen's buttons choose
+(RQ-004's later parts). The server's (b) path stays for the panels' create, which sends
+a name alone, and is removed when no client sends one.
 
 ### Q101 — The account's nation and the create settings RQ-002 does not land
 
@@ -1780,3 +1791,26 @@ Options:
 start would pass through is RQ-007's to widen with class rules. `create.start`'s zone
 must be the package's (the realm is one zone); a start in another zone waits for a
 realm of several zones.
+
+### Q109 — The create screen's race buttons for races it does not offer
+
+RQ-004 binds create's race buttons to KO's race codes (1298 `00604f90`, `006060f0`:
+every race button live, KO never disables one; `content/character-create.md`, "Races
+and classes"). The realm offers only the races of `content` (Q105 (b); Moradon: the
+Tuarek), but ships create models for more (`models.create`: the Wrinkle and Puri
+Tuarek) and none for the Arch Tuarek (RQ-165).
+
+Options:
+- (a) As today: a race the package does not offer keeps its button fixed disabled
+  (1298's layout draws its textured disabled tile; the 1097 choice's Puri Tuarek its
+  normal grey tile, Q90), no pointer, no click.
+- (b) KO's live button: a click builds its model where one ships and fills its stats,
+  and Create refuses it with KO's own refusal for the case, code 8, row 1910 ("This
+  race is not available yet.", the source's commented-out race check), under 1901.
+  A race without a create model would build nothing.
+- (c) Hide the button.
+
+**Default taken:** (a), the look the screens have now, so nothing changes until the
+maintainer picks; (b) is the nearest to KO's flow, but adds a refusal KO's 1298 never
+shows. RQ-004's race-button part draws it as decided.
+

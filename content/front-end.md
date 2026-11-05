@@ -470,7 +470,7 @@ The closed set, by index: none, `login`, `exit`, `login_group`, `realm_group`,
 `create_class` (version 21). A group bound to `login_group` or
 `realm_group` is shown in its state only; `realm_list` lists the realm from
 `realm.json`; `notice`, `char_info`, `class_desc`, `version`, `info`,
-`message` and `title` (the message's title, item 11) are texts the client fills; `name_field` is the name entry; `char_view`
+`message` and `title` (the message's title, item 11) are texts the client fills; `name_field` is the name entry (RQ-004: printable ASCII up to the package's longest name, `create.bin`); `char_view`
 is where create draws the character.
 
 1298's select bar (version 13, RQ-109, `specs/KO-FINDINGS.md` §9.6,
@@ -508,13 +508,16 @@ later class click that chose the class (`005fd120`, which builds it on a click
 that changes either value, puts it by the camera's slot `+0x38c`: a race clicked
 while the camera flies stands at the slot the flight left). `create_confirm`
 then refuses, in `005fffd0`'s order, an empty name (`create_name`), no race
-(`create_no_race`) and no class (`create_no_class`), each in the message box;
-otherwise it sends the create. The client's own wording for the two is "Choose
-a race." and "Choose a class.". The choice gates only the client's Create: the
-create the server receives names no race or class, and the server makes the
-character it makes (Q52). A create that binds neither keeps race and class
-chosen from the open and the new character at the slot in focus, as before
-version 21.
+(`create_no_race`), no class (`create_no_class`) and (RQ-004) a name the
+package's rule refuses (`create_refused`, in the package's wording of the
+server's name refusal), each in the message box; otherwise it sends the create.
+The client's own wording for the two is "Choose a race." and "Choose a class.".
+The buttons gate only the client's Create: since RQ-004 the create sends the
+package's fixed choice from `create.bin` (race, specialty, face, hair, stats)
+in the first free slot, whatever the buttons chose, until RQ-004's later parts
+bind them to KO's codes (`content/character-create.md`, "The create screen
+(RQ-004)"). A create that binds neither keeps race and class chosen from the
+open and the new character at the slot in focus, as before version 21.
 
 Create's nodes drawn until the race is chosen (version 22, RQ-133,
 `specs/KO-FINDINGS.md` §9.15, binary), create screen only, in a create that
@@ -1023,7 +1026,7 @@ box and loading are 1264's.
   | `login_blocked`: spec 02's "Your account is blocked until …: …" | the login answer's result 4 (`005bf010`, MsgRecv_AccountLogIn: row 2907, title row 2909) | title and text: the pinned tree's rows 2909 ("Connection failed.") and 2907 ("Your account is currently blocked. Please contact customer support.") |
   | `login_unavailable`: "The realm cannot log you in right now. ENTER to try again." | the login answer's other results (`005bf010`'s last branch: row 2908, title row 2909) | title and text: the pinned tree's rows 2909 and 2908 ("There is an error in the selected server. ") |
   | `login`: the Discord flow's own failures (denied, timed out, its callback, the redirect ports, a refused code, a logout the realm could not end) and the address to open | none: KO has no Discord step | none: untitled, the realm's words |
-  | `create_name`: "Enter a name: 1 to 24 letters, digits, _ or -." | an empty name (`0043a340`: code 6 → `0043a820`, ReportErrorCharacterCreate: row 1905, title row 1901) | title and text: the 1264 install's rows 1901 ("Failed creating character") and 1905 ("Please enter your character ID. ") |
+  | `create_name`: "Enter a name: 1 to 24 letters, digits, _ or -." (RQ-004: from the package's name rule, Moradon's "Enter a name: 1 to 20 letters, digits, _, : or ;.") | an empty name (`0043a340`: code 6 → `0043a820`, ReportErrorCharacterCreate: row 1905, title row 1901) | title and text: the 1264 install's rows 1901 ("Failed creating character") and 1905 ("Please enter your character ID. ") |
   | `create_refused`: the server's wording of the refusal | the server's create answer (`0043a820` by its code: 1911 no more characters, 1912 a name in use, 1906 a forbidden letter, and others; title row 1901) | title only: the 1264 install's row 1901; since RQ-002 the server words each refusal with KO's row for its code, from the package's create table's texts (`content/character-create.md`, "The realm's create"), so its words stay |
   | `select_refused`: the server's "character not owned or already online" | the select refused (`004436a0`, CharacterSelectFailed: row 6066; title empty) | none: untitled, the realm's words |
   | `exit_confirm` (RQ-115, §9.8): the client's "Exit the game?" | the select's `bt_exit` (`00444e60` → `005f7f80`: row 1502, title empty, `MB_YESNO`, `BEHAVIOR_EXIT`) | text: the 1264 install's row 1502 ("Are you sure you want to exit? "), untitled |

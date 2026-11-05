@@ -15,10 +15,13 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   server, whose 2 s admission lease a paused logo would outlast.) The first
   browser step is denied: KO's message box shows the flow's failure, and ENTER
   again logs in (the browser step played here on the address it prints) -> realms -> select (no
-  characters) -> create "Taken", which another account holds: the server's
+  characters) -> create "Bad-Name", which the package's name rule refuses:
+  the client's refusal, unsent, in the words of the server's (RQ-004, KO's
+  code 5) -> create "Taken", which another account holds: the server's
   refusal in KO's message box, titled as the package words a refused create
   (RQ-102, Q81: 1264's create failure title) where the Discord failure and the
-  kick are untitled -> create a fresh name -> select with it (the
+  kick are untitled -> create a fresh name, sent with the package's fixed
+  choice in the first free slot (RQ-004, Q100) -> select with it (the
   pointer off, on and off the character in front: its hover clip blends in on
   its first frame, plays once and holds its last frame, the rest clip blends
   back, the spot widens and narrows to off and the info text shows only while
@@ -87,6 +90,10 @@ CONTENT = (package / "release.sha256").read_text().strip()
 # another character has, and a fourth character (KO's 3 and 1).
 TAKEN = manifest["create"]["refusals"]["taken"]
 LIMIT = manifest["create"]["refusals"]["limit"]
+# RQ-004: the client refuses a name the package's rule refuses before sending
+# it, in the box and words of the server's same refusal (KO's code 5).
+NAME = manifest["create"]["refusals"]["name"]
+FIXED = manifest["create"]["fixed"]
 server_binary = str(Path(os.environ.get("N3E_TEST_SERVER", "target/debug/n3e-server")).resolve())
 name = "n3e-front-end-" + uuid.uuid4().hex[:10]
 out = ROOT / "build/live-ko/front-end-flow"
@@ -277,7 +284,7 @@ try:
     client = subprocess.Popen(
         ["build/client/n3e-test-client", str(package), "--realm", str(realm_json), "--ca", "deploy/local/ca.pem"],
         env={**env, "XDG_CONFIG_HOME": str(home / "config"), "N3E_TEST_NO_BROWSER": "1",
-             "N3E_TEST_FRONT_FLOW": "Taken,Fresh"},
+             "N3E_TEST_FRONT_FLOW": "Bad-Name,Taken,Fresh"},
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
     lines, flow, kicked, denied, held = [], [], False, False, None
     deadline = time.monotonic() + 240
@@ -317,6 +324,7 @@ try:
     assert enters == ["enter connected=0"], flow
     assert screens == ["logo", "login", "realms", "select", "create", "select", "loading", "world", "login"], flow
     assert messages == [shown("login", "Discord login was cancelled. ENTER to try again."),
+                        shown("create_refused", NAME),
                         shown("create_refused", TAKEN),
                         shown("disconnected", "You were disconnected by an operator: flow test.")], flow
     order = [f.split()[0] for f in flow if f.startswith(("screen=", "music="))]
@@ -440,10 +448,17 @@ try:
     edges = [{k: float(x) for k, x in (kv.split("=") for kv in f.split()[1:])} for f in flow if f.startswith("edge ")]
     assert edges == [{"slot": 1, "focus": 1, "sounds": 0, "clip": 1}], edges
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
+    # RQ-004: the screen sent KO's create packet, the package's fixed choice
+    # (Q100) in the first free slot; nothing was sent for Bad-Name.
+    chosen = sql("SELECT slot, nation, race, specialty, face, hair, array_to_string(stats, ',') "
+                 "FROM characters WHERE name='Fresh'")
+    assert chosen == "|".join(map(str, [0, manifest["create"]["nation"], FIXED["race"], FIXED["specialty"],
+                                        FIXED["face"], FIXED["hair"], ",".join(map(str, FIXED["stats"]))])), chosen
+    assert sql("SELECT count(*) FROM characters WHERE name ILIKE 'bad%'") == "0"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
     print(f"PASS front-end flow: the logo (its music 1 s in, the cursor hidden, a click ignored, SPACE skips it) -> "
-          f"one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Taken refused in the message box under KO's title, "
-          "Fresh created) -> select (the front character's hover clip blends in on its first frame, plays once and holds, the rest clip blends back; "
+          f"one ENTER ({enters[0]}) -> Discord denied (KO's message box) -> ENTER -> Discord login -> realms -> select -> create (Bad-Name refused by the client, Taken by the server, "
+          "each in the message box under KO's title; Fresh created with the package's choice) -> select (the front character's hover clip blends in on its first frame, plays once and holds, the rest clip blends back; "
           "the spot widens and the info text shows only while the pointer is on it; the arrows turn the camera one slot each way, "
           "ending where 1097's check ends it, each with the turn sound) -> start (blends in over 0.6 s, then plays) -> loading -> world; "
           "a kick returns to login with the operator's wording; "

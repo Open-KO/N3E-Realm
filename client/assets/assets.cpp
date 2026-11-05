@@ -434,6 +434,152 @@ PostProcess load_postprocess(const std::filesystem::path &path){
        &&in(pp.adapt_rate,0,100)&&in(pp.blur_variance,0,16)&&pp.blur_variance>0,"postprocess bounds");
   return pp;
 }
+// N3CC version 2 (RQ-002, RQ-154): tools/assetc/create.py's layout, read
+// whole with server/src/create.rs's bounds (RQ-004: the client's create
+// screen reads it, so the two refuse the same files).
+namespace {
+std::string create_text(Reader &r, size_t limit, const char *what) {
+  const auto n = r.u();
+  need(n <= limit, what);
+  auto s = r.raw(n);
+  need(std::all_of(s.begin(), s.end(), [](unsigned char c) { return (c >= ' ' && c <= '~') || c == '\n'; }), what);
+  return s;
+}
+bool ascii_graphic(unsigned char c) { return c > ' ' && c <= '~'; }
+bool ascii_alnum(unsigned char c) { return (c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'); }
+}  // namespace
+CreateRules load_create(const std::filesystem::path &path) {
+  Reader r(path);
+  r.magic("N3CC");
+  need(r.u() == CreateRules::VERSION, "create magic/version");
+  CreateRules rules;
+  rules.stats = r.u();
+  rules.nation = r.u();
+  const auto count = r.u();
+  need(rules.stats >= 1 && rules.stats <= CreateRules::MAX_STATS && rules.nation >= 1 && rules.nation <= 255 &&
+           count >= 1 && count <= CreateRules::MAX_RACES,
+       "create bounds");
+  for (uint32_t i = 0; i < count; ++i) {
+    CreateRules::Race race;
+    race.id = r.u(), race.nation = r.u(), race.faces = r.u(), race.hairs = r.u();
+    const auto n = r.u();
+    need(race.id >= 1 && race.id <= 65535 &&
+             std::none_of(rules.races.begin(), rules.races.end(), [&](const auto &x) { return x.id == race.id; }) &&
+             race.nation >= 1 && race.nation <= 255 && race.faces >= 1 && race.faces <= 256 && race.hairs >= 1 &&
+             race.hairs <= 256 && n >= 1 && n <= CreateRules::MAX_SPECIALTIES,
+         "create race");
+    for (uint32_t k = 0; k < n; ++k) {
+      CreateRules::Specialty s;
+      s.id = r.u(), s.bonus = r.u();
+      for (uint32_t j = 0; j < rules.stats; ++j) s.base.push_back(r.u());
+      need(s.id >= 1 && s.id <= 65535 &&
+               std::none_of(race.specialties.begin(), race.specialties.end(),
+                            [&](const auto &x) { return x.id == s.id; }) &&
+               s.bonus <= 1000 && std::all_of(s.base.begin(), s.base.end(), [](uint32_t v) { return v <= 1000; }),
+           "create specialty");
+      race.specialties.push_back(std::move(s));
+    }
+    rules.races.push_back(std::move(race));
+  }
+  rules.name_min = r.u(), rules.name_max = r.u();
+  rules.punctuation = create_text(r, 32, "create punctuation");
+  need(rules.name_min >= 1 && rules.name_min <= rules.name_max && rules.name_max <= CreateRules::MAX_NAME &&
+           std::none_of(rules.punctuation.begin(), rules.punctuation.end(),
+                        [](unsigned char c) { return ascii_alnum(c) || !ascii_graphic(c); }),
+       "create name rule");
+  const auto reserved = r.u();
+  need(reserved <= CreateRules::MAX_RESERVED, "create reserved count");
+  for (uint32_t i = 0; i < reserved; ++i) {
+    auto word = create_text(r, CreateRules::MAX_WORD, "create reserved word");
+    need(!word.empty() && std::none_of(word.begin(), word.end(),
+                                       [](unsigned char c) { return (c >= 'A' && c <= 'Z') || !ascii_graphic(c); }),
+         "create reserved word");
+    rules.reserved.push_back(std::move(word));
+  }
+  for (auto &text : rules.refusals) text = create_text(r, CreateRules::MAX_TEXT, "create refusal text");
+  switch (r.u()) {
+  case 0: break;
+  case 1: {
+    CreateRules::Fixed f;
+    f.race = r.u(), f.specialty = r.u(), f.face = r.u(), f.hair = r.u();
+    for (uint32_t j = 0; j < rules.stats; ++j) f.stats.push_back(r.u());
+    rules.fixed = std::move(f);
+    break;
+  }
+  default: need(false, "create fixed flag");
+  }
+  switch (r.u()) {
+  case 0: break;
+  case 1: rules.start = r.floats<2>(); break;  // Reader::f: finite, within 10^6 m
+  default: need(false, "create start flag");
+  }
+  std::vector<uint32_t> offered;
+  for (const auto &race : rules.races)
+    for (const auto &s : race.specialties) offered.push_back(s.id);
+  const auto kits = r.u();
+  need(kits <= offered.size(), "create items count");
+  for (uint32_t i = 0; i < kits; ++i) {
+    const auto specialty = r.u(), stacks = r.u();
+    need(std::find(offered.begin(), offered.end(), specialty) != offered.end() && !rules.kits.contains(specialty) &&
+             stacks <= CreateRules::MAX_KIT,
+         "create items specialty");
+    auto &kit = rules.kits[specialty];
+    for (uint32_t k = 0; k < stacks; ++k) {
+      auto item = create_text(r, CreateRules::MAX_ITEM, "create item");
+      const auto n = r.u();
+      need(!item.empty() && std::all_of(item.begin(), item.end(), ascii_graphic) &&
+               std::none_of(kit.begin(), kit.end(), [&](const auto &x) { return x.first == item; }) && n >= 1 &&
+               n <= CreateRules::MAX_COUNT,
+           "create item");
+      kit.emplace_back(std::move(item), n);
+    }
+  }
+  r.end();
+  // The fixed choice is one the rules accept, in the default nation.
+  if (rules.fixed) {
+    const auto &f = *rules.fixed;
+    need(!create_choice_refusal(rules, rules.nation, f.race, f.specialty, f.face, f.hair, f.stats),
+         "create fixed choice");
+  }
+  return rules;
+}
+const CreateRules::Race *create_race(const CreateRules &rules, uint32_t race) {
+  for (const auto &r : rules.races)
+    if (r.id == race) return &r;
+  return nullptr;
+}
+const CreateRules::Specialty *create_specialty(const CreateRules::Race &race, uint32_t specialty) {
+  for (const auto &s : race.specialties)
+    if (s.id == specialty) return &s;
+  return nullptr;
+}
+std::optional<CreateRules::Refusal> create_choice_refusal(const CreateRules &rules, uint32_t nation, uint32_t race,
+                                                          uint32_t specialty, uint32_t face, uint32_t hair,
+                                                          const std::vector<uint32_t> &stats) {
+  const auto *r = create_race(rules, race);
+  if (!r || r->nation != nation) return CreateRules::Refusal::mismatch;
+  const auto *s = create_specialty(*r, specialty);
+  if (!s) return CreateRules::Refusal::mismatch;
+  if (face >= r->faces || hair >= r->hairs || stats.size() != rules.stats) return CreateRules::Refusal::stats;
+  uint64_t base = 0, sum = 0;
+  for (size_t i = 0; i < stats.size(); ++i) {
+    if (stats[i] < s->base[i]) return CreateRules::Refusal::stats;
+    base += s->base[i], sum += stats[i];
+  }
+  if (sum != base + s->bonus) return CreateRules::Refusal::stats;
+  return std::nullopt;
+}
+bool create_name_ok(const CreateRules &rules, std::string_view name) {
+  if (name.size() < rules.name_min || name.size() > rules.name_max) return false;
+  std::string folded;
+  for (unsigned char c : name) {
+    if (!ascii_alnum(c) && rules.punctuation.find(char(c)) == std::string::npos) return false;
+    folded += char(c >= 'A' && c <= 'Z' ? c - 'A' + 'a' : c);
+  }
+  for (const auto &word : rules.reserved)
+    if (folded.find(word) != std::string::npos) return false;
+  return true;
+}
 Release load_release(const std::filesystem::path &root) {
   Reader r(root / "release.bin");
   r.magic("N3R1");
@@ -863,12 +1009,9 @@ Release load_release(const std::filesystem::path &root) {
     result.front_end=true;
   }
   // RQ-002: the character-create rules the server checks a create against;
-  // hashed above, the client checks its magic and version (2 since RQ-154: the
-  // start and starting items; its create screen reads them in RQ-004).
-  if(files.erase("create.bin")){
-    Reader c(root/"create.bin");c.magic("N3CC");need(c.u()==2,"create version");
-    result.create=true;
-  }
+  // hashed above. RQ-004: read whole (load_create), the create screen's name
+  // rule, choice and refusal wording.
+  if(files.erase("create.bin"))result.create=load_create(root/"create.bin");
   result.loot_model=files.erase("loot-model.bin")!=0;
   need(!result.loot_model||(engine>=10&&result.presentation&&result.thresholds),"loot model requires durable loot presentation");
   if(files.erase("pick.bin")){

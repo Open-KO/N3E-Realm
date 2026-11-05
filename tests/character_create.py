@@ -30,8 +30,9 @@
   ko_create.complete cooks the start as engine metres (refusing another zone
   or a position off the map) and each offered specialty's set.
 - A package carrying create.bin passes the client's asset check and the
-  server's content check, which reads its rules; a create.bin with a bad magic
-  or version, rehashed into the release, fails both, and so do starting items
+  server's content check, which both read its rules whole (the client since
+  RQ-004); a create.bin with a bad magic or version, truncated or with a
+  trailing byte, rehashed into the release, fails both, and so do starting items
   in a package without an inventory and a start off the ground.
 """
 import copy
@@ -550,7 +551,9 @@ with tempfile.TemporaryDirectory(dir="build", prefix="character-create-") as td:
             index += string(name) + u(len(body)) + digest(body)
         (out / "release.bin").write_bytes(index)
 
-    for bad in (b"N3CX" + cooked[4:], cooked[:4] + u(1) + cooked[8:]):
+    # RQ-004: the client reads the file whole, as the server does: a
+    # truncated file and one with a trailing byte fail both.
+    for bad in (b"N3CX" + cooked[4:], cooked[:4] + u(1) + cooked[8:], cooked[:-1], cooked + b"\0"):
         repack(bad)
         check(False)
     # RQ-154: a start on the ground is read; one off the map, and starting

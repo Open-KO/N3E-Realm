@@ -557,7 +557,7 @@ words (lower-case printable ASCII, 1..24 bytes), refusal texts printable ASCII u
 200 bytes; a start finite and within 10^6 m; at most one kit per specialty the races
 offer, each up to 64 distinct items (printable ASCII ids of 1..128 bytes), counts
 1..9999. The server (`server/src/create.rs`) and the client
-(`client/assets/assets.cpp`, magic and version only until RQ-004 reads it) refuse
+(`client/assets/assets.cpp` `load_create`, which reads it whole since RQ-004) refuse
 any other file; the server's `--check-content` prints `create races=… specialties=…
 stats=… nation=… fixed=… start=<x,z or none> items=<kits>`. A package without
 `create.bin` creates by name alone, as before. The Moradon package is the only one with rules; its table is 1264's for the
@@ -604,8 +604,9 @@ each character's `slot`, `nation`, `race` and `specialty`.
 
 **What stays.** A new character starts at the package's spawn, or the realm owner's
 `create.start`, with its specialty's starting items (Q96 (b); RQ-154, below); the stats
-are kept but play does not read them yet (RQ-007); the screen still sends a name alone
-(RQ-004); one nation (RQ-006).
+are kept but play does not read them yet (RQ-007); one nation (RQ-006). Since RQ-004 the
+KO screens send the package's fixed choice whole (below); the panels' create still sends
+a name alone, which the server fills from the same fixed choice (Q100).
 
 ## The realm's races (RQ-003)
 
@@ -755,6 +756,56 @@ next deploy is a new realm, Q63). `tests/character_create.py` checks the cook an
 readers; `tests/character_create_db.py` creates characters against Postgres and checks
 where each stands and what its bag starts with.
 
+## The create screen (RQ-004)
+
+RQ-004 is the screen with every option working, as 1298 draws it. Its first part (this
+section) gives the client the package's rules and makes the screen send KO's whole
+create packet; the buttons that choose race, class, face, hair and points, KO's
+description texts, the chosen race's model and its dress are its later parts
+(`docs/loop/queue.jsonl`), each changing the screen only to match 1298.
+
+**The rules in the client.** `load_create` (`client/assets/assets.cpp`) reads
+`create.bin` whole with the server's bounds, so the client and the server refuse the
+same files, and checks the fixed choice as the server's `Policy::choice` does
+(`create_choice_refusal`, Q95). The front end takes the rules from the release
+(`client/render/viewer.cpp`); `client/render/create_choice.h` holds the screen's use of
+them, GL-free (`tests/front_end.cpp`).
+
+**The name** (Q99; KO 1298 `005fffd0`, binary; `CN3UIEdit::Load`, source):
+- The edit takes any printable ASCII (the realm's fonts draw ASCII 32–126) up to the
+  rule's longest name (Moradon: 20; 24 without rules). KO's `edit_name` takes what is
+  typed: its layout carries no length (the edit's record is the static's and a typing
+  sound, source `N3UIEdit.cpp`) and the source's create never calls `SetMaxString`
+  (the 1298 binary's edit was not read). The stop at the longest name is the realm's
+  bound; a longer name is one KO's server refuses with the same code 5.
+- Create refuses, in 1298's order, an empty name (`create_name`; the client's wording,
+  now from the rule: "Enter a name: 1 to 20 letters, digits, _, : or ;." for Moradon's,
+  which the 1097 recipe replaces with KO's row 1905), no race and no class (RQ-130), then
+  a name the rule refuses: the box a refused create shows (`create_refused`, titled
+  1901 by the 1097 recipe) in the package's wording of the server's name refusal (KO's
+  row 1906, "You cannot use this character ID."), else the engine's. Nothing is sent.
+  KO's client refuses the same letters with code 5 and row 1906 under 1901 (§ Names,
+  Refusals); the realm's rule is the server's (Q99), so the client refuses what the
+  server would.
+- Without rules the rule is the server's legacy one (1..24 ASCII letters, digits, `_`
+  and `-`), checked the same way.
+
+**What Create sends.** `CreateCharacter` with the name and, from the rules, the
+package's fixed choice (`fixed`: race, specialty, face, hair and the stats with its
+points spent; Moradon's the Tuarek priest at 60 / 60 / 70 / 50 / 60) in the first slot
+the list leaves free (`Character.slot`). The hall draws the list in slot order, so
+the new character stands where it is drawn; KO's 1298 creates in the slot in focus
+when it is empty (`005ff920`), which differs only when an empty slot in focus is not
+the first, and waits for RQ-005's hall by slot. A package without rules, or without a
+fixed choice, sends race 0 and the name, as before. The server checks the choice as any
+create (Q95); its race-0 path (Q100) stays for the panels' create.
+
+How the race buttons of races the package does not offer draw once the buttons choose
+(Q105 leaves Moradon offering the Tuarek alone) is Q109; until it is decided they stay
+as they draw now.
+
+Moradon's cooked bytes are unchanged; no package or feature pin changes.
+
 ## What each item needs
 
 - **RQ-002 (wire and server).**
@@ -815,4 +866,4 @@ where each stands and what its bag starts with.
 | The 1298 list parse | RQ-005 |
 | The game-start stat recompute (HP, MP, SP) | RQ-007 |
 | Ebenezer's word-list loader | Q99 takes a realm-owner list instead |
-| Whether the layout's `edit_name` carries a length limit | RQ-004 |
+| Whether the 1298 binary's create sets `edit_name`'s length (the layout carries none, source) | RQ-004's later parts |

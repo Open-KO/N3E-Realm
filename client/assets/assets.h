@@ -368,6 +368,33 @@ inline std::string npc_info_line(const NpcInfoPolicy&info,uint64_t entity,const 
     text.replace(placeholder.at,placeholder.size,state.empty()?placeholder.fallback:state);
   return text;
 }
+// create.bin (N3CC version 2, RQ-002, RQ-154; content/character-create.md,
+// "The realm's create"): the package's character-create rules, read whole as
+// server/src/create.rs reads them, with its bounds. The create screen takes
+// its name rule, its fixed choice and its refusal wording from them (RQ-004);
+// the server checks every create against the same file and never trusts the
+// client. No game's race, specialty or stat is named here: every id is the
+// package's.
+struct CreateRules {
+  static constexpr uint32_t VERSION = 2, MAX_STATS = 8, MAX_RACES = 32, MAX_SPECIALTIES = 16,
+                            MAX_RESERVED = 256, MAX_NAME = 24, MAX_TEXT = 200, MAX_WORD = 24, MAX_KIT = 64,
+                            MAX_COUNT = 9999, MAX_ITEM = 128;
+  // The refusals, in the file's (and the wire's) order: KO's create results
+  // 1 limit, 2 mismatch, 3 taken, 4 failed, 5 name, 17 stats.
+  enum class Refusal : uint32_t { limit, mismatch, taken, failed, name, stats, count };
+  struct Specialty { uint32_t id = 0, bonus = 0; std::vector<uint32_t> base; };
+  struct Race { uint32_t id = 0, nation = 0, faces = 0, hairs = 0; std::vector<Specialty> specialties; };
+  struct Fixed { uint32_t race = 0, specialty = 0, face = 0, hair = 0; std::vector<uint32_t> stats; };
+  uint32_t stats = 0, nation = 0;
+  std::vector<Race> races;
+  uint32_t name_min = 1, name_max = MAX_NAME;
+  std::string punctuation;
+  std::vector<std::string> reserved;  // lower case; no name may contain one, compared without regard to case
+  std::array<std::string, size_t(Refusal::count)> refusals;  // empty: the engine's wording
+  std::optional<Fixed> fixed;
+  std::optional<std::array<float, 2>> start;  // engine metres; none: the package's spawn
+  std::map<uint32_t, std::vector<std::pair<std::string, uint32_t>>> kits;
+};
 struct NameDisplayPolicy {
   enum : uint32_t {self=1,players=2,npcs=4,all=7};
   bool shown=true;uint32_t hides=all;
@@ -462,7 +489,7 @@ struct Release {
   std::optional<PostProcess> postprocess;
   std::optional<Audio> audio;
   bool front_end = false;  // front-end.bin (N3FE, engine 42, spec 11); load_front_end reads it
-  bool create = false;     // create.bin (N3CC, RQ-002): the server's create rules; hashed, its magic checked
+  std::optional<CreateRules> create;  // create.bin (N3CC, RQ-002): read whole since RQ-004
   std::optional<Skills> skills;
   std::optional<std::vector<InputBinding>> input;
   NameDisplayPolicy names;
@@ -498,6 +525,21 @@ struct Release {
   PickPolicy pick;
 };
 Release load_release(const std::filesystem::path &root);
+// create.bin (RQ-004): read whole, refused as server/src/create.rs refuses it.
+CreateRules load_create(const std::filesystem::path &path);
+const CreateRules::Race *create_race(const CreateRules &rules, uint32_t race);
+const CreateRules::Specialty *create_specialty(const CreateRules::Race &race, uint32_t specialty);
+// A create's race, specialty, face, hair and stats against the rules in
+// `nation`, as the server's Policy::choice checks them (Q95): none when they
+// pass, else mismatch (race, nation or specialty) or stats (face, hair or
+// stats).
+std::optional<CreateRules::Refusal> create_choice_refusal(const CreateRules &rules, uint32_t nation, uint32_t race,
+                                                          uint32_t specialty, uint32_t face, uint32_t hair,
+                                                          const std::vector<uint32_t> &stats);
+// The name rule (Q99), as the server's Policy::name: name_min..name_max bytes
+// of ASCII letters, digits and the punctuation, containing no reserved word
+// in any case.
+bool create_name_ok(const CreateRules &rules, std::string_view name);
 PostProcess load_postprocess(const std::filesystem::path &path);
 struct Node {
   bool operator==(const Node &) const = default;

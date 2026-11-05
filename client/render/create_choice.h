@@ -31,9 +31,79 @@
 // tests/front_end.cpp checks it.
 
 #include "assets/assets.h"
+#include <algorithm>
+#include <cctype>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 
 namespace n3e::front {
+
+// RQ-004 (content/character-create.md, "The create screen (RQ-004)"): what
+// create sends, KO's create packet's fields (1298 005fffd0: slot, name, race,
+// class, face, hair and the five stats; the nation is the account's).
+struct CreateRequest {
+  uint32_t slot = 0, race = 0, specialty = 0, face = 0, hair = 0;
+  std::vector<uint32_t> stats;
+};
+// The choice create sends with the package's rules (create.bin): its fixed
+// choice (Q100) until the screen's buttons choose race, class, face, hair and
+// points (RQ-004's later parts), in `slot`; race 0, the name alone, without
+// rules or a fixed choice (the server's own path: a package without create
+// rules creates by name).
+inline CreateRequest create_request(const std::optional<CreateRules> &rules, uint32_t slot) {
+  CreateRequest q;
+  if (!rules || !rules->fixed) return q;
+  const auto &f = *rules->fixed;
+  q.slot = slot, q.race = f.race, q.specialty = f.specialty, q.face = f.face, q.hair = f.hair, q.stats = f.stats;
+  return q;
+}
+// The first slot no listed character holds (the list names each one's slot,
+// RQ-002), below `slots`; -1 when all are held.
+template <class Slots> int create_free_slot(const Slots &held, int slots) {
+  for (int s = 0; s < slots; ++s)
+    if (std::find(held.begin(), held.end(), uint32_t(s)) == held.end()) return s;
+  return -1;
+}
+// The name entry (Q99). Without create rules the server's own rule: 1..24
+// ASCII letters, digits, `_` and `-` (server/src/create.rs LEGACY_NAME).
+inline constexpr uint32_t kLegacyNameMax = 24;
+inline uint32_t create_name_max(const std::optional<CreateRules> &rules) {
+  return rules ? rules->name_max : kLegacyNameMax;
+}
+// What the edit takes: any printable ASCII (KO's edit_name takes what is
+// typed, its create checks the letters, 1298 005fffd0; the realm's fonts draw
+// ASCII 32-126), up to the rule's longest name.
+inline bool create_name_takes(const std::optional<CreateRules> &rules, const std::string &name, char c) {
+  return c >= ' ' && c <= '~' && name.size() < create_name_max(rules);
+}
+// Whether Create sends the name (1298 005fffd0's last check, code 5): the
+// package's rule (create_name_ok), else the server's legacy one.
+inline bool create_name_valid(const std::optional<CreateRules> &rules, std::string_view name) {
+  if (rules) return create_name_ok(*rules, name);
+  if (name.empty() || name.size() > kLegacyNameMax) return false;
+  for (unsigned char c : name)
+    if (!std::isalnum(c) && c != '_' && c != '-') return false;
+  return true;
+}
+// The client's wording for an empty name, from the rule (a package's
+// `messages` may replace it with KO's row, content/front-end.md).
+inline std::string create_name_prompt(const std::optional<CreateRules> &rules) {
+  const std::string marks = rules ? rules->punctuation : std::string("_-");
+  std::string list;
+  for (size_t i = 0; i < marks.size(); ++i)
+    list += (i == 0 ? "" : i + 1 == marks.size() ? " or " : ", ") + std::string(1, marks[i]);
+  return "Enter a name: " + std::to_string(rules ? rules->name_min : 1) + " to " +
+         std::to_string(create_name_max(rules)) + " letters, digits" + (list.empty() ? "" : ", " + list) + ".";
+}
+// The client's wording for a name the rule refuses: the package's text for
+// the name refusal (KO's row, cooked from the create table's texts), else the
+// engine's, as the server words the same refusal (server/src/create.rs).
+inline std::string create_name_refused(const std::optional<CreateRules> &rules) {
+  if (rules && !rules->refusals[size_t(CreateRules::Refusal::name)].empty()) return rules->refusals[size_t(CreateRules::Refusal::name)];
+  return "character name invalid";
+}
 
 struct CreateChoice {
   // The package's create binds a race button (create_race) or a class

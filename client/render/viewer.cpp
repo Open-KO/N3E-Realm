@@ -1181,7 +1181,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     std::unique_ptr<n3e::front::View> front;
     if (release.front_end && discord_flow) {
       try {
-        front = std::make_unique<n3e::front::View>(n3e::load_front_end(release));
+        front = std::make_unique<n3e::front::View>(n3e::load_front_end(release), release.create);
         // RQ-018: the screens' music needs the device even without audio.bin.
         if (front->has_music() && !release.audio && client_options.sound) audio.open();
       } catch (const std::exception &error) {
@@ -1816,10 +1816,23 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             network->send(message);
             front_chose = true;
             break;
-          case n3e::front::Command::create:
-            message.mutable_create_character()->set_name(out.name);
+          // RQ-004: KO's create packet, the choice the screen holds (its
+          // slot, race, specialty, face, hair and stats; race 0 without the
+          // package's create rules, which the server creates by name).
+          case n3e::front::Command::create: {
+            auto *q = message.mutable_create_character();
+            q->set_name(out.name);
+            if (out.create.race) {
+              q->set_slot(out.create.slot);
+              q->set_race(out.create.race);
+              q->set_specialty(out.create.specialty);
+              q->set_face(out.create.face);
+              q->set_hair(out.create.hair);
+              for (auto v : out.create.stats) q->add_stats(v);
+            }
             network->send(message);
             break;
+          }
           // The select's Back: a new connection, the login screen, where the
           // stored session logs in again as at start and its answer opens the
           // realm list (front->logged_in). RQ-112 (KO-FINDINGS 9.12): a package

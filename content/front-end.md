@@ -48,11 +48,11 @@ with a version 30 file, engine 45 (RQ-165). Its
 bound is 256 MiB (RQ-183: `ko_front_end.MAX_FILE` and `FRONT_END_FILE` in the cook,
 `kFrontEndFile` in the client, `MAX_FRONT_END_ASSET` in the server; a file a byte
 past it is refused by each), since it holds
-the character models and the UI art (Moradon's 1097 choice: 58,460,464 bytes with
+the character models and the UI art (Moradon's 1097 choice: 61,065,488 bytes with
 three create models, RQ-158, its race and class buttons, RQ-172, its stat
 arrows, RQ-173, its create models' four faces and three hairs, RQ-174, its
-description text, RQ-175, and its create dress, RQ-176; the 1298 recipe's
-61,843,732).
+description text, RQ-175, its create dress, RQ-176, and the Arch Tuarek's
+create model, RQ-169; the 1298 recipe's 64,447,160).
 
 The bound against what is still to come (RQ-182; local-asset, the pinned trees:
 both recipes cooked with each section's bytes counted, KO's textures stored as
@@ -665,12 +665,15 @@ either in its looks parts needs them, as the player path does since RQ-163.
   slots, in order, so the front end draws it as the world does. The server
   reads only the header and takes version 30 only at engine 45.
 
-Moradon's front end needs none: its create races (2, 3, 4) have no such vertex,
-and on both create tables each specialty's create dress replaces the looks lower
-part, so the Arch Tuarek's and the El Morad male's dressed create models have
-none either (local-asset: the 1097 choice's records 2,342,872 and 1,644,968
-bytes with their race codes, the 1298 recipe's 2,341,276 and 4,678,215, each
-N3S1 with N3S1 parts). A create model in its looks lower part (a create table
+Moradon's front end needs none: its create races 2, 3 and 4 have no such
+vertex, and on both create tables each specialty's create dress replaces the
+looks lower part, so the dressed create models of the Arch Tuarek (1, shipped
+since RQ-169) and of the El Morad male have none either (local-asset: the 1097
+choice's records 2,342,872 and 1,644,968 bytes with their race codes, the 1298
+recipe's 2,341,276 and 4,678,215; the Arch Tuarek's N3SM on both tables, the
+El Morad male's N3S1 on 1264's and N3SM on 1298's, no influence table in any
+model or part; `tests/ko_player_races.py` asserts it for every shipped race).
+Moradon's `front-end.bin` stays version 29. A create model in its looks lower part (a create table
 without item columns, or a dress that leaves that slot) does: undressed, the
 Arch Tuarek's and the El Morad male's are N3SI, 2,780,584 and 1,341,684 bytes
 with their race codes, four faces and three hairs (their parts N3S1).

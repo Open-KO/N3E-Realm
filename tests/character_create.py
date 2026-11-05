@@ -136,8 +136,9 @@ assert (plan["table"], plan["races"], plan["reserved"]) == ("1264", rules["conte
 assert ko_create.plan(MORADON, "1298", {})["table"] == "1298"
 assert ko_create.plan(MORADON, "1097", {"table": "1298", "reserved": ["GM", "gm", "Staff"]})["reserved"] == ["gm", "staff"]
 # RQ-158 (Q105): the package ships the create model of the Karus races that
-# convert on the front-end path; create offers only content, the Tuarek.
-assert (rules["models"], rules["content"]) == ({"create": [2, 3, 4]}, [2]), rules
+# convert on the front-end path (RQ-169: the Arch Tuarek too); create offers
+# only content, the Tuarek.
+assert (rules["models"], rules["content"]) == ({"create": [1, 2, 3, 4]}, [2]), rules
 # The races the screen offers per nation (1298 006060f0), every one in a table.
 assert {r["race"]: r["specialties"] for r in rules["races"]} == {
     1: [101], 2: [102, 104], 3: [103], 4: [104], 11: [201], 12: [201, 202, 203, 204], 13: [201, 202, 203, 204]}
@@ -334,7 +335,7 @@ create.cook(section)
 worn = ko_create.dress(plan, good)
 # 1264's table keyed by race: race 2's one set for both its specialties, from the
 # installer's input; the offered race and the races with a create model.
-assert sorted(worn) == [2, 3, 4] and worn[2][102] == worn[2][104], worn
+assert sorted(worn) == [1, 2, 3, 4] and worn[2][102] == worn[2][104], worn
 assert worn[2][104] == dict(
     parts=[dict(slot=0, item=UPPER, file="installer-1264:Item/3_0002_10_0.n3cpart"),
            dict(slot=1, item=LOWER, file="installer-1264:Item/3_0002_20_0.n3cpart"),

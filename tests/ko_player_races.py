@@ -43,6 +43,12 @@ specialties' create dress from the pinned tree's own 1298 table
 (ko_create.dress, Q106), each specialty drawn: the dress the most specialties
 wear as the model's own parts, the others' parts after it, each plug on its
 looks row joint.
+
+RQ-169: the Arch Tuarek (1) ships. Each shipped create model is dressed
+from both create tables (1298's from the pinned tree, 1264's from the 1264
+install, SKIP without it): each dress replaces the looks lower part, so the
+dressed model is N3S1 or N3SM and neither it nor its parts hold an influence
+table, and Moradon's front end stays N3FE version 29.
 """
 import os
 import pathlib
@@ -51,6 +57,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT / "tools/assetc"))
+import front_end_choice  # noqa: E402
 import ko_character  # noqa: E402
 import ko_create  # noqa: E402
 import ko_detail  # noqa: E402
@@ -65,7 +72,6 @@ OPEN = {}
 # RQ-158: convertible races whose create model the package does not ship:
 # (the front-end cook's refusal or None, why).
 UNSHIPPED = {
-    1: (None, "its create model cooks N3SI (RQ-165); models.create does not name it yet (RQ-169)"),
     11: (None, "El Morad: the realm's create is Karus until nation select (RQ-006)"),
     12: (None, "El Morad: the realm's create is Karus until nation select (RQ-006); its create model cooks N3SI "
                "(RQ-165)"),
@@ -80,6 +86,14 @@ rules = ko_player.rules()
 assert rules["player"] in rules["content"], rules
 assets = ko_character.Assets(TREE)
 every = ko_player.clip_indices(True, True, True, True)
+# RQ-169: the create tables a shipped create model is dressed from: 1298's
+# from the pinned tree, 1264's from the 1264 install (SKIP without it).
+DRESS_INPUTS = [("1298", ko_front_end.Inputs([assets]))]
+try:
+    front_1097 = front_end_choice.resolve(ko_player.GAME, "1097")
+    DRESS_INPUTS.append(("1097", ko_front_end.inputs(front_1097, {TREE.resolve(): assets})))
+except front_end_choice.Refused as error:
+    print("SKIP ko_player_races 1264 create dress: %s" % error)
 cooked, refused = [], []
 for entry in rules["races"]:
     race = entry["race"]
@@ -153,21 +167,31 @@ for entry in rules["races"]:
         assert not shipped and UNSHIPPED[race][0] and UNSHIPPED[race][0] in str(error), (race, str(error))
         record, create_magic = None, None
     if shipped:
-        # RQ-176: dressed from the 1298 table, as the 1298 front end's cook.
-        tree_inputs = ko_front_end.Inputs([assets])
-        dress = ko_create.dress(ko_create.plan(ko_player.GAME, "1298", {}), tree_inputs, {race})[race]
-        dressed = []
-        dressed_record = ko_front_end.create_model(
-            assets, race, OUT / str(race) / "create-dressed", entry, rules["faces"], rules["hairs"], dressed, dress,
-            tree_inputs, ko_front_end.Textures(tree_inputs))
-        worn = dressed[0]["dresses"]
-        assert set(worn) == set(entry["specialties"]) and sum(d["body"] for d in worn.values()) >= 1, (race, worn)
-        assert dressed[0]["bytes"] == len(dressed_record), (race, dressed[0])
-        print("PASS race %d create dress (1298's table): %s, %d dress parts, %d bytes" % (
-            race, ", ".join("%d: %s, %d plugs" % (s, "its own parts" if d["body"] else "%d parts" % len(d["parts"]),
-                                                  len(d["plugs"])) for s, d in worn.items()),
-            dressed[0]["dress_parts"], len(dressed_record)))
-    print("PASS race %d create model: %s%s" % (race, "%s, %d faces, %d hairs, %d bytes in front-end.bin" % (
+        # RQ-176: dressed from each create table, as the front end's cook
+        # (1298's for the 1298 recipe; 1264's, from the 1264 install, for the
+        # 1097 choice). RQ-169: each dress replaces the looks lower part, so
+        # no dressed scene holds an influence table (the Arch Tuarek's
+        # undressed N3SI model is not what front-end.bin carries) and
+        # Moradon's front end stays N3FE version 29.
+        for client, tree_inputs in DRESS_INPUTS:
+            create_plan = ko_create.plan(ko_player.GAME, client, {})
+            dress = ko_create.dress(create_plan, tree_inputs, {race})[race]
+            dressed, dressed_tables = [], []
+            dressed_record = ko_front_end.create_model(
+                assets, race, OUT / str(race) / ("create-dressed-" + create_plan["table"]), entry, rules["faces"],
+                rules["hairs"], dressed, dress, tree_inputs, ko_front_end.Textures(tree_inputs), dressed_tables)
+            dressed_magic = dressed_record[4:8]
+            assert dressed_magic in (b"N3S1", b"N3SM"), (race, create_plan["table"], dressed_magic)
+            assert dressed_tables == [] and "tables" not in dressed[0], (race, create_plan["table"], dressed[0])
+            worn = dressed[0]["dresses"]
+            assert set(worn) == set(entry["specialties"]) and sum(d["body"] for d in worn.values()) >= 1, (race, worn)
+            assert dressed[0]["bytes"] == len(dressed_record), (race, dressed[0])
+            print("PASS race %d create dress (%s's table): %s, %s, %d dress parts, %d bytes, no influence table" % (
+                race, create_plan["table"], dressed_magic.decode(),
+                ", ".join("%d: %s, %d plugs" % (s, "its own parts" if d["body"] else "%d parts" % len(d["parts"]),
+                                                len(d["plugs"])) for s, d in worn.items()),
+                dressed[0]["dress_parts"], len(dressed_record)))
+    print("PASS race %d create model: %s%s" % (race, "undressed %s, %d faces, %d hairs, %d bytes" % (
         create_magic.decode(), made[0]["faces"], made[0]["hairs"], len(record)) if shipped
         else "not shipped: " + UNSHIPPED[race][1],
         ", %d of its scenes with influence tables (%s, %d bytes)" % (made[0]["tables"], create_magic.decode(),

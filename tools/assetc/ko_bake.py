@@ -526,7 +526,7 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
     if main.front_end_version(manifest, root) == main.FRONT_END_TABLES_VERSION:
         # RQ-165: a front end whose create, select or intro models are past
         # four joint influences (N3SI / N3SJ records, N3FE 30) is engine 45;
-        # Moradon's create races (2, 3, 4) are not.
+        # Moradon's dressed create races (1, 2, 3, 4) are not (RQ-169).
         manifest['engine_version']=max(manifest['engine_version'],main.FRONT_END_INFLUENCES_ENGINE)
     (root / "package.json").write_text(json.dumps(manifest, indent=2))
 

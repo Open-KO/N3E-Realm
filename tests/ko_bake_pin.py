@@ -542,9 +542,16 @@ CLIENT = Path("assets/ko")
 # follows. Default features 1a59d60a... -> 8aa786d3...; classic ffd75303... ->
 # ec29c864...; 1097 a8a5648f... -> 1f96f2dc.... The plain cooks and the
 # homelands keep their pins.
+# RQ-169 changed them again: models.create names the Arch Tuarek (1), so
+# front-end.bin carries its create model after the Tuarek's, dressed from 1264's
+# table (N3SM, no influence table, so the file stays version 29; 2,342,872 bytes
+# with its race code) and the texture its plug adds: front-end.bin grows from
+# 58,460,464 to 61,065,488 bytes; the release index follows. Default features
+# 8aa786d3... -> 8698fe24...; classic ec29c864... -> 5738cde6...; 1097
+# 1f96f2dc... -> 4f99f71a.... The plain cooks and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "8aa786d324318083d44c502e449ab9a963014cc2d5781b8b85a044f7a20e3ce9"),
+    "features": (["--features"], "8698fe24098082f9acb50a30fda5b30a266454d517920b678d2197c9d5137a94"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -565,13 +572,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "ec29c8645442033f1e992d3e078efdab127c2b7e02a6493ff79db72d0dae31bd"),
+    "features": (["--features"], "5738cde6e7e801279dd06e064541fcdde848f554b24656acc1ab0df002653e12"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "1f96f2dca9355aa843727378d01e04c6c62badfe57e3a63a256263b6d0a01615"),
+    "features": (["--features"], "4f99f71a5bc3093edd8f9ad4260373af2266b9ec5cfc94cd3315a0ac7c04bcf7"),
 }
 
 

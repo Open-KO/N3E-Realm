@@ -1402,9 +1402,11 @@ import ko_create  # noqa: E402
 assert fe.create_races(2) == [(2, None)]
 moradon_rules = ko_create.rules(ROOT / "games/moradon")
 ordered = fe.create_races(2, moradon_rules)
-assert [race for race, _ in ordered] == moradon_rules["models"]["create"] == [2, 3, 4], ordered
-assert [entry["looks"] for _, entry in ordered] == ["upc_ka_tu", "upc_ka_wt", "upc_ka_pu"], ordered
-assert [race for race, _ in fe.create_races(4, moradon_rules)] == [4, 2, 3]
+# RQ-169: the Arch Tuarek (1) ships too, after the select race.
+assert moradon_rules["models"]["create"] == [1, 2, 3, 4], moradon_rules["models"]
+assert [race for race, _ in ordered] == [2, 1, 3, 4], ordered
+assert [entry["looks"] for _, entry in ordered] == ["upc_ka_tu", "upc_ka_at", "upc_ka_wt", "upc_ka_pu"], ordered
+assert [race for race, _ in fe.create_races(4, moradon_rules)] == [4, 1, 2, 3]
 create_refusals = {
     "a select race without a create model": lambda: fe.create_races(13, moradon_rules),
     "no create models": lambda: fe.create_scene(None, [], pathlib.Path("/nonexistent")),

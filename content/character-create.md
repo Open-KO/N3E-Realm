@@ -536,7 +536,7 @@ rules; KO's are Moradon's, from the tables above:
 | `races` | each race's `race` code, `nation` and `specialties` (KO's classes), as 1298's race click offers them (`006060f0`), and its `looks`, the stem of its `UPC_DefaultLooks` parts (RQ-003, below) |
 | `content` | the races the package has a player model for, every screen and the world drawing it: the races create may offer (Moradon: the Tuarek, 2; RQ-003, Q105, below) |
 | `player` | the race of the package's player scenes, one of `content` (Moradon: 2; RQ-003) |
-| `models` | the races whose model the package ships in each form a screen draws: `create`, the create screen's (`front-end.bin` N3FE version 24; Moradon: 2, 3, 4), which has every race of `content` (RQ-158, below) |
+| `models` | the races whose model the package ships in each form a screen draws: `create`, the create screen's (`front-end.bin` N3FE version 24; Moradon: 1, 2, 3, 4), which has every race of `content` (RQ-158, below) |
 | `tables` | the stat tables a realm validates against, by id: each a KO `values` table (`Data/NewChrValue.tbl`) read from the front end's inputs (a `<name>:` prefix as the recipe's paths), its row `key` (row id = race × `race` + specialty × `specialty`: 1264's `{1, 0}`, 1298's `{10000, 1}`), the `texts` table its refusals are worded from and its `dress` (RQ-159, above): the `items` and `extensions` tables and `robe_exempt`, or null for a table without item columns |
 | `columns` | the values table's stat columns and bonus column (KO's 2..6 and 7), and the item columns of each hand plug (`plugs`, 8 and 9) and each part slot (`parts`, 10..19, the face's null; RQ-159) |
 | `front_ends` | the table each front-end client draws by default (Q97 (b): 1264's for the 1097 choice, 1298's for the 1298 recipe) |
@@ -687,9 +687,9 @@ draws the first, the select character's race). Moradon ships the Karus races tha
 | 2 Tuarek | N3S1, the bytes of the one create model before (1,014,644) | 8: the count and its race code |
 | 3 Wrinkle Tuarek | N3S1, four parts | 1,405,656 |
 | 4 Puri Tuarek | N3S1 | 1,139,064 |
-| 1 Arch Tuarek | not shipped: `models.create` does not name it yet (RQ-169). Its create model in its looks parts is N3SI, which a front-end record holds since RQ-165 (N3FE version 30, engine 45); in its create dress, on either table, N3S1 | — |
+| 1 Arch Tuarek | shipped since RQ-169: in its create dress, on either table, N3SM with no influence table, so Moradon's `front-end.bin` stays version 29; undressed (its looks parts) it would be N3SI, which a front-end record holds since RQ-165 (N3FE version 30, engine 45) | 2,605,024 (1097 choice) and 2,603,428 (1298 recipe): its dressed record, 2,342,872 and 2,341,276 with its race code, and its plug's texture |
 | 11 Barbarian, 13 El Morad female | not shipped: they cook, but the realm's create is Karus until nation select (RQ-006) | (1,042,195 and 1,034,220) |
-| 12 El Morad male | not shipped: El Morad (RQ-006); its create model in its looks parts is N3SI (RQ-165), in its create dress N3S1 | — |
+| 12 El Morad male | not shipped: El Morad (RQ-006); its create model in its looks parts is N3SI (RQ-165), in its create dress N3S1 (1264's table) or N3SM (1298's), no influence table | — |
 
 Moradon's `front-end.bin` grows from 53,802,688 to 56,347,416 bytes, under its 64 MiB
 bound; the package hash changes, so the hosted
@@ -975,7 +975,9 @@ the cook (Q115). The 1097 choice's `front-end.bin` grows from 57,419,400 to
 58,460,464 bytes, the 1298 recipe's from 59,299,044 to 61,843,732 (within the
 64 MiB bound, 5.2 MiB to spare for the races RQ-165 and RQ-006 add, whose dress
 parts take room too; RQ-183 raised the bound to 256 MiB). The package hash changes, so the hosted realm's next deploy is
-a new realm (Q63).
+a new realm (Q63). RQ-169 adds the Arch Tuarek's dressed create model: the 1097
+choice's file grows to 61,065,488 bytes, the 1298 recipe's to 64,447,160
+(local-asset), both still version 29.
 
 **The size of every race's create model (RQ-182; local-asset, the pinned tree).**
 Cooked as RQ-165 and RQ-170 would add them (`content/front-end.md`, the bound):
@@ -991,8 +993,9 @@ Cooked as RQ-165 and RQ-170 would add them (`content/front-end.md`, the bound):
 | 13 El Morad female | 1,660,456 | 4,164,940 (12 dress parts) |
 
 Each record's bytes with its race code; the textures its plugs add to the table
-come on top (0.26 MB a 256 × 256 texture). RQ-165: each is N3S1, with N3S1 parts:
-every dress here replaces the looks lower part, whose vertices past four joint
+come on top (0.26 MB a 256 × 256 texture). RQ-165: none holds an influence table
+(each N3S1, but the Arch Tuarek's N3SM on both tables and the El Morad male's on
+1298's; RQ-169 checked it): every dress here replaces the looks lower part, whose vertices past four joint
 influences (the Arch Tuarek's 49, the El Morad male's 57) are then not drawn.
 Undressed (looks parts, four faces, three hairs) the two are N3SI, 2,780,584 and
 1,341,684 bytes, which front-end records hold since RQ-165 (N3FE version 30,

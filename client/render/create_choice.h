@@ -48,8 +48,13 @@
 // bonus are left and the stat is above the row's (1298's row by race and
 // class, so with no class chosen it has none and does nothing; 1264's by
 // race); Create refuses points left (005fffd0's code 10) and sends the
-// values. No GL; render/front_end.h acts by it and tests/front_end.cpp checks
-// it.
+// values. RQ-174 (version 27): the face and hair arrows (1298's 00604f90,
+// 1264's 0043dfc0, binary): each steps its value by one within create.bin's
+// faces or hairs for the race, clamped at both ends (KO's 0..3 and 0..2), with
+// or without a race or class; no open writes them, so they are kept from
+// open to open; the new character draws its face and hair parts by them
+// (InitFace and InitHair, vtable +0x28 and +0x24) and Create sends them. No
+// GL; render/front_end.h acts by it and tests/front_end.cpp checks it.
 
 #include "assets/assets.h"
 #include <algorithm>
@@ -143,7 +148,7 @@ struct CreateChoice {
   // RQ-173 (version 26): the stat arrows (none: the fixed choice's points,
   // Q110) and the package's rules their rows are read from.
   FrontCreateStats arrows;
-  std::optional<CreateRules> stat_rules;
+  std::optional<CreateRules> package_rules;
   // The values the last build wrote and the arrows moved (KO's player
   // +0x830..., 1264's +0x734...), the points left (the create's +0xb0) and
   // the bonus the build gave (+0xb4), and whether they are written: from a
@@ -154,12 +159,28 @@ struct CreateChoice {
   bool written = false;
   // The specialty whose row the last build wrote (the left arrows' floor).
   uint32_t built = 0;
+  // RQ-174 (version 27): whether the screen binds the face and the hair
+  // arrows (without them the fixed choice's face or hair, Q110), and the face
+  // and hair they chose: KO's player +0x7d8 and +0x7dc (1264's +0x6e0 and
+  // +0x6e4), zeroed by the player's constructor (00465410) and Release
+  // (00465740) and written by no open, Init 005fab40, Cancel 005ffb90 nor
+  // build 005fd120 (binary), so kept from one open to the next.
+  bool face_arrows = false, hair_arrows = false;
+  uint32_t face = 0, hair = 0;
 
   void bind(std::vector<FrontCreateRace> r, std::vector<FrontCreateClass> c, int race_at_open, int class_at_open,
             FrontCreateStats s = {}, std::optional<CreateRules> package = std::nullopt) {
     races = std::move(r), classes = std::move(c), race_preset = race_at_open, class_preset = class_at_open;
-    arrows = std::move(s), stat_rules = std::move(package);
+    arrows = std::move(s), package_rules = std::move(package);
     open();
+  }
+  // RQ-174: the face and hair arrows the screen binds; each value starts at
+  // 0 (KO's constructor) with its arrows, else at the fixed choice's.
+  void bind_looks(bool face_bound, bool hair_bound) {
+    face_arrows = face_bound, hair_arrows = hair_bound;
+    const auto *fixed = package_rules && package_rules->fixed ? &*package_rules->fixed : nullptr;
+    face = face_arrows || !fixed ? 0 : fixed->face;
+    hair = hair_arrows || !fixed ? 0 : fixed->hair;
   }
   // Create opens (1298's Init 005fab40 and Cancel 005ffb90 set race and
   // class to -1; 1264's Init 00439550 too): nothing chosen but the package's
@@ -189,6 +210,10 @@ struct CreateChoice {
     race = int(button);
     if (!classes.empty()) klass = -1;
     if (changed) figure = camera_slot, marked = -1, build();
+    // RQ-174: a race whose create.bin range is narrower takes the value in
+    // it (Q112; KO's range is one for every race, so this never moves it).
+    if (face_arrows && faces()) face = std::min(face, faces() - 1);
+    if (hair_arrows && hairs()) hair = std::min(hair, hairs() - 1);
   }
   // A click on class button `button`: the class chosen and its labels marked
   // (006062d0, 0043ee10); a class that was not chosen builds the character
@@ -274,8 +299,8 @@ struct CreateChoice {
   // race, if it has one.
   const CreateRules::Specialty *stat_row(uint32_t code) const {
     const auto race_id = race_code();
-    if (!race_id || !stat_rules) return nullptr;
-    const auto *r = create_race(*stat_rules, *race_id);
+    if (!race_id || !package_rules) return nullptr;
+    const auto *r = create_race(*package_rules, *race_id);
     return r ? create_specialty(*r, code) : nullptr;
   }
   // A build (1298's 005fd120, 1264's SetChr 00439970): the row of the chosen
@@ -285,7 +310,7 @@ struct CreateChoice {
   // values only when the table has the row).
   void build() {
     if (arrows.stats.empty()) return;
-    const auto code = row_specialty(stat_rules);
+    const auto code = row_specialty(package_rules);
     const auto *row = code ? stat_row(*code) : nullptr;
     if (!row || row->base.size() != arrows.stats.size()) return;
     stats = row->base, points = bonus = row->bonus, written = true, built = *code;
@@ -306,6 +331,33 @@ struct CreateChoice {
     const auto *row = stat_row(built);
     if (!row || i >= row->base.size() || stats[i] <= row->base[i]) return;
     --stats[i], ++points;
+  }
+  // RQ-174 (version 27): the arrows' range, create.bin's faces and hairs for
+  // the chosen race (KO's 4 and 3 for every race, 00604f90); with no race
+  // chosen, or one create.bin lacks, the fewest of its races (Q112); none
+  // without rules.
+  uint32_t faces() const { return look_range(&CreateRules::Race::faces); }
+  uint32_t hairs() const { return look_range(&CreateRules::Race::hairs); }
+  uint32_t look_range(uint32_t CreateRules::Race::*count) const {
+    if (!package_rules || package_rules->races.empty()) return 0;
+    if (const auto code = race_code())
+      if (const auto *r = create_race(*package_rules, *code)) return r->*count;
+    uint32_t fewest = package_rules->races.front().*count;
+    for (const auto &r : package_rules->races) fewest = std::min(fewest, r.*count);
+    return fewest;
+  }
+  // A face or hair arrow (00604f90's btn_face_left/right, btn_hair_left/
+  // right; 1264's 0043dfc0): one down, stopping at 0, or one up, stopping at
+  // the last; no wrap.
+  void face_step(bool up) {
+    if (!face_arrows) return;
+    if (up && face + 1 < faces()) ++face;
+    if (!up && face > 0) --face;
+  }
+  void hair_step(bool up) {
+    if (!hair_arrows) return;
+    if (up && hair + 1 < hairs()) ++hair;
+    if (!up && hair > 0) --hair;
   }
   // What stat `i`'s value text and the points text say: the number, or empty
   // before a build (1298's SetStringAsInt, "%d"; 006066b0's empty string).
@@ -328,9 +380,9 @@ struct CreateChoice {
 // default or the fixed choice's; the stats the arrows chose (RQ-173), or in a
 // create without them the fixed choice's points spent on the chosen
 // specialty's base (none without a fixed choice, a sum the server refuses);
-// the face and hair of the fixed choice until the screen's arrows choose them
-// (RQ-174, Q110); race 0, the name alone, without rules or a race (the
-// server's own path: a package without create rules creates by name).
+// the face and hair the arrows chose (RQ-174), or in a create without them
+// the fixed choice's (Q110); race 0, the name alone, without rules or a race
+// (the server's own path: a package without create rules creates by name).
 inline CreateRequest create_request(const std::optional<CreateRules> &rules, uint32_t slot,
                                     const CreateChoice &choice = {}) {
   CreateRequest q;
@@ -344,6 +396,8 @@ inline CreateRequest create_request(const std::optional<CreateRules> &rules, uin
   else if (choice.classes.empty()) specialty = code ? choice.races[size_t(choice.race)].base : fixed ? fixed->specialty : 0;
   q.slot = slot, q.race = race, q.specialty = specialty;
   if (fixed) q.face = fixed->face, q.hair = fixed->hair;
+  if (choice.face_arrows) q.face = choice.face;
+  if (choice.hair_arrows) q.hair = choice.hair;
   if (!choice.arrows.stats.empty()) {
     q.stats = choice.stats;
     return q;

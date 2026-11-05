@@ -39,7 +39,9 @@ stat labels its click marks, in place of version 22's nodes drawn until the
 race (RQ-172), and (version 26) create's stat arrows, each stat's value text
 and arrows, the points text and whether the stat row is the race's and
 class's (1298's) or the race's (1264's), with the message create_points_left
-(RQ-173).
+(RQ-173), and (version 27) create's face and hair arrows, with each create
+model's face and hair parts by number in place of its face 0 and hair 0
+(RQ-174).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -70,7 +72,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 26
+VERSION = 27
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -158,7 +160,7 @@ ACTIONS = ("", "login", "exit", "login_group", "realm_group", "realm_list", "rea
            "class_desc", "progress", "version", "info", "message", "ok", "title", "login_closed",
            "select_start", "select_create", "select_delete", "char_name", "char_level", "char_class",
            "yes", "no", "create_race", "create_class", "create_stat_down", "create_stat_up", "create_stat",
-           "create_points")
+           "create_points", "create_face_down", "create_face_up", "create_hair_down", "create_hair_up")
 # Version 13 (RQ-109, specs/KO-FINDINGS.md 9.6): 1298's select bar
 # (co_CharacterSelect_us.uif, its ReceiveMessage 00607160): `select_start`
 # (btn_start, 005ff870: the centre click's start), `select_create` (btn_create,
@@ -189,9 +191,16 @@ CREATE_CHOICES = ("create_race", "create_class")
 CREATE_STATS = ("create_stat_down", "create_stat_up", "create_stat", "create_points")
 MULTI_BOUND = CREATE_CHOICES + ("create_stat_down", "create_stat_up", "create_stat")
 STAT_ROWS = {"race": 0, "class": 1}
+# Version 27 (RQ-174, specs/KO-FINDINGS.md 10.5): create's face and hair
+# arrows (1298's 00604f90 by the buttons btn_face_left, btn_face_right,
+# btn_hair_left and btn_hair_right, 1264's 0043dfc0 the same), bound by the
+# create screen's `bindings`, each once, a button with no fixed state; a create
+# that binds one needs the package's create rules (create.bin's faces and
+# hairs are the arrows' range).
+CREATE_LOOKS = ("create_face_down", "create_face_up", "create_hair_down", "create_hair_up")
 # Actions bound on one screen only (the others never draw or use them).
 ONLY_ON = {"login_closed": "login", **{a: "select" for a in SELECT_ONLY}, **{a: "message" for a in MESSAGE_ONLY},
-           **{a: "create" for a in CREATE_CHOICES + CREATE_STATS}}
+           **{a: "create" for a in CREATE_CHOICES + CREATE_STATS + CREATE_LOOKS}}
 # The select's info text: 1097's and 1264's one text00 (char_info), or any of
 # 1298's three (version 13); a select layout binds at least one.
 INFO_TEXTS = {"char_info", "char_name", "char_level", "char_class"}
@@ -1130,7 +1139,8 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
     appended to, as the section writes it; another screen may not name one.
     `choices`: a list create's race and class buttons (version 25, item 14)
     are appended to, as {data: the section's bytes, races: [(race, default)],
-    classes: [specialties], stats: item 15's bytes (version 26), stat_count}."""
+    classes: [specialties], stats: item 15's bytes (version 26), stat_count,
+    looks: the face and hair arrows' actions it binds (version 27)}."""
     tree, ui = split(assets, spec["ui"])
     root = ko_hud.parse(tree.get(ui))
     # Every address resolves on KO's tree as read, before anything moves or is added.
@@ -1191,6 +1201,9 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
             flags |= STATES[states[id(n)]]
         if action in CREATE_CHOICES and (kind != "button" or states.get(id(n), "down") != "down"):
             raise ValueError("front-end %s: a button with no fixed state but down" % action)
+        # Version 27 (RQ-174): a face or hair arrow is a button the player clicks.
+        if action in CREATE_LOOKS and (kind != "button" or id(n) in states):
+            raise ValueError("front-end %s: a button with no fixed state" % action)
         if id(n) in chosen["labels"]:
             flags |= chosen["flag"]
         record = u(KINDS[kind]) + u(0xFFFFFFFF if parent is None else parent) + f(n["rect"]) + \
@@ -1279,7 +1292,7 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
         stat_record += u(found[id(arrows["points"])] if arrows["stats"] else NO_NODE) + u(arrows["row"])
         choices.append(dict(data=record, races=[(race, default) for _, race, default in chosen["races"]],
                             classes=[codes for _, codes, *_ in chosen["classes"]], stats=stat_record,
-                            stat_count=len(arrows["stats"])))
+                            stat_count=len(arrows["stats"]), looks=[a for a in CREATE_LOOKS if a in seen]))
     data = u(len(nodes)) + b"".join(nodes)
     if placements is not None:
         # A move of a node that draws nothing (hidden) is not written.
@@ -1785,24 +1798,70 @@ def character_tree(assets, look):
 
 # Version 24 (RQ-158): at most as many create models as create.bin has races.
 MAX_CREATE_MODELS = 32
+# Version 27 (RQ-174): at most this many faces and hairs per create model.
+MAX_CREATE_PARTS = 32
 
 
-def create_model(assets, race, work, entry=None):
+def scene_skeleton(head):
+    """The nodes and joints of a cooked scene's head (scene_tracks): the bytes
+    after its atlas."""
+    w, h = struct.unpack_from("<2I", head, 4)
+    return head[12 + w * h * (4 if head[:4] == b"N3SM" else 3):]
+
+
+def create_part(assets, joint, animation, name, work, head, tail):
+    """Version 27 (RQ-174): one face or hair part of a create model (KO's
+    InitFace and InitHair set it on the player, PlayerMySelf.cpp): a byte
+    length and an N3S1 or N3SM scene of that part alone with no tracks, its
+    nodes, joints and instance scale the model's (`head`, `tail`), so the
+    client skins it with the model's pose."""
+    record = model(assets, joint, dict(joint=joint, animation=animation, parts=[name]), [BREATH], work)
+    scene = record[4:4 + struct.unpack_from("<I", record)[0]]
+    part_head, _, part_tail = scene_tracks(scene)
+    if scene_skeleton(part_head) != scene_skeleton(head) or part_tail[-16:] != tail[-16:]:
+        raise ValueError("front-end create part %s: not its model's nodes, joints and scale" % name)
+    scene = part_head + u(0) + part_tail
+    return u(len(scene)) + scene
+
+
+def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None):
     """CGameProcCharacterCreate: the player's own model (InitChr from the
     race's UPC_DefaultLooks row: its joint, animation and default parts),
     breathing (ANI_BREATH), with no plugs: a new character holds nothing.
     With the package's race `entry` ({race, looks}, character-create.json),
-    its parts are KO's SetChr set (ko_player.looks: face 0 and hair 0, an
-    empty name setting no part, the row checked against the race's looks)."""
+    its parts are KO's SetChr set (ko_player.looks: an empty name setting no
+    part, the row checked against the race's looks). Version 27 (RQ-174): the
+    model holds every part but the face and the hair, which follow it by
+    number (InitFace and InitHair's "%02d", ko_player.numbered): `faces` face
+    parts and `hairs` hair parts (create.bin's counts with the package's
+    rules, the face and hair 0 alone without), none for a row whose part is
+    empty (the Wrinkle Tuarek's hair: InitHair sets none). `report`: a list
+    the race, its face and hair counts and the record's bytes are appended
+    to."""
+    import ko_player
     row = looks(assets, race)
     joint, animation = row[2].replace("\\", "/"), row[3].replace("\\", "/")
-    if entry is None:
-        parts = default_parts(assets, race)
-    else:
-        import ko_player
-        parts = ko_player.looks(assets, entry)["definition"]["parts"]
-    definition = dict(joint=joint, animation=animation, parts=parts)
-    return model(assets, joint, definition, [BREATH], work) + u(0)
+    if entry is not None:
+        ko_player.looks(assets, entry)  # the row checked against the race's looks
+    names = row[4:10]
+    if not 0 <= faces <= MAX_CREATE_PARTS or not 0 <= hairs <= MAX_CREATE_PARTS:
+        raise ValueError("front-end create faces and hairs: 0 to %d each" % MAX_CREATE_PARTS)
+    base = [n for i, n in enumerate(names) if n and i not in (ko_player.FACE, ko_player.HAIR)]
+    definition = dict(joint=joint, animation=animation, parts=base)
+    record = model(assets, joint, definition, [BREATH], work)
+    head, _, tail = scene_tracks(record[4:4 + struct.unpack_from("<I", record)[0]])
+    out, counts = record + u(0), []
+    for position, number in ((ko_player.FACE, faces), (ko_player.HAIR, hairs)):
+        name = names[position]
+        parts = [ko_player.numbered(name, i) for i in range(number)] if name else []
+        kind = ko_player.POSITIONS[position]
+        out += u(len(parts)) + b"".join(
+            create_part(assets, joint, animation, part, work.parent / ("%s-%s-%d" % (work.name, kind, i)), head, tail)
+            for i, part in enumerate(parts))
+        counts.append(len(parts))
+    if report is not None:
+        report.append(dict(race=race, faces=counts[0], hairs=counts[1], bytes=len(out)))
+    return out
 
 
 def create_races(select_race, rules=None):
@@ -1821,19 +1880,23 @@ def create_races(select_race, rules=None):
     return [(race, entries[race]) for race in order]
 
 
-def create_scene(assets, races, work):
+def create_scene(assets, races, work, rules=None, report=None):
     """Version 24 (RQ-158): a count, then per race its code and its create
-    model (create_model), for `races` from create_races."""
+    model (create_model), for `races` from create_races; version 27 (RQ-174):
+    each with its face and hair parts, as many as the package's rules have
+    faces and hairs (the face and hair 0 alone without rules)."""
     if not 1 <= len(races) <= MAX_CREATE_MODELS:
         raise ValueError("front-end create models: 1 to %d" % MAX_CREATE_MODELS)
     if len({race for race, _ in races}) != len(races):
         raise ValueError("front-end create race twice")
+    faces, hairs = (rules["faces"], rules["hairs"]) if rules is not None else (1, 1)
     out = u(len(races))
     for at, (race, entry) in enumerate(races):
         if type(race) is not int or not 1 <= race <= 65535:
             raise ValueError("front-end create race %r" % (race,))
         # The first keeps the work directory the one create model had.
-        out += u(race) + create_model(assets, race, work / ("create" if at == 0 else "create-%d" % race), entry)
+        out += u(race) + create_model(assets, race, work / ("create" if at == 0 else "create-%d" % race), entry,
+                                      faces, hairs, report)
     return out
 
 
@@ -2153,8 +2216,8 @@ def create_buttons(choice, rules):
     (Q109 (a)); the client checks a choice against create.bin as the server
     does."""
     if rules is None:
-        if choice["races"] or choice["classes"] or choice.get("stat_count"):
-            raise ValueError("front-end races, classes and stats: the package has no create rules "
+        if choice["races"] or choice["classes"] or choice.get("stat_count") or choice.get("looks"):
+            raise ValueError("front-end races, classes, stats, faces and hairs: the package has no create rules "
                              "(character-create.json)")
         return
     # Version 26 (RQ-173): one arrow pair per stat of the rules, which a build
@@ -2242,7 +2305,10 @@ def write(assets, out, config, work, rules=None):
     scenes += select_scene(assets, textures, config["select"], pathlib.Path(work), zone_report)
     # Version 24 (RQ-158): a create model per race of models.create.
     races = create_races(config["select"]["character"]["race"], rules)
-    scenes += create_scene(character_tree(assets, config["select"]["character"])[0], races, pathlib.Path(work))
+    # Version 27 (RQ-174): each with its faces and hairs (create.bin's counts).
+    create_report = []
+    scenes += create_scene(character_tree(assets, config["select"]["character"])[0], races, pathlib.Path(work), rules,
+                           create_report)
     atlases = b""
     sources = {False: pathlib.Path(config["fonts"]["regular"]), True: pathlib.Path(config["fonts"]["bold"])}
     for (size, bold), _ in sorted(fonts.items(), key=lambda kv: kv[1]):
@@ -2264,6 +2330,6 @@ def write(assets, out, config, work, rules=None):
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)
     return dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), textures=len(textures.list),
-                create_races=[race for race, _ in races],
+                create_races=[race for race, _ in races], create_models=create_report,
                 fonts=len(fonts), music=played, logo=logo_report, messages=message_report, font_substitutes=sorted(str(p) for p in sources.values()),
                 sources=dict(sorted(assets.sources.items())), **zone_report)

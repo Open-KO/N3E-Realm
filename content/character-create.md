@@ -176,7 +176,17 @@ El Morad race, but Ebenezer checks only that the class exists (below).
 
 - Each arrow steps by one and stops at the end of the range; it does not wrap.
 - The range is the same for every race.
-- 1264 and 1097 have the same ranges (binary).
+- A change calls the vtable function once; nothing tests a race or class
+  first, so the arrows work before a race is clicked (RQ-174).
+- No open writes them: the player's constructor (`00465410`) and its Release
+  (`00465740`) zero `+0x7d8` and `+0x7dc`, the world's own-character packet
+  (`005c87c0`) sets them, and neither Init (`005fab40`), Cancel (`005ffb90`),
+  the reset (`006066b0`) nor the build (`005fd120`, which calls `+0x28` and
+  `+0x24` with the values as they are) writes them. A create keeps the face
+  and hair of the last one (RQ-174, binary).
+- 1264's (`0043dfc0`) are the same: the face `+0x6e0` and hair `+0x6e4`,
+  0..3 and 0..2, clamped, `+0x28` and `+0x24` on a change (binary). 1097 has
+  the same ranges (binary).
 
 The files are named by the looks path plus `%02d` (source `PlayerMySelf.cpp`
 `InitHair`).
@@ -797,8 +807,9 @@ them, GL-free (`tests/front_end.cpp`).
 
 **What Create sends.** `CreateCharacter` with the name, from the rules, the
 chosen race and specialty (below; a create without race and class buttons, the
-package's fixed choice: `fixed`, race and specialty), the fixed choice's face and
-hair until RQ-174's arrows choose them, and the stats the stat arrows chose
+package's fixed choice: `fixed`, race and specialty), the face and hair the
+face and hair arrows chose (RQ-174, below; a create without them: the fixed
+choice's, Q110), and the stats the stat arrows chose
 (RQ-173, below; a create without arrows: the chosen specialty's base with the
 fixed choice's points spent as it spends them, Moradon's ten in the fifth stat,
 MP: the Tuarek rogue or priest at 60 / 60 / 70 / 50 / 60; Q110), in the first
@@ -867,6 +878,41 @@ Both recipes' `text_bonus`, hidden until now (Q52), shows the points left, and t
 arrows are no longer fixed disabled; the face and hair stay the fixed choice's until RQ-174. The 1097 choice's
 `front-end.bin` grows from 56,348,696 to 56,348,916 bytes (item 15 and the message);
 the package hash changes (Q63).
+
+**The face and hair arrows (RQ-174; N3FE version 27, `content/front-end.md` item
+8 and "Actions").** Both recipes bind KO's `btn_face_left`, `btn_face_right`,
+`btn_hair_left` and `btn_hair_right` (no longer fixed disabled). As KO's ("Face
+and hair" above; KO-FINDINGS §10.5, binary):
+- Each arrow steps its value by one, from 0 to `create.bin`'s last face or
+  hair for the race (Moradon's 3 and 2, KO's), no wrap, with or without a race
+  or class. With no race chosen the range is the fewest of `create.bin`'s
+  races, and a race click takes a value past its range into it (Q112).
+- The face and hair are kept from one open to the next, as no KO open writes
+  them.
+- The new character draws its face and hair parts by number: each create
+  model in `front-end.bin` carries its parts without its face and hair, then
+  its `faces` face parts and `hairs` hair parts (KO's `InitFace` and
+  `InitHair` file names), the Wrinkle Tuarek none for hair; so its hair arrow
+  moves the value and draws nothing new, as KO's.
+- Create sends them; the server checks them under the race's counts (Q95).
+
+The parts weigh against `front-end.bin`'s 64 MiB bound (local-asset, the
+pinned tree; `tests/ko_player_races.py` cooks each):
+
+| Race | Create model record before (bytes) | With its faces and hairs | Faces, hairs |
+|---|---|---|---|
+| 2 Tuarek | 1,014,644 | 1,303,588 | 4, 3 |
+| 3 Wrinkle Tuarek | 1,405,652 | 1,508,788 | 4, none |
+| 4 Puri Tuarek | 1,139,060 | 1,816,036 | 4, 3 |
+
+Each part's scene repeats the model's nodes and joints (about 2.7 KB) but not
+its clip; its texture is its own (128 × 128 for most, 256 × 256 for the
+Wrinkle Tuarek's face 00 and the Puri Tuarek's hairs). The 1097 choice's
+`front-end.bin` grows from 56,348,916 to 57,417,972 bytes and the 1298
+recipe's is 59,297,737, both under 67,108,864, leaving the 1097 choice about
+9.7 MB for the races RQ-165 and RQ-006 add (each about 1.3 to 1.8 MB with its
+parts). The package hash changes, so the hosted realm's next deploy is a new
+realm (Q63).
 
 ## What each item needs
 

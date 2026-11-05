@@ -29,23 +29,26 @@ create model per race the package's create rules name (version 24, RQ-158), and
 create's race and class buttons bound to KO's codes, each class button with its
 stand-in image and the stat labels its click marks (version 25, RQ-172), and
 create's stat arrows, their values and the points left, with a message for
-points left at Create (version 26, RQ-173).
+points left at Create (version 26, RQ-173), and create's face and hair
+arrows, each create model's face and hair parts carried by number in place of
+its face 0 and hair 0 (version 27, RQ-174).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
 its header. A package with it is engine 42, so wire 30 (as engines 38–41). Its bound is
 64 MiB (`FRONT_END_FILE`, `MAX_FRONT_END_ASSET`, `kFrontEndFile`), since it holds
-the character models and the UI art (Moradon's 1097 choice: 56,348,916 bytes with
-three create models, RQ-158, its race and class buttons, RQ-172, and its stat
-arrows, RQ-173).
+the character models and the UI art (Moradon's 1097 choice: 57,417,972 bytes with
+three create models, RQ-158, its race and class buttons, RQ-172, its stat
+arrows, RQ-173, and its create models' four faces and three hairs, RQ-174;
+the 1298 recipe's 59,297,737).
 
 Integers are little-endian u32, reals f32; strings are a u32 length and that many
 bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 26, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 27, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -89,10 +92,23 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 8. The create models (version 24, RQ-158): a count (1–32), then per race its
    race code (1–65535, each once) and its model and plugs (version 2):
    `CGameProcCharacterCreate`'s player (`InitChr`: the race's `UPC_DefaultLooks`
-   joint, animation and default parts, face 0 and hair 0, an empty part name
-   setting no part as `SetChr` sets them; source `GameProcCharacterCreate.cpp`,
+   joint, animation and default parts, an empty part name setting no part as
+   `SetChr` sets them; source `GameProcCharacterCreate.cpp`,
    `content/character-create.md` "The realm's races") with one clip,
-   `ANI_BREATH` (0), and no plugs (a new character holds nothing). The races
+   `ANI_BREATH` (0), and no plugs (a new character holds nothing). Version 27
+   (RQ-174): the model holds every part but the face and the hair, and after
+   its plugs come its faces (a count, 0–32) and its hairs (a count, 0–32),
+   each part a byte length and an N3S1 or N3SM scene of that part alone with
+   no tracks, its nodes, joints and instance scale the model's, so the
+   client skins it with the model's pose. Part i is the looks row's face or
+   hair file with i as two digits before the extension (`InitFace` and
+   `InitHair`'s `"%02d"`, source `PlayerMySelf.cpp`); the cook writes
+   `create.bin`'s faces and hairs of them (Moradon's 4 and 3, KO's 0..3 and
+   0..2), none for a row whose part is empty (the Wrinkle Tuarek's hair,
+   which `InitHair` sets to none), and without create rules the face and hair
+   0 alone. The new character draws the face and hair the create holds
+   ("Actions"), none past the parts (before version 27 the model carried
+   face 0 and hair 0). The races
    are the package's `models.create` (`games/<game>/character-create.json`):
    the select character's race first (`select.character.race`, which must be
    one of them), the model a create without race buttons draws, then the
@@ -460,8 +476,10 @@ address mode); the font atlases and the moon linear.
   and ambient (3 reals each), a vertex count (1–65536) of 8 reals (position,
   normal, uv), an index count (a multiple of 3, ≤196608), the indices.
 
-The loader refuses (version 26) a create model count outside 1–32, a create race
-outside 1–65535 or named twice, an unknown action, a screen missing one of its required
+The loader refuses (version 27) a create model count outside 1–32, a create race
+outside 1–65535 or named twice, a face or hair count above 32, a part that is
+not N3S1 or N3SM, has tracks, or whose nodes, joints or instance scale are
+not its model's (version 27), an unknown action, a screen missing one of its required
 actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
 `realm_connect`; select: `select_prev`, `select_next`, `back`, `exit` and an
 info text, `char_info` or (version 13) any of `char_name`, `char_level` and
@@ -488,7 +506,9 @@ bounds and references above (version 25), a node bound to `create_stat_down`,
 `create_stat_up`, `create_stat` or `create_points` on a screen other than
 create, an arrow that is not a button or is fixed on or disabled, a value or
 points text that is not a text node, item 15's bounds and references above
-(version 26), a select ESC other than 0, 1 or
+(version 26), a node bound to `create_face_down`, `create_face_up`,
+`create_hair_down` or `create_hair_up` on a screen other than create, or one
+that is not a button or is fixed on or disabled (version 27), a select ESC other than 0, 1 or
 2 (version 15; 2 since version 16), a select Back other than 0 or 1 (version
 17), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
@@ -507,7 +527,9 @@ The closed set, by index: none, `login`, `exit`, `login_group`, `realm_group`,
 `progress`, `version`, `info`, `message`, `ok`, `title` (version 10), `login_closed`
 (version 12), `select_start`, `select_create`, `select_delete`, `char_name`,
 `char_level`, `char_class` (version 13), `yes`, `no` (version 14), `create_race`,
-`create_class` (version 21). A group bound to `login_group` or
+`create_class` (version 21), `create_stat_down`, `create_stat_up`,
+`create_stat`, `create_points` (version 26), `create_face_down`,
+`create_face_up`, `create_hair_down`, `create_hair_up` (version 27). A group bound to `login_group` or
 `realm_group` is shown in its state only; `realm_list` lists the realm from
 `realm.json`; `notice`, `char_info`, `class_desc`, `version`, `info`,
 `message` and `title` (the message's title, item 11) are texts the client fills; `name_field` is the name entry (RQ-004: printable ASCII up to the package's longest name, `create.bin`); `char_view`
@@ -605,6 +627,25 @@ finds none for class −1). The value texts (`create_stat`) and the
 points text (`create_points`) show the numbers once a build has written them
 (1298's `SetStringAsInt`), empty before.
 
+The face and hair arrows (version 27, RQ-174; `specs/KO-FINDINGS.md` §10.5,
+binary: 1298's `00604f90`, 1264's `0043dfc0`), create screen only, with the
+package's create rules: `create_face_down` and `create_face_up` step the face
+by one, `create_hair_down` and `create_hair_up` the hair, each stopping at 0
+and at the last of `create.bin`'s faces or hairs for the chosen race (KO's 3
+and 2, constants of both binaries, the same for every race), no wrap, with or
+without a race or class. With no race chosen (or one `create.bin` lacks) the
+range is the fewest of `create.bin`'s races, and a race click takes a value
+past the race's range into it (Q112: KO's range is one, so this never moves
+it). No open writes them (1298's player `+0x7d8` and `+0x7dc`: zeroed by the
+player's constructor `00465410` and Release `00465740`, written by neither
+Init, Cancel nor the build), so a create keeps the face and hair of the last
+one, from 0 at the client's start. The new character draws the face and hair
+parts they name (item 8; KO's `InitFace` and `InitHair` through the player's
+vtable `+0x28` and `+0x24`, called on a change and by each build), none for a
+model without that part (the Wrinkle Tuarek's hair: its value moves, nothing
+is drawn). A create that binds a face or hair arrow draws and sends the
+fixed choice's face or hair for the one it does not bind (Q110).
+
 `create_confirm` then refuses, in `005fffd0`'s order (1264's `0043a340`), an
 empty name (`create_name`), no race (`create_no_race`), no class
 (`create_no_class`), (version 26, RQ-173) with stat arrows, points left
@@ -615,9 +656,10 @@ face, hair and stats it would send, as the server's `Policy::choice` checks
 them (`create_choice_refusal`, Q95: a race or specialty the package does not
 offer is `create_refused` in the package's wording of the server's mismatch
 refusal); otherwise it sends the create: the chosen race and specialty, the
-package's fixed face and hair (until RQ-174) and the stats the arrows chose
-(without arrows, the fixed choice's points on the chosen specialty's base
-stats; Q110), in the first free slot. The client's own wording for the three
+face and hair the arrows chose (RQ-174; without them the package's fixed
+face and hair, Q110) and the stats the arrows chose (without arrows, the
+fixed choice's points on the chosen specialty's base stats; Q110), in the
+first free slot. The client's own wording for the three
 is "Choose a race.", "Choose a class." and "Spend the stat points left.". A
 create that binds neither keeps race and class chosen from the open and the new character at the slot in focus, and sends the
 package's fixed choice (Q100), as before version 21.
@@ -653,6 +695,11 @@ points node that is not a text or an arrow that is not a button, a node they
 name that draws nothing, an unknown `stat_row`, and (with the package's create
 rules) a stat count other than the rules', stats without race buttons, or
 stats without the package's create rules.
+
+The recipe binds the face and hair arrows in the create screen's `bindings`
+(version 27, RQ-174), each action once; an arrow takes no fixed state. The
+cook refuses them on another screen, on a node that is not a button or has a
+state, twice, and without the package's create rules.
 
 A recipe screen's `states` fixes a node's button state: `on` and `disabled` are
 flags 1 and 2. `down` (RQ-138, Q89 (b), `specs/KO-FINDINGS.md` §9.16, binary) is
@@ -903,7 +950,10 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   Load `00603850` keeps them in the order str, dex, sta, int, map, and
   `006062d0` hides flags 0 and 2, 1 and 2, 3 and 4, 0 and 3), `class_labels`
   `hide`; states: the other races (Q109 (a): their textured disabled tiles,
-  the Puri Tuarek's too), face and hair disabled, none chosen at the open;
+  the Puri Tuarek's too), none chosen at the open; (RQ-174, version 27)
+  `bindings` `btn_face_left` `create_face_down`, `btn_face_right`
+  `create_face_up`, `btn_hair_left` `create_hair_down` and `btn_hair_right`
+  `create_hair_up`, live from the open as `00604f90`'s;
   hidden: El Morad's three race buttons (Load shows Karus's and hides El
   Morad's for a Karus player). (RQ-173, version 26, item 15) `stats` binds
   `text_str`, `text_sta`, `text_dex`, `text_int` and `text_map` with their
@@ -1131,8 +1181,9 @@ box and loading are 1264's.
   `0043a340` posts code 9 through `0043a820` (`messages`). Every other race
   (Q109 (a): the Arch and Wrinkle Tuarek fixed disabled; the Puri Tuarek,
   whose disabled image has no texture, unfixed and unbound, its normal grey
-  tile, inert: RQ-139, Q90, "Grey button, as 1264") and the face and hair
-  arrows fixed disabled (Q52, until RQ-174). (RQ-173, version 26, item 15)
+  tile, inert: RQ-139, Q90, "Grey button, as 1264"); (RQ-174, version 27) the
+  face and hair arrows bound as the 1298 recipe's (`0043dfc0`'s, the same
+  steps and ends), no longer fixed disabled (Q52). (RQ-173, version 26, item 15)
   `stats` binds the five `text_*` values and their `btn_*_left` and
   `btn_*_right` arrows, `points` `text_bonus` (pink, as the layout draws it)
   and `stat_row` `race` (1264's `0043dfc0` looks the row up by the race alone,

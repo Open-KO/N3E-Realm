@@ -519,9 +519,17 @@ CLIENT = Path("assets/ko")
 # Default features 0daa0f41... -> e798df20...; classic 883dcdeb... ->
 # 73fe5f1f...; 1097 5f229efc... -> ffc7446f.... The plain cooks and the
 # homelands keep their pins.
+# RQ-174 changed them again: N3FE version 27 binds create's face and hair arrows
+# (no longer fixed disabled) and carries each create model's face and hair parts
+# by index (item 8: the Tuarek's and Puri's 4 faces and 3 hairs, the Wrinkle
+# Tuarek's 4 faces and no hair), the model cooked without them: front-end.bin
+# grows from 56,348,916 to 57,417,972 bytes; the release index follows.
+# Default features e798df20... -> 6c27dc74...; classic 73fe5f1f... ->
+# ba9e14ee...; 1097 ffc7446f... -> 18b53a03.... The plain cooks and the
+# homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "e798df2012f3496f12740fb38132268de5cb9ad3e21fcec762a7aa71ac872c9e"),
+    "features": (["--features"], "6c27dc744db6eebea1259e663b639d6cc6d0bf642382646cdc6b3de63a155a1c"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -542,13 +550,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "73fe5f1fc98cb4a6c5320a2cebb8ac4c0f8da96b91524f5a5bd013a2dd84c9dc"),
+    "features": (["--features"], "ba9e14ee67c6c02d1486daa2f111993c5022f870456352d518bc30857b051de0"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "ffc7446f76f68ab0765649e160faec885a8fe325b0545373c5106b65d05931ef"),
+    "features": (["--features"], "18b53a036bccb7dfbfdad0cbd89948aa994ae36f285ecf698060af70ccb0a9b9"),
 }
 
 

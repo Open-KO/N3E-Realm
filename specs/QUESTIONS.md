@@ -1634,7 +1634,8 @@ a name alone, and is removed when no client sends one.
 RQ-172 sends the race and specialty the KO screens' buttons chose (a create with no
 buttons still sends the fixed choice), with the fixed choice's face, hair and points
 until RQ-173 and RQ-174 (Q110). RQ-173 sends the stats the arrows chose, with the
-fixed choice's face and hair until RQ-174.
+fixed choice's face and hair until RQ-174. RQ-174 sends the face and hair the
+arrows chose.
 
 ### Q101 — The account's nation and the create settings RQ-002 does not land
 
@@ -1868,6 +1869,11 @@ refuses points left with `create_points_left` (code 10, row 1913 under 1901) aft
 no race and no class, as `005fffd0` does. A create without arrows keeps (a). The
 face and hair stay the fixed choice's until RQ-174.
 
+**Resolved for the face and hair (RQ-174, 2026-11-04):** a create screen with face
+and hair arrows (N3FE version 27) sends the face and hair they chose, from 0 as
+KO's player starts and kept from open to open (KO-FINDINGS §10.5); both recipes
+bind them. A create that does not bind one keeps (a) for it, drawn as sent.
+
 ### Q111 — The points left after a Cancel
 
 RQ-173 (KO-FINDINGS §10.4): 1298 zeroes the points left (`+0xb0`) and the bonus
@@ -1888,3 +1894,22 @@ Options:
 a Cancel cannot leave points the screen does not show, and Create refuses points
 left only after a build. Changing it would be client-only.
 
+### Q112 — The face and hair range before a race, and per race
+
+RQ-174 (KO-FINDINGS §10.5): KO's face and hair arrows clamp to constants (0..3 and
+0..2 in 1298's `00604f90` and 1264's `0043dfc0`), the same for every race and
+whether or not a race is chosen. `create.bin` carries `faces` and `hairs` per race
+(the cook writes the package's one pair for each), so a package could give races
+different ranges, while KO's arrows work before any race is chosen.
+
+Options:
+- (a) With a race chosen, that race's range; with none (or a race `create.bin`
+  lacks), the fewest of `create.bin`'s races; a race click takes a value past the
+  new race's range into it.
+- (b) With none, the largest range, refusing at Create a value the race lacks.
+- (c) The arrows do nothing until a race is chosen.
+
+**Default taken:** (a). With KO's one range (Moradon's 4 and 3 for every race) it
+is exactly KO's: the arrows work before the race and nothing is ever moved; for a
+package with different ranges every value shown is one the server takes. Changing
+it is client-only (`client/render/create_choice.h`).

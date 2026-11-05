@@ -1570,6 +1570,30 @@ client keeps the points as these functions do and Create refuses points left wit
 `create_points_left` (row 1913 under 1901 in both recipes), then sends the values.
 One edge differs: each open of the realm's create starts with no points (Q111).
 
+### 10.5 The create's face and hair arrows (RQ-174, 2026-11-04)
+
+Read statically in 1298's `KnightOnLine.exe` and the 1264 client as §10.4 does
+(same projects and hashes); the new output (the player's constructor, Release and
+the world's MyInfo handler) is under `build/ghidra/rq174/`, not committed. The
+source's `PlayerMySelf.cpp` (`InitFace`, `InitHair`) matches what is read here.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The four arrows are found by their ids.** Init looks up `btn_face_left`, `btn_face_right`, `btn_hair_left` and `btn_hair_right` (`006d89dc`–`006d89ac`) into `+0x164`, `+0x168`, `+0x16c` and `+0x170`; ReceiveMessage compares the clicked node with them after the race and class buttons, Cancel and Create, and tests no disabled or hidden state | 1298 `00603850`, `00604f90` | binary |
+| **Each arrow steps by one and clamps, no wrap, with or without a race or class.** The face (the player's `+0x7d8`) goes down to 0 and up to 3; the hair (`+0x7dc`) down to 0 and up to 2; neither the race (`+0x48c`) nor the class is read on the way. A changed face calls the player's vtable `+0x28`, a changed hair `+0x24` (InitFace and InitHair) | 1298 `00604f90` | binary |
+| **The part is the looks' name with the index as two digits.** InitFace and InitHair build `{dir}{name}{index:02}{ext}` from the race's looks and set the face or hair part; a race whose looks name no hair sets an empty hair part | `ref/ko-src/src/Client/WarFare/PlayerMySelf.cpp` (`InitFace`, `InitHair`) | source |
+| **They start at 0 and stay across opens.** The player's constructor (`00465410`, from `006113b0`) and its Release (`00465740`) write 0 to both; the world's MyInfo handler (`005c87c0`) sets them from the server. Init (`005fab40`), Cancel (`005ffb90`), the reset (`006066b0`) and the build (`005fd120`) never write them, and the build calls `+0x28` and `+0x24` with the current values, so a face or hair chosen before a Cancel is the next open's | 1298 `00465410`, `00465740`, `005c87c0`, `005fab40`, `005ffb90`, `006066b0`, `005fd120` | binary |
+| **Create sends them.** The packet carries `+0x7d8` and `+0x7dc`, a byte each, after the class | 1298 `005fffd0` (beside the race and class, before the stats at `006006d5`) | binary |
+| **1264's arrows are the same.** ReceiveMessage compares its four arrows (`+300`, `+0x130`, `+0x134`, `+0x138`) with the same steps and clamps (face 0..3 at the player's `+0x6e0`, hair 0..2 at `+0x6e4`) | 1264 `0043dfc0` | binary |
+| **The parts.** The pinned tree has the face parts `…00` … `…03` and the hair parts `…00` … `…02` for each Moradon race's looks (the package's `faces` 4 and `hairs` 3); the Wrinkle Tuarek's looks name no hair part | the pinned tree, cooked by `tests/ko_player_races.py` (`content/character-create.md`) | local-asset |
+
+**Decides (RQ-174):** N3FE version 27 binds the four arrows (`create_face_down`,
+`create_face_up`, `create_hair_down`, `create_hair_up`) and carries each create
+model's face and hair parts by index (item 8). The client steps and clamps as
+`00604f90` does, keeps the values from open to open, draws the indexed parts and
+sends the values. The range is `create.bin`'s per race rather than a constant; with
+KO's one range for every race this is KO's behaviour (Q112).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

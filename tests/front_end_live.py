@@ -934,18 +934,28 @@ base_other, bonus_other = stat_row(other_specialty)
 assert bonus_default > 1 and bonus_other > 1 and RULES["stats"] == 5, (bonus_default, bonus_other)
 SPENT = base_other[:4] + [base_other[4] + bonus_other]
 MOVED = [SPENT[0] + 1] + SPENT[1:4] + [SPENT[4] - 1]
-CREATE_CHOICE = (f"open=0,0,0 column={COLUMN_ALL} labels={LABELS_ALL} stats={NO_STATS} empty=create_name "
-                 f"norace=create_no_race class=1,0 column={COLUMN_ALL} labels={LABELS_FIXED} "
+# RQ-174 (version 27, KO-FINDINGS 10.5): the face and hair arrows step by one
+# within create.bin's faces and hairs (KO's 0..3 and 0..2, 1298's 00604f90),
+# with or without a race: a face click before the race draws face 1 once the
+# race's build stands; five face and four hair right clicks stop at the last
+# (3 and 2), a hair left click takes it to 1; the new character draws those
+# parts; Create sends them; no open writes them, so the reopen keeps them.
+LAST_FACE, LAST_HAIR = RULES["faces"] - 1, RULES["hairs"] - 1
+assert (LAST_FACE, LAST_HAIR) == (3, 2), RULES
+ARROWS = f"{LAST_FACE},{LAST_HAIR - 1}"
+CREATE_CHOICE = (f"open=0,0,0 column={COLUMN_ALL} labels={LABELS_ALL} stats={NO_STATS} looks=0,0 "
+                 f"empty=create_name norace=create_no_race class=1,0 column={COLUMN_ALL} labels={LABELS_FIXED} "
                  f"classfirst=create_no_race race=1,0,1 column={COLUMN_RACE} labels={LABELS_ALL} "
                  f"model={FIXED['race']} row={race_button_1298['default']} "
-                 f"stats={stat_texts(base_default, bonus_default)} "
+                 f"stats={stat_texts(base_default, bonus_default)} drawn=1,0 "
                  f"noclassarrows={stat_texts([base_default[0] + 1] + base_default[1:], bonus_default - 1)} "
                  f"noclass=create_no_class both=1,1,1 labels={LABELS_FIXED} "
-                 f"stats={stat_texts(base_fixed, bonus_fixed)} again=1,0,1 labels={LABELS_FIXED} "
+                 f"stats={stat_texts(base_fixed, bonus_fixed)} arrows={ARROWS} drawn={ARROWS} "
+                 f"again=1,0,1 labels={LABELS_FIXED} "
                  f"other=1,1,0,1 labels={LABELS_OTHER} stats={stat_texts(base_other, bonus_other)} "
                  f"points=create_points_left spent={stat_texts(SPENT, 0)} moved={stat_texts(MOVED, 0)} "
-                 f"create=none sent=1 as={FIXED['race']},{other_specialty},{'/'.join(map(str, MOVED))} "
-                 f"reopen={COLUMN_ALL} labels={LABELS_ALL} stats={NO_STATS}")
+                 f"create=none sent=1 as={FIXED['race']},{other_specialty},{'/'.join(map(str, MOVED))},{ARROWS} "
+                 f"reopen={COLUMN_ALL} labels={LABELS_ALL} stats={NO_STATS} looks={ARROWS}")
 # RQ-125: 1298's in-select create, co_characterCreate_us.uif (row 2's, as
 # 005fab40 loads it), its root at the origin and its panels where its Tick
 # (00606450) clamps their slides: Group_class at (50, H - 30 - h), Group_race at

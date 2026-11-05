@@ -250,5 +250,10 @@ right arrows in `character-create.json`'s stat order, the points text and the ro
 key (`class`, 1298's race and class; `race`, 1264's), checked against the package's
 create rules, with the message `create_points_left` (row 1913 under 1901). Both
 recipes bind the five stats and `text_bonus`.
+N3FE version 27 (RQ-174, §10.5) binds create's face and hair arrows
+(`create_face_down`/`_up`, `create_hair_down`/`_up`, plain buttons) and carries each
+create model's face and hair parts by index (`create.bin`'s `faces` and `hairs`;
+a race without a hair part carries none), cooked apart from the model and checked to
+share its skeleton. Both recipes bind the four arrows.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

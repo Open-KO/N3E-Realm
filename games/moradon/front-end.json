@@ -49,7 +49,11 @@
         "btn_cancel": "back",
         "edit_name": "name_field",
         "area_character": "char_view",
-        "text_desc": "class_desc"
+        "text_desc": "class_desc",
+        "btn_face_left": "create_face_down",
+        "btn_face_right": "create_face_up",
+        "btn_hair_left": "create_hair_down",
+        "btn_hair_right": "create_hair_up"
       },
       "races": {"btn_race_ka_tu": {"race": 2, "default": 102}},
       "classes": {
@@ -63,11 +67,7 @@
         "btn_race_ka_tu": "down",
         "btn_class_priest": "down",
         "btn_race_ka_at": "disabled",
-        "btn_race_ka_wt": "disabled",
-        "btn_face_left": "disabled",
-        "btn_face_right": "disabled",
-        "btn_hair_left": "disabled",
-        "btn_hair_right": "disabled"
+        "btn_race_ka_wt": "disabled"
       },
       "stats": [
         {"value": "text_str", "down": "btn_str_left", "up": "btn_str_right"},

@@ -901,7 +901,9 @@ enum class FrontAction : uint32_t {
   char_name, char_level, char_class, yes, no, create_race, create_class,
   // Version 26 (RQ-173): create's stat arrows and the texts they write
   // (FrontCreateStats; 1298's 00604f90, 00605950).
-  create_stat_down, create_stat_up, create_stat, create_points, count
+  create_stat_down, create_stat_up, create_stat, create_points,
+  // Version 27 (RQ-174): create's face and hair arrows (1298's 00604f90).
+  create_face_down, create_face_up, create_hair_down, create_hair_up, count
 };
 enum class FrontScreen : uint32_t { login, select, create, loading, message, count };
 enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };
@@ -961,6 +963,10 @@ struct FrontScene {
   std::vector<std::vector<Track>> clips;  // clips[0] is model.tracks
   std::vector<float> blends;              // version 4: each clip's blend time (seconds)
   std::vector<FrontPlug> plugs;
+  // Version 27 (RQ-174): a create model's face and hair parts by number
+  // (InitFace, InitHair), each a scene with no tracks on the model's nodes
+  // and joints, drawn with the model's pose; none for the other scenes.
+  std::vector<Scene> faces, hairs;
 };
 // create_yaw (version 19, RQ-125): the new character's turn at the slot when
 // create draws over the hall (1298: 005fd120), the slot's yaw otherwise.

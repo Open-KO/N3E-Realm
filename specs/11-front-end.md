@@ -272,8 +272,12 @@ replace the panels when the client has a Discord realm config.
   (`create_no_race`) and then no class (`create_no_class`) after the empty name,
   each in the message box, then points left (`create_points_left`, row 1913 under
   1901; RQ-173), then a name or choice the server would refuse (`create_refused`),
-  and sends the chosen race, specialty and stats (with the package's fixed face and
-  hair until RQ-174; Q110); the server validates it as any create (Q95). The stat
+  and sends the chosen race, specialty, face, hair and stats; the server validates
+  it as any create (Q95). The face and hair arrows (N3FE version 27, RQ-174) step
+  by one within `create.bin`'s range for the race, no wrap, with or without a race
+  (Q112), kept from open to open as KO's, and the new character draws the face and
+  hair parts they name (KO-FINDINGS §10.5); a create without them sends the fixed
+  choice's (Q110). The stat
   arrows (N3FE version 26) spend and return points as KO's do: each build (the race
   with 1264's rows, the race and class with 1298's) copies the row's stats and
   bonus, a right arrow spends a point while any is left, a left arrow returns one

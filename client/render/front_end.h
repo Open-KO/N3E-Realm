@@ -198,6 +198,13 @@ class View {
       const auto &scene = scene_at(k);
       models.push_back(texture(scene.model.width, scene.model.height, scene.model.texture.data(),
                                scene.model.channels == 3));
+      // RQ-174 (version 27): a create model's face and hair parts, by number.
+      auto &looks = part_textures.emplace_back();
+      for (const auto *set : {&scene.faces, &scene.hairs}) {
+        auto &out = looks.emplace_back();
+        for (const auto &part : *set)
+          out.push_back(texture(part.width, part.height, part.texture.data(), part.channels == 3));
+      }
     }
     lit = program(R"(#version 330 core
 layout(location=0) in vec3 p;layout(location=1) in vec3 n;layout(location=2) in vec2 t;
@@ -258,6 +265,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // RQ-173 (version 26): its stat arrows, their rows the package's rules'.
     choice.bind(fe.create_race_buttons, fe.create_class_buttons, race_at_open, class_at_open, fe.create_stats,
                 create_rules);
+    // RQ-174 (version 27): its face and hair arrows.
+    bool face_bound = false, hair_bound = false;
+    for (const auto &n : created) {
+      face_bound |= n.action == FrontAction::create_face_down || n.action == FrontAction::create_face_up;
+      hair_bound |= n.action == FrontAction::create_hair_down || n.action == FrontAction::create_hair_up;
+    }
+    choice.bind_looks(face_bound, hair_bound);
     create_role.assign(created.size(), {});
     for (size_t k = 0; k < fe.create_stats.stats.size(); ++k) {
       const auto &st = fe.create_stats.stats[k];
@@ -284,10 +298,17 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     fe.select.model.texture.clear();
     fe.create.model.texture.clear();
     for (auto &model : fe.create_models) model.model.texture.clear();
+    for (auto *set : {&fe.create.faces, &fe.create.hairs})
+      for (auto &part : *set) part.texture.clear();
+    for (auto &model : fe.create_models)
+      for (auto *set : {&model.faces, &model.hairs})
+        for (auto &part : *set) part.texture.clear();
   }
   ~View() {
     glDeleteTextures(GLsizei(textures.size()), textures.data());
     glDeleteTextures(GLsizei(models.size()), models.data());
+    for (auto &looks : part_textures)
+      for (auto &set : looks) glDeleteTextures(GLsizei(set.size()), set.data());
     std::vector<std::vector<Buffer> *> sets{&statics, &zone_meshes, &intro_plugs, &select_plugs, &create_plugs};
     for (auto &set : race_plugs) sets.push_back(&set);
     for (auto *set : sets)
@@ -471,6 +492,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     if (k >= fe.create_stats.stats.size()) return -1;
     return int(up ? fe.create_stats.stats[k].up : fe.create_stats.stats[k].down);
   }
+  // RQ-174 (version 27): the create node bound to `action` (a face or hair
+  // arrow), or -1 (a test hook).
+  int create_action_node(FrontAction action) const {
+    const auto &nodes = fe.screens[size_t(FrontScreen::create)];
+    for (size_t i = 0; i < nodes.size(); ++i)
+      if (nodes[i].action == action) return int(i);
+    return -1;
+  }
   // The state the current layout's button bound to `action` draws in (0
   // normal, 1 down, 2 on, 3 disabled), or -1 (a test hook).
   int action_state(FrontAction action) const {
@@ -551,6 +580,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     std::array<float, 4> box;      // x0 y0 x1 y1 in the viewport's NDC, y up
     std::array<int, 4> viewport;   // GL viewport: x, y (from the bottom), w, h
     uint32_t race = 0;             // create: the race code of the model drawn (RQ-172)
+    int face = -1, hair = -1;      // create: the face and hair parts drawn, -1 none (RQ-174)
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) {
@@ -775,6 +805,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   struct Buffer { GLuint vao = 0, vbo = 0, ebo = 0; GLsizei count = 0; };
   FrontEnd fe;
   std::vector<GLuint> textures, models;
+  // RQ-174 (version 27): per scene, its face parts' and hair parts' textures
+  // (none but a create model's).
+  std::vector<std::vector<std::vector<GLuint>>> part_textures;
   GLuint lit = 0, flat = 0, vao = 0, vbo = 0;
   std::vector<Buffer> statics, zone_meshes, intro_plugs, select_plugs, create_plugs;
   std::vector<std::vector<Buffer>> race_plugs;  // RQ-172: each further create model's
@@ -1284,6 +1317,17 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         if (role.kind == CreateRole::klass) choice.click_class(size_t(role.button), at_slot);
       }
       break;
+    // RQ-174 (version 27): the face and hair arrows (1298's 00604f90,
+    // btn_face_left .. btn_hair_right; 1264's 0043dfc0), with or without a
+    // race or class.
+    case FrontAction::create_face_down:
+    case FrontAction::create_face_up:
+      if (state == Screen::create && !pending_create) choice.face_step(action == FrontAction::create_face_up);
+      break;
+    case FrontAction::create_hair_down:
+    case FrontAction::create_hair_up:
+      if (state == Screen::create && !pending_create) choice.hair_step(action == FrontAction::create_hair_up);
+      break;
     // RQ-173 (version 26): the stat arrows (1298's 00604f90 by the button's
     // id, btn_*_right and btn_*_left; 1264's 0043dfc0).
     case FrontAction::create_stat_down:
@@ -1423,16 +1467,16 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     glBindVertexArray(b.vao);
     glDrawElements(GL_TRIANGLES, b.count, GL_UNSIGNED_INT, nullptr);
   }
-  // A posed character: skinned on the CPU (Scene::skin), drawn by its render
-  // runs (N3SM) or as one opaque draw; KO's parts keep alpha test on.
-  void draw_character(size_t which, const std::vector<Node> &pose, const detail::Mat &vp, const detail::Mat &model) {
+  // One skinned scene posed by `pose` (a character, or RQ-174's face or hair
+  // part on its model's nodes): its vertices grow `box` (normalised device
+  // coordinates), then it draws by its render runs (N3SM) or as one opaque
+  // draw.
+  void draw_skinned(const Scene &s, GLuint tex, const std::vector<Node> &pose, const detail::Mat &vp,
+                    const detail::Mat &model, const detail::Mat &mvp, std::array<float, 4> &box) {
     static const GLenum factors[] = {GL_ZERO, GL_ONE, GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR, GL_SRC_ALPHA,
                                      GL_ONE_MINUS_SRC_ALPHA, GL_DST_ALPHA, GL_ONE_MINUS_DST_ALPHA,
                                      GL_DST_COLOR, GL_ONE_MINUS_DST_COLOR};
-    const auto &scene = scene_at(which);
-    const auto vertices = scene.model.skin(pose);
-    const auto mvp = detail::mul(vp, model);
-    std::array<float, 4> box{1e9f, 1e9f, -1e9f, -1e9f};
+    const auto vertices = s.skin(pose);
     for (size_t v = 0; v + 2 < vertices.size(); v += 8) {
       float c[4];
       for (int i = 0; i < 4; ++i)
@@ -1441,9 +1485,6 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       box = {std::min(box[0], c[0] / c[3]), std::min(box[1], c[1] / c[3]), std::max(box[2], c[0] / c[3]),
              std::max(box[3], c[1] / c[3])};
     }
-    std::array<int, 4> viewport{};
-    glGetIntegerv(GL_VIEWPORT, viewport.data());
-    drawn_boxes.push_back({std::min<size_t>(which, 2), box, viewport, which >= 2 ? scene_race(which) : 0});
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
@@ -1453,14 +1494,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     glDisableVertexAttribArray(3);
     transform(vp, model);
-    glBindTexture(GL_TEXTURE_2D, models[which]);
+    glBindTexture(GL_TEXTURE_2D, tex);
     const V white{1, 1, 1};
-    if (scene.model.runs.empty()) {
+    if (s.runs.empty()) {
       glEnable(GL_CULL_FACE);
       material(white, white, false, 0);
-      glDrawArrays(GL_TRIANGLES, 0, GLsizei(scene.model.indices.size()));
+      glDrawArrays(GL_TRIANGLES, 0, GLsizei(s.indices.size()));
     }
-    for (const auto &run : scene.model.runs) {
+    for (const auto &run : s.runs) {
       if (run.flags & MaterialRun::BLEND) {
         glEnable(GL_BLEND);
         glBlendFunc(factors[run.source], factors[run.destination]);
@@ -1472,6 +1513,29 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       glDrawArrays(GL_TRIANGLES, GLint(run.first), GLsizei(run.count));
     }
     glDisable(GL_BLEND);
+  }
+  // A posed character: skinned on the CPU (Scene::skin), drawn by its render
+  // runs (N3SM) or as one opaque draw; KO's parts keep alpha test on. RQ-174
+  // (version 27): a create model then draws the face and the hair the create
+  // chose (InitFace, InitHair; none past its parts, as the Wrinkle Tuarek's
+  // hair), each skinned with the model's pose.
+  void draw_character(size_t which, const std::vector<Node> &pose, const detail::Mat &vp, const detail::Mat &model) {
+    const auto &scene = scene_at(which);
+    const auto mvp = detail::mul(vp, model);
+    std::array<float, 4> box{1e9f, 1e9f, -1e9f, -1e9f};
+    draw_skinned(scene.model, models[which], pose, vp, model, mvp, box);
+    if (which >= 2) {
+      const auto &looks = part_textures[which];
+      if (choice.face < scene.faces.size())
+        draw_skinned(scene.faces[choice.face], looks[0][choice.face], pose, vp, model, mvp, box);
+      if (choice.hair < scene.hairs.size())
+        draw_skinned(scene.hairs[choice.hair], looks[1][choice.hair], pose, vp, model, mvp, box);
+    }
+    std::array<int, 4> viewport{};
+    glGetIntegerv(GL_VIEWPORT, viewport.data());
+    drawn_boxes.push_back({std::min<size_t>(which, 2), box, viewport, which >= 2 ? scene_race(which) : 0,
+                           which >= 2 && choice.face < scene.faces.size() ? int(choice.face) : -1,
+                           which >= 2 && choice.hair < scene.hairs.size() ? int(choice.hair) : -1});
     const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : which == 2 ? create_plugs
                                                                                        : race_plugs[which - 3];
     for (size_t i = 0; i < plugs.size(); ++i) {

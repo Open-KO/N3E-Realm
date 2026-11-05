@@ -2859,7 +2859,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 26, "front end version");
+  need(r.u() == 27, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2944,6 +2944,12 @@ FrontEnd load_front_end(const Release &release) {
       need((n.action != FrontAction::create_stat && n.action != FrontAction::create_points) ||
                n.kind == FrontNode::TEXT,
            "front end create stat text");
+      // Version 27 (RQ-174): a face or hair arrow is a button the player
+      // clicks, with no fixed state, bound once.
+      const bool looks = n.action == FrontAction::create_face_down || n.action == FrontAction::create_face_up ||
+                         n.action == FrontAction::create_hair_down || n.action == FrontAction::create_hair_up;
+      need(!looks || (n.kind == FrontNode::BUTTON && !(n.flags & (FrontNode::FIXED_ON | FrontNode::FIXED_DISABLED))),
+           "front end create look arrow");
       need((n.flags & (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS)) !=
                (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS),
            "front end class label");
@@ -3000,7 +3006,9 @@ FrontEnd load_front_end(const Release &release) {
     // Version 21 (RQ-130): the race and class choices are create's only.
     if (screen != size_t(FrontScreen::create))
       for (auto action : {FrontAction::create_race, FrontAction::create_class, FrontAction::create_stat_down,
-                          FrontAction::create_stat_up, FrontAction::create_stat, FrontAction::create_points})
+                          FrontAction::create_stat_up, FrontAction::create_stat, FrontAction::create_points,
+                          FrontAction::create_face_down, FrontAction::create_face_up, FrontAction::create_hair_down,
+                          FrontAction::create_hair_up})
         need(!bound.contains(action), "front end create choice off create");
     // Version 25 (RQ-172): a class label is create's (item 14 names it).
     for (const auto &n : fe.screens[screen])
@@ -3226,6 +3234,26 @@ FrontEnd load_front_end(const Release &release) {
   // Version 24 (RQ-158): a create model per race (1-32, each race 1-65535
   // once); the first is the one create draws, the others are kept for the
   // create screen per race (RQ-004).
+  // Version 27 (RQ-174): each model's face and hair parts by number (0-32
+  // each): a byte length and an N3S1 or N3SM scene with no tracks, its nodes,
+  // joints and instance scale the model's, so the model's pose skins it.
+  auto create_parts = [&](const Scene &body, std::vector<Scene> &out) {
+    const auto count = r.count(32, 0);
+    for (uint32_t i = 0; i < count; ++i) {
+      const auto bytes = r.u();
+      const auto start = r.p;
+      const auto magic = r.raw(4);
+      need(magic == "N3S1" || magic == "N3SM", "front end create part magic");
+      auto &part = out.emplace_back();
+      part.channels = magic == "N3SM" ? 4 : 3;
+      read_scene_head(r, part, 2048);
+      read_scene_tracks(r, part, part.tracks);
+      read_scene_tail(r, part);
+      need(r.p - start == bytes, "front end create part length");
+      need(part.tracks.empty() && part.nodes == body.nodes && part.joints == body.joints && part.scale == body.scale,
+           "front end create part skeleton");
+    }
+  };
   const auto create_models = r.count(32);
   for (uint32_t i = 0; i < create_models; ++i) {
     const auto race = r.u();
@@ -3233,7 +3261,10 @@ FrontEnd load_front_end(const Release &release) {
              std::find(fe.create_races.begin(), fe.create_races.end(), race) == fe.create_races.end(),
          "front end create race");
     fe.create_races.push_back(race);
-    model(i == 0 ? fe.create : fe.create_models.emplace_back());
+    auto &scene = i == 0 ? fe.create : fe.create_models.emplace_back();
+    model(scene);
+    create_parts(scene.model, scene.faces);
+    create_parts(scene.model, scene.hairs);
   }
   // 9. Music (version 3, RQ-018): each track's frames checked whole here, so
   // the stream that decodes them later meets only well-formed frames.

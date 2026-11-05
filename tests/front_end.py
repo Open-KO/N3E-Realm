@@ -439,7 +439,7 @@ assert choice_section(CHOSEN["data"]) == (
 assert CHOSEN["races"] == [(2, 102)] and CHOSEN["classes"] == [[101, 201], [104, 204]], CHOSEN
 shown = {i: f for i, _, f in node_records(choice_screens(class_labels="show")[2])}
 assert shown["str_01"] == shown["int_01"] == fe.CLASS_SHOWS and shown["str_02"] == 0, shown
-assert fe.CLASS_HIDES == 16 and fe.CLASS_SHOWS == 32 and fe.ACTIONS[-6:-4] == ("create_race", "create_class") and \
+assert fe.CLASS_HIDES == 16 and fe.CLASS_SHOWS == 32 and fe.ACTIONS[-10:-8] == ("create_race", "create_class") and \
     fe.ONLY_ON["create_race"] == "create", fe.ACTIONS
 # A race or class button `down` is chosen at each open (the 1097 choice's):
 # fixed on, every state image kept (the client draws it down while chosen).
@@ -572,7 +572,9 @@ def stats_tree():
                             text("text_desc"), node(4, "img_priest"), text("int_01"), button("btn_race_ka_tu"),
                             button("btn_class_priest"), text("text_bonus"), button("btn_face_left")] +
                 [x for n in STAT_NAMES for x in (text("text_" + n), button("btn_%s_left" % n),
-                                                 button("btn_%s_right" % n))])[1]
+                                                 button("btn_%s_right" % n))] +
+                # RQ-174: the other three face and hair arrows, last.
+                [button("btn_face_right"), button("btn_hair_left"), button("btn_hair_right")])[1]
 
 
 def stats_cook(**create):
@@ -600,7 +602,7 @@ words = list(struct.unpack("<%dI" % (len(STAT_CHOICE["stats"]) // 4), STAT_CHOIC
 assert words == [5] + [stat_index[x] for n in STAT_NAMES for x in ("text_" + n, "btn_%s_left" % n,
                                                                    "btn_%s_right" % n)] + \
     [stat_index["text_bonus"], 1], words
-assert STAT_CHOICE["stat_count"] == 5 and fe.ACTIONS[-4:] == fe.CREATE_STATS and \
+assert STAT_CHOICE["stat_count"] == 5 and fe.ACTIONS[-8:-4] == fe.CREATE_STATS and \
     all(fe.ONLY_ON[a] == "create" for a in fe.CREATE_STATS), fe.ACTIONS
 words = list(struct.unpack("<2I", stats_cook(stat_row="race")[1]["stats"][-8:]))
 assert words == [stat_index["text_bonus"], 0], words
@@ -645,7 +647,7 @@ fe.create_buttons(STAT_CHOICE, moradon_rules)
 for reason, choice in (
         ("stats: 4, the package's create rules have 5", STAT_CHOICE | {"stat_count": 4}),
         ("a create without race buttons builds no stat row", STAT_CHOICE | {"races": []}),
-        ("races, classes and stats: the package has no create rules", None)):
+        ("races, classes, stats, faces and hairs: the package has no create rules", None)):
     try:
         fe.create_buttons(choice or (STAT_CHOICE | {"races": [], "classes": []}),
                           None if choice is None else moradon_rules)
@@ -673,6 +675,57 @@ assert moradon_rules["stats"] == len(STATS) and moradon_rules["columns"]["stats"
 print("PASS front-end cook: create's stat arrows, value texts and points text as item 15, %d refusals; both "
       "recipes bind KO's arrows in the package's stat order, 1298's row by race and class, 1264's by race, "
       "and word points left with row 1913" % (len(stat_problems) + 3))
+
+# RQ-174 (version 27, KO-FINDINGS 10.5): create's face and hair arrows (1298's
+# 00604f90 and 1264's 0043dfc0 by btn_face_left, btn_face_right, btn_hair_left
+# and btn_hair_right), bound by the create screen's `bindings`, each once, a
+# button with no fixed state, create's only; a create that binds one needs
+# the package's create rules (create.bin's faces and hairs are their range).
+LOOK_BINDINGS = {"btn_face_left": "create_face_down", "btn_face_right": "create_face_up",
+                 "btn_hair_left": "create_hair_down", "btn_hair_right": "create_hair_up"}
+assert fe.ACTIONS[-4:] == fe.CREATE_LOOKS == tuple(LOOK_BINDINGS.values()) and \
+    all(fe.ONLY_ON[a] == "create" for a in fe.CREATE_LOOKS), fe.ACTIONS
+LOOK_DATA, LOOK_CHOICE = stats_cook(bindings={**BINDINGS["create"], **LOOK_BINDINGS})
+look_actions = {i: (a, f) for i, a, f in node_records(LOOK_DATA[2]) if i in LOOK_BINDINGS}
+assert look_actions == {i: (fe.ACTIONS.index(a), 0) for i, a in LOOK_BINDINGS.items()}, look_actions
+assert LOOK_CHOICE["looks"] == list(fe.CREATE_LOOKS) and STAT_CHOICE["looks"] == [], LOOK_CHOICE
+assert stats_cook(bindings={**BINDINGS["create"], "btn_face_right": "create_face_up"})[1]["looks"] == \
+    ["create_face_up"]
+look_problems = (
+    ("a button with no fixed state", dict(bindings={**BINDINGS["create"], **LOOK_BINDINGS},
+                                          states={"btn_face_left": "disabled"})),
+    ("a button with no fixed state", dict(bindings={**BINDINGS["create"], **LOOK_BINDINGS},
+                                          states={"btn_hair_right": "on"})),
+    ("a button with no fixed state", dict(bindings={**BINDINGS["create"], **LOOK_BINDINGS,
+                                                    "text_desc": "create_face_up", "btn_face_right": ""})),
+    ("bound twice", dict(bindings={**BINDINGS["create"], **LOOK_BINDINGS, "btn_face_right": "create_face_down"})))
+for reason, kw in look_problems:
+    try:
+        stats_cook(**kw)
+    except ValueError as error:
+        assert reason in str(error), (reason, error)
+        continue
+    raise AssertionError(("cooked create looks", reason, kw))
+try:
+    assets = Fixture({**trees, "create.uif": stats_tree()})
+    fe.screen("select", {**spec("select"), "bindings": {**BINDINGS["select"], "bt_back": "create_face_up"}},
+              assets, fe.Textures(assets), {}, choices=[])
+    raise AssertionError("cooked a face arrow off create")
+except ValueError as error:
+    assert "front-end action 'create_face_up'" in str(error), error
+fe.create_buttons(LOOK_CHOICE, moradon_rules)
+try:
+    fe.create_buttons(LOOK_CHOICE | {"races": [], "classes": [], "stat_count": 0}, None)
+    raise AssertionError("cooked face and hair arrows without create rules")
+except ValueError as error:
+    assert "faces and hairs: the package has no create rules" in str(error), error
+# Both recipes bind KO's four arrows (none fixed or hidden any more).
+for recipe in (create_1298, create_1097["screens"]["create"]):
+    assert {k: recipe["bindings"][k] for k in LOOK_BINDINGS} == LOOK_BINDINGS, recipe["bindings"]
+    assert not set(LOOK_BINDINGS) & (set(recipe["states"]) | set(recipe.get("hidden", []))), recipe
+assert (moradon_rules["faces"], moradon_rules["hairs"]) == (4, 3), moradon_rules
+print("PASS front-end cook: create's face and hair arrows, each bound once to a button with no fixed state, "
+      "create's only, with the package's rules; %d refusals; both recipes bind KO's four" % (len(look_problems) + 2))
 
 # RQ-138 (Q89 (b), KO-FINDINGS 9.16): the recipe state `down`, 1264's chosen
 # race and class (0043ec90 and 0043ee10 set state 3, which Render 00403a70
@@ -1228,6 +1281,28 @@ def character(clips=1, blends=None, plug=None):
     return u(len(model)) + model + u(clips - 1) + further + f([0.3] * clips if blends is None else blends) + plugs
 
 
+# Version 27 (RQ-174): a create model's face and hair parts. PART is the demo
+# model as a part: its scene with no tracks, so its nodes, joints and scale
+# are the model's.
+MODEL_HEAD, _, MODEL_TAIL = fe.scene_tracks(model)
+PART_SCENE = MODEL_HEAD + u(0) + MODEL_TAIL
+PART = u(len(PART_SCENE)) + PART_SCENE
+# The part with its first node moved, and with another instance scale: not
+# the model's skeleton.
+_W, _H = struct.unpack_from("<2I", PART_SCENE, 4)
+_NODE = 12 + _W * _H * 3 + 4 + 4  # the first node's translation x
+BENT_SCENE = PART_SCENE[:_NODE] + f([struct.unpack_from("<f", PART_SCENE, _NODE)[0] + 1]) + PART_SCENE[_NODE + 4:]
+BENT_PART = u(len(BENT_SCENE)) + BENT_SCENE
+SCALED_SCENE = PART_SCENE[:-16] + f([2, 2, 2]) + PART_SCENE[-4:]
+SCALED_PART = u(len(SCALED_SCENE)) + SCALED_SCENE
+
+
+def create_model(faces=(), hairs=(), plug=None):
+    """A create model record (version 27): the demo character, then its face
+    parts and its hair parts."""
+    return character(plug=plug) + u(len(faces)) + b"".join(faces) + u(len(hairs)) + b"".join(hairs)
+
+
 def path(source=fe.ENTRY, to=0, eye_rate=30.0, eye=((0, 1, 2), (0, 1, 3)), at_rate=30.0, at=((0, 0, 0),)):
     """A version 7 path record (RQ-087)."""
     return (u(source) + u(to) + f([eye_rate]) + u(len(eye)) + b"".join(f(list(v)) for v in eye) + f([at_rate]) +
@@ -1266,7 +1341,7 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=26, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=27, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0),
@@ -1294,8 +1369,9 @@ def blob(version=26, slots=1, screen_data=None, font_index=None, light=None, plu
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
     out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
     out += character(select_clips, plug=plug)
-    # Version 24 (RQ-158): the create models, each a race and a model record.
-    out += u(1) + u(2) + character(plug=plug) if creates is None else creates
+    # Version 24 (RQ-158): the create models, each a race and a model record;
+    # version 27 (RQ-174): each with its face and hair parts.
+    out += u(1) + u(2) + create_model(plug=plug) if creates is None else creates
     # Version 20 (RQ-126): create's slide, after the placement; version 25
     # (RQ-172): create's race and class buttons, after the slide; version 26
     # (RQ-173): its stat arrows, last.
@@ -2226,14 +2302,14 @@ CHOICE_SECTIONS = {
 CHOICE_CASES = {
     # RQ-158 (version 24): a create model per race.
     "bad-version-23": blob(version=23),
-    "ok-create-races": blob(creates=u(3) + u(2) + character() + u(3) + character() + u(13) + character()),
-    "ok-create-races-32": blob(creates=u(32) + b"".join(u(r) + character() for r in range(1, 33))),
+    "ok-create-races": blob(creates=u(3) + u(2) + create_model() + u(3) + create_model() + u(13) + create_model()),
+    "ok-create-races-32": blob(creates=u(32) + b"".join(u(r) + create_model() for r in range(1, 33))),
     "bad-create-races-0": blob(creates=u(0)),
-    "bad-create-races-33": blob(creates=u(33) + b"".join(u(r) + character() for r in range(1, 34))),
-    "bad-create-race-0": blob(creates=u(1) + u(0) + character()),
-    "bad-create-race-65536": blob(creates=u(1) + u(65536) + character()),
-    "bad-create-race-twice": blob(creates=u(2) + u(2) + character() + u(2) + character()),
-    "bad-create-races-truncated": blob(creates=u(2) + u(2) + character() + u(3)),
+    "bad-create-races-33": blob(creates=u(33) + b"".join(u(r) + create_model() for r in range(1, 34))),
+    "bad-create-race-0": blob(creates=u(1) + u(0) + create_model()),
+    "bad-create-race-65536": blob(creates=u(1) + u(65536) + create_model()),
+    "bad-create-race-twice": blob(creates=u(2) + u(2) + create_model() + u(2) + create_model()),
+    "bad-create-races-truncated": blob(creates=u(2) + u(2) + create_model() + u(3)),
     "bad-version-20": blob(version=20),
     "bad-version-21": blob(version=21),
     "bad-version-22": blob(version=22),
@@ -2306,6 +2382,33 @@ CHOICE_CASES = {
                                     choices=STAT_CHOICE["data"], stats=STAT_CHOICE["stats"]),
     "bad-create-stats-truncated": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"],
                                        stats=STAT_CHOICE["stats"][:-4]),
+    # RQ-174 (version 27): create's face and hair arrows, and each create
+    # model's face and hair parts (item 8).
+    "bad-version-26": blob(version=26),
+    "ok-create-looks": blob(screen_data=LOOK_DATA, choices=LOOK_CHOICE["data"], stats=LOOK_CHOICE["stats"]),
+    "ok-create-parts": blob(creates=u(2) + u(2) + create_model([PART] * 4, [PART] * 3) + u(3) +
+                            create_model([PART] * 4)),
+    "ok-create-parts-32": blob(creates=u(1) + u(2) + create_model([PART] * 32, [PART] * 32)),
+    "bad-create-parts-33": blob(creates=u(1) + u(2) + create_model([PART] * 33)),
+    "bad-create-hairs-33": blob(creates=u(1) + u(2) + create_model([], [PART] * 33)),
+    "bad-create-part-tracks": blob(creates=u(1) + u(2) + create_model([u(len(model)) + model])),
+    "bad-create-part-skeleton": blob(creates=u(1) + u(2) + create_model([PART, BENT_PART])),
+    "bad-create-part-scale": blob(creates=u(1) + u(2) + create_model([], [SCALED_PART])),
+    "bad-create-part-magic": blob(creates=u(1) + u(2) + create_model([u(len(PART_SCENE)) + b"N3XX" + PART_SCENE[4:]])),
+    "bad-create-part-length": blob(creates=u(1) + u(2) + create_model([u(len(PART_SCENE) + 4) + PART_SCENE + u(0)])),
+    "bad-create-parts-truncated": blob(creates=u(1) + u(2) + character() + u(1)),
+    "bad-create-look-arrow-disabled": blob(screen_data=patch_node(LOOK_DATA, 2, "btn_face_left", flags=2),
+                                           choices=LOOK_CHOICE["data"], stats=LOOK_CHOICE["stats"]),
+    "bad-create-look-arrow-on": blob(screen_data=patch_node(LOOK_DATA, 2, "btn_hair_right", flags=1),
+                                     choices=LOOK_CHOICE["data"], stats=LOOK_CHOICE["stats"]),
+    "bad-create-look-arrow-text": blob(screen_data=patch_node(LOOK_DATA, 2, "text_desc",
+                                                              action=fe.ACTIONS.index("create_hair_down")),
+                                       choices=LOOK_CHOICE["data"], stats=LOOK_CHOICE["stats"]),
+    "bad-create-look-twice": blob(screen_data=patch_node(LOOK_DATA, 2, "btn_face_right",
+                                                         action=fe.ACTIONS.index("create_face_down")),
+                                  choices=LOOK_CHOICE["data"], stats=LOOK_CHOICE["stats"]),
+    "bad-create-look-off-create": blob(screen_data=patch_node(bar_screens, 1, "btn_delete",
+                                                              action=fe.ACTIONS.index("create_face_up"))),
 }
 cases = {
     "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
@@ -2562,6 +2665,29 @@ try:
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
     assert any(l.startswith("refused bad-create-stats-truncated:") for l in run.stdout.splitlines())
+    # RQ-174: create's face and hair arrows and parts, each refusal for its
+    # reason; the loaded parts' counts per create model.
+    for name, reason in (("bad-version-26", "front end version"),
+                         ("bad-create-parts-33", "count"),
+                         ("bad-create-hairs-33", "count"),
+                         ("bad-create-part-tracks", "front end create part skeleton"),
+                         ("bad-create-part-skeleton", "front end create part skeleton"),
+                         ("bad-create-part-scale", "front end create part skeleton"),
+                         ("bad-create-part-magic", "front end create part magic"),
+                         ("bad-create-part-length", "front end create part length"),
+                         ("bad-create-look-arrow-disabled", "front end create look arrow"),
+                         ("bad-create-look-arrow-on", "front end create look arrow"),
+                         ("bad-create-look-arrow-text", "front end create look arrow"),
+                         ("bad-create-look-twice", "front end action bound twice"),
+                         ("bad-create-look-off-create", "front end create choice off create")):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    assert any(l.startswith("refused bad-create-parts-truncated:") for l in run.stdout.splitlines())
+    part_lines = {l.split(":")[0]: l.split(": ", 1)[1] for l in run.stdout.splitlines() if l.startswith("create-parts ")}
+    assert part_lines == {"create-parts ok-create-parts": "2/4/3 3/4/0", "create-parts ok-create-parts-32": "2/32/32"}, \
+        part_lines
+    for name in ("ok-create-looks", "ok-create-parts", "ok-create-parts-32"):
+        assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
     stat_at = {i: k for k, (i, _, _) in enumerate(node_records(STAT_DATA[2]))}
     for name, row in (("ok-create-stats", 1), ("ok-create-stats-race", 0)):
         line = next(l for l in run.stdout.splitlines() if l.startswith("create-stats %s:" % name))
@@ -2580,7 +2706,8 @@ try:
     # file order; 1 to 32 models, each race 1 to 65535 once.
     race_lines = {l.split(":")[0]: l.split(": ", 1)[1].split() for l in run.stdout.splitlines()
                   if l.startswith("create-races ")}
-    assert set(race_lines) == {"create-races ok-create-races", "create-races ok-create-races-32"}, race_lines
+    assert set(race_lines) == {"create-races ok-create-races", "create-races ok-create-races-32",
+                               "create-races ok-create-parts"}, race_lines
     three = race_lines["create-races ok-create-races"]
     assert [x.split("/")[:2] for x in three] == [["2", "1"], ["3", "1"], ["13", "1"]], three
     assert len({x.split("/")[2] for x in three}) == 1 and three[0].split("/")[2] != "0", three

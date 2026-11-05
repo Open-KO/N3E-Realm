@@ -699,6 +699,72 @@ int main(int argc, char **argv) {
                  "the class and sends the values; the texts empty from each open until a build\n";
   }
   {
+    // RQ-174 (version 27, KO-FINDINGS 10.5): the face and hair arrows. Each
+    // steps its value by one, stopping at 0 and at create.bin's last face or
+    // hair for the race (KO's 3 and 2: 1298's 00604f90, 1264's 0043dfc0), no
+    // wrap, with or without a race or class; no open writes them (1298's
+    // player +0x7d8 and +0x7dc), so they are kept; Create sends them. With no
+    // race the range is the fewest of create.bin's races, and a race click
+    // takes the value into the race's range (Q112). Without its arrows the
+    // fixed choice's (Q110).
+    n3e::CreateRules rules;
+    rules.stats = 5, rules.nation = 1;
+    rules.races = {{2, 1, 4, 3, {{102, 10, {60, 60, 70, 50, 50}}}},
+                   {3, 1, 4, 3, {{103, 10, {50, 50, 70, 70, 50}}}},
+                   {9, 1, 2, 1, {{109, 10, {60, 60, 60, 60, 50}}}}};
+    rules.fixed = n3e::CreateRules::Fixed{2, 102, 1, 2, {60, 60, 70, 50, 60}};
+    const std::optional<n3e::CreateRules> with = rules;
+    const std::vector<n3e::FrontCreateRace> races{{10, 2, 102}, {11, 3, 103}, {12, 9, 109}};
+    n3e::front::CreateChoice c;
+    c.bind(races, {}, -1, -1, {}, with);
+    c.bind_looks(true, true);
+    std::string fail;
+    auto want = [&](const char *step, bool ok) {
+      if (!ok && fail.empty()) fail = step;
+    };
+    auto looks = [&] { return std::to_string(c.face) + "," + std::to_string(c.hair); };
+    want("open", looks() == "0,0" && c.faces() == 2 && c.hairs() == 1);
+    c.face_step(true), c.face_step(true), c.hair_step(true), c.hair_step(false);
+    want("no race", looks() == "1,0");
+    c.click_race(0, 0);  // the Tuarek: four faces, three hairs
+    want("race range", c.faces() == 4 && c.hairs() == 3 && looks() == "1,0");
+    for (int k = 0; k < 5; ++k) c.face_step(true);
+    for (int k = 0; k < 4; ++k) c.hair_step(true);
+    want("last", looks() == "3,2");
+    c.face_step(false), c.hair_step(false);
+    want("back", looks() == "2,1");
+    for (int k = 0; k < 4; ++k) c.face_step(false);
+    want("first", looks() == "0,1");
+    c.face_step(true), c.face_step(true);
+    const auto q = n3e::front::create_request(with, 0, c);
+    want("sent", q.race == 2 && q.specialty == 102 && q.face == 2 && q.hair == 1 &&
+                     !n3e::create_choice_refusal(rules, 1, q.race, q.specialty, q.face, q.hair, q.stats));
+    c.open();  // a reopen keeps them (no open writes +0x7d8, +0x7dc)
+    want("reopen", looks() == "2,1" && !c.stands());
+    c.click_race(1, 0), c.click_race(2, 0);  // a race of two faces and one hair: taken into its range
+    want("narrow race", looks() == "1,0" && c.faces() == 2 && c.hairs() == 1);
+    c.face_step(true);
+    want("narrow last", looks() == "1,0");
+    // Without its arrows: the fixed choice's face and hair, drawn and sent.
+    c.bind(races, {}, 0, -1, {}, with);
+    c.bind_looks(false, false);
+    c.face_step(true), c.hair_step(false);
+    const auto r = n3e::front::create_request(with, 0, c);
+    want("unbound", looks() == "1,2" && r.face == 1 && r.hair == 2);
+    // Only the face's: the hair the fixed choice's.
+    c.bind_looks(true, false);
+    c.face_step(true);
+    const auto h = n3e::front::create_request(with, 0, c);
+    want("face only", looks() == "1,2" && h.face == 1 && h.hair == 2);
+    if (!fail.empty()) {
+      std::cerr << "FAIL create looks: " << fail << "\n";
+      return 1;
+    }
+    std::cout << "PASS create looks: the face and hair arrows step by one within create.bin's range for the race, "
+                 "stopping at both ends, with or without a race; kept from open to open; sent by Create; a narrower "
+                 "race takes them into its range; without arrows the fixed choice's\n";
+  }
+  {
     // RQ-004: Moradon's rules as create.bin carries them (one race of two
     // specialties, KO's 1..20 letters, digits, _ : ;), a reserved word.
     using n3e::CreateRules;
@@ -861,6 +927,21 @@ int main(int argc, char **argv) {
         std::cout << "\n";
       }
       if (fe.create_races.size() != fe.create_models.size() + 1) error = "create models inconsistent";
+      // RQ-174: a package whose create models carry face or hair parts: each
+      // race, then its face and hair part counts.
+      bool parted = false;
+      for (size_t k = 0; k < fe.create_races.size(); ++k) {
+        const auto &scene = k == 0 ? fe.create : fe.create_models[k - 1];
+        parted |= !scene.faces.empty() || !scene.hairs.empty();
+      }
+      if (parted) {
+        std::cout << "create-parts " << release.root.filename().string() << ":";
+        for (size_t k = 0; k < fe.create_races.size(); ++k) {
+          const auto &scene = k == 0 ? fe.create : fe.create_models[k - 1];
+          std::cout << " " << fe.create_races[k] << "/" << scene.faces.size() << "/" << scene.hairs.size();
+        }
+        std::cout << "\n";
+      }
       // RQ-125: a create over the hall, and each slot's create yaw.
       if (fe.create_mode != n3e::FrontCreateMode::screen) {
         std::cout << std::setprecision(9) << "create " << release.root.filename().string() << ": "

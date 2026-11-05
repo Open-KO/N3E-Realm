@@ -28,8 +28,10 @@ refusal changes or the race cooks, so the list stays true.
 
 RQ-158: every race of `models.create` has its create model in front-end.bin
 (N3FE version 24): its create model (tools/assetc/ko_front_end.py
-create_model, KO's InitChr and SetChr parts, face 0 and hair 0, breathing)
-cooks N3S1 or N3SM, as a front-end model record holds. A race outside it is
+create_model, KO's InitChr and SetChr parts, breathing) cooks N3S1 or N3SM,
+as a front-end model record holds; RQ-174 (version 27): without its face and
+hair, which follow it as parts on its skeleton, the rules' faces and hairs
+(none for a race without hair, the Wrinkle Tuarek). A race outside it is
 listed in UNSHIPPED with why: the front-end record's refusal for a race whose
 model has a drawn vertex past four influences (RQ-165), or none for a race
 that cooks but whose create screen the realm does not draw yet.
@@ -125,15 +127,20 @@ for entry in rules["races"]:
     shipped = race in rules["models"]["create"]
     assert shipped != (race in UNSHIPPED), (race, "models.create and UNSHIPPED disagree")
     try:
-        record = ko_front_end.create_model(assets, race, OUT / str(race) / "create", entry)
+        made = []
+        record = ko_front_end.create_model(assets, race, OUT / str(race) / "create", entry, rules["faces"],
+                                           rules["hairs"], made)
         create_magic = record[4:8]
         assert create_magic in (b"N3S1", b"N3SM"), (race, create_magic)
+        assert made == [dict(race=race, faces=rules["faces"], hairs=rules["hairs"] if "hair" in positions else 0,
+                             bytes=len(record))], (race, made)
         assert shipped or UNSHIPPED[race][0] is None, (race, "now cooks a create model", UNSHIPPED[race])
     except ValueError as error:
         assert not shipped and UNSHIPPED[race][0] and UNSHIPPED[race][0] in str(error), (race, str(error))
         record, create_magic = None, None
-    print("PASS race %d create model: %s" % (race, "%s, %d bytes in front-end.bin" % (create_magic.decode(), len(record))
-                                              if shipped else "not shipped: " + UNSHIPPED[race][1]))
+    print("PASS race %d create model: %s" % (race, "%s, %d faces, %d hairs, %d bytes in front-end.bin" % (
+        create_magic.decode(), made[0]["faces"], made[0]["hairs"], len(record)) if shipped
+        else "not shipped: " + UNSHIPPED[race][1]))
     print("PASS race %d (%s): %d parts, %d part files over its faces and hairs, %d clips, idle cooks (%s%s), "
           "render detail with its parts worn cooks (%s%s)"
           % (race, entry["looks"], len(positions), len(names), len(clips), magic.decode(),

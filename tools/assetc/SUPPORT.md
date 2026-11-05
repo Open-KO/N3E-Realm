@@ -255,5 +255,13 @@ N3FE version 27 (RQ-174, §10.5) binds create's face and hair arrows
 create model's face and hair parts by index (`create.bin`'s `faces` and `hairs`;
 a race without a hair part carries none), cooked apart from the model and checked to
 share its skeleton. Both recipes bind the four arrows.
+N3FE version 29 (RQ-176, §10.3, §10.7) dresses each create model's specialties as
+KO's build does, from `ko_create.dress` on the package's `create.table` (Q106):
+the parts most of them wear are the model's own, the others' cooked once each from
+their input (a 1264 Item file on the 1298 skeleton for the 1097 choice), the robe's
+lower left bare, and the hand plugs on the looks row's joints (columns 18, 19 and
+20, a class-60 shield on the last) scaled by the model's height as `PlugSet` does.
+A dress with a helmet is refused (Q115). The client draws the dress of the
+specialty whose row the last build took.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

@@ -483,8 +483,9 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         report['audio']=ko_audio.cook(source_assets,report['effects'],hud,root/'audio.bin',item_icons,extra_sounds)
         manifest['presentation']['audio.bin']='audio.bin'
         # Spec 11: KO's login scene, select hall, create, loading and message
-        # box from the chosen front end's input trees; engine 42.
-        report['front_end']=ko_front_end.cook(front_inputs,root,front['recipe'],root.parent/(root.name+'-front-end'))
+        # box from the chosen front end's input trees; engine 42. RQ-176: the
+        # create models wear the realm's create table's dress (Q106).
+        report['front_end']=ko_front_end.cook(front_inputs,root,front['recipe'],root.parent/(root.name+'-front-end'),front['create'])
         report['front_end'].update(client=front['client'],recipe=str(front['recipe']),inputs=[str(t) for t in front['inputs']])
         if any(front['names'][1:]) or any(front['pins']):
             # RQ-084: recorded only for a choice of several trees or a reference

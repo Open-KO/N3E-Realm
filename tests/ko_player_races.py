@@ -35,6 +35,12 @@ hair, which follow it as parts on its skeleton, the rules' faces and hairs
 listed in UNSHIPPED with why: the front-end record's refusal for a race whose
 model has a drawn vertex past four influences (RQ-165), or none for a race
 that cooks but whose create screen the realm does not draw yet.
+
+RQ-176 (version 29): each shipped create model also cooks in its
+specialties' create dress from the pinned tree's own 1298 table
+(ko_create.dress, Q106), each specialty drawn: the dress the most specialties
+wear as the model's own parts, the others' parts after it, each plug on its
+looks row joint.
 """
 import os
 import pathlib
@@ -44,6 +50,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT / "tools/assetc"))
 import ko_character  # noqa: E402
+import ko_create  # noqa: E402
 import ko_detail  # noqa: E402
 import ko_front_end  # noqa: E402
 import ko_player  # noqa: E402
@@ -138,6 +145,21 @@ for entry in rules["races"]:
     except ValueError as error:
         assert not shipped and UNSHIPPED[race][0] and UNSHIPPED[race][0] in str(error), (race, str(error))
         record, create_magic = None, None
+    if shipped:
+        # RQ-176: dressed from the 1298 table, as the 1298 front end's cook.
+        tree_inputs = ko_front_end.Inputs([assets])
+        dress = ko_create.dress(ko_create.plan(ko_player.GAME, "1298", {}), tree_inputs, {race})[race]
+        dressed = []
+        dressed_record = ko_front_end.create_model(
+            assets, race, OUT / str(race) / "create-dressed", entry, rules["faces"], rules["hairs"], dressed, dress,
+            tree_inputs, ko_front_end.Textures(tree_inputs))
+        worn = dressed[0]["dresses"]
+        assert set(worn) == set(entry["specialties"]) and sum(d["body"] for d in worn.values()) >= 1, (race, worn)
+        assert dressed[0]["bytes"] == len(dressed_record), (race, dressed[0])
+        print("PASS race %d create dress (1298's table): %s, %d dress parts, %d bytes" % (
+            race, ", ".join("%d: %s, %d plugs" % (s, "its own parts" if d["body"] else "%d parts" % len(d["parts"]),
+                                                  len(d["plugs"])) for s, d in worn.items()),
+            dressed[0]["dress_parts"], len(dressed_record)))
     print("PASS race %d create model: %s" % (race, "%s, %d faces, %d hairs, %d bytes in front-end.bin" % (
         create_magic.decode(), made[0]["faces"], made[0]["hairs"], len(record)) if shipped
         else "not shipped: " + UNSHIPPED[race][1]))

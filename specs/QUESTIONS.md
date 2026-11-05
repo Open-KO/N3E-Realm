@@ -1772,6 +1772,10 @@ Options:
 **Default taken:** (a). Every Moradon cook stays byte for byte as it was; the dress
 the 1097 choice draws is 1264's until the maintainer picks (c).
 
+RQ-176 draws it per (a): the create screen's `front-end.bin` carries the dress of
+`create.table`, so the 1097 choice's fixed Tuarek priest is drawn in 1264's rogue
+set, and the 1298 recipe's priest in 1298's own. (c) remains a cook change.
+
 ### Q107 — Each class's starting weapon before the package has class weapons
 
 RQ-160 gives each specialty a starting set and a weapon it can use
@@ -1954,3 +1958,20 @@ Options:
 The 1097 choice (the one Moradon offers) draws 1264's English row. Changing it is
 recipe-only (`games/moradon/front-end-1298.json`; (b) adds the 1264 input to that
 recipe).
+
+### Q115 — A create dress with a helmet
+
+RQ-176 (`content/front-end.md` item 8): KO's build puts each row item on the create
+model, the helmet (part slot 5, the hair's) among them, and its create model also
+takes the chosen hair (`InitHair`). Which wins on screen, the helmet or the hair,
+depends on the order 1298's `005fd120` applies them, which is unread. No Moradon
+specialty's create dress has a helmet, on either table.
+
+Options:
+- (a) Refuse a dress with a helmet at the cook until a package needs one and the
+  order is read.
+- (b) Draw the helmet over the hair (the hair hidden while the dress is drawn).
+- (c) Draw the hair and leave the helmet out.
+
+**Default taken:** (a), `ko_front_end.dress_sets` refuses it ("a helmet the create
+draws over the hair is unread"). Changing it is cook and client work.

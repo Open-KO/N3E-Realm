@@ -55,8 +55,11 @@
 // open to open; the new character draws its face and hair parts by them
 // (InitFace and InitHair, vtable +0x28 and +0x24) and Create sends them.
 // RQ-175 (version 28): the description text (CreateDescription, KO's
-// text_desc and its MouseProc, 1298 00605bf0 and 1264 0043eb00, binary). No
-// GL; render/front_end.h acts by it and tests/front_end.cpp checks it.
+// text_desc and its MouseProc, 1298 00605bf0 and 1264 0043eb00, binary).
+// RQ-176 (version 29): every build also dresses the new character in its
+// row's create dress (1298 005fd120, 1264 00439970; KO-FINDINGS 10.3, 10.7):
+// `dressed` is the specialty whose row the last build took. No GL;
+// render/front_end.h acts by it and tests/front_end.cpp checks it.
 
 #include "assets/assets.h"
 #include <algorithm>
@@ -161,6 +164,11 @@ struct CreateChoice {
   bool written = false;
   // The specialty whose row the last build wrote (the left arrows' floor).
   uint32_t built = 0;
+  // RQ-176 (version 29): the specialty whose row the last build took, with
+  // or without stat arrows: the new character wears its create dress (1298's
+  // build 005fd120 sets the row's parts and plugs, 1264's 00439970); 0
+  // before a build.
+  uint32_t dressed = 0;
   // RQ-174 (version 27): whether the screen binds the face and the hair
   // arrows (without them the fixed choice's face or hair, Q110), and the face
   // and hair they chose: KO's player +0x7d8 and +0x7dc (1264's +0x6e0 and
@@ -193,7 +201,7 @@ struct CreateChoice {
   void open() {
     race = race_preset, klass = class_preset, marked = class_preset;
     figure = -1;
-    stats.clear(), points = bonus = 0, written = false, built = 0;
+    stats.clear(), points = bonus = 0, written = false, built = 0, dressed = 0;
     if (race >= 0) build();
   }
   // Whether create waits for a click before it can be sent (a button with no
@@ -311,8 +319,11 @@ struct CreateChoice {
   // points spent are reset; with no row nothing changes (005fd120 writes the
   // values only when the table has the row).
   void build() {
-    if (arrows.stats.empty()) return;
     const auto code = row_specialty(package_rules);
+    // RQ-176: the dress is the row's, whatever the arrows (005fd120 sets the
+    // row's items with or without them).
+    dressed = code.value_or(0);
+    if (arrows.stats.empty()) return;
     const auto *row = code ? stat_row(*code) : nullptr;
     if (!row || row->base.size() != arrows.stats.size()) return;
     stats = row->base, points = bonus = row->bonus, written = true, built = *code;

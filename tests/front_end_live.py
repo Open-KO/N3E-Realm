@@ -179,19 +179,37 @@ FIXED = RULES["fixed"]
 # RQ-078: every front end games/moradon offers (front-ends.json) cooks twice to
 # the same bytes and the client loader takes it; the one realm-config.json
 # chooses is the package's own.
-chosen = front_end_choice.choose("games/moradon")["client"]
+chosen_front = front_end_choice.choose("games/moradon")
+chosen = chosen_front["client"]
 for client in sorted(front_end_choice.catalogue("games/moradon")):
     front = front_end_choice.resolve("games/moradon", client)
+    # RQ-176 (version 29, Q106): the create models wear the create table's
+    # dress, the realm's choice for the chosen front end (as ko_bake cooks it).
+    create_plan = chosen_front["create"] if client == chosen else ko_create.plan("games/moradon", client, {})
     cooked = []
     for i in range(2):
         out = Path(tempfile.mkdtemp(prefix="front-end-%s-" % client, dir=B))
-        report = ko_front_end.cook(ko_front_end.inputs(front), out, front["recipe"], out / "work")
+        report = ko_front_end.cook(ko_front_end.inputs(front), out, front["recipe"], out / "work", create_plan)
         cooked.append((out / "front-end.bin").read_bytes())
     assert cooked[0] == cooked[1], "the %s front-end cook is not deterministic" % client
     if client == chosen:
         # RQ-102: whether the chosen recipe titles a refused create (the
         # message-titled capture below checks the title only then).
         titled_create = bool((report["messages"].get("create_refused") or {}).get("title"))
+        # RQ-176: the dress each create model wears, by race and specialty.
+        chosen_dresses = {m["race"]: m.get("dresses", {}) for m in report["create_models"]}
+    # RQ-176 (version 29, KO-FINDINGS 10.3, 10.7): every create model wears
+    # each of its specialties' dress from the plan's table, the files its
+    # input names (the 1097 choice: 1264's table and Item files, Q106).
+    assert report["create_table"] == create_plan["table"], report["create_table"]
+    for made in report["create_models"]:
+        assert set(made["dresses"]) == set(next(r["specialties"] for r in RULES["races"] if r["race"] == made["race"])), \
+            made
+        prefix = "installer-1264:" if create_plan["table"] == "1264" else ""
+        for dressed in made["dresses"].values():
+            files = dressed["parts"] + [plug["file"] for plug in dressed["plugs"]]
+            assert all(name.startswith(prefix + "Item/") for name in files
+                       if not name.lower().startswith("item\\upc_")), (made["race"], files)
     if client == "1097":
         # RQ-085 (KO-FINDINGS 9.2): the 1097 choice draws the 1264 client's
         # screens: every layout and the textures they name come from the 1264
@@ -225,7 +243,10 @@ pinned = ko_front_end.inputs(front_end_choice.resolve("games/moradon", "1097"))
 cooked = []
 for i in range(2):
     out = Path(tempfile.mkdtemp(prefix="front-end-1298-recipe-", dir=B))
-    report = ko_front_end.cook(pinned, out, Path("games/moradon/front-end-1298.json"), out / "work")
+    # RQ-176 (version 29): dressed from 1298's own table, as character-create.json
+    # names it for the 1298 front end (Q106).
+    report = ko_front_end.cook(pinned, out, Path("games/moradon/front-end-1298.json"), out / "work",
+                               ko_create.plan("games/moradon", "1298", {}))
     cooked.append((out / "front-end.bin").read_bytes())
 # RQ-130 (KO-FINDINGS 9.15): the recipe words create's two refusals with
 # 1298's rows (00600750: code 7 row 1908, code 9 row 1904, each under 1901),
@@ -241,6 +262,32 @@ choice_boxes = [f"{k}|{report['messages'][k]['title']}|{report['messages'][k]['t
                 for k in ("create_no_race", "create_no_class", "create_points_left")]
 assert cooked[0] == cooked[1], "the 1298 recipe's cook is not deterministic"
 front_end_1298 = out / "front-end.bin"
+# RQ-176 (version 29, KO-FINDINGS 10.3, 10.7): 1298's table dresses each
+# create model in each specialty's own set (content/character-create.md,
+# "Moradon's dress"): the Tuarek rogue and priest in different parts and
+# weapons, the Wrinkle Tuarek's robe with its lower bare (three parts, no
+# lower), the Puri Tuarek's shield on the looks row's shield joint (column
+# 20, 1298 00467b30's +0x110) and its mace on the right hand's (column 18).
+dresses_1298 = {m["race"]: m["dresses"] for m in report["create_models"]}
+assert report["create_table"] == "1298", report["create_table"]
+tuarek = dresses_1298[FIXED["race"]]
+assert tuarek[102]["parts"] != tuarek[104]["parts"] and tuarek[102]["plugs"] != tuarek[104]["plugs"], tuarek
+assert sum(d["body"] for d in tuarek.values()) == 1, tuarek
+wrinkle = dresses_1298[3][103]
+assert len(wrinkle["parts"]) == 3 and not any("_20_" in n for n in wrinkle["parts"]), wrinkle
+puri_row = ko_front_end.looks(pinned.trees[0], 4)
+puri = dresses_1298[4][104]["plugs"]
+assert [(p["hand"], p["joint"]) for p in puri] == [(0, int(puri_row[18])), (1, int(puri_row[20]))], (puri, puri_row[17:22])
+
+
+def dress_text(specialty):
+    """The FRONT_CREATE_CHOICE dress the fixed race wears for `specialty`:
+    the specialty, -1 for the model's own parts or the dress parts drawn in
+    their place, and the hand plugs."""
+    d = tuarek[specialty]
+    return "%d/%d/%d" % (specialty, -1 if d["body"] else len(d["parts"]), len(d["plugs"]))
+
+
 assert cooked[0][4:8] == ko_front_end.VERSION.to_bytes(4, "little"), cooked[0][:8]
 sources = set(report["sources"])
 assert {"ChrSelect/upc_ka_tu.n3joint", "ChrSelect/upc_ka_tu.n3anim"} <= sources, sorted(sources)
@@ -633,6 +680,14 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     assert "FRONT_CREATE_SLIDE" not in run.stdout, size
     # RQ-130: and its race and class stand chosen from the open (Q52).
     assert "FRONT_CREATE_CHOICE" not in run.stdout, size
+    # RQ-176 (version 29, Q106 (a)): so its new character, the Tuarek priest,
+    # stands in its table's dress for the priest (1264's: the rogue's set,
+    # one per race) with its weapon in the right hand.
+    worn = chosen_dresses[FIXED["race"]][FIXED["specialty"]]
+    dressed = re.search(r"^FRONT_CREATE_DRESS (.*)$", run.stdout, re.M)
+    assert dressed and dressed.group(1) == "race=%d dress=%d parts=%d plugs=%d" % (
+        FIXED["race"], FIXED["specialty"], -1 if worn["body"] else len(worn["parts"]), len(worn["plugs"])), \
+        (size, dressed and dressed.group(1), worn)
     shots = {}
     origins = {}
     for m in re.finditer(r"^FRONT_SHOT name=(\S+) size=(\d+)x(\d+) path=(\S+) rect=(\S*) drawn=(\S*) "
@@ -1028,11 +1083,14 @@ CREATE_CHOICE = (f"open=0,0,0 column={COLUMN_ALL} labels={LABELS_ALL} stats={NO_
                  f"classfirst=create_no_race race=1,0,1 column={COLUMN_RACE} labels={LABELS_ALL} "
                  f"model={FIXED['race']} row={race_button_1298['default']} "
                  f"stats={stat_texts(base_default, bonus_default)} drawn=1,0 "
+                 f"dress={dress_text(race_button_1298['default'])} "
                  f"noclassarrows={stat_texts([base_default[0] + 1] + base_default[1:], bonus_default - 1)} "
                  f"noclass=create_no_class both=1,1,1 labels={LABELS_FIXED} "
-                 f"stats={stat_texts(base_fixed, bonus_fixed)} arrows={ARROWS} drawn={ARROWS} "
-                 f"again=1,0,1 labels={LABELS_FIXED} "
+                 f"stats={stat_texts(base_fixed, bonus_fixed)} dress={dress_text(FIXED['specialty'])} "
+                 f"arrows={ARROWS} drawn={ARROWS} "
+                 f"again=1,0,1 labels={LABELS_FIXED} dress={dress_text(FIXED['specialty'])} "
                  f"other=1,1,0,1 labels={LABELS_OTHER} stats={stat_texts(base_other, bonus_other)} "
+                 f"dress={dress_text(other_specialty)} "
                  f"points=create_points_left spent={stat_texts(SPENT, 0)} moved={stat_texts(MOVED, 0)} "
                  f"create=none sent=1 as={FIXED['race']},{other_specialty},{'/'.join(map(str, MOVED))},{ARROWS} "
                  f"reopen={COLUMN_ALL} labels={LABELS_ALL} stats={NO_STATS} looks={ARROWS}")
@@ -1152,6 +1210,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     slide_frames = [tuple(map(int, frame.split(","))) for frame in slid.group(2).split(";")]
     want_slide = ko_create_slide(create_tree, width, height, 1 / 32)
     assert slide_frames == want_slide, (size, slide_frames[-3:], want_slide[-3:])
+    # RQ-176: the create shot, before the race click, has no new character to dress.
+    assert re.search(r"^FRONT_CREATE_DRESS none$", run.stdout, re.M), size
     # RQ-130: the race and class wait for their clicks; the refusals in 1298's words.
     choice = re.search(r"^FRONT_CREATE_CHOICE (.*)$", run.stdout, re.M)
     assert choice and choice.group(1) == CREATE_CHOICE, (size, choice and choice.group(1), CREATE_CHOICE)

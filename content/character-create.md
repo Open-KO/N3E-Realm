@@ -302,9 +302,10 @@ its column's, an icon-only item, an item whose Item_Ext table is 24 or more (KO'
 name function indexes its 24 tables with it unbounded for every item, `006157b0`,
 `005d2a80`), one that names no file or a file its input lacks,
 a race and class the switch would name from a stack address, and malformed item
-tables. Nothing is cooked from it yet: `create.bin` and the provenance of a package
-on 1264's table are as before (a package on 1298's table records the 1298 item
-tables it read). RQ-004 draws it on the create screen and RQ-005 in the hall.
+tables. `create.bin` and the provenance of a package on 1264's table are as before
+(a package on 1298's table records the 1298 item tables it read). Since RQ-176 the
+front-end cook writes it into `front-end.bin` for the create screen ("The create
+dress (RQ-176)" below); RQ-005 draws it in the hall.
 
 **Moradon's dress** (both tables, all races; local-asset), the files the parts and
 plugs name:
@@ -952,6 +953,29 @@ The 1097 choice's `front-end.bin` grows from 57,417,972 to 57,419,400 bytes, the
 1298 recipe's from 59,297,737 to 59,299,044. The package hash changes, so the hosted
 realm's next deploy is a new realm (Q63).
 
+**The create dress (RQ-176; N3FE version 29, `content/front-end.md` item 8 and
+"Actions").** KO's build dresses the new character in its stat row's items (1298
+`005fd120`, 1264 `00439970`; above): the cook writes each create model's
+specialties in the dress `ko_create.dress` resolves from the realm's
+`create.table` (Q106, default (a)), so the 1097 choice, on 1264's table, draws
+1264's one set per race, and the 1298 recipe 1298's set per class. Per model the
+parts most of its specialties wear are the model's own; the others' parts follow
+once each and are drawn in place of the model's (the 1298 Tuarek's priest set over
+its rogue's body; on 1264's table both Tuarek specialties wear the rogue set). The
+robe's lower is bare (the Wrinkle Tuarek mage draws three parts, `ko_create.dress`'s
+null file), and the hand plugs hang on the looks row's joints: right hand column 18,
+left hand column 19, a class-60 shield column 20 (KO-FINDINGS §10.7), each scaled
+by the model's height as `PlugSet` scales it (the Puri priest's mace on joint 12 and
+shield on joint 5). The client dresses the model as the specialty of the last build:
+the chosen class's on 1298's rows, the race's on 1264's, kept while a second click
+on the race unchooses the class (no build). A create without race buttons dresses
+its fixed race's model as the fixed specialty. A dress with a helmet is refused at
+the cook (Q115). The 1097 choice's `front-end.bin` grows from 57,419,400 to
+58,460,464 bytes, the 1298 recipe's from 59,299,044 to 61,843,732 (within the
+64 MiB bound, 5.2 MiB to spare for the races RQ-165 and RQ-006 add, whose dress
+parts take room too). The package hash changes, so the hosted realm's next deploy is
+a new realm (Q63).
+
 ## What each item needs
 
 - **RQ-002 (wire and server).**
@@ -985,6 +1009,7 @@ realm's next deploy is a new realm (Q63).
   - face and hair arrows that clamp;
   - the stat arrows, with every build resetting the points;
   - the description texts and the hover;
+  - the create model in its specialty's create dress (RQ-176);
   - the client checks in order, with no confirm dialog;
   - errors in KO's titled box (Q61).
 - **RQ-005 (select).** Each character drawn from its race's looks, face, hair and

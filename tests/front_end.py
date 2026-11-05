@@ -1297,10 +1297,20 @@ SCALED_SCENE = PART_SCENE[:-16] + f([2, 2, 2]) + PART_SCENE[-4:]
 SCALED_PART = u(len(SCALED_SCENE)) + SCALED_SCENE
 
 
-def create_model(faces=(), hairs=(), plug=None):
+def create_model(faces=(), hairs=(), plug=None, dress_parts=(), dresses=()):
     """A create model record (version 27): the demo character, then its face
-    parts and its hair parts."""
-    return character(plug=plug) + u(len(faces)) + b"".join(faces) + u(len(hairs)) + b"".join(hairs)
+    parts and its hair parts; version 29 (RQ-176): then its dress parts and
+    its dresses (each from dress())."""
+    return (character(plug=plug) + u(len(faces)) + b"".join(faces) + u(len(hairs)) + b"".join(hairs) +
+            u(len(dress_parts)) + b"".join(dress_parts) + u(len(dresses)) + b"".join(dresses))
+
+
+def dress(specialty, body=1, parts=(), plugs=()):
+    """Version 29 (RQ-176): one specialty's dress: whether the model's own
+    parts draw, the dress parts it wears in their place, and its plugs, each
+    (hand, joint)."""
+    return (u(specialty) + u(body) + u(len(parts)) + b"".join(u(i) for i in parts) + u(len(plugs)) +
+            b"".join(u(hand) + u(joint) + MESH for hand, joint in plugs))
 
 
 def path(source=fe.ENTRY, to=0, eye_rate=30.0, eye=((0, 1, 2), (0, 1, 3)), at_rate=30.0, at=((0, 0, 0),)):
@@ -1341,7 +1351,7 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=28, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=29, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0),
@@ -1406,6 +1416,36 @@ for reason, call in create_refusals.items():
     raise AssertionError("front-end cook accepted " + reason)
 print("PASS front-end cook: a create model per race of models.create, the select race first; %d refusals"
       % len(create_refusals))
+
+# RQ-176 (version 29, KO-FINDINGS 10.3, 10.7): each specialty's drawn parts
+# and plugs from its create dress (ko_create.dress's): the slots in order but
+# the face's and the hair's, a dress part in its slot, none for a robe's bare
+# lower, the looks part where the dress leaves the slot; the right hand on
+# the looks row's column 18, the left on 19, a left-hand shield (class 60) on
+# 20 (1298 00467b30). A helmet and a row without the joints are refused.
+LOOKS_ROW = ["2", "x", "j.n3joint", "a.n3anim", "u.n3cpart", "l.n3cpart", "f.n3cpart", "h.n3cpart", "t.n3cpart",
+             "r.n3cpart", "", "", "", "", "", "", "", "-1", "12", "7", "5", "0"]
+worn = fe.dress_sets(LOOKS_ROW, {
+    102: dict(parts=[dict(slot=0, item=1, file="A"), dict(slot=1, item=2, file=None), dict(slot=6, item=3, file="C")],
+              plugs=[dict(slot=0, item=4, kind=71, file="P"), dict(slot=1, item=5, kind=60, file="S")]),
+    104: dict(parts=[], plugs=[dict(slot=1, item=6, kind=41, file="L"), dict(slot=0, item=7, kind=60, file="R")])})
+assert worn == {102: (("A", "h.n3cpart", "t.n3cpart", "C"), ((0, 12, "P"), (1, 5, "S"))),
+                104: (("u.n3cpart", "l.n3cpart", "h.n3cpart", "t.n3cpart"), ((1, 7, "L"), (0, 12, "R")))}, worn
+dress_refusals = {
+    "a helmet": lambda: fe.dress_sets(LOOKS_ROW, {102: dict(parts=[dict(slot=5, item=1, file="H")], plugs=[])}),
+    "a row without its hand joints": lambda: fe.dress_sets(LOOKS_ROW[:19], {102: dict(parts=[], plugs=[])}),
+    "a hand joint not a number": lambda: fe.dress_sets(LOOKS_ROW[:18] + ["x"] + LOOKS_ROW[19:],
+                                                       {102: dict(parts=[], plugs=[])}),
+}
+for reason, call in dress_refusals.items():
+    try:
+        call()
+    except ValueError:
+        continue
+    raise AssertionError("front-end cook accepted " + reason)
+print("PASS front-end cook: each specialty's create dress drawn as KO's build sets it, the robe's lower bare, the "
+      "looks part where it leaves a slot, each plug on its hand's joint (a shield on its own); %d refusals"
+      % len(dress_refusals))
 
 
 # --- the logo screen (version 9, RQ-101) ---------------------------------------
@@ -2540,6 +2580,42 @@ CHOICE_CASES = {
     "bad-create-look-off-create": blob(screen_data=patch_node(bar_screens, 1, "btn_delete",
                                                               action=fe.ACTIONS.index("create_face_up"))),
 }
+# RQ-176 (version 29): each create model's dress parts and each specialty's
+# dress (item 8): the body or dress parts, and the hand plugs.
+DRESSED = create_model([PART] * 4, [PART] * 3, dress_parts=[PART] * 4,
+                       dresses=[dress(102, plugs=[(0, 0)]), dress(104, 0, [0, 1, 2, 3], [(0, 0), (1, 0)])])
+DRESS_CASES = {
+    "bad-version-28": blob(version=28),
+    "ok-create-dress": blob(creates=u(2) + u(2) + DRESSED + u(3) + create_model(dresses=[dress(103)])),
+    "ok-create-dress-64": blob(creates=u(1) + u(2) + create_model(
+        dress_parts=[PART] * 64, dresses=[dress(100 + k, 0, range(8 * k, 8 * k + 8)) for k in range(8)])),
+    "ok-create-dress-16": blob(creates=u(1) + u(2) + create_model(dresses=[dress(100 + k) for k in range(16)])),
+    "bad-create-dress-parts-65": blob(creates=u(1) + u(2) + create_model(
+        dress_parts=[PART] * 65, dresses=[dress(100 + k, 0, range(8 * k, min(8 * k + 8, 65))) for k in range(9)])),
+    "bad-create-dresses-17": blob(creates=u(1) + u(2) + create_model(dresses=[dress(100 + k) for k in range(17)])),
+    "bad-create-dress-specialty-0": blob(creates=u(1) + u(2) + create_model(dresses=[dress(0)])),
+    "bad-create-dress-specialty-65536": blob(creates=u(1) + u(2) + create_model(dresses=[dress(65536)])),
+    "bad-create-dress-specialty-twice": blob(creates=u(1) + u(2) + create_model(dresses=[dress(102), dress(102)])),
+    "bad-create-dress-body-2": blob(creates=u(1) + u(2) + create_model(dresses=[dress(102, 2)])),
+    "bad-create-dress-body-parts": blob(creates=u(1) + u(2) + create_model(
+        dress_parts=[PART], dresses=[dress(102, 1, [0]), dress(104, 0, [0])])),
+    "bad-create-dress-part-index": blob(creates=u(1) + u(2) + create_model(
+        dress_parts=[PART], dresses=[dress(102, 0, [1])])),
+    "bad-create-dress-part-twice": blob(creates=u(1) + u(2) + create_model(
+        dress_parts=[PART], dresses=[dress(102, 0, [0, 0])])),
+    "bad-create-dress-parts-11": blob(creates=u(1) + u(2) + create_model(
+        dress_parts=[PART] * 11, dresses=[dress(102, 0, range(11))])),
+    "bad-create-dress-part-unworn": blob(creates=u(1) + u(2) + create_model(
+        dress_parts=[PART] * 2, dresses=[dress(102, 0, [0])])),
+    "bad-create-dress-part-skeleton": blob(creates=u(1) + u(2) + create_model(
+        dress_parts=[BENT_PART], dresses=[dress(102, 0, [0])])),
+    "bad-create-dress-plugs-3": blob(creates=u(1) + u(2) + create_model(
+        dresses=[dress(102, plugs=[(0, 0), (1, 0), (1, 0)])])),
+    "bad-create-dress-hand-2": blob(creates=u(1) + u(2) + create_model(dresses=[dress(102, plugs=[(2, 0)])])),
+    "bad-create-dress-hand-twice": blob(creates=u(1) + u(2) + create_model(dresses=[dress(102, plugs=[(1, 0), (1, 0)])])),
+    "bad-create-dress-plug-joint": blob(creates=u(1) + u(2) + create_model(dresses=[dress(102, plugs=[(0, 999)])])),
+    "bad-create-dress-truncated": blob(creates=u(1) + u(2) + character() + u(0) + u(0) + u(0) + u(1) + u(102)),
+}
 # RQ-175 (version 28): create's description text (item 16).
 DESC_AREA, DESC_CLASS, DESC_RACE = desc_at["area_character"], desc_at["btn_class_priest"], desc_at["btn_race_ka_tu"]
 DESC_TIPS = [(DESC_AREA, 0, "Looks."), (DESC_CLASS, 1, "Heals."), (DESC_RACE, 2, "Tuarek.")]
@@ -2574,6 +2650,7 @@ DESCRIPTION_CASES = {
 }
 cases = {
     **DESCRIPTION_CASES,
+    **DRESS_CASES,
     "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
     # RQ-130 (version 21): create's race and class choices.
     **CHOICE_CASES,
@@ -2877,9 +2954,39 @@ try:
             ["Looks.", "Heals.", "Tuarek."])}, desc_lines
     for name in ("ok-create-descriptions", "ok-create-descriptions-chosen", "ok-create-descriptions-none"):
         assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
+    # RQ-176: each create model's dress parts and dresses, each refusal for
+    # its reason; the loaded dresses per create model.
+    for name, reason in (("bad-version-28", "front end version"),
+                         ("bad-create-dress-parts-65", "count"),
+                         ("bad-create-dresses-17", "count"),
+                         ("bad-create-dress-specialty-0", "front end create dress specialty"),
+                         ("bad-create-dress-specialty-65536", "front end create dress specialty"),
+                         ("bad-create-dress-specialty-twice", "front end create dress specialty"),
+                         ("bad-create-dress-body-2", "front end create dress body"),
+                         ("bad-create-dress-body-parts", "front end create dress parts with the body"),
+                         ("bad-create-dress-part-index", "front end create dress part"),
+                         ("bad-create-dress-part-twice", "front end create dress part"),
+                         ("bad-create-dress-parts-11", "count"),
+                         ("bad-create-dress-part-unworn", "front end create dress part unworn"),
+                         ("bad-create-dress-part-skeleton", "front end create part skeleton"),
+                         ("bad-create-dress-plugs-3", "count"),
+                         ("bad-create-dress-hand-2", "front end create dress hand"),
+                         ("bad-create-dress-hand-twice", "front end create dress hand"),
+                         ("bad-create-dress-plug-joint", "front end create dress plug joint")):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    assert any(l.startswith("refused bad-create-dress-truncated:") for l in run.stdout.splitlines())
+    dress_lines = {l.split(":")[0]: l.split(": ", 1)[1] for l in run.stdout.splitlines() if l.startswith("create-dress ")}
+    assert dress_lines == {
+        "create-dress ok-create-dress": "2/4:102/body/0,104/0+1+2+3/0+1 3/0:103/body/-",
+        "create-dress ok-create-dress-64": "2/64:" + ",".join(
+            "%d/%s/-" % (100 + k, "+".join(str(i) for i in range(8 * k, 8 * k + 8))) for k in range(8)),
+        "create-dress ok-create-dress-16": "2/0:" + ",".join("%d/body/-" % (100 + k) for k in range(16))}, dress_lines
+    for name in ("ok-create-dress", "ok-create-dress-64", "ok-create-dress-16"):
+        assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
     part_lines = {l.split(":")[0]: l.split(": ", 1)[1] for l in run.stdout.splitlines() if l.startswith("create-parts ")}
-    assert part_lines == {"create-parts ok-create-parts": "2/4/3 3/4/0", "create-parts ok-create-parts-32": "2/32/32"}, \
-        part_lines
+    assert part_lines == {"create-parts ok-create-parts": "2/4/3 3/4/0", "create-parts ok-create-parts-32": "2/32/32",
+                          "create-parts ok-create-dress": "2/4/3 3/0/0"}, part_lines
     for name in ("ok-create-looks", "ok-create-parts", "ok-create-parts-32"):
         assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
     stat_at = {i: k for k, (i, _, _) in enumerate(node_records(STAT_DATA[2]))}
@@ -2901,7 +3008,7 @@ try:
     race_lines = {l.split(":")[0]: l.split(": ", 1)[1].split() for l in run.stdout.splitlines()
                   if l.startswith("create-races ")}
     assert set(race_lines) == {"create-races ok-create-races", "create-races ok-create-races-32",
-                               "create-races ok-create-parts"}, race_lines
+                               "create-races ok-create-parts", "create-races ok-create-dress"}, race_lines
     three = race_lines["create-races ok-create-races"]
     assert [x.split("/")[:2] for x in three] == [["2", "1"], ["3", "1"], ["13", "1"]], three
     assert len({x.split("/")[2] for x in three}) == 1 and three[0].split("/")[2] != "0", three

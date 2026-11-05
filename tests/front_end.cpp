@@ -647,18 +647,20 @@ int main(int argc, char **argv) {
       for (size_t k = 0; k < 5; ++k) out += (k ? "/" : "") + c.stat_text(k);
       return out + "|" + c.points_text();
     };
-    want("open", texts() == "////|" && !c.written);
+    // RQ-176 (version 29): `dressed`, the specialty whose row (and so whose
+    // create dress, 005fd120) the last build took: none before one.
+    want("open", texts() == "////|" && !c.written && c.dressed == 0);
     c.stat_up(0);  // no points before a build
     want("open arrow", texts() == "////|" && c.points == 0);
     c.click_race(0, 1);  // the Tuarek: the default class's row (102), ten points
-    want("race", texts() == "60/60/70/50/50|10" && c.refusal() == M::create_no_class);
+    want("race", texts() == "60/60/70/50/50|10" && c.refusal() == M::create_no_class && c.dressed == 102);
     c.stat_up(0), c.stat_up(0);
     c.stat_down(0);  // 1298: no class, no row (race x 10000 - 1): nothing
     want("no class", texts() == "62/60/70/50/50|8");
     c.click_race(0, 1);  // the same race: no build, the points kept
-    want("race again", texts() == "62/60/70/50/50|8");
+    want("race again", texts() == "62/60/70/50/50|8" && c.dressed == 102);
     c.click_class(1, 1);  // the priest: built again from its row, the points reset
-    want("class", texts() == "60/60/60/50/60|8" && c.refusal() == M::create_points_left);
+    want("class", texts() == "60/60/60/50/60|8" && c.refusal() == M::create_points_left && c.dressed == 104);
     c.stat_down(4);  // at the row's base: nothing
     for (int k = 0; k < 9; ++k) c.stat_up(4);  // the ninth: none left
     want("spent", texts() == "60/60/60/50/68|0" && !c.refusal());
@@ -670,25 +672,31 @@ int main(int argc, char **argv) {
                      !n3e::create_choice_refusal(rules, 1, q.race, q.specialty, q.face, q.hair, q.stats));
     c.click_class(1, 0);  // the same class: no build
     want("class again", texts() == "61/61/60/50/66|0");
+    c.click_race(0, 0);  // the chosen race again: the class unchosen, no build, the priest's dress kept
+    want("race keeps dress", c.dressed == 104 && c.row_specialty(with) == 102u);
+    c.click_class(1, 0);
     c.click_class(0, 0);  // the rogue: built again
-    want("rogue", texts() == "60/60/70/50/50|10");
+    want("rogue", texts() == "60/60/70/50/50|10" && c.dressed == 102);
     c.open();  // a reopen: no points, the texts empty (006066b0)
-    want("reopen", texts() == "////|" && c.refusal() == M::create_no_race);
+    want("reopen", texts() == "////|" && c.refusal() == M::create_no_race && c.dressed == 0);
     // 1264's row by race (the 1097 choice: the Tuarek and the priest chosen at
     // each open, built there): a class click builds nothing; the left arrows
     // work without a class.
     arrows.by_class = false;
     c.bind(races, classes, 0, 1, arrows, with);
-    want("1264 open", texts() == "60/60/60/50/60|8" && c.refusal() == M::create_points_left);
+    want("1264 open", texts() == "60/60/60/50/60|8" && c.refusal() == M::create_points_left && c.dressed == 104);
     c.stat_up(2), c.click_class(0, 0);
-    want("1264 class", texts() == "60/60/61/50/60|7");
+    // 1264's class click builds nothing, so the dress stays the open's
+    // build's (its one set per race, 00439970).
+    want("1264 class", texts() == "60/60/61/50/60|7" && c.dressed == 104);
     c.click_race(0, 0);  // the chosen race: no build; the class unchosen
     c.stat_down(2);  // the last build's row (104, as 1264's one row for the race): 61 is above its 60
     c.stat_up(3), c.stat_down(3);
     want("1264 no class", texts() == "60/60/60/50/60|8" && c.refusal() == M::create_no_class);
     // A create without arrows sends the fixed choice's points (Q110).
     c.bind(races, classes, 0, 1, {}, with);
-    want("no arrows", !c.refusal() && texts() == "////|" &&
+    // RQ-176: the build dresses the character without arrows too.
+    want("no arrows", !c.refusal() && texts() == "////|" && c.dressed == 104 &&
                           n3e::front::create_request(with, 0, c).stats == std::vector<uint32_t>{60, 60, 70, 50, 60});
     if (!fail.empty()) {
       std::cerr << "FAIL create stats: " << fail << "\n";
@@ -697,7 +705,8 @@ int main(int argc, char **argv) {
     std::cout << "PASS create stats: each build writes its row and resets the points spent; the right arrows spend "
                  "while any is left, the left take back above the row's base (1298's by race and class: nothing "
                  "without a class, a class click builds again; 1264's by race); Create refuses points left after "
-                 "the class and sends the values; the texts empty from each open until a build\n";
+                 "the class and sends the values; the texts empty from each open until a build; each build "
+                 "dresses the character in its row's specialty (RQ-176)\n";
   }
   {
     // RQ-174 (version 27, KO-FINDINGS 10.5): the face and hair arrows. Each
@@ -998,6 +1007,31 @@ int main(int argc, char **argv) {
         for (size_t k = 0; k < fe.create_races.size(); ++k) {
           const auto &scene = k == 0 ? fe.create : fe.create_models[k - 1];
           std::cout << " " << fe.create_races[k] << "/" << scene.faces.size() << "/" << scene.hairs.size();
+        }
+        std::cout << "\n";
+      }
+      // RQ-176: a package whose create models carry dresses: each race and
+      // its dress part count, then each dress's specialty, `body` or the
+      // dress parts it wears (+-joined) and its plugs' hands (`-` none).
+      bool dressed = false;
+      for (size_t k = 0; k < fe.create_races.size(); ++k) {
+        const auto &scene = k == 0 ? fe.create : fe.create_models[k - 1];
+        dressed |= !scene.dresses.empty() || !scene.dress_parts.empty();
+      }
+      if (dressed) {
+        std::cout << "create-dress " << release.root.filename().string() << ":";
+        for (size_t k = 0; k < fe.create_races.size(); ++k) {
+          const auto &scene = k == 0 ? fe.create : fe.create_models[k - 1];
+          std::cout << " " << fe.create_races[k] << "/" << scene.dress_parts.size() << ":";
+          for (size_t d = 0; d < scene.dresses.size(); ++d) {
+            const auto &dress = scene.dresses[d];
+            std::cout << (d ? "," : "") << dress.specialty << "/";
+            if (dress.body) std::cout << "body";
+            for (size_t i = 0; i < dress.parts.size(); ++i) std::cout << (i ? "+" : "") << dress.parts[i];
+            std::cout << "/";
+            if (dress.hands.empty()) std::cout << "-";
+            for (size_t i = 0; i < dress.hands.size(); ++i) std::cout << (i ? "+" : "") << dress.hands[i];
+          }
         }
         std::cout << "\n";
       }

@@ -217,6 +217,21 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   }
   std::cout << std::endl;
   shot("create", Screen::create, 0, "Local Realm", 0, A::name_field, "");
+  // RQ-176 (version 29): the dress the create shot's new character wore:
+  // the model's race, the specialty whose dress it wore (0 none), the dress
+  // parts drawn in place of the model's own (-1 its own) and the hand plugs;
+  // `none` when no new character stood.
+  {
+    std::cout << "FRONT_CREATE_DRESS";
+    bool stood = false;
+    for (const auto &d : front->drawn())
+      if (d.which == 2 && !stood) {
+        stood = true;
+        std::cout << " race=" << d.race << " dress=" << d.dress << " parts=" << d.dress_parts
+                  << " plugs=" << d.dress_plugs;
+      }
+    std::cout << (stood ? "" : " none") << std::endl;
+  }
   shot("loading-start", Screen::loading, 1, "Local Realm", 2 / 3.f, A::progress, "");
   shot("loading-world", Screen::loading, 1, "Local Realm", 1, A::progress, "");
   shot("message", Screen::login, 0, "Local Realm", 0, A::message, "Disconnected from server");
@@ -532,6 +547,16 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
         return std::string("-");
       };
       const auto look = [&](A action) { press(front->create_action_node(action)); };
+      // RQ-176 (version 29): the dress the new character wears, as drawn:
+      // its specialty, the dress parts in place of the model's own (-1 its
+      // own) and the hand plugs ("-" when none stands).
+      const auto dressed = [&] {
+        for (const auto &d : front->drawn())
+          if (d.which == 2)
+            return std::to_string(d.dress) + "/" + std::to_string(d.dress_parts) + "/" +
+                   std::to_string(d.dress_plugs);
+        return std::string("-");
+      };
       const auto race_state = [&] { return front->node_state(race_node); };
       const auto class_state = [&] { return front->node_state(class_node); };
       std::cout << "FRONT_CREATE_CHOICE open=" << stands() << "," << race_state() << "," << class_state()
@@ -553,7 +578,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       frame();
       std::cout << " race=" << race_state() << "," << class_state() << "," << stands() << " column=" << until()
                 << " labels=" << labels() << " model=" << front->create_model_race() << " row=" << front->create_row()
-                << " stats=" << stat_texts() << " drawn=" << drawn_looks();
+                << " stats=" << stat_texts() << " drawn=" << drawn_looks() << " dress=" << dressed();
       // RQ-173: with no class the right arrow spends a point; the left takes
       // none back (1298's row by race and class has none for class -1,
       // 00604f90); Create says no class before points left (005fffd0).
@@ -565,7 +590,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       press(class_node);
       frame();
       std::cout << " both=" << race_state() << "," << class_state() << "," << stands() << " labels=" << labels()
-                << " stats=" << stat_texts();
+                << " stats=" << stat_texts() << " dress=" << dressed();
       // RQ-153: that frame, the race and then the class clicked, as the shot
       // create-class (rect= the class button's), printed after this line.
       front->draw(width, height, t, opened);
@@ -582,11 +607,12 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       // other class clicked, its own labels marked, Create sends it.
       press(race_node);
       frame();
-      std::cout << " again=" << race_state() << "," << class_state() << "," << stands() << " labels=" << labels();
+      std::cout << " again=" << race_state() << "," << class_state() << "," << stands() << " labels=" << labels()
+                << " dress=" << dressed();
       press(other_node);
       frame();
       std::cout << " other=" << race_state() << "," << front->node_state(other_node) << "," << class_state() << ","
-                << stands() << " labels=" << labels() << " stats=" << stat_texts();
+                << stands() << " labels=" << labels() << " stats=" << stat_texts() << " dress=" << dressed();
       // RQ-173: the other class's build reset the points; Create says points
       // left (code 10); the left arrow at the row's base takes nothing back,
       // the right arrows spend until none is left (the last click none), a

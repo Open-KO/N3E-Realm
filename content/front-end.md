@@ -31,24 +31,27 @@ stand-in image and the stat labels its click marks (version 25, RQ-172), and
 create's stat arrows, their values and the points left, with a message for
 points left at Create (version 26, RQ-173), and create's face and hair
 arrows, each create model's face and hair parts carried by number in place of
-its face 0 and hair 0 (version 27, RQ-174).
+its face 0 and hair 0 (version 27, RQ-174), create's description text
+(version 28, RQ-175), and each create model's specialties in their create
+dress, the chosen create table's parts and hand plugs (version 29, RQ-176).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
 its header. A package with it is engine 42, so wire 30 (as engines 38–41). Its bound is
 64 MiB (`FRONT_END_FILE`, `MAX_FRONT_END_ASSET`, `kFrontEndFile`), since it holds
-the character models and the UI art (Moradon's 1097 choice: 57,419,400 bytes with
+the character models and the UI art (Moradon's 1097 choice: 58,460,464 bytes with
 three create models, RQ-158, its race and class buttons, RQ-172, its stat
-arrows, RQ-173, its create models' four faces and three hairs, RQ-174, and its
-description text, RQ-175; the 1298 recipe's 59,299,044).
+arrows, RQ-173, its create models' four faces and three hairs, RQ-174, its
+description text, RQ-175, and its create dress, RQ-176; the 1298 recipe's
+61,843,732).
 
 Integers are little-endian u32, reals f32; strings are a u32 length and that many
 bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 28, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 29, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -96,7 +99,8 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    joint, animation and default parts, an empty part name setting no part as
    `SetChr` sets them; source `GameProcCharacterCreate.cpp`,
    `content/character-create.md` "The realm's races") with one clip,
-   `ANI_BREATH` (0), and no plugs (a new character holds nothing). Version 27
+   `ANI_BREATH` (0), and no plugs of its own (version 29's dresses carry the
+   hand plugs). Version 27
    (RQ-174): the model holds every part but the face and the hair, and after
    its plugs come its faces (a count, 0–32) and its hairs (a count, 0–32),
    each part a byte length and an N3S1 or N3SM scene of that part alone with
@@ -121,6 +125,32 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    model's seated clips are for the hall's thrones; it is not the create model
    (KO's select draws `ChrSelect/` joints and clips, its create the looks row's
    `Chr/` ones), so the two are separate records.
+   Version 29 (RQ-176; `content/character-create.md` "The create dress (RQ-176)",
+   `specs/KO-FINDINGS.md` §10.3, §10.7): after its hairs each model carries its
+   dress parts (a count, 0–64, each a part as a face is) and its dresses (a
+   count, 0–16), each a specialty (1–65535, once per model), a body flag (0 or
+   1), a part count (0–10; 0 with the body) and that many dress-part indices
+   (each once), and a plug count (0–2) and per plug its hand (0 right, 1 left,
+   each once), a joint of the model and a mesh in that joint's space (as a
+   plug's, item 6). Every dress part is some dress's. KO's build dresses the
+   model in its row's items (1298 `005fd120`, 1264 `00439970`): with the
+   package's create choice (`ko_create.plan`, the realm's `create.table`,
+   Q106) the cook writes a dress for each of the race's specialties from
+   `ko_create.dress` (RQ-159): its part slots in order but the face's and the
+   hair's (a helmet in the hair's slot is refused, KO's order of the helmet
+   and `InitHair` being unread), each a dress part, none for the robe's bare
+   lower, or the looks row's part where the dress leaves the slot; the parts
+   the most specialties wear (the first's on a tie) are the model's own
+   parts (body 1), and the others' follow as dress parts, each once, drawn in
+   place of the model's own (body 0). A plug's joint is the looks row's
+   right hand (column 18), left hand (column 19) or, for a left-hand item of
+   class 60, shield (column 20; 1298 `00467b30`'s `+0x108`, `+0x10c`,
+   `+0x110`), scaled as `PlugSet` scales it (its scale y × the model's
+   `Height()`, the largest joint y, / 1.8). Without a create choice, or for a
+   table without item columns, the model holds the looks parts and carries no
+   dresses (KO's `SetChr` without a row). The new character wears the dress
+   of the specialty whose row the last build took ("Actions"), none for a
+   specialty without one.
 9. Music (version 3, RQ-018; version 5, RQ-083): a track count (≤4), each
    its kind (version 5: 0 MPEG, 1 PCM), sample rate, channels (1 or 2), loop
    (0 or 1), restart period (version 5: a real, seconds, 0 for none or
@@ -486,7 +516,12 @@ address mode); the font atlases and the moon linear.
   and ambient (3 reals each), a vertex count (1–65536) of 8 reals (position,
   normal, uv), an index count (a multiple of 3, ≤196608), the indices.
 
-The loader refuses (version 27) a create model count outside 1–32, a create race
+The loader refuses (version 29) a dress part count above 64, a dress count
+above 16, a dress specialty outside 1–65535 or named twice on a model, a body
+flag above 1, dress parts with the body, more than 10, outside the dress
+parts or named twice in a dress, a dress part no dress wears, a dress part
+that is not its model's skeleton (as a face), more than two plugs, a hand
+above 1 or twice, a plug joint outside the model's joints, (version 27) a create model count outside 1–32, a create race
 outside 1–65535 or named twice, a face or hair count above 32, a part that is
 not N3S1 or N3SM, has tracks, or whose nodes, joints or instance scale are
 not its model's (version 27), an unknown action, a screen missing one of its required
@@ -523,7 +558,7 @@ rest above 2, a tip on a node outside create, of a group above 2 or below the
 last tip's, not an area for group 0 or a button for groups 1 and 2, or named
 twice, more than 32 tips, a rest 0 with a colour, open text or tips, and a rest
 1 or 2 without a create node bound to `class_desc` or a rest 2 with open text
-(version 28; version 27 is refused as every older version is), a select ESC other than 0, 1 or
+(version 28), (version 29; version 28 is refused as every older version is), a select ESC other than 0, 1 or
 2 (version 15; 2 since version 16), a select Back other than 0 or 1 (version
 17), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
@@ -596,7 +631,13 @@ builds it on a click that changes either value, puts it by the camera's slot
 `+0x38c`: a race clicked while the camera flies stands at the slot the flight
 left). Until a class is chosen the build takes the race button's default
 specialty for the race's stat row (`005fd120`), which the stat values show
-(RQ-173, below).
+(RQ-173, below). Each build also dresses the new character (version 29,
+RQ-176; item 8): it wears the dress of the specialty whose row that build
+took, the chosen class's or the race's default, until the next build (a
+second click on the chosen race unchooses the class and builds nothing, so
+the dress stays; 1264's class click builds nothing, its row being the
+race's). A create without race buttons dresses its model as the fixed
+choice's specialty when that is the model's race (Q100).
 
 The class column (version 25, RQ-172, binary): before a race is chosen every
 class button draws over its stand-in image (1298's reset `006066b0` by

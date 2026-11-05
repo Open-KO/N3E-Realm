@@ -1628,6 +1628,27 @@ class's) was wrong: 1298 shows one or the other, the class's first. Two texts th
 realm's fonts cannot draw: CP949's apostrophe is drawn as ASCII's (Q113), and the
 1298 recipe gives the Puri Tuarek no tooltip (Q114).
 
+### 10.7 The create model's dress: the hand joints and the plug scale (RQ-176, 2026-11-05)
+
+Read statically in 1298's `KnightOnLine.exe` as §10.3 does (same project and hash;
+the table reader `00635be0` decompiled again, output under `build/ghidra/rq176/`,
+not committed), with the source's `CPlayerBase::PlugSet` and `CN3Chr`. Not run.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The looks row's joint columns.** The table reader sizes each column by its type: 1 and 2 one byte, 3 and 4 two, 5, 6 and 8 four, 7 (a string) `0x10`, the string object's size. UPC_DefaultLooks's row (the player's looks at `+0x274`) is a u32 key and 16 strings (`+0x04`–`+0x103`), then the columns from 17 on, four bytes each: column 17 at `+0x104`, so the plug set's `+0x108`, `+0x10c` and `+0x110` (§10.3) are columns 18, 19 and 20, the source's `iJointRH`, `iJointLH` and `iJointLH2` (a shield's, "the left forearm") | 1298 `00635be0`, `00467b30`; source `GameDef.h` `__TABLE_PLAYER_LOOKS` | binary; source |
+| **The plug's scale is its own scale y × the character's height / 1.8.** `PlugSet` scales a plug uniformly by `Height() / 1.8 × plug.Scale().y / chr.Scale().y`, `Height()` being `m_vMax.y × m_vScale.y`, so the character's scale cancels; `FindMinMax` sets `m_vMax` from the joint positions alone (the largest joint y), not the meshes | 1298 `00467b30` (vtable `+0x30`); source `PlayerBase.cpp` `CPlayerBase::PlugSet`, `N3Chr.h` `Height`, `N3Chr.cpp` `CN3Chr::FindMinMax` | binary; source |
+| **The rows.** The pinned tree's and the 1264 install's looks rows for races 1–4 and 11–13 hold 12, 7 and 5 in columns 18, 19 and 20, joints of each race's `Chr/` skeleton; the 1298 Puri Tuarek priest's mace hangs on joint 12 and its shield (Item_Org class 60) on joint 5 | the pinned tree's and the 1264 install's `UPC_DefaultLooks` | local-asset |
+
+**Decides (RQ-176):** N3FE version 29 carries each create model's dresses (item 8,
+`content/front-end.md`): the parts and plugs `ko_create.dress` resolves (§10.3), the
+right hand's plug on column 18's joint, the left's on column 19's, a class-60 left
+item on column 20's, each scaled by the model's height as `PlugSet` scales it (the
+largest joint y of the bind pose, as `ko_appearance` takes `Height()`; `FindMinMax`
+ticks the current frame, which the breath clip's first frame barely moves). A dress
+with a helmet is refused until the order of 1298's build and `InitHair` is read
+(Q115).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

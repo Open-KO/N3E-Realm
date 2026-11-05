@@ -44,7 +44,10 @@ model's face and hair parts by number in place of its face 0 and hair 0
 (RQ-174), and (version 28) create's description text: KO's text rows for the
 open, the stat areas, class buttons and race buttons under the pointer and
 (1298's) the chosen class and race, in KO's colour, in place of the strings'
-authored `class_desc` (RQ-175).
+authored `class_desc` (RQ-175), and (version 29) each create model's
+specialties dressed as KO's build dresses them: the chosen create table's
+parts and hand plugs (RQ-159's dress), the robe's bare lower and a shield on
+its joint (RQ-176).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -75,7 +78,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 28
+VERSION = 29
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -1887,6 +1890,20 @@ def character_tree(assets, look):
 MAX_CREATE_MODELS = 32
 # Version 27 (RQ-174): at most this many faces and hairs per create model.
 MAX_CREATE_PARTS = 32
+# Version 29 (RQ-176): at most this many dress parts per create model, and a
+# dress per specialty of the race (create.bin's bound, create.MAX_SPECIALTIES).
+MAX_DRESS_PARTS = 64
+MAX_DRESSES = 16
+# The looks row's joints the plug set (1298 00467b30) attaches a hand item to:
+# the right hand (+0x108), the left (+0x10c) and a left-hand shield (+0x110),
+# columns 18, 19 and 20 of UPC_DefaultLooks (00635be0 lays a row out with a
+# string at 16 bytes, so the row's u32 key and 16 strings end at +0x104,
+# column 17; source GameDef.h iJointRH, iJointLH, iJointLH2).
+HAND_JOINTS = (18, 19, 20)
+# Item_Org's class of a shield (1298 00467b30 compares +0x40 with 60).
+SHIELD = 60
+# A part slot's looks row column (UPC_DefaultLooks parts 0..9, columns 4..13).
+LOOKS_PARTS = 4
 
 
 def scene_skeleton(head):
@@ -1896,12 +1913,51 @@ def scene_skeleton(head):
     return head[12 + w * h * (4 if head[:4] == b"N3SM" else 3):]
 
 
+def normal(name):
+    return name.replace("\\", "/").casefold()
+
+
+class Dressed:
+    """Version 29 (RQ-176): a create model's tree with its dress parts read
+    from their own inputs. The joint, the animation and the looks parts are
+    the model's tree's; each dress part (a recipe path, its input's prefix
+    kept, ko_create.dress) and the texture and skin it names are its input's,
+    as KO reads an item's files from the client that names it. `get` takes a
+    dress part by its path within its input."""
+
+    def __init__(self, tree, assets, names):
+        self.tree, self.root, self.routes, self.paths = tree, tree.root, {}, {}
+        for name in names:
+            source, path = split(assets, name)
+            part = character.part(source.get(path))
+            for n in (path, part["texture"], part["skin"]):
+                if self.routes.setdefault(normal(n), source) is not source:
+                    raise ValueError("front-end create dress: %s is named by two inputs' parts" % n)
+            self.paths[name] = path
+
+    @property
+    def sources(self):
+        """The files read so far, each input's (the scene's record)."""
+        merged = {}
+        for tree in [self.tree] + list(self.routes.values()):
+            merged.update(tree.sources)
+        return merged
+
+    def has(self, name):
+        return self.routes.get(normal(name), self.tree).has(name)
+
+    def get(self, name):
+        self.last = name
+        return self.routes.get(normal(name), self.tree).get(name)
+
+
 def create_part(assets, joint, animation, name, work, head, tail):
     """Version 27 (RQ-174): one face or hair part of a create model (KO's
     InitFace and InitHair set it on the player, PlayerMySelf.cpp): a byte
     length and an N3S1 or N3SM scene of that part alone with no tracks, its
     nodes, joints and instance scale the model's (`head`, `tail`), so the
-    client skins it with the model's pose."""
+    client skins it with the model's pose. Version 29 (RQ-176): a dress part
+    the same way."""
     record = model(assets, joint, dict(joint=joint, animation=animation, parts=[name]), [BREATH], work)
     scene = record[4:4 + struct.unpack_from("<I", record)[0]]
     part_head, _, part_tail = scene_tracks(scene)
@@ -1911,20 +1967,94 @@ def create_part(assets, joint, animation, name, work, head, tail):
     return u(len(scene)) + scene
 
 
-def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None):
+def dress_plug(assets, textures, name, joint, height):
+    """Version 29 (RQ-176): a dress's hand plug as KO's plug set attaches it
+    (1298 00467b30, source PlayerBase.cpp PlugSet): on the looks row's hand
+    `joint`, uniformly scaled by its scale y x the character's Height() / 1.8
+    (CN3Chr::Height, the largest joint y: ko_detail.bind_world), its rotation
+    and position as CN3CPlugBase::ReCalcMatrix (004133c0) takes them; then a
+    front-end mesh in that joint's space, as plug_record's. Its mesh and
+    texture are its input's."""
+    tree, name = split(assets, name)
+    plug = ko_appearance.read_plug(tree, name)
+    if min(plug["scale"]) <= 0 or plug["material"][20] != 0:
+        raise ValueError("front-end create dress plug %s: scale/render state" % name)
+    mesh = mesh_file(tree, plug["mesh"])
+    identity = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+    move, _ = ko_appearance.plug_transform(plug, identity, height)
+    vertices = [move(v[:3], True) + move(v[3:6], False) + list(v[6:8]) for v in mesh["vertices"]]
+    tex = textures.add(plug["texture"], tree)
+    material = plug["material"]
+    return u(joint) + mesh_record(vertices, mesh["indices"], tex, ALPHA_TEST if textures.masked(tex) else 0,
+                                  material[:3], material[4:7])
+
+
+def dress_sets(row, sets):
+    """Version 29 (RQ-176): each specialty's drawn parts and plugs from its
+    create dress (`sets`, ko_create.dress's for the race: {specialty: {parts,
+    plugs}}), as KO's build sets them (1298 005fd120, 1264 00439970): each
+    part slot but the face's and the hair's, in slot order, takes its dress
+    part, the bare lower under a robe none, and a slot the dress leaves (item
+    0) the looks row's part, if it names one. A dress that sets the hair's
+    slot (a helmet) is refused: the order of KO's build's helmet and its
+    InitHair is unread, and no package's dress has one. A plug is (hand: 0
+    right, 1 left; the looks row's joint for it, a left-hand shield's at
+    +0x110; its file)."""
+    import ko_player
+    joints = {}
+    for at, column in zip(("right", "left", "shield"), HAND_JOINTS):
+        try:
+            joints[at] = int(row[column])
+        except (IndexError, ValueError):
+            raise ValueError("front-end create dress: looks row %s has no %s hand joint (column %d)"
+                             % (row[0], at, column))
+    out = {}
+    for specialty, dress in sets.items():
+        worn = {p["slot"]: p["file"] for p in dress["parts"]}
+        if ko_player.HAIR in worn:
+            raise ValueError("front-end create dress of specialty %d: a helmet (slot %d) is not drawn: KO's build's "
+                             "order of the helmet and InitHair is unread" % (specialty, ko_player.HAIR))
+        parts = []
+        for slot in range(10):
+            if slot in (ko_player.FACE, ko_player.HAIR):
+                continue
+            name = worn[slot] if slot in worn else row[LOOKS_PARTS + slot] or None
+            if name:
+                parts.append(name)
+        plugs = []
+        for p in dress["plugs"]:
+            hand = "right" if p["slot"] == 0 else "shield" if p["kind"] == SHIELD else "left"
+            plugs.append((p["slot"], joints[hand], p["file"]))
+        out[specialty] = (tuple(parts), tuple(plugs))
+    return out
+
+
+def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, dress=None, inputs=None,
+                 textures=None):
     """CGameProcCharacterCreate: the player's own model (InitChr from the
     race's UPC_DefaultLooks row: its joint, animation and default parts),
-    breathing (ANI_BREATH), with no plugs: a new character holds nothing.
-    With the package's race `entry` ({race, looks}, character-create.json),
-    its parts are KO's SetChr set (ko_player.looks: an empty name setting no
-    part, the row checked against the race's looks). Version 27 (RQ-174): the
-    model holds every part but the face and the hair, which follow it by
-    number (InitFace and InitHair's "%02d", ko_player.numbered): `faces` face
-    parts and `hairs` hair parts (create.bin's counts with the package's
-    rules, the face and hair 0 alone without), none for a row whose part is
-    empty (the Wrinkle Tuarek's hair: InitHair sets none). `report`: a list
-    the race, its face and hair counts and the record's bytes are appended
-    to."""
+    breathing (ANI_BREATH). With the package's race `entry` ({race, looks},
+    character-create.json), its parts are KO's SetChr set (ko_player.looks:
+    an empty name setting no part, the row checked against the race's
+    looks). Version 27 (RQ-174): the model holds every part but the face and
+    the hair, which follow it by number (InitFace and InitHair's "%02d",
+    ko_player.numbered): `faces` face parts and `hairs` hair parts
+    (create.bin's counts with the package's rules, the face and hair 0 alone
+    without), none for a row whose part is empty (the Wrinkle Tuarek's hair:
+    InitHair sets none).
+
+    Version 29 (RQ-176): with the race's create `dress` (ko_create.dress's
+    {specialty: {parts, plugs}}, its files read from `inputs`, its plug
+    textures added to `textures`), each specialty is drawn in it, as KO's
+    build dresses the model (dress_sets). The model holds the parts the most
+    specialties wear (the first's on a tie) in place of the looks parts; the
+    parts of the others follow as dress parts, each once, then each
+    specialty's dress: whether the model's own parts draw, the dress parts
+    it wears instead and its hand plugs. Without a dress the model holds the
+    looks parts and no specialty has a dress (KO's SetChr without a row).
+    `report`: a list the race, its face and hair counts, its dresses and the
+    record's bytes are appended to."""
+    import ko_detail
     import ko_player
     row = looks(assets, race)
     joint, animation = row[2].replace("\\", "/"), row[3].replace("\\", "/")
@@ -1933,9 +2063,21 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None):
     names = row[4:10]
     if not 0 <= faces <= MAX_CREATE_PARTS or not 0 <= hairs <= MAX_CREATE_PARTS:
         raise ValueError("front-end create faces and hairs: 0 to %d each" % MAX_CREATE_PARTS)
-    base = [n for i, n in enumerate(names) if n and i not in (ko_player.FACE, ko_player.HAIR)]
-    definition = dict(joint=joint, animation=animation, parts=base)
-    record = model(assets, joint, definition, [BREATH], work)
+    sets = dress_sets(row, dress) if dress else {}
+    if len(sets) > MAX_DRESSES:
+        raise ValueError("front-end create dresses: at most %d" % MAX_DRESSES)
+    tree = Dressed(assets, inputs, sorted({n for parts, _ in sets.values() for n in parts if n not in names})) \
+        if sets else assets
+    if sets:
+        # The parts the most specialties wear, the first's on a tie.
+        worn = [parts for parts, _ in sets.values()]
+        body = max(worn, key=lambda parts: (worn.count(parts), -worn.index(parts)))
+    else:
+        body = tuple(n for i, n in enumerate(names) if n and i not in (ko_player.FACE, ko_player.HAIR))
+    if not body:
+        raise ValueError("front-end create model of race %d: no part to draw" % race)
+    definition = dict(joint=joint, animation=animation, parts=[tree.paths.get(n, n) if sets else n for n in body])
+    record = model(tree, joint, definition, [BREATH], work)
     head, _, tail = scene_tracks(record[4:4 + struct.unpack_from("<I", record)[0]])
     out, counts = record + u(0), []
     for position, number in ((ko_player.FACE, faces), (ko_player.HAIR, hairs)):
@@ -1946,8 +2088,31 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None):
             create_part(assets, joint, animation, part, work.parent / ("%s-%s-%d" % (work.name, kind, i)), head, tail)
             for i, part in enumerate(parts))
         counts.append(len(parts))
+    # Version 29 (RQ-176): the dress parts, each once, in specialty order.
+    pool = []
+    for parts, _ in sets.values():
+        if parts != body:
+            pool += [n for n in parts if n not in pool]
+    if len(pool) > MAX_DRESS_PARTS:
+        raise ValueError("front-end create dress parts: at most %d" % MAX_DRESS_PARTS)
+    out += u(len(pool)) + b"".join(
+        create_part(tree, joint, animation, tree.paths.get(n, n), work.parent / ("%s-dress-%d" % (work.name, i)),
+                    head, tail) for i, n in enumerate(pool))
+    # CN3Chr::Height(), the largest joint y (ko_detail.bind_world), scales the plugs.
+    height = max(m[1][3] for m in ko_detail.bind_world(assets, dict(joint=joint))) if sets else 0
+    out += u(len(sets))
+    dresses = {}
+    for specialty, (parts, plugs) in sets.items():
+        own = parts == body
+        indices = [] if own else [pool.index(n) for n in parts]
+        out += u(specialty) + u(1 if own else 0) + u(len(indices)) + b"".join(u(i) for i in indices)
+        out += u(len(plugs)) + b"".join(u(hand) + dress_plug(inputs, textures, name, at, height)
+                                        for hand, at, name in plugs)
+        dresses[specialty] = dict(body=own, parts=list(parts), plugs=[dict(hand=hand, joint=at, file=name)
+                                                            for hand, at, name in plugs])
     if report is not None:
-        report.append(dict(race=race, faces=counts[0], hairs=counts[1], bytes=len(out)))
+        report.append(dict(race=race, faces=counts[0], hairs=counts[1], bytes=len(out),
+                           **(dict(dresses=dresses, dress_parts=len(pool), height=height) if sets else {})))
     return out
 
 
@@ -1967,11 +2132,13 @@ def create_races(select_race, rules=None):
     return [(race, entries[race]) for race in order]
 
 
-def create_scene(assets, races, work, rules=None, report=None):
+def create_scene(assets, races, work, rules=None, report=None, dress=None, inputs=None, textures=None):
     """Version 24 (RQ-158): a count, then per race its code and its create
     model (create_model), for `races` from create_races; version 27 (RQ-174):
     each with its face and hair parts, as many as the package's rules have
-    faces and hairs (the face and hair 0 alone without rules)."""
+    faces and hairs (the face and hair 0 alone without rules); version 29
+    (RQ-176): each with its specialties' create dress (`dress`,
+    ko_create.dress's by race, or None)."""
     if not 1 <= len(races) <= MAX_CREATE_MODELS:
         raise ValueError("front-end create models: 1 to %d" % MAX_CREATE_MODELS)
     if len({race for race, _ in races}) != len(races):
@@ -1983,7 +2150,7 @@ def create_scene(assets, races, work, rules=None, report=None):
             raise ValueError("front-end create race %r" % (race,))
         # The first keeps the work directory the one create model had.
         out += u(race) + create_model(assets, race, work / ("create" if at == 0 else "create-%d" % race), entry,
-                                      faces, hairs, report)
+                                      faces, hairs, report, (dress or {}).get(race), inputs, textures)
     return out
 
 
@@ -2335,11 +2502,15 @@ def create_buttons(choice, rules):
                 raise ValueError("front-end classes: race %d takes two specialties of one class button" % race)
 
 
-def cook(assets, out, config_path, work):
+def cook(assets, out, config_path, work, create=None):
     """Writes front-end.bin into the directory `out`; returns its provenance.
     `assets` is the choice's `Inputs`, or one tree. The package's create rules
     (character-create.json beside the recipe, ko_create) name the races whose
-    create model it carries (version 24, RQ-158)."""
+    create model it carries (version 24, RQ-158). `create` is the realm's
+    create choice (ko_create.plan for this front end, front_end_choice's
+    `create`): its table's dress (RQ-159) dresses each create model (version
+    29, RQ-176, Q106: the dress follows create.table); without it, or for a
+    table without item columns, the models wear their looks parts."""
     import ko_create
     config = load(pathlib.Path(config_path))
     rules = ko_create.rules(pathlib.Path(config_path).parent)
@@ -2350,15 +2521,17 @@ def cook(assets, out, config_path, work):
         shared.append((tree, tree.sources))
         tree.sources = {}
     try:
-        return write(assets, out, config, work, rules)
+        return write(assets, out, config, work, rules, create)
     finally:
         for tree, earlier in shared:
             cooked, tree.sources = tree.sources, earlier
             earlier.update(cooked)
 
 
-def write(assets, out, config, work, rules=None):
+def write(assets, out, config, work, rules=None, create=None):
     assets = assets if isinstance(assets, Inputs) else Inputs([assets])
+    if create is not None and create["rules"] != rules:
+        raise ValueError("front-end create choice: not the recipe's package's create rules")
     if set(config["screens"]) != set(SCREENS):
         raise ValueError("front-end screens")
     textures, fonts = Textures(assets), {}
@@ -2396,10 +2569,14 @@ def write(assets, out, config, work, rules=None):
     scenes += select_scene(assets, textures, config["select"], pathlib.Path(work), zone_report)
     # Version 24 (RQ-158): a create model per race of models.create.
     races = create_races(config["select"]["character"]["race"], rules)
-    # Version 27 (RQ-174): each with its faces and hairs (create.bin's counts).
+    # Version 27 (RQ-174): each with its faces and hairs (create.bin's counts);
+    # version 29 (RQ-176): and its specialties' create dress, the chosen
+    # table's (Q106).
+    import ko_create
+    dress = ko_create.dress(create, assets, {race for race, _ in races}) if create is not None else None
     create_report = []
     scenes += create_scene(character_tree(assets, config["select"]["character"])[0], races, pathlib.Path(work), rules,
-                           create_report)
+                           create_report, dress, assets, textures)
     atlases = b""
     sources = {False: pathlib.Path(config["fonts"]["regular"]), True: pathlib.Path(config["fonts"]["bold"])}
     for (size, bold), _ in sorted(fonts.items(), key=lambda kv: kv[1]):
@@ -2422,5 +2599,6 @@ def write(assets, out, config, work, rules=None):
     (out / "front-end.bin").write_bytes(data)
     return dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), textures=len(textures.list),
                 create_races=[race for race, _ in races], create_models=create_report,
+                create_table=None if create is None else create["table"],
                 fonts=len(fonts), music=played, logo=logo_report, messages=message_report, font_substitutes=sorted(str(p) for p in sources.values()),
                 sources=dict(sorted(assets.sources.items())), **zone_report)

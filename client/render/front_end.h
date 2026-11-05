@@ -178,8 +178,12 @@ class View {
     use[fe.backdrop] = 1;
     for (const auto &m : fe.hall) use[m.texture] = 2;
     for (const auto &z : fe.zone) use[z.mesh.texture] = 2;
-    for (size_t k = 0; k < scene_count(); ++k)
+    for (size_t k = 0; k < scene_count(); ++k) {
       for (const auto &plug : scene_at(k).plugs) use[plug.mesh.texture] = 2;
+      // RQ-176 (version 29): a create dress's hand plugs.
+      for (const auto &dress : scene_at(k).dresses)
+        for (const auto &plug : dress.plugs) use[plug.mesh.texture] = 2;
+    }
     for (size_t i = 0; i < textures.size(); ++i) {
       glBindTexture(GL_TEXTURE_2D, textures[i]);
       if (use[i] == 0) {
@@ -198,9 +202,10 @@ class View {
       const auto &scene = scene_at(k);
       models.push_back(texture(scene.model.width, scene.model.height, scene.model.texture.data(),
                                scene.model.channels == 3));
-      // RQ-174 (version 27): a create model's face and hair parts, by number.
+      // RQ-174 (version 27): a create model's face and hair parts, by number;
+      // RQ-176 (version 29): then its dress parts.
       auto &looks = part_textures.emplace_back();
-      for (const auto *set : {&scene.faces, &scene.hairs}) {
+      for (const auto *set : {&scene.faces, &scene.hairs, &scene.dress_parts}) {
         auto &out = looks.emplace_back();
         for (const auto &part : *set)
           out.push_back(texture(part.width, part.height, part.texture.data(), part.channels == 3));
@@ -241,6 +246,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     for (auto &model : fe.create_models) {
       auto &set = race_plugs.emplace_back();
       for (auto &plug : model.plugs) set.push_back(upload(plug.mesh));
+    }
+    // RQ-176 (version 29): each scene's dresses' hand plugs.
+    for (size_t k = 0; k < scene_count(); ++k) {
+      auto &scene = dress_plugs.emplace_back();
+      for (const auto &dress : scene_at(k).dresses) {
+        auto &set = scene.emplace_back();
+        for (const auto &plug : dress.plugs) set.push_back(upload(plug.mesh));
+      }
     }
     // A further clip poses the model's own nodes (load_front_end checked them).
     for (size_t k = 0; k < scene_count(); ++k) {
@@ -301,10 +314,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     fe.select.model.texture.clear();
     fe.create.model.texture.clear();
     for (auto &model : fe.create_models) model.model.texture.clear();
-    for (auto *set : {&fe.create.faces, &fe.create.hairs})
+    for (auto *set : {&fe.create.faces, &fe.create.hairs, &fe.create.dress_parts})
       for (auto &part : *set) part.texture.clear();
     for (auto &model : fe.create_models)
-      for (auto *set : {&model.faces, &model.hairs})
+      for (auto *set : {&model.faces, &model.hairs, &model.dress_parts})
         for (auto &part : *set) part.texture.clear();
   }
   ~View() {
@@ -314,6 +327,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       for (auto &set : looks) glDeleteTextures(GLsizei(set.size()), set.data());
     std::vector<std::vector<Buffer> *> sets{&statics, &zone_meshes, &intro_plugs, &select_plugs, &create_plugs};
     for (auto &set : race_plugs) sets.push_back(&set);
+    for (auto &scene : dress_plugs)
+      for (auto &set : scene) sets.push_back(&set);
     for (auto *set : sets)
       for (auto &m : *set) {
         glDeleteBuffers(1, &m.vbo);
@@ -480,6 +495,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // none), and the specialty whose stat row the screen holds (0: none).
   uint32_t create_model_race() const { return figure_scene() < 0 ? 0 : scene_race(size_t(figure_scene())); }
   uint32_t create_row() const { return choice.row_specialty(create_rules).value_or(0); }
+  // RQ-176 (version 29): the specialty whose dress the new character wears
+  // (0: none, its model's own parts), a test hook.
+  uint32_t create_dress() const {
+    const auto which = figure_scene();
+    if (which < 0) return 0;
+    const auto at = dress_at(size_t(which));
+    return at < 0 ? 0 : scene_at(size_t(which)).dresses[size_t(at)].specialty;
+  }
   // RQ-173 (version 26): what create's stat value texts say, in the stats'
   // order, then the points text (test hooks; empty before a build).
   std::vector<std::string> create_stat_texts() const {
@@ -589,6 +612,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     std::array<int, 4> viewport;   // GL viewport: x, y (from the bottom), w, h
     uint32_t race = 0;             // create: the race code of the model drawn (RQ-172)
     int face = -1, hair = -1;      // create: the face and hair parts drawn, -1 none (RQ-174)
+    // create: the specialty whose dress the model wears (0 none: its own
+    // parts, no plugs), the dress parts drawn in place of its own (-1: its
+    // own) and the hand plugs drawn (RQ-176).
+    uint32_t dress = 0;
+    int dress_parts = -1, dress_plugs = 0;
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) {
@@ -819,6 +847,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   GLuint lit = 0, flat = 0, vao = 0, vbo = 0;
   std::vector<Buffer> statics, zone_meshes, intro_plugs, select_plugs, create_plugs;
   std::vector<std::vector<Buffer>> race_plugs;  // RQ-172: each further create model's
+  // RQ-176 (version 29): per scene, per dress, its hand plugs' buffers.
+  std::vector<std::vector<std::vector<Buffer>>> dress_plugs;
   std::vector<std::vector<Scene>> clips;  // per scene: each clip's poses
   Screen state = Screen::login;
   struct Message {
@@ -1545,13 +1575,24 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // (version 27): a create model then draws the face and the hair the create
   // chose (InitFace, InitHair; none past its parts, as the Wrinkle Tuarek's
   // hair), each skinned with the model's pose.
+  //
+  // RQ-176 (version 29): a create model wears the dress of the specialty
+  // whose row the last build took (create_dress): its own parts, or the
+  // dress parts in their place, then the face and hair, then the dress's
+  // hand plugs on their joints (KO's 005fd120 sets the parts and plugs;
+  // 004196a0 draws a character's parts, then its plugs).
   void draw_character(size_t which, const std::vector<Node> &pose, const detail::Mat &vp, const detail::Mat &model) {
     const auto &scene = scene_at(which);
     const auto mvp = detail::mul(vp, model);
     std::array<float, 4> box{1e9f, 1e9f, -1e9f, -1e9f};
-    draw_skinned(scene.model, models[which], pose, vp, model, mvp, box);
+    const int worn = which >= 2 ? dress_at(which) : -1;
+    const FrontDress *dress = worn >= 0 ? &scene.dresses[size_t(worn)] : nullptr;
+    if (!dress || dress->body) draw_skinned(scene.model, models[which], pose, vp, model, mvp, box);
     if (which >= 2) {
       const auto &looks = part_textures[which];
+      if (dress && !dress->body)
+        for (auto part : dress->parts)
+          draw_skinned(scene.dress_parts[part], looks[2][part], pose, vp, model, mvp, box);
       if (choice.face < scene.faces.size())
         draw_skinned(scene.faces[choice.face], looks[0][choice.face], pose, vp, model, mvp, box);
       if (choice.hair < scene.hairs.size())
@@ -1561,16 +1602,36 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     glGetIntegerv(GL_VIEWPORT, viewport.data());
     drawn_boxes.push_back({std::min<size_t>(which, 2), box, viewport, which >= 2 ? scene_race(which) : 0,
                            which >= 2 && choice.face < scene.faces.size() ? int(choice.face) : -1,
-                           which >= 2 && choice.hair < scene.hairs.size() ? int(choice.hair) : -1});
+                           which >= 2 && choice.hair < scene.hairs.size() ? int(choice.hair) : -1,
+                           dress ? dress->specialty : 0u, dress && !dress->body ? int(dress->parts.size()) : -1,
+                           dress ? int(dress->plugs.size()) : 0});
     const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : which == 2 ? create_plugs
                                                                                        : race_plugs[which - 3];
-    for (size_t i = 0; i < plugs.size(); ++i) {
-      const auto &plug = scene.plugs[i];
+    auto attach = [&](const FrontPlug &plug, const Buffer &buffer) {
       const auto joint = scene.model.joint_matrix(pose, plug.joint);
       detail::Mat j;
       std::copy(joint.begin(), joint.end(), j.begin());
-      draw_mesh(plugs[i], plug.mesh, vp, detail::mul(model, j));
-    }
+      draw_mesh(buffer, plug.mesh, vp, detail::mul(model, j));
+    };
+    for (size_t i = 0; i < plugs.size(); ++i) attach(scene.plugs[i], plugs[i]);
+    if (dress)
+      for (size_t i = 0; i < dress->plugs.size(); ++i) attach(dress->plugs[i], dress_plugs[which][size_t(worn)][i]);
+  }
+  // RQ-176 (version 29): the dress create model `which` wears (an index into
+  // its dresses, -1 none): the specialty whose row the last build took, or,
+  // with no race buttons, the fixed choice's on its race's model (Q100); none
+  // for a specialty the model has no dress for (its own parts, as KO's
+  // SetChr without a row).
+  int dress_at(size_t which) const {
+    uint32_t specialty = 0;
+    if (choice.race_code()) specialty = choice.dressed;
+    else if (choice.races.empty() && create_rules && create_rules->fixed &&
+             create_rules->fixed->race == scene_race(which))
+      specialty = create_rules->fixed->specialty;
+    const auto &dresses = scene_at(which).dresses;
+    for (size_t i = 0; i < dresses.size(); ++i)
+      if (specialty && dresses[i].specialty == specialty) return int(i);
+    return -1;
   }
   // CGameProcCharacterSelect's centre rect, 0.36-0.64 of the viewport's
   // width by 0.44-0.86 of its height, on the pointer's whole pixel. The hover

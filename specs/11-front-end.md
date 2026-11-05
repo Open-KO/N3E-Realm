@@ -289,7 +289,10 @@ replace the panels when the client has a Discord realm config.
   area, class button or race button under the pointer, in KO's yellow, and off them
   1264's last tooltip (row 6124 from each open) or 1298's chosen class's, else
   chosen race's, else nothing, from the recipe client's table (KO-FINDINGS §10.6;
-  Q113, Q114). The 1298 recipe binds the Tuarek and the four classes and
+  Q113, Q114). Each build dresses the create model (N3FE version 29, RQ-176) in
+  the create dress of the specialty whose row it took, from the realm's
+  `create.table` (Q106): its parts, the robe's bare lower and its hand plugs on
+  the looks row's joints (KO-FINDINGS §10.3, §10.7). The 1298 recipe binds the Tuarek and the four classes and
   waits for both, the messages 1298's rows 1908 and 1904 under 1901; the 1097
   choice binds the same with the Tuarek and the priest chosen at each open (Q52),
   `create_no_class` 1264's row 1904 under 1901. Version 22's nodes until the race
@@ -551,6 +554,13 @@ CPU (`make test`):
    arrival; RQ-125: with the click when create draws over the hall), and Delete's box shows
    only for a character at rest (`client/render/select_bar.h`, `tests/front_end.cpp`);
    the 1298 recipe binds its bar as 1298 does.
+   RQ-176 (version 29): the cook resolves each create model's dresses from a
+   synthetic looks row (the hand joints from columns 18–20, a class-60 shield on
+   column 20) and refuses a helmet and a missing joint column; the loader takes a
+   model's dress parts and dresses (up to 64 and 16) and refuses version 28 and
+   each case `content/front-end.md` item 8 names; `tests/front_end.cpp` checks
+   that each build dresses the new character in its row's specialty and that a
+   build-less click keeps it.
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.
@@ -687,6 +697,13 @@ KO (`make live-ko`, needs `assets/ko`):
    Tuarek's text, and after the priest click the priest's, nothing again at a new
    open; the open's frame and the first tip's differ only at the text, drawn in
    yellow (the 1298 recipe's open draws none) (KO-FINDINGS §10.6).
+   RQ-176 (version 29): the offered cooks carry, per create model, a dress for
+   each of its race's specialties from the create table's input; the 1298
+   recipe's Tuarek wears different rogue and priest dresses, the Wrinkle
+   Tuarek's mage three parts (the robe's lower bare) and the Puri Tuarek's
+   priest a mace on column 18's joint and a shield on column 20's; the chosen
+   package's create draws its Tuarek in its fixed priest's dress, and each
+   create capture names the dress drawn (none on the 1298 recipe's open).
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

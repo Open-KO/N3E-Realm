@@ -965,14 +965,15 @@ impl Release {
 }
 
 /// front-end.bin's header (spec 11, content/front-end.md): the N3FE version
-/// this server's client reads (28 since RQ-175: create's description text,
-/// after RQ-174's face and hair arrows and parts, RQ-173's stat arrows, RQ-172's race and class buttons
+/// this server's client reads (29 since RQ-176: each create model's
+/// specialties dressed, after RQ-175's create description text,
+/// RQ-174's face and hair arrows and parts, RQ-173's stat arrows, RQ-172's race and class buttons
 /// bound to KO's codes, RQ-158's create model per race,
 /// RQ-145's create nodes drawn until a class is clicked, RQ-133's nodes
 /// drawn until the race is chosen and RQ-130's create race and class
 /// choices) and the character slot count, 1 to 3.
 fn front_end_slots(mut p: Reader) -> Result<u32> {
-    if p.take(4)? != b"N3FE" || p.u()? != 28 {
+    if p.take(4)? != b"N3FE" || p.u()? != 29 {
         return Err(bad("front end magic/version"));
     }
     let slots = p.u()?;
@@ -993,9 +994,9 @@ mod front_end_tests {
         Reader::from_bytes(b)
     }
     #[test]
-    fn reads_the_slot_count_of_version_28() {
+    fn reads_the_slot_count_of_version_29() {
         for slots in 1..=3 {
-            assert_eq!(front_end_slots(header(b"N3FE", 28, slots)).unwrap(), slots);
+            assert_eq!(front_end_slots(header(b"N3FE", 29, slots)).unwrap(), slots);
         }
     }
     #[test]
@@ -1097,13 +1098,17 @@ mod front_end_tests {
             "version 27 (no description text)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 29, 3)).is_err(),
-            "version 29"
+            front_end_slots(header(b"N3FE", 28, 3)).is_err(),
+            "version 28 (no create dress)"
         );
-        assert!(front_end_slots(header(b"N3FX", 28, 3)).is_err(), "magic");
-        assert!(front_end_slots(header(b"N3FE", 28, 0)).is_err(), "no slots");
         assert!(
-            front_end_slots(header(b"N3FE", 28, 4)).is_err(),
+            front_end_slots(header(b"N3FE", 30, 3)).is_err(),
+            "version 30"
+        );
+        assert!(front_end_slots(header(b"N3FX", 29, 3)).is_err(), "magic");
+        assert!(front_end_slots(header(b"N3FE", 29, 0)).is_err(), "no slots");
+        assert!(
+            front_end_slots(header(b"N3FE", 29, 4)).is_err(),
             "four slots"
         );
         assert!(

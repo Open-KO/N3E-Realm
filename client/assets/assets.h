@@ -950,6 +950,19 @@ struct FrontMesh {
   std::vector<uint32_t> indices;
 };
 struct FrontPlug { uint32_t joint = 0; FrontMesh mesh; };
+// Version 29 (RQ-176): one specialty's create dress (KO's build dresses the
+// create model in its row's items: 1298 005fd120, 1264 00439970). `body`:
+// the model's own parts draw (the dress the most specialties wear); else
+// `parts`, indices into the model's dress parts, draw in their place. Each
+// plug is on its hand (0 right, 1 left) at the looks row's joint for it
+// (1298 00467b30: a left-hand shield on the shield's joint).
+struct FrontDress {
+  uint32_t specialty = 0;
+  bool body = true;
+  std::vector<uint32_t> parts;
+  std::vector<uint32_t> hands;
+  std::vector<FrontPlug> plugs;
+};
 // Version 8 (RQ-095): one mesh of the zone the select hall draws (1298's
 // karus_intro) and the point a BLEND mesh is sorted by (engine space).
 struct FrontZoneMesh { FrontMesh mesh; V sort{}; };
@@ -969,6 +982,11 @@ struct FrontScene {
   // (InitFace, InitHair), each a scene with no tracks on the model's nodes
   // and joints, drawn with the model's pose; none for the other scenes.
   std::vector<Scene> faces, hairs;
+  // Version 29 (RQ-176): a create model's dress parts (scenes as its faces
+  // and hairs) and each specialty's dress; none for the other scenes, and
+  // none for a model without a dress (its own parts always draw).
+  std::vector<Scene> dress_parts;
+  std::vector<FrontDress> dresses;
 };
 // create_yaw (version 19, RQ-125): the new character's turn at the slot when
 // create draws over the hall (1298: 005fd120), the slot's yaw otherwise.

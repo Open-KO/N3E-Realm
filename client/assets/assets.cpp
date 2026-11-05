@@ -2859,7 +2859,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 28, "front end version");
+  need(r.u() == 29, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -3237,8 +3237,8 @@ FrontEnd load_front_end(const Release &release) {
   // Version 27 (RQ-174): each model's face and hair parts by number (0-32
   // each): a byte length and an N3S1 or N3SM scene with no tracks, its nodes,
   // joints and instance scale the model's, so the model's pose skins it.
-  auto create_parts = [&](const Scene &body, std::vector<Scene> &out) {
-    const auto count = r.count(32, 0);
+  auto create_parts = [&](const Scene &body, std::vector<Scene> &out, uint32_t most = 32) {
+    const auto count = r.count(most, 0);
     for (uint32_t i = 0; i < count; ++i) {
       const auto bytes = r.u();
       const auto start = r.p;
@@ -3265,6 +3265,50 @@ FrontEnd load_front_end(const Release &release) {
     model(scene);
     create_parts(scene.model, scene.faces);
     create_parts(scene.model, scene.hairs);
+    // Version 29 (RQ-176): its dress parts (0-64, each a part as a face) and
+    // each specialty's dress (0-16, each specialty 1-65535 once): whether
+    // the model's own parts draw, else the dress parts it wears (0-10, each
+    // once; none with the body), and its hand plugs (0-2, each hand once,
+    // on a joint of the model).
+    create_parts(scene.model, scene.dress_parts, 64);
+    std::vector<bool> worn(scene.dress_parts.size(), false);
+    const auto dresses = r.count(16, 0);
+    for (uint32_t d = 0; d < dresses; ++d) {
+      FrontDress dress;
+      dress.specialty = r.u();
+      need(dress.specialty >= 1 && dress.specialty <= 65535 &&
+               std::none_of(scene.dresses.begin(), scene.dresses.end(),
+                            [&](const FrontDress &o) { return o.specialty == dress.specialty; }),
+           "front end create dress specialty");
+      const auto body = r.u();
+      need(body <= 1, "front end create dress body");
+      dress.body = body == 1;
+      const auto parts = r.count(10, 0);
+      need(!dress.body || parts == 0, "front end create dress parts with the body");
+      for (uint32_t i = 0; i < parts; ++i) {
+        const auto part = r.u();
+        need(part < scene.dress_parts.size() &&
+                 std::find(dress.parts.begin(), dress.parts.end(), part) == dress.parts.end(),
+             "front end create dress part");
+        dress.parts.push_back(part);
+        worn[part] = true;
+      }
+      const auto plugs = r.count(2, 0);
+      for (uint32_t i = 0; i < plugs; ++i) {
+        const auto hand = r.u();
+        need(hand <= 1 && std::find(dress.hands.begin(), dress.hands.end(), hand) == dress.hands.end(),
+             "front end create dress hand");
+        dress.hands.push_back(hand);
+        FrontPlug plug;
+        plug.joint = r.u();
+        need(plug.joint < scene.model.joints.size(), "front end create dress plug joint");
+        plug.mesh = mesh();
+        dress.plugs.push_back(std::move(plug));
+      }
+      scene.dresses.push_back(std::move(dress));
+    }
+    // A dress part no dress wears is refused, as it would never draw.
+    need(std::all_of(worn.begin(), worn.end(), [](bool w) { return w; }), "front end create dress part unworn");
   }
   // 9. Music (version 3, RQ-018): each track's frames checked whole here, so
   // the stream that decodes them later meets only well-formed frames.

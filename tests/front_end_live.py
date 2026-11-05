@@ -299,7 +299,7 @@ assert zone["key"] == recipe_1298["select"]["zone"], zone
 assert {zone[k].replace("\\", "/") for k in ("terrain", "colour_map", "objects")} <= sources, (zone, sorted(sources))
 assert 0 < zone["blended_meshes"] < zone["meshes"] <= ko_front_end.MAX_ZONE_MESHES, zone
 assert any(s.startswith("Object/") and s.lower().endswith(".n3pmesh") for s in sources), sorted(sources)
-assert len(cooked[0]) <= 64 << 20, len(cooked[0])
+assert len(cooked[0]) <= ko_front_end.MAX_FILE == 256 << 20, len(cooked[0])
 loaded = subprocess.run(["build/client/n3e-front-end-check", "ok", str(out)], capture_output=True, text=True)
 assert "PASS front-end loader: 1 loaded, 0 refused" in loaded.stdout, \
     "the client loader refuses the 1298 recipe's front end: %s%s" % (loaded.stdout, loaded.stderr)

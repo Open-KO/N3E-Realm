@@ -82,10 +82,11 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 29, engine 42 (so wire 30). Its layout,
-bounds and the action set are in `content/front-end.md`. The client treats it as
-optional: **a package without it gets today's panels**, which is how `demo` and every
-test fixture keep working. A package with it is the realm's: the screens below
+An optional presentation file, N3FE version 29, engine 42 (so wire 30), at most
+256 MiB (RQ-183: the cook, the client and the server each refuse a larger one).
+Its layout, bounds and the action set are in `content/front-end.md`. The client
+treats it as optional: **a package without it gets today's panels**, which is how
+`demo` and every test fixture keep working. A package with it is the realm's: the screens below
 replace the panels when the client has a Discord realm config.
 
 - **Screens.** Five node lists in draw order (login, select, create, loading,
@@ -561,6 +562,12 @@ CPU (`make test`):
    each case `content/front-end.md` item 8 names; `tests/front_end.cpp` checks
    that each build dresses the new character in its row's specialty and that a
    build-less click keeps it.
+   RQ-183 (the 256 MiB bound): the loader takes a synthetic file past 64 MiB and
+   refuses one a byte past 256 MiB for its size (`tests/front_end.py`); the package
+   cook, the client's release load and the server's take a package whose file is
+   past 64 MiB, both release loads take one of exactly 256 MiB, and each of the
+   three refuses one a byte past for its size (`tests/front_end_bound.py`, synthetic,
+   under `build/`).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.

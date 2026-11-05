@@ -151,7 +151,47 @@ pub struct Release {
     pub create: Option<std::sync::Arc<crate::create::Policy>>,
 }
 /// front-end.bin's bound (spec 11; tools/assetc/main.py FRONT_END_FILE).
-pub const MAX_FRONT_END_ASSET: u64 = 64 * 1024 * 1024;
+/// RQ-182/RQ-183: 256 MiB, for every race's create model and El Morad's
+/// select (content/front-end.md). The server hashes it in blocks and reads
+/// only its header.
+pub const MAX_FRONT_END_ASSET: u64 = 256 * 1024 * 1024;
+/// A file's length, SHA-256 and first four bytes, read in 1 MiB blocks within
+/// `limit` (RQ-183: front-end.bin is hashed without holding it).
+pub fn hash_file(path: &Path, limit: u64) -> Result<(u64, [u8; 32], Vec<u8>)> {
+    use std::io::Read;
+    if fs::metadata(path)?.len() > limit {
+        return Err(bad("file bound"));
+    }
+    // A file grown since the check stops at the bound and fails it.
+    let mut f = fs::File::open(path)?.take(limit + 1);
+    let mut hasher = openssl::sha::Sha256::new();
+    let mut block = vec![0u8; 1 << 20];
+    let (mut n, mut head) = (0u64, Vec::with_capacity(4));
+    loop {
+        let k = match f.read(&mut block) {
+            Ok(0) => break,
+            Ok(k) => k,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(e) => return Err(e.into()),
+        };
+        if head.len() < 4 {
+            head.extend_from_slice(&block[..k.min(4 - head.len())]);
+        }
+        hasher.update(&block[..k]);
+        n += k as u64;
+    }
+    if n > limit {
+        return Err(bad("file bound"));
+    }
+    Ok((n, hasher.finish(), head))
+}
+/// The first `n` bytes of a file (fewer if it is shorter).
+fn read_head(path: &Path, n: u64) -> Result<Reader> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    fs::File::open(path)?.take(n).read_to_end(&mut bytes)?;
+    Ok(Reader::from_bytes(bytes))
+}
 pub fn load(root: &Path) -> Result<Release> {
     let mut r = Reader::open(&root.join("release.bin"))?;
     let hash = sha256(&r.bytes)
@@ -225,12 +265,20 @@ pub fn load(root: &Path) -> Result<Release> {
         if path.parent() != Some(root.as_path()) {
             return Err(bad("asset containment"));
         }
+        // RQ-183: front-end.bin, up to 256 MiB that the server never
+        // interprets past its header, is hashed in blocks.
+        if name == "front-end.bin" {
+            let (bytes, digest, _) = hash_file(&path, MAX_FRONT_END_ASSET)?;
+            if bytes != size as u64 || digest.as_slice() != hash {
+                return Err(bad("asset hash/length mismatch"));
+            }
+            assets.insert(name, hash);
+            continue;
+        }
         let f = Reader::open_bounded(
             &path,
             if name == "render-detail.bin" {
                 128 * 1024 * 1024
-            } else if name == "front-end.bin" {
-                MAX_FRONT_END_ASSET
             } else if name == "world.bin" {
                 MAX_CHUNKED_WORLD_ASSET
             } else if name == "world-textures.bin" {
@@ -492,16 +540,14 @@ pub fn load(root: &Path) -> Result<Release> {
     if files.remove("audio.bin") && (engine < 33 || !presentation) {
         return Err(bad("audio compatibility"));
     }
-    // Spec 11: the server reads only front-end.bin's header, for the slot
-    // count; the client reads the rest.
+    // Spec 11: the server reads only front-end.bin's header (magic, version
+    // and slot count; hashed in blocks above), for the slot count; the
+    // client reads the rest.
     let character_slots = if files.remove("front-end.bin") {
         if engine < 42 || !presentation {
             return Err(bad("front end compatibility"));
         }
-        front_end_slots(Reader::open_bounded(
-            &root.join("front-end.bin"),
-            MAX_FRONT_END_ASSET,
-        )?)?
+        front_end_slots(read_head(&root.join("front-end.bin"), FRONT_END_HEADER)?)?
     } else {
         8
     };
@@ -972,6 +1018,8 @@ impl Release {
 /// RQ-145's create nodes drawn until a class is clicked, RQ-133's nodes
 /// drawn until the race is chosen and RQ-130's create race and class
 /// choices) and the character slot count, 1 to 3.
+/// The bytes of front-end.bin the server reads: magic, version, slot count.
+const FRONT_END_HEADER: u64 = 12;
 fn front_end_slots(mut p: Reader) -> Result<u32> {
     if p.take(4)? != b"N3FE" || p.u()? != 29 {
         return Err(bad("front end magic/version"));
@@ -1115,6 +1163,49 @@ mod front_end_tests {
             front_end_slots(Reader::from_bytes(b"N3FE\x1a\0\0".to_vec())).is_err(),
             "truncated"
         );
+    }
+    // RQ-183: front-end.bin up to 256 MiB, hashed in 1 MiB blocks (the
+    // digest of the whole file), its slot count from the header alone. The
+    // files are sparse: no 256 MiB is written.
+    #[test]
+    fn hashes_in_blocks_within_the_bound_and_reads_only_the_header() {
+        use super::{hash_file, read_head, FRONT_END_HEADER, MAX_FRONT_END_ASSET};
+        assert_eq!(MAX_FRONT_END_ASSET, 256 << 20);
+        let path =
+            std::env::temp_dir().join(format!("n3e-front-end-bound-{}.bin", std::process::id()));
+        let mut head = b"N3FE".to_vec();
+        for v in [29u32, 3, 1024, 768] {
+            head.extend_from_slice(&v.to_le_bytes());
+        }
+        let write = |len: u64, tail: &[u8]| {
+            let mut bytes = head.clone();
+            bytes.extend_from_slice(&[7; 3 << 20]);
+            bytes.extend_from_slice(tail);
+            std::fs::write(&path, &bytes).unwrap();
+            let f = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+            f.set_len(len).unwrap();
+            bytes
+        };
+        // A block boundary falls inside the written bytes: the digest is the
+        // whole file's.
+        let small = write(head.len() as u64 + (3 << 20) + 5, b"tail!");
+        let (n, digest, magic) = hash_file(&path, MAX_FRONT_END_ASSET).unwrap();
+        let whole = openssl::sha::sha256(&small);
+        assert_eq!(
+            (n, digest, magic.as_slice()),
+            (small.len() as u64, whole, &b"N3FE"[..])
+        );
+        for len in [(64 << 20) + 1, MAX_FRONT_END_ASSET] {
+            write(len, b"");
+            let (n, _, magic) = hash_file(&path, MAX_FRONT_END_ASSET).unwrap();
+            assert_eq!((n, magic.as_slice()), (len, &b"N3FE"[..]));
+            let header = read_head(&path, FRONT_END_HEADER).unwrap();
+            assert_eq!(front_end_slots(header).unwrap(), 3);
+        }
+        write(MAX_FRONT_END_ASSET + 1, b"");
+        let error = hash_file(&path, MAX_FRONT_END_ASSET).unwrap_err();
+        assert_eq!(error.to_string(), "file bound");
+        std::fs::remove_file(&path).unwrap();
     }
 }
 #[cfg(test)]

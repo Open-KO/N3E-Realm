@@ -278,7 +278,8 @@ MAX_NODES = 1024
 MAX_TEXTURES = 256
 MAX_FONTS = 8
 MAX_TEXT = 1024
-MAX_FILE = 64 * 1024 * 1024
+# RQ-183: main.FRONT_END_FILE, the loaders' kFrontEndFile and MAX_FRONT_END_ASSET.
+MAX_FILE = 256 * 1024 * 1024
 # The logo screen (version 9, RQ-101; 1264's logo procedure, Init 005fa500 and
 # Tick 005fa7c0, its UI's Load 00601140, Tick 00601360, Render 00600ce0 and
 # OnKeyPress 00601480). Its layout draws groups, images and strings and binds

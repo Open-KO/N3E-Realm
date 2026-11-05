@@ -37,9 +37,13 @@ dress, the chosen create table's parts and hand plugs (version 29, RQ-176).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
-`load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
-its header. A package with it is engine 42, so wire 30 (as engines 38–41). Its bound is
-64 MiB (`FRONT_END_FILE`, `MAX_FRONT_END_ASSET`, `kFrontEndFile`), since it holds
+`load_front_end` (`client/assets/assets.cpp`) reads it whole when the window
+opens. Both release loads hash it in 1 MiB blocks without holding it, and the server
+then reads only its first 12 bytes (magic, version and slot count) for the slot
+count (RQ-183). A package with it is engine 42, so wire 30 (as engines 38–41). Its
+bound is 256 MiB (RQ-183: `ko_front_end.MAX_FILE` and `FRONT_END_FILE` in the cook,
+`kFrontEndFile` in the client, `MAX_FRONT_END_ASSET` in the server; a file a byte
+past it is refused by each), since it holds
 the character models and the UI art (Moradon's 1097 choice: 58,460,464 bytes with
 three create models, RQ-158, its race and class buttons, RQ-172, its stat
 arrows, RQ-173, its create models' four faces and three hairs, RQ-174, its
@@ -70,7 +74,7 @@ select hall (the 1097 choice's `el_chairs`, about 5.1 MB as `ka_chairs` is; the
 its object files are missing from the pinned tree), its select character and the
 nation select's art: about 75–77 MB and 102–108 MB, before any per-race select
 model RQ-005 carries here. Compressed with zstd -3 the two files are 26.0 and
-16.7 MB today. RQ-182's choice, filed as its own item: raise the bound to
+16.7 MB today. RQ-182's choice, made by RQ-183: raise the bound from 64 MiB to
 256 MiB rather than split the file or compress its textures, since no byte of
 the file changes, the engine already reads files of that order whole
 (`render-detail.bin` 128 MiB, `world-textures.bin` 384 MiB), a bound on the

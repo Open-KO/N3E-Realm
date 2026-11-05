@@ -94,9 +94,10 @@ N3C1_POINTS = 196608
 N3C2_MAX_EXTENT = 4096
 N3C2_MAX_OBJECT_POINTS = 393216
 DIAGONALS = ("fixed", "alternating", "alternating-mirrored")
-# Spec 11: front-end.bin carries two character models and the UI art, so it
-# has its own bound (client/assets/assets.cpp kFrontEndFile).
-FRONT_END_FILE = 64 * 1024 * 1024
+# Spec 11: front-end.bin carries the create models and the UI art, so it has
+# its own bound (client/assets/assets.h kFrontEndFile, server/src/content.rs
+# MAX_FRONT_END_ASSET); 256 MiB since RQ-183 (content/front-end.md).
+FRONT_END_FILE = 256 * 1024 * 1024
 
 
 def nondegenerate(points):

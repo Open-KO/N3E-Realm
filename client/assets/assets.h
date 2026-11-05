@@ -884,7 +884,8 @@ struct Hud {
 };
 Hud load_hud(const Release &release);
 // Spec 11's KO front end (content/front-end.md, tools/assetc/ko_front_end.py).
-inline constexpr size_t kFrontEndFile = 64 * 1024 * 1024;
+// RQ-183: 256 MiB; load_release hashes it in blocks, load_front_end reads it whole.
+inline constexpr size_t kFrontEndFile = 256 * 1024 * 1024;
 // title is version 10's (RQ-102); login_closed version 12's (RQ-108): a login
 // screen node drawn only while the login group is not (a login waiting for its
 // answer, and the realm list; render/front_end.h View::visible). Version 13

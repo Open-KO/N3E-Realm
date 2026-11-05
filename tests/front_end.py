@@ -1355,8 +1355,9 @@ def blob(version=29, slots=1, screen_data=None, font_index=None, light=None, plu
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0),
-         creates=None, choices=u(0) + u(0), stats=u(0) + u(0xFFFFFFFF) + u(0), descriptions=None):
-    tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
+         creates=None, choices=u(0) + u(0), stats=u(0) + u(0xFFFFFFFF) + u(0), descriptions=None, more_size=1):
+    more = (more_size, more_size, bytes(more_size * more_size * 4))
+    tex = [(w, h, rgba) for w, h, rgba in textures.list] + [more] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
     out += u(1) + u(len(tex) - 1 if font_index is None else font_index) + u(16) + u(12) + u(4) + f([6] * 95)
@@ -3160,3 +3161,33 @@ try:
           "create's %d nodes where 1298 puts them" % (checked, bar_checked))
 finally:
     shutil.rmtree(work)
+
+# --- RQ-183: the 256 MiB bound ------------------------------------------------------
+# The loader on a front-end.bin past the old 64 MiB (seventeen more 1024x1024
+# textures), on one exactly 256 MiB (a hole of zeros: refused for its magic,
+# not its size) and on one a byte past (refused for its size). The cook's bound
+# is ko_front_end.MAX_FILE; the package cook and both release loads are
+# tests/front_end_bound.py's. Under build/, removed after.
+assert fe.MAX_FILE == 256 << 20, fe.MAX_FILE
+big = blob(more_textures=17, more_size=1024)
+assert 64 << 20 < len(big) <= fe.MAX_FILE, len(big)
+(ROOT / "build").mkdir(exist_ok=True)
+with tempfile.TemporaryDirectory(dir=ROOT / "build", prefix="front-end-bound-") as td:
+    sized = {"ok-big": None, "bad-at-bound": fe.MAX_FILE, "bad-past-bound": fe.MAX_FILE + 1}
+    args = []
+    for name, size in sized.items():
+        (pathlib.Path(td) / name).mkdir()
+        with open(pathlib.Path(td) / name / "front-end.bin", "wb") as out:
+            if size is None:
+                out.write(big)
+            else:
+                out.truncate(size)
+        args += [name.split("-")[0], str(pathlib.Path(td) / name)]
+    del big
+    run = subprocess.run([str(ROOT / "build/client/n3e-front-end-check"), *args], capture_output=True, text=True)
+    assert run.returncode == 0 and "PASS front-end loader: 1 loaded, 2 refused" in run.stdout, run.stdout + run.stderr
+    refusals = {l.split(":")[0][len("refused "):]: l for l in run.stdout.splitlines() if l.startswith("refused ")}
+    assert "asset file bound" not in refusals["bad-at-bound"], refusals
+    assert "asset file bound" in refusals["bad-past-bound"], refusals
+print("PASS front-end loader bound: a file past 64 MiB loaded, one of 256 MiB read (refused for its magic), one a "
+      "byte past refused for its size")

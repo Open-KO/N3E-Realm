@@ -973,7 +973,7 @@ its fixed race's model as the fixed specialty. A dress with a helmet is refused 
 the cook (Q115). The 1097 choice's `front-end.bin` grows from 57,419,400 to
 58,460,464 bytes, the 1298 recipe's from 59,299,044 to 61,843,732 (within the
 64 MiB bound, 5.2 MiB to spare for the races RQ-165 and RQ-006 add, whose dress
-parts take room too). The package hash changes, so the hosted realm's next deploy is
+parts take room too; RQ-183 raised the bound to 256 MiB). The package hash changes, so the hosted realm's next deploy is
 a new realm (Q63).
 
 **The size of every race's create model (RQ-182; local-asset, the pinned tree).**

@@ -652,7 +652,15 @@ Release load_release(const std::filesystem::path &root) {
       need(magic == "N3WO", "world overlay magic");
       continue;
     }
-    Reader f(path, name == "render-detail.bin" ? 128 * 1024 * 1024 : name == "front-end.bin" ? kFrontEndFile : 16 * 1024 * 1024);
+    // Spec 11's front end (RQ-183): up to 256 MiB, hashed in blocks too;
+    // load_front_end reads it whole when the window opens.
+    if (name == "front-end.bin") {
+      auto [bytes, digest, head] = hash_file(path, kFrontEndFile);
+      (void)head;
+      need(bytes == size && digest == hash, "asset size/hash mismatch");
+      continue;
+    }
+    Reader f(path, name == "render-detail.bin" ? 128 * 1024 * 1024 : 16 * 1024 * 1024);
     need(f.b.size() == size && sha(f.b) == hash, "asset size/hash mismatch");
   }
   r.end();

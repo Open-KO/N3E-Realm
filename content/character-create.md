@@ -727,6 +727,14 @@ kind, and the realm's equipment rule has no class (RQ-162, RQ-007). RQ-154 cooks
 offered specialty's set into `create.bin` (below); the weapon is checked, not cooked,
 and stays in the bag as the package's starting blade does.
 
+Items the cook itself adds to the package's `starting` items (the opt-in
+`--glow-2233` cook's Azagai and its grades, its arrows and its 2145 armour, granted at
+start: `tools/assetc/ko_chrplug_2145.py`) join each of the package's `starting` sets
+after the set's own items, an item the set already names keeping the set's count, and
+are checked with them (RQ-178). Moradon's set so still holds every starting item the
+cooked package grants, as before RQ-160. A realm owner's `create.items` group replaces
+the package's set and gets none of them.
+
 ## Start and starting items (RQ-154, Q96)
 
 KO's operator procedure starts every character in zone 21, Moradon, at (312, 402),

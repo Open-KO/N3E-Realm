@@ -30,7 +30,11 @@ package's spawn; Q96) and the `items` some specialties start with instead of
 the package's (Q96: groups as `starting`'s, a group's items possibly none, as
 KO's operator gives none, and its weapon possibly null). `starting` merges the
 two and checks every set; `complete` cooks them into the `create` section
-(create.bin version 2, RQ-154).
+(create.bin version 2, RQ-154). Items the cook itself adds to the package's
+starting items (`added`: the 2233 / 2145 additions' bow, arrows and armour,
+tools/assetc/ko_chrplug_2145.py) join each of the package's `starting` sets, as
+they join its `starting` items (RQ-178); a realm owner's set replaces the
+package's and gets none of them.
 
 `plan` checks both files and resolves the choice before any KO file is read;
 `build` reads the table and texts and returns the manifest's `create` section
@@ -391,12 +395,19 @@ def dress(chosen, assets, races=None):
     return out
 
 
-def starting(chosen, manifest):
+def starting(chosen, manifest, added=()):
     """Each specialty's starting set (RQ-160, RQ-154, Q96 (b)): {specialty:
     {items: [[item, count], ...], weapon}}: the package's `starting`, each
     specialty a realm owner's `create.items` group names taking that group's
     instead; or None when neither names a set (every specialty starts with the
     package's `starting` items). `complete` cooks it into create.bin.
+
+    `added` ([[item, count], ...]) are the starting items the cook adds to the
+    package's bag beyond its source's (ko_bake's additions): each of the
+    package's own sets carries them after its items, an item the set already
+    names keeping the set's count (RQ-178), so Moradon's set (its source's
+    `starting` items) still holds every starting item the cooked package
+    grants. A realm owner's set does not.
 
     Checked against the package `manifest`'s inventory, equipment and wear
     (features.json and what the cook adds): each item is in the bag and not
@@ -411,7 +422,10 @@ def starting(chosen, manifest):
     and their stat floors, content/character-create.md, "Starting items".)
     Refuses a set that does not."""
     r = chosen["rules"]
-    sets = [(SOURCE + " starting", g) for g in r["starting"] or []] + \
+    def joined(g):
+        named = {item for item, _ in g["items"]}
+        return dict(g, items=[list(i) for i in g["items"]] + [list(i) for i in added if i[0] not in named])
+    sets = [(SOURCE + " starting", joined(g)) for g in r["starting"] or []] + \
         [("%s create.items" % front_end_choice.CONFIG, g) for g in chosen.get("items", [])]
     if not sets:
         return None
@@ -450,7 +464,7 @@ def starting(chosen, manifest):
     return out
 
 
-def complete(section, report, chosen, manifest, zone, extent):
+def complete(section, report, chosen, manifest, zone, extent, added=()):
     """Adds the realm owner's start and each specialty's starting items to the
     manifest's `create` section (`build`'s) and the start to its provenance
     `report` (RQ-154, Q96). The start's `zone` must be the package's zone
@@ -458,8 +472,9 @@ def complete(section, report, chosen, manifest, zone, extent):
     of `extent` metres a side; it is cooked as engine metres (KO's x and z
     from the map's corner, ko_start's rule: x - half, half - z), the server
     refusing a start off the ground. Each specialty the section's races offer
-    gets its set from `starting` (the weapon is checked there, not cooked);
-    without one it starts with the package's `starting` items."""
+    gets its set from `starting` (the weapon is checked there, not cooked;
+    `added` as `starting` takes it); without one it starts with the package's
+    `starting` items."""
     start = chosen.get("start")
     if start is not None:
         path = "%s create.start" % front_end_choice.CONFIG
@@ -471,7 +486,7 @@ def complete(section, report, chosen, manifest, zone, extent):
         half = extent / 2.0
         section["start"] = [float(x - half), float(half - z)]
         report["start"] = dict(zone=zone, position=[x, z], engine=section["start"])
-    kits = starting(chosen, manifest)
+    kits = starting(chosen, manifest, added)
     if kits is not None:
         # One kit per specialty, in the order the offered races first name it:
         # KO's races share specialty ids (the Tuarek's 104 is the Puri Tuarek's).

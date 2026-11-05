@@ -480,8 +480,35 @@ for group, expect in [(dict(POTIONS, weapon="demo:item/potion"), "realm-config.j
         raise AssertionError("started (%s)" % expect)
     except front_end_choice.Refused as error:
         assert expect in str(error), (expect, str(error))
+# RQ-178: the starting items the cook adds (the glow cook's bow, arrows and
+# armour) join each of the package's sets after its items, a set's own count
+# kept; a realm owner's set gets none, and they are checked as the set's own.
+BOW = dict(id="demo:item/bow", label="Bow", stack_limit=1, durability=0, starting=1)
+ARROW = dict(id="demo:item/arrow", label="Arrow", stack_limit=9999, durability=0, starting=100)
+ADDED = [["demo:item/bow", 1], ["demo:item/arrow", 100], ["demo:item/potion", 7]]
+GROWN = dict(PACKAGE, inventory=dict(PACKAGE["inventory"], items=PACKAGE["inventory"]["items"] + [BOW, ARROW]))
+joined = ko_create.starting(plan, GROWN, ADDED)
+assert all(k == dict(items=kit + ADDED[:2], weapon="demo:item/blade") for k in joined.values()), joined
+assert ko_create.starting(plan, PACKAGE) == kits, "no additions leave the package's sets as they are"
+mine = ko_create.starting(dict(plan, items=[NONE, POTIONS]), GROWN, ADDED)
+assert mine[104] == dict(items=[], weapon=None) and mine[102]["items"] == POTIONS["items"], mine
+assert all(mine[s] == joined[s] for s in joined if s not in (102, 104)), mine
+assert ko_create.starting(dict(plan, rules=dict(rules, starting=None)), GROWN, ADDED) is None
+try:
+    ko_create.starting(plan, PACKAGE, ADDED[:1])
+    raise AssertionError("started with an item the bag lacks")
+except front_end_choice.Refused as error:
+    assert "item demo:item/bow is not in the package's inventory" in str(error), str(error)
+try:
+    # 9 stacks and 8 reward slots fit 18; with the two added, 11 do not.
+    small = dict(GROWN, inventory=dict(GROWN["inventory"], capacity=18))
+    assert ko_create.starting(plan, small) == kits
+    ko_create.starting(plan, small, ADDED)
+    raise AssertionError("started past the bag")
+except front_end_choice.Refused as error:
+    assert "do not fit the bag of 18" in str(error), str(error)
 print("PASS starting items: each specialty's set in the package's bag, its weapon one the player may wear; "
-      "a realm owner's create.items replaces it")
+      "the cook's added starting items join the package's sets; a realm owner's create.items replaces it")
 
 # --- RQ-154: the start and the items cooked into the create section -----------------
 base, base_report = ko_create.build(plan, good)

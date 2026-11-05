@@ -296,6 +296,10 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         if spawn is None:raise ValueError('feature integration needs surveyed spawn')
         import moradon_features, ko_loot_model, ko_target_marker
         report['features']=moradon_features.apply(root,manifest,characters,spawn,heightfield,triangles,player,layout)
+        # RQ-178: the bag items of the package's source, before the cook's
+        # additions grant their own starting items (the glow cook's bow, arrows
+        # and armour), which join each of the package's starting sets below.
+        source_items={i['id'] for i in manifest['inventory']['items']}
         item_icons=presented=None
         if not glow:
             # PQ-361 (D-196): the default feature cooks draw 1298's tooltip head
@@ -500,8 +504,11 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
             # or the realm owner's create.items) fits the package's bag and names
             # a weapon its player may wear, and is cooked with the realm owner's
             # create.start, KO's zone and map position, into create.bin.
+            # RQ-178: the starting items the cook added join the package's sets.
+            added=[[i['id'],i['starting']] for i in manifest['inventory']['items']
+                   if i['starting'] and i['id'] not in source_items]
             ko_create.complete(manifest['create'],report['create'],front['create'],manifest,
-                               zone['zone_id'],report['extent_metres'])
+                               zone['zone_id'],report['extent_metres'],added)
         if des:
             # Exploration: Demon's Souls characters from the user's own dump (moradon_des.py).
             import moradon_des

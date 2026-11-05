@@ -27,22 +27,25 @@ chosen (version 22, RQ-133), create's nodes drawn until a class is clicked,
 again from each open and each race click that builds (version 23, RQ-145), a
 create model per race the package's create rules name (version 24, RQ-158), and
 create's race and class buttons bound to KO's codes, each class button with its
-stand-in image and the stat labels its click marks (version 25, RQ-172).
+stand-in image and the stat labels its click marks (version 25, RQ-172), and
+create's stat arrows, their values and the points left, with a message for
+points left at Create (version 26, RQ-173).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
 its header. A package with it is engine 42, so wire 30 (as engines 38–41). Its bound is
 64 MiB (`FRONT_END_FILE`, `MAX_FRONT_END_ASSET`, `kFrontEndFile`), since it holds
-the character models and the UI art (Moradon's 1097 choice: 56,348,696 bytes with
-three create models, RQ-158, and its race and class buttons, RQ-172).
+the character models and the UI art (Moradon's 1097 choice: 56,348,916 bytes with
+three create models, RQ-158, its race and class buttons, RQ-172, and its stat
+arrows, RQ-173).
 
 Integers are little-endian u32, reals f32; strings are a u32 length and that many
 bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 25, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 26, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -173,7 +176,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    when the screen ends, as 1264 connects from its login; a message raised
    while it shows (the latest) waits for the login. A reset connection leaves
    the screen playing.
-11. The messages (version 10, RQ-102, Q81): a count (0–13, at most one per
+11. The messages (version 10, RQ-102, Q81): a count (0–14, at most one per
    message) and each: the message (an index of the closed set below, each
    once), its title (≤1024 ASCII bytes, may be empty), whether its text
    replaces the client's own wording (0 or 1) and that text (≤1024 ASCII
@@ -192,7 +195,8 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    `btn_exit`, 1264's `bt_exit`; named, it makes the select ask, "Actions" below),
    and (version 21, RQ-130) 11 `create_no_race` (create before its race is
    clicked: 1298's `005fffd0` code 7) and 12 `create_no_class` (before its
-   class is: code 9). The client shows a message in the message box
+   class is: code 9), and (version 26, RQ-173) 13 `create_points_left` (stat
+   points still to spend: code 10). The client shows a message in the message box
    with the package's title in the node bound to `title` (empty for a message
    the package does not name) and the package's text where it replaces, its
    own wording otherwise. The cook writes the recipe's `messages` (below): a
@@ -266,6 +270,16 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    button's, every node with flag 16 or 32 some class's label, and at most one
    race and one class button is fixed on (chosen at each open). The client's
    use is "Actions" below.
+15. Create's stat arrows (version 26, RQ-173; `client/render/create_choice.h`;
+   `specs/KO-FINDINGS.md` §10.4, binary): a stat count (≤8; the cook
+   writes the package's create rules' count), each its value text (a create text
+   node bound to `create_stat`), its left arrow (a create button bound to
+   `create_stat_down`) and its right arrow (`create_stat_up`), in the rules'
+   stat order and each node once; then the points text (a create text node
+   bound to `create_points`; `0xffffffff` without stats) and the row (0 the
+   race's, as 1264's, 1 the race's and class's, as 1298's; 0 without stats).
+   Every node bound to those four actions is one stat's or the points text.
+   The client's use is "Actions" below.
 
 The client samples as KO sets its devices: UIF images with point sampling on whole
 screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
@@ -446,7 +460,7 @@ address mode); the font atlases and the moon linear.
   and ambient (3 reals each), a vertex count (1–65536) of 8 reals (position,
   normal, uv), an index count (a multiple of 3, ≤196608), the indices.
 
-The loader refuses (version 25) a create model count outside 1–32, a create race
+The loader refuses (version 26) a create model count outside 1–32, a create race
 outside 1–65535 or named twice, an unknown action, a screen missing one of its required
 actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
 `realm_connect`; select: `select_prev`, `select_next`, `back`, `exit` and an
@@ -454,7 +468,8 @@ info text, `char_info` or (version 13) any of `char_name`, `char_level` and
 `char_class`; create: `create_confirm`, `back`, `name_field` and (version 19)
 `char_view` unless create draws over the hall, where it is refused;
 loading: `progress`; message: `message`, `ok`), an action bound twice in a
-screen (but `create_race` and `create_class`, version 25), an unknown turn mode, paths in the rotate mode, a path outside the slots
+screen (but `create_race` and `create_class`, version 25, and
+`create_stat_down`, `create_stat_up` and `create_stat`, version 26), an unknown turn mode, paths in the rotate mode, a path outside the slots
 or from a slot to itself, an entry path not to slot 0, a from and to pair twice,
 the path mode without its entry path or a way between neighbours, a hall with
 a zone, a zone mesh's flags other than above, fog values outside their bounds
@@ -469,7 +484,11 @@ or `create_class` on a screen other than create, or one that is not a button
 or is fixed disabled (version 21; fixed on is a choice at each open since
 version 25), a node flag above 63 or with flag 8 (version 25), flags 16 and 32
 together, on a screen other than create or on the logo screen, item 14's
-bounds and references above (version 25), a select ESC other than 0, 1 or
+bounds and references above (version 25), a node bound to `create_stat_down`,
+`create_stat_up`, `create_stat` or `create_points` on a screen other than
+create, an arrow that is not a button or is fixed on or disabled, a value or
+points text that is not a text node, item 15's bounds and references above
+(version 26), a select ESC other than 0, 1 or
 2 (version 15; 2 since version 16), a select Back other than 0 or 1 (version
 17), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
@@ -538,7 +557,7 @@ builds it on a click that changes either value, puts it by the camera's slot
 `+0x38c`: a race clicked while the camera flies stands at the slot the flight
 left). Until a class is chosen the build takes the race button's default
 specialty for the race's stat row (`005fd120`), which the stat values show
-(RQ-173).
+(RQ-173, below).
 
 The class column (version 25, RQ-172, binary): before a race is chosen every
 class button draws over its stand-in image (1298's reset `006066b0` by
@@ -566,20 +585,41 @@ while it does (1264's `0043ee10` shows the clicked class's two pink `img_*`:
 warrior `img_str`, `img_sta`; rogue `img_sta`, `img_dex`; mage `img_int`,
 `img_map`; priest `img_str`, `img_int`).
 
+The stat arrows (version 26, RQ-173, item 15; `specs/KO-FINDINGS.md` §10.4,
+binary: 1298's `00604f90`, `005fd120`, `00605950`, 1264's `0043dfc0`,
+`00439970`, `0043ea10`), create screen only, with the package's create rules:
+each open starts with no points and the value and points texts empty (1298's
+reset `006066b0`; the points a Cancel leaves are not kept, Q111). Each build
+takes the stat row (row 0: the race's with the chosen class or the race
+button's default; row 1, 1298's: the same, the build happening on a class
+click that changes the class too) and writes its stats as the values and its
+bonus as the points left, so every build resets the points spent; a build is
+an open with the race chosen, a race click that changes the race and (row 1)
+a class click that changes the class with a race chosen. A right arrow
+(`create_stat_up`) moves a point into its stat while any is left, with or
+without a class; a left arrow (`create_stat_down`) takes one back while fewer
+than the bonus are left and the stat is above the last build's row (1264's
+one row for the race; 1298's for the race and class, every change of either
+building), in row 1 only with a class chosen (1298's lookup by race and class
+finds none for class −1). The value texts (`create_stat`) and the
+points text (`create_points`) show the numbers once a build has written them
+(1298's `SetStringAsInt`), empty before.
+
 `create_confirm` then refuses, in `005fffd0`'s order (1264's `0043a340`), an
 empty name (`create_name`), no race (`create_no_race`), no class
-(`create_no_class`) and (RQ-004) a name the package's rule refuses
+(`create_no_class`), (version 26, RQ-173) with stat arrows, points left
+(`create_points_left`, code 10) and (RQ-004) a name the package's rule refuses
 (`create_refused`, in the package's wording of the server's name refusal),
 each in the message box; then (RQ-172) the chosen race and specialty with the
 face, hair and stats it would send, as the server's `Policy::choice` checks
 them (`create_choice_refusal`, Q95: a race or specialty the package does not
 offer is `create_refused` in the package's wording of the server's mismatch
 refusal); otherwise it sends the create: the chosen race and specialty, the
-package's fixed face and hair and its fixed choice's points on the chosen
-specialty's base stats (until RQ-173 and RQ-174 add the arrows; Q110), in the
-first free slot. The client's own wording for the two is "Choose a race." and
-"Choose a class.". A create that binds neither keeps race and class chosen
-from the open and the new character at the slot in focus, and sends the
+package's fixed face and hair (until RQ-174) and the stats the arrows chose
+(without arrows, the fixed choice's points on the chosen specialty's base
+stats; Q110), in the first free slot. The client's own wording for the three
+is "Choose a race.", "Choose a class." and "Spend the stat points left.". A
+create that binds neither keeps race and class chosen from the open and the new character at the slot in focus, and sends the
 package's fixed choice (Q100), as before version 21.
 
 The recipe binds the buttons in the create screen's `races` (`{"<node>":
@@ -601,6 +641,18 @@ are the recipe's to leave unbound (Q109 (a): fixed disabled, or the 1097
 choice's Puri Tuarek unfixed and unbound, Q90). Version 22's `until_race` and
 23's `until_class` are refused: the class buttons' images and labels do their
 work.
+
+The recipe binds the stat arrows in the create screen's `stats` (`[{"value":
+"<node>", "down": "<node>", "up": "<node>"}, ...]`, in the package's
+`character-create.json` stat order), `points` (the points text's node) and
+`stat_row` (`race` or `class`, item 15's row), all three or none, not in
+`bindings`; an arrow takes no fixed state. The cook refuses them on another
+screen, one without the others, more than 8 stats, a stat that is not exactly
+those three keys, a node bound, hidden, fixed or named twice, a value or
+points node that is not a text or an arrow that is not a button, a node they
+name that draws nothing, an unknown `stat_row`, and (with the package's create
+rules) a stat count other than the rules', stats without race buttons, or
+stats without the package's create rules.
 
 A recipe screen's `states` fixes a node's button state: `on` and `disabled` are
 flags 1 and 2. `down` (RQ-138, Q89 (b), `specs/KO-FINDINGS.md` §9.16, binary) is
@@ -851,9 +903,19 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   Load `00603850` keeps them in the order str, dex, sta, int, map, and
   `006062d0` hides flags 0 and 2, 1 and 2, 3 and 4, 0 and 3), `class_labels`
   `hide`; states: the other races (Q109 (a): their textured disabled tiles,
-  the Puri Tuarek's too), face, hair and the stat arrows disabled, none chosen
-  at the open; hidden: El Morad's three race buttons (Load shows Karus's and
-  hides El Morad's for a Karus player) and `text_bonus`, as the 1097 recipe.
+  the Puri Tuarek's too), face and hair disabled, none chosen at the open;
+  hidden: El Morad's three race buttons (Load shows Karus's and hides El
+  Morad's for a Karus player). (RQ-173, version 26, item 15) `stats` binds
+  `text_str`, `text_sta`, `text_dex`, `text_int` and `text_map` with their
+  `btn_*_left` and `btn_*_right` arrows, `points` `text_bonus`, `stat_row`
+  `class` (`00604f90`'s and `005fd120`'s lookup by race × 10000 + class): the
+  texts are empty from each open until the Tuarek click, which writes its
+  default class's row (102's) and 10 points; a right arrow spends a point
+  before a class too, a left arrow takes one back only with a class; each
+  class click that changes the class writes its row and resets the points;
+  Create says `create_points_left`, row 1913 titled 1901 (`005fffd0` code 10,
+  after codes 7 and 9), until every point is spent, then sends the five
+  stats.
   Each open draws every class button over its `img_*` (`00605950`, by the
   reset `006066b0`), each live, as 1298's are NORMAL before the race click; the
   Tuarek click hides the warrior and mage buttons, their greyed images standing
@@ -1069,9 +1131,16 @@ box and loading are 1264's.
   `0043a340` posts code 9 through `0043a820` (`messages`). Every other race
   (Q109 (a): the Arch and Wrinkle Tuarek fixed disabled; the Puri Tuarek,
   whose disabled image has no texture, unfixed and unbound, its normal grey
-  tile, inert: RQ-139, Q90, "Grey button, as 1264"), the face, hair and stat
-  arrows fixed disabled, the bonus points hidden and the stat values empty
-  (Q52, until RQ-173 and RQ-174).
+  tile, inert: RQ-139, Q90, "Grey button, as 1264") and the face and hair
+  arrows fixed disabled (Q52, until RQ-174). (RQ-173, version 26, item 15)
+  `stats` binds the five `text_*` values and their `btn_*_left` and
+  `btn_*_right` arrows, `points` `text_bonus` (pink, as the layout draws it)
+  and `stat_row` `race` (1264's `0043dfc0` looks the row up by the race alone,
+  and its SetChr `00439970` builds on a race change only): each open, the
+  Tuarek chosen, writes the priest's row and 10 points, a class click builds
+  nothing, and the left arrows work without a class; Create says
+  `create_points_left`, row 1913 titled 1901 (`0043a340` code 10), until every
+  point is spent, then sends the five stats.
 - Loading (`UI_US/co_loading_us.uif`, centred; `Text_Version` at (10, 10)):
   1264's layout when no nation has won the last war (`005f9a30`); the realm has
   no war, so no victor (Q80).

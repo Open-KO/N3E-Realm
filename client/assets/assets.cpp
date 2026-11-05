@@ -2859,7 +2859,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 25, "front end version");
+  need(r.u() == 26, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2921,9 +2921,13 @@ FrontEnd load_front_end(const Release &release) {
       need(action < uint32_t(FrontAction::count), "front end action");
       n.action = FrontAction(action);
       // Version 25 (RQ-172): every race and class button is bound, so those
-      // two actions may be bound more than once.
+      // two actions may be bound more than once; version 26 (RQ-173): so are
+      // each stat's arrows and value text.
       const bool choice = n.action == FrontAction::create_race || n.action == FrontAction::create_class;
-      need(n.action == FrontAction::none || bound.insert(n.action).second || choice, "front end action bound twice");
+      const bool arrow = n.action == FrontAction::create_stat_down || n.action == FrontAction::create_stat_up;
+      need(n.action == FrontAction::none || bound.insert(n.action).second || choice || arrow ||
+               n.action == FrontAction::create_stat,
+           "front end action bound twice");
       n.flags = r.u();
       n.mask = r.u();
       // Flag 8 (version 22's) is gone in version 25.
@@ -2933,6 +2937,13 @@ FrontEnd load_front_end(const Release &release) {
       // at each open.
       need(!choice || (n.kind == FrontNode::BUTTON && !(n.flags & FrontNode::FIXED_DISABLED)),
            "front end create choice");
+      // Version 26 (RQ-173): a stat arrow is a button the player clicks, with
+      // no fixed state; a stat's value and the points left are texts.
+      need(!arrow || (n.kind == FrontNode::BUTTON && !(n.flags & (FrontNode::FIXED_ON | FrontNode::FIXED_DISABLED))),
+           "front end create stat arrow");
+      need((n.action != FrontAction::create_stat && n.action != FrontAction::create_points) ||
+               n.kind == FrontNode::TEXT,
+           "front end create stat text");
       need((n.flags & (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS)) !=
                (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS),
            "front end class label");
@@ -2988,7 +2999,8 @@ FrontEnd load_front_end(const Release &release) {
            "front end screen action unbound");
     // Version 21 (RQ-130): the race and class choices are create's only.
     if (screen != size_t(FrontScreen::create))
-      for (auto action : {FrontAction::create_race, FrontAction::create_class})
+      for (auto action : {FrontAction::create_race, FrontAction::create_class, FrontAction::create_stat_down,
+                          FrontAction::create_stat_up, FrontAction::create_stat, FrontAction::create_points})
         need(!bound.contains(action), "front end create choice off create");
     // Version 25 (RQ-172): a class label is create's (item 14 names it).
     for (const auto &n : fe.screens[screen])
@@ -3467,6 +3479,39 @@ FrontEnd load_front_end(const Release &release) {
   for (auto image : images) need(!race_nodes.contains(image) && !class_nodes.contains(image) && !labels.contains(image),
                                  "front end create class image");
   need(race_presets <= 1 && class_presets <= 1, "front end create choice at open");
+  // 15. Version 26 (RQ-173): create's stat arrows: a stat count (at most 8,
+  // CreateRules::MAX_STATS), each its value text (bound to create_stat) and
+  // its left and right arrows (create_stat_down, create_stat_up), every node
+  // once; then the points text (create_points; none without stats) and the
+  // row (0 the race's, 1 the race's and class's; 0 without stats). Every node
+  // bound to those actions is one stat's, or the points text.
+  const auto stats = r.count(CreateRules::MAX_STATS, 0);
+  std::set<uint32_t> stat_nodes;
+  for (uint32_t i = 0; i < stats; ++i) {
+    FrontCreateStat st;
+    st.value = r.u();
+    st.down = r.u();
+    st.up = r.u();
+    need(bound_to(FrontAction::create_stat, st.value) && bound_to(FrontAction::create_stat_down, st.down) &&
+             bound_to(FrontAction::create_stat_up, st.up) && stat_nodes.insert(st.value).second &&
+             stat_nodes.insert(st.down).second && stat_nodes.insert(st.up).second,
+         "front end create stat");
+    fe.create_stats.stats.push_back(st);
+  }
+  fe.create_stats.points = r.u();
+  const auto row = r.u();
+  need(stats ? bound_to(FrontAction::create_points, fe.create_stats.points) && row <= 1
+             : fe.create_stats.points == FrontCreateClass::kNone && row == 0,
+       "front end create points");
+  fe.create_stats.by_class = row == 1;
+  for (uint32_t i = 0; i < created.size(); ++i) {
+    const auto action = created[i].action;
+    need((action != FrontAction::create_stat && action != FrontAction::create_stat_down &&
+          action != FrontAction::create_stat_up) ||
+             stat_nodes.contains(i),
+         "front end create stat");
+    need(action != FrontAction::create_points || fe.create_stats.points == i, "front end create points");
+  }
   r.end();
   return fe;
 }

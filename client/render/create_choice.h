@@ -39,8 +39,17 @@
 // 0043ee10's), hidden or shown by the package's flag. A race or class button
 // fixed on is chosen at each open (the 1097 choice's Tuarek and priest, Q52,
 // Q89 (b)), its labels marked. Create sends the chosen race and specialty,
-// refused first as the server's Policy::choice would refuse it. No GL;
-// render/front_end.h acts by it and tests/front_end.cpp checks it.
+// refused first as the server's Policy::choice would refuse it. RQ-173
+// (version 26): the stat arrows (content/front-end.md item 15, 1298's
+// 00604f90 and 1264's 0043dfc0, binary): every build writes the stat row's
+// values and its bonus as the points left and the bonus (005fd120, 00439970),
+// so each build resets the points spent; a right arrow moves a point into its
+// stat while any is left, a left arrow takes one back while fewer than the
+// bonus are left and the stat is above the row's (1298's row by race and
+// class, so with no class chosen it has none and does nothing; 1264's by
+// race); Create refuses points left (005fffd0's code 10) and sends the
+// values. No GL; render/front_end.h acts by it and tests/front_end.cpp checks
+// it.
 
 #include "assets/assets.h"
 #include <algorithm>
@@ -131,17 +140,38 @@ struct CreateChoice {
   // The slot the new character stands at, set by the click that built it;
   // -1: the slot in focus (a create chosen from the open).
   int figure = -1;
+  // RQ-173 (version 26): the stat arrows (none: the fixed choice's points,
+  // Q110) and the package's rules their rows are read from.
+  FrontCreateStats arrows;
+  std::optional<CreateRules> stat_rules;
+  // The values the last build wrote and the arrows moved (KO's player
+  // +0x830..., 1264's +0x734...), the points left (the create's +0xb0) and
+  // the bonus the build gave (+0xb4), and whether they are written: from a
+  // build until the next open (1298's reset 006066b0 writes the values and
+  // text_bonus empty; each build's 00605950 writes them).
+  std::vector<uint32_t> stats;
+  uint32_t points = 0, bonus = 0;
+  bool written = false;
+  // The specialty whose row the last build wrote (the left arrows' floor).
+  uint32_t built = 0;
 
-  void bind(std::vector<FrontCreateRace> r, std::vector<FrontCreateClass> c, int race_at_open, int class_at_open) {
+  void bind(std::vector<FrontCreateRace> r, std::vector<FrontCreateClass> c, int race_at_open, int class_at_open,
+            FrontCreateStats s = {}, std::optional<CreateRules> package = std::nullopt) {
     races = std::move(r), classes = std::move(c), race_preset = race_at_open, class_preset = class_at_open;
+    arrows = std::move(s), stat_rules = std::move(package);
     open();
   }
   // Create opens (1298's Init 005fab40 and Cancel 005ffb90 set race and
   // class to -1; 1264's Init 00439550 too): nothing chosen but the package's
   // choice at the open, its class's labels marked (1264's 0043ee10 for it).
+  // RQ-173: no points and no values written (1298's reset 006066b0; the
+  // points left from a Cancel are not kept, Q111), or the choice at the open
+  // built (the 1097 choice's, as 1264's SetChr 00439970 after its clicks).
   void open() {
     race = race_preset, klass = class_preset, marked = class_preset;
     figure = -1;
+    stats.clear(), points = bonus = 0, written = false, built = 0;
+    if (race >= 0) build();
   }
   // Whether create waits for a click before it can be sent (a button with no
   // choice at the open).
@@ -158,17 +188,22 @@ struct CreateChoice {
     const bool changed = race != int(button);
     race = int(button);
     if (!classes.empty()) klass = -1;
-    if (changed) figure = camera_slot, marked = -1;
+    if (changed) figure = camera_slot, marked = -1, build();
   }
   // A click on class button `button`: the class chosen and its labels marked
   // (006062d0, 0043ee10); a class that was not chosen builds the character
   // again, at the camera's slot, once a race is.
+  // RQ-173: with the row by race and class (1298's) that build writes the
+  // class's row; 1264's class click builds nothing (0043ee10).
   void click_class(size_t button, int camera_slot) {
     if (button >= classes.size()) return;
     const bool changed = klass != int(button);
     klass = int(button);
     marked = int(button);
-    if (changed && race >= 0) figure = camera_slot;
+    if (changed && race >= 0) {
+      figure = camera_slot;
+      if (arrows.by_class) build();
+    }
   }
   // Whether the new character stands (a race chosen).
   bool stands() const { return race_chosen(); }
@@ -235,11 +270,54 @@ struct CreateChoice {
   // (its down state, 006060f0 and 006062d0 set UI_STATE_BUTTON_DOWN).
   bool race_down(size_t button) const { return race == int(button); }
   bool class_down(size_t button) const { return klass == int(button); }
+  // RQ-173 (version 26): the rules' row for specialty `code` of the chosen
+  // race, if it has one.
+  const CreateRules::Specialty *stat_row(uint32_t code) const {
+    const auto race_id = race_code();
+    if (!race_id || !stat_rules) return nullptr;
+    const auto *r = create_race(*stat_rules, *race_id);
+    return r ? create_specialty(*r, code) : nullptr;
+  }
+  // A build (1298's 005fd120, 1264's SetChr 00439970): the row of the chosen
+  // class, or with none the race's default (row_specialty), its values
+  // written and its bonus as both the points left and the bonus, so the
+  // points spent are reset; with no row nothing changes (005fd120 writes the
+  // values only when the table has the row).
+  void build() {
+    if (arrows.stats.empty()) return;
+    const auto code = row_specialty(stat_rules);
+    const auto *row = code ? stat_row(*code) : nullptr;
+    if (!row || row->base.size() != arrows.stats.size()) return;
+    stats = row->base, points = bonus = row->bonus, written = true, built = *code;
+  }
+  // A right arrow (00604f90's btn_*_right, 1264's 0043dfc0): one point into
+  // stat `i` while any is left, with or without a class.
+  void stat_up(size_t i) {
+    if (i >= stats.size() || points < 1) return;
+    ++stats[i], --points;
+  }
+  // A left arrow: one point back while fewer than the bonus are left and the
+  // stat is above its row's (1298 looks the row up by the race and the class,
+  // so with no class it has none; 1264 by the race). Each race change builds,
+  // and with 1298's row each class change too, so the row is the last
+  // build's.
+  void stat_down(size_t i) {
+    if (i >= stats.size() || points >= bonus || (arrows.by_class && !class_chosen())) return;
+    const auto *row = stat_row(built);
+    if (!row || i >= row->base.size() || stats[i] <= row->base[i]) return;
+    --stats[i], ++points;
+  }
+  // What stat `i`'s value text and the points text say: the number, or empty
+  // before a build (1298's SetStringAsInt, "%d"; 006066b0's empty string).
+  std::string stat_text(size_t i) const { return written && i < stats.size() ? std::to_string(stats[i]) : ""; }
+  std::string points_text() const { return written ? std::to_string(points) : ""; }
   // What Create refuses, in 005fffd0's order (the empty name first: the
-  // caller's create_name), or nothing.
+  // caller's create_name), or nothing: no race, no class, then (RQ-173)
+  // points left (code 10).
   std::optional<FrontMessage> refusal() const {
     if (!race_chosen()) return FrontMessage::create_no_race;
     if (!class_chosen()) return FrontMessage::create_no_class;
+    if (!arrows.stats.empty() && points > 0) return FrontMessage::create_points_left;
     return std::nullopt;
   }
 };
@@ -247,10 +325,11 @@ struct CreateChoice {
 // The choice create sends with the package's rules (create.bin), in `slot`:
 // the chosen race button's race, else the fixed choice's (Q100); the chosen
 // class's specialty for it, else (no class button) the race button's
-// default or the fixed choice's; the face, hair and points spent of the fixed
-// choice until the screen's arrows choose them (RQ-173, RQ-174), the points
-// added to the chosen specialty's base (none without a fixed choice, a sum
-// the server refuses); race 0, the name alone, without rules or a race (the
+// default or the fixed choice's; the stats the arrows chose (RQ-173), or in a
+// create without them the fixed choice's points spent on the chosen
+// specialty's base (none without a fixed choice, a sum the server refuses);
+// the face and hair of the fixed choice until the screen's arrows choose them
+// (RQ-174, Q110); race 0, the name alone, without rules or a race (the
 // server's own path: a package without create rules creates by name).
 inline CreateRequest create_request(const std::optional<CreateRules> &rules, uint32_t slot,
                                     const CreateChoice &choice = {}) {
@@ -265,6 +344,10 @@ inline CreateRequest create_request(const std::optional<CreateRules> &rules, uin
   else if (choice.classes.empty()) specialty = code ? choice.races[size_t(choice.race)].base : fixed ? fixed->specialty : 0;
   q.slot = slot, q.race = race, q.specialty = specialty;
   if (fixed) q.face = fixed->face, q.hair = fixed->hair;
+  if (!choice.arrows.stats.empty()) {
+    q.stats = choice.stats;
+    return q;
+  }
   const auto *r = create_race(*rules, race);
   const auto *s = r ? create_specialty(*r, specialty) : nullptr;
   const auto *fr = fixed ? create_race(*rules, fixed->race) : nullptr;

@@ -73,19 +73,18 @@
         "btn_face_left": "disabled",
         "btn_face_right": "disabled",
         "btn_hair_left": "disabled",
-        "btn_hair_right": "disabled",
-        "btn_str_left": "disabled",
-        "btn_str_right": "disabled",
-        "btn_sta_left": "disabled",
-        "btn_sta_right": "disabled",
-        "btn_dex_left": "disabled",
-        "btn_dex_right": "disabled",
-        "btn_int_left": "disabled",
-        "btn_int_right": "disabled",
-        "btn_map_left": "disabled",
-        "btn_map_right": "disabled"
+        "btn_hair_right": "disabled"
       },
-      "hidden": ["btn_race_el_ba", "btn_race_el_rm", "btn_race_el_rf", "text_bonus"]
+      "stats": [
+        {"value": "text_str", "down": "btn_str_left", "up": "btn_str_right"},
+        {"value": "text_sta", "down": "btn_sta_left", "up": "btn_sta_right"},
+        {"value": "text_dex", "down": "btn_dex_left", "up": "btn_dex_right"},
+        {"value": "text_int", "down": "btn_int_left", "up": "btn_int_right"},
+        {"value": "text_map", "down": "btn_map_left", "up": "btn_map_right"}
+      ],
+      "points": "text_bonus",
+      "stat_row": "class",
+      "hidden": ["btn_race_el_ba", "btn_race_el_rm", "btn_race_el_rf"]
     },
     "loading": {
       "ui": "UI_US/ka_loading_us.uif",
@@ -111,7 +110,9 @@
     "create_no_race": {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
                        "text": {"table": "Data/Texts_us.tbl", "row": 1908}},
     "create_no_class": {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
-                        "text": {"table": "Data/Texts_us.tbl", "row": 1904}}
+                        "text": {"table": "Data/Texts_us.tbl", "row": 1904}},
+    "create_points_left": {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
+                           "text": {"table": "Data/Texts_us.tbl", "row": 1913}}
   },
   "strings": {
     "select_info": "Level: {level}\nSpecialty: {class}\nID: {name}",

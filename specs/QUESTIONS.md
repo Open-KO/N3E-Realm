@@ -334,6 +334,10 @@ model and one class. **Default taken (spec 11), accepted by the maintainer 2026-
 working and race and class shown fixed; face, hair and stats hidden. More races and
 classes come with the content that supports them.
 
+RQ-173 (2026-11-04) lifts the empty stat values and the hidden `text_bonus` in both
+KO recipes: the stat arrows work, the values and the points left are written as KO
+writes them, and Create sends the stats (Q110, KO-FINDINGS §10.4).
+
 ### Q53 — Deleting a character
 
 KO's select screen has Delete; the server has no character deletion. **Default taken (spec 11), accepted by
@@ -1435,6 +1439,10 @@ names its two labels (1298's `006062d0` pairs: warrior `str_01`, `sta_01`; rogue
 hiding them while that class marks the create, in place of `until_class`; the
 re-click edge stays exact for every class.
 
+RQ-173 (N3FE version 26) fills the five stat values and shows `text_bonus` in both
+recipes (Q92's 1097 choice too), written as 1298's `00605950` and 1264's Reset
+write them (KO-FINDINGS §10.4); the labels' marks are unchanged.
+
 ### Q94 — Which races and classes the realm's create offers
 
 RQ-001 (`content/character-create.md`, binary): no KO version disables a race
@@ -1625,7 +1633,8 @@ sends its fixed choice whole, in the first free slot, until the screen's buttons
 a name alone, and is removed when no client sends one.
 RQ-172 sends the race and specialty the KO screens' buttons chose (a create with no
 buttons still sends the fixed choice), with the fixed choice's face, hair and points
-until RQ-173 and RQ-174 (Q110).
+until RQ-173 and RQ-174 (Q110). RQ-173 sends the stats the arrows chose, with the
+fixed choice's face and hair until RQ-174.
 
 ### Q101 — The account's nation and the create settings RQ-002 does not land
 
@@ -1852,4 +1861,30 @@ rogue is sent at 60 / 60 / 70 / 50 / 60 as the priest is, and the server's check
 unchanged. RQ-173 and RQ-174 replace it with the player's choice. Without a fixed
 choice the stats are the base alone, which Create refuses locally as the server
 would (`create_refused`, the stats refusal's words), so such a package needs RQ-173.
+
+**Resolved for the points (RQ-173, 2026-11-04):** a create screen with stat arrows
+(N3FE version 26's item 15) sends the five stats the player chose, and Create
+refuses points left with `create_points_left` (code 10, row 1913 under 1901) after
+no race and no class, as `005fffd0` does. A create without arrows keeps (a). The
+face and hair stay the fixed choice's until RQ-174.
+
+### Q111 — The points left after a Cancel
+
+RQ-173 (KO-FINDINGS §10.4): 1298 zeroes the points left (`+0xb0`) and the bonus
+(`+0xb4`) only in the create's constructor and sets them only in a build; its Cancel
+reset (`006066b0`) writes the values and `text_bonus` empty but keeps the points.
+So after a Cancel with points spent, the next open shows empty texts while the
+right arrows still spend the old points, until a race click builds (1298's own
+create opens with no race; the realm's 1097 choice opens with its race chosen,
+which builds at once).
+
+Options:
+- (a) Each open of the realm's create starts with no points and empty texts, and
+  builds at once when its race is chosen at the open.
+- (b) Keep KO's carried points across a Cancel (the arrows spending points the
+  texts do not show).
+
+**Default taken:** (a), a robustness fix with nothing drawn differently at the open:
+a Cancel cannot leave points the screen does not show, and Create refuses points
+left only after a build. Changing it would be client-only.
 

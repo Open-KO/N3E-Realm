@@ -82,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 25, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 26, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -270,10 +270,15 @@ replace the panels when the client has a Discord realm config.
   class buttons it cannot take give way to their images (1298 `006060f0`, 1264
   `0043ec90`); a chosen button draws down. Create refuses no race
   (`create_no_race`) and then no class (`create_no_class`) after the empty name,
-  each in the message box, then a name or choice the server would refuse
-  (`create_refused`), and sends the chosen race and specialty (with the package's
-  fixed face, hair and points until RQ-173 and RQ-174; Q110); the server validates
-  it as any create (Q95). The 1298 recipe binds the Tuarek and the four classes and
+  each in the message box, then points left (`create_points_left`, row 1913 under
+  1901; RQ-173), then a name or choice the server would refuse (`create_refused`),
+  and sends the chosen race, specialty and stats (with the package's fixed face and
+  hair until RQ-174; Q110); the server validates it as any create (Q95). The stat
+  arrows (N3FE version 26) spend and return points as KO's do: each build (the race
+  with 1264's rows, the race and class with 1298's) copies the row's stats and
+  bonus, a right arrow spends a point while any is left, a left arrow returns one
+  while the stat is above the row's, and the values and the points left are written
+  as KO writes them (KO-FINDINGS §10.4); each open starts with no points (Q111). The 1298 recipe binds the Tuarek and the four classes and
   waits for both, the messages 1298's rows 1908 and 1904 under 1901; the 1097
   choice binds the same with the Tuarek and the priest chosen at each open (Q52),
   `create_no_class` 1264's row 1904 under 1901. Version 22's nodes until the race
@@ -417,7 +422,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 25 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, no select bar actions, no message box Yes and No or exit question, no select ESC or its `none`, no select Back, no select arrow rule, no create mode, no create slide, no create choices, no until-race nodes, no until-class nodes, one create model, or no race and class buttons by KO's codes) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 26 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, no select bar actions, no message box Yes and No or exit question, no select ESC or its `none`, no select Back, no select arrow rule, no create mode, no create slide, no create choices, no until-race nodes, no until-class nodes, one create model, no race and class buttons by KO's codes, or no stat arrows) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas (1024 × 768) | KO's placements would cut the layouts off, so the UI scales down uniformly, centred, as with `ui_scale` `window` (RQ-106). No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -650,7 +655,19 @@ KO (`make live-ko`, needs `assets/ko`):
    case `content/front-end.md` names, `until_race` and `until_class`, flag 8, and
    a version 24 package; `tests/front_end.cpp` plays the choice for both recipes'
    rules (the class column, each class's labels, the default class, the request
-   and its refusal).
+   and its refusal). RQ-173 (version 26): on the 1298 recipe's, the five stat
+   values and the points left are empty at the open; the Tuarek click writes its
+   default class's row and bonus; with no class a right arrow spends a point and a
+   left one returns none; each class click that changes the class writes its row
+   and resets the points; Create with points left says row 1913 under 1901 (after
+   no race and no class); a left arrow at the row's value returns nothing, eleven
+   right arrows on MP spend the ten and stop, a left one returns one and a right
+   one on STR spends it; Create then sends the five stats; a Cancel and a new open
+   write them empty again. The 1097 choice's flow spends its points with the
+   arrows before the name (`front_end_flow_live`). The cook and loader take
+   `stats`, `points` and `stat_row` (item 15) and refuse each case
+   `content/front-end.md` names and a version 25 package; `tests/front_end.cpp`
+   plays the arrows for both rows (1298's race and class, 1264's race).
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

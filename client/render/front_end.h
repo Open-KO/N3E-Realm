@@ -255,8 +255,16 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (created[fe.create_race_buttons[k].node].flags & FrontNode::FIXED_ON) race_at_open = int(k);
     for (size_t k = 0; k < fe.create_class_buttons.size(); ++k)
       if (created[fe.create_class_buttons[k].node].flags & FrontNode::FIXED_ON) class_at_open = int(k);
-    choice.bind(fe.create_race_buttons, fe.create_class_buttons, race_at_open, class_at_open);
+    // RQ-173 (version 26): its stat arrows, their rows the package's rules'.
+    choice.bind(fe.create_race_buttons, fe.create_class_buttons, race_at_open, class_at_open, fe.create_stats,
+                create_rules);
     create_role.assign(created.size(), {});
+    for (size_t k = 0; k < fe.create_stats.stats.size(); ++k) {
+      const auto &st = fe.create_stats.stats[k];
+      create_role[st.value] = {CreateRole::stat, int(k)};
+      create_role[st.down] = {CreateRole::stat_down, int(k)};
+      create_role[st.up] = {CreateRole::stat_up, int(k)};
+    }
     for (size_t k = 0; k < fe.create_race_buttons.size(); ++k)
       create_role[fe.create_race_buttons[k].node] = {CreateRole::race, int(k)};
     for (size_t k = 0; k < fe.create_class_buttons.size(); ++k) {
@@ -448,6 +456,21 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // none), and the specialty whose stat row the screen holds (0: none).
   uint32_t create_model_race() const { return figure_scene() < 0 ? 0 : scene_race(size_t(figure_scene())); }
   uint32_t create_row() const { return choice.row_specialty(create_rules).value_or(0); }
+  // RQ-173 (version 26): what create's stat value texts say, in the stats'
+  // order, then the points text (test hooks; empty before a build).
+  std::vector<std::string> create_stat_texts() const {
+    std::vector<std::string> out;
+    for (size_t k = 0; k < fe.create_stats.stats.size(); ++k) out.push_back(choice.stat_text(k));
+    out.push_back(choice.points_text());
+    return out;
+  }
+  // The create screen's choice, its stats and points left (a test hook).
+  const CreateChoice &create_choice() const { return choice; }
+  // The create node of stat `k`'s left (`up` false) or right arrow, or -1.
+  int stat_arrow_node(size_t k, bool up) const {
+    if (k >= fe.create_stats.stats.size()) return -1;
+    return int(up ? fe.create_stats.stats[k].up : fe.create_stats.stats[k].down);
+  }
   // The state the current layout's button bound to `action` draws in (0
   // normal, 1 down, 2 on, 3 disabled), or -1 (a test hook).
   int action_state(FrontAction action) const {
@@ -771,10 +794,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::vector<std::array<float, 2>> slide_shift;
   // RQ-130 (version 21): create's race and class, when the package waits for
   // them; RQ-172 (version 25): its buttons by KO's codes, and each create
-  // node's part in them (a race or class button, a class's image).
+  // node's part in them (a race or class button, a class's image); RQ-173
+  // (version 26): a stat's value text or arrow.
   CreateChoice choice;
   struct CreateRole {
-    enum Kind { none, race, klass, image } kind = none;
+    enum Kind { none, race, klass, image, stat, stat_down, stat_up } kind = none;
     int button = -1;
   };
   std::vector<CreateRole> create_role;
@@ -1260,15 +1284,28 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         if (role.kind == CreateRole::klass) choice.click_class(size_t(role.button), at_slot);
       }
       break;
+    // RQ-173 (version 26): the stat arrows (1298's 00604f90 by the button's
+    // id, btn_*_right and btn_*_left; 1264's 0043dfc0).
+    case FrontAction::create_stat_down:
+    case FrontAction::create_stat_up:
+      if (state == Screen::create && !pending_create && acted_node >= 0 && size_t(acted_node) < create_role.size()) {
+        const auto &role = create_role[size_t(acted_node)];
+        if (role.kind == CreateRole::stat_down) choice.stat_down(size_t(role.button));
+        if (role.kind == CreateRole::stat_up) choice.stat_up(size_t(role.button));
+      }
+      break;
     case FrontAction::create_confirm:
       if (state == Screen::create && !pending_create) {
         if (name.empty()) {
           show_message(FrontMessage::create_name, create_name_prompt(create_rules));
           break;
         }
-        // RQ-130: then no race, then no class (005fffd0's codes 7 and 9).
+        // RQ-130: then no race, then no class (005fffd0's codes 7 and 9);
+        // RQ-173: then points left (code 10).
         if (const auto refused = choice.refusal()) {
-          show_message(*refused, *refused == FrontMessage::create_no_race ? "Choose a race." : "Choose a class.");
+          show_message(*refused, *refused == FrontMessage::create_no_race    ? "Choose a race."
+                                 : *refused == FrontMessage::create_no_class ? "Choose a class."
+                                                                             : "Spend the stat points left.");
           break;
         }
         // RQ-004: then the name's letters (005fffd0's code 5, row 1906 under
@@ -1828,6 +1865,15 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
           }
           break;
         case FrontAction::class_desc: value = filled(FrontString::class_desc, context, nullptr); break;
+        // RQ-173 (version 26): a stat's value and the points left, as each
+        // build's 00605950 and each arrow write them (SetStringAsInt), empty
+        // from the open until a build (006066b0).
+        case FrontAction::create_stat:
+          value = i < create_role.size() && create_role[i].kind == CreateRole::stat
+                      ? choice.stat_text(size_t(create_role[i].button))
+                      : std::string();
+          break;
+        case FrontAction::create_points: value = choice.points_text(); break;
         case FrontAction::version: value = filled(FrontString::version, context, nullptr); break;
         case FrontAction::info: value = filled(FrontString::loading_info, context, nullptr); break;
         case FrontAction::message: value = message ? message->text : std::string(); break;

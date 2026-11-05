@@ -611,6 +611,94 @@ int main(int argc, char **argv) {
                  "at each open; a create that binds neither keeps both chosen\n";
   }
   {
+    // RQ-173 (version 26, KO-FINDINGS 9.15, 9.16): the stat arrows. Every
+    // build writes the row's values and its bonus as the points left and the
+    // bonus (1298's 005fd120, 1264's 00439970), so it resets the points spent;
+    // a right arrow moves a point into its stat while any is left; a left arrow
+    // takes one back while fewer than the bonus are left and the stat is above
+    // its row's (00604f90, 0043dfc0). 1298's row is the race's and class's:
+    // with no class (a race click unchooses it) the left arrows do nothing and
+    // a class click builds again; 1264's is the race's: its class click builds
+    // nothing. Create refuses points left after no race and no class (005fffd0
+    // code 10) and sends the values. Before a build the texts are empty
+    // (1298's reset 006066b0).
+    using M = n3e::FrontMessage;
+    n3e::CreateRules rules;
+    rules.stats = 5, rules.nation = 1;
+    // A synthetic row per specialty: the rogue's base differs from the
+    // priest's, so a build shows which row it read.
+    rules.races = {{2, 1, 4, 3, {{102, 10, {60, 60, 70, 50, 50}}, {104, 8, {60, 60, 60, 50, 60}}}}};
+    rules.fixed = n3e::CreateRules::Fixed{2, 104, 0, 0, {60, 60, 70, 50, 60}};
+    const std::optional<n3e::CreateRules> with = rules;
+    const std::vector<n3e::FrontCreateRace> races{{10, 2, 102}};
+    const std::vector<n3e::FrontCreateClass> classes{{21, {102, 202}, 31, {}}, {23, {104, 204}, 33, {}}};
+    n3e::FrontCreateStats arrows;
+    for (uint32_t k = 0; k < 5; ++k) arrows.stats.push_back({50 + 3 * k, 51 + 3 * k, 52 + 3 * k});
+    arrows.points = 70, arrows.by_class = true;
+    n3e::front::CreateChoice c;
+    c.bind(races, classes, -1, -1, arrows, with);
+    std::string fail;
+    auto want = [&](const char *step, bool ok) {
+      if (!ok && fail.empty()) fail = step;
+    };
+    auto texts = [&] {
+      std::string out;
+      for (size_t k = 0; k < 5; ++k) out += (k ? "/" : "") + c.stat_text(k);
+      return out + "|" + c.points_text();
+    };
+    want("open", texts() == "////|" && !c.written);
+    c.stat_up(0);  // no points before a build
+    want("open arrow", texts() == "////|" && c.points == 0);
+    c.click_race(0, 1);  // the Tuarek: the default class's row (102), ten points
+    want("race", texts() == "60/60/70/50/50|10" && c.refusal() == M::create_no_class);
+    c.stat_up(0), c.stat_up(0);
+    c.stat_down(0);  // 1298: no class, no row (race x 10000 - 1): nothing
+    want("no class", texts() == "62/60/70/50/50|8");
+    c.click_race(0, 1);  // the same race: no build, the points kept
+    want("race again", texts() == "62/60/70/50/50|8");
+    c.click_class(1, 1);  // the priest: built again from its row, the points reset
+    want("class", texts() == "60/60/60/50/60|8" && c.refusal() == M::create_points_left);
+    c.stat_down(4);  // at the row's base: nothing
+    for (int k = 0; k < 9; ++k) c.stat_up(4);  // the ninth: none left
+    want("spent", texts() == "60/60/60/50/68|0" && !c.refusal());
+    c.stat_down(4), c.stat_down(4), c.stat_up(1);
+    want("moved", texts() == "60/61/60/50/66|1" && c.refusal() == M::create_points_left);
+    c.stat_up(0);
+    const auto q = n3e::front::create_request(with, 0, c);
+    want("sent", q.race == 2 && q.specialty == 104 && q.stats == std::vector<uint32_t>{61, 61, 60, 50, 66} &&
+                     !n3e::create_choice_refusal(rules, 1, q.race, q.specialty, q.face, q.hair, q.stats));
+    c.click_class(1, 0);  // the same class: no build
+    want("class again", texts() == "61/61/60/50/66|0");
+    c.click_class(0, 0);  // the rogue: built again
+    want("rogue", texts() == "60/60/70/50/50|10");
+    c.open();  // a reopen: no points, the texts empty (006066b0)
+    want("reopen", texts() == "////|" && c.refusal() == M::create_no_race);
+    // 1264's row by race (the 1097 choice: the Tuarek and the priest chosen at
+    // each open, built there): a class click builds nothing; the left arrows
+    // work without a class.
+    arrows.by_class = false;
+    c.bind(races, classes, 0, 1, arrows, with);
+    want("1264 open", texts() == "60/60/60/50/60|8" && c.refusal() == M::create_points_left);
+    c.stat_up(2), c.click_class(0, 0);
+    want("1264 class", texts() == "60/60/61/50/60|7");
+    c.click_race(0, 0);  // the chosen race: no build; the class unchosen
+    c.stat_down(2);  // the last build's row (104, as 1264's one row for the race): 61 is above its 60
+    c.stat_up(3), c.stat_down(3);
+    want("1264 no class", texts() == "60/60/60/50/60|8" && c.refusal() == M::create_no_class);
+    // A create without arrows sends the fixed choice's points (Q110).
+    c.bind(races, classes, 0, 1, {}, with);
+    want("no arrows", !c.refusal() && texts() == "////|" &&
+                          n3e::front::create_request(with, 0, c).stats == std::vector<uint32_t>{60, 60, 70, 50, 60});
+    if (!fail.empty()) {
+      std::cerr << "FAIL create stats: " << fail << "\n";
+      return 1;
+    }
+    std::cout << "PASS create stats: each build writes its row and resets the points spent; the right arrows spend "
+                 "while any is left, the left take back above the row's base (1298's by race and class: nothing "
+                 "without a class, a class click builds again; 1264's by race); Create refuses points left after "
+                 "the class and sends the values; the texts empty from each open until a build\n";
+  }
+  {
     // RQ-004: Moradon's rules as create.bin carries them (one race of two
     // specialties, KO's 1..20 letters, digits, _ : ;), a reserved word.
     using n3e::CreateRules;
@@ -754,6 +842,13 @@ int main(int argc, char **argv) {
           sep = ";";
         }
         std::cout << "\n";
+      }
+      // RQ-173: create's stat arrows: each stat's value, left and right
+      // arrow nodes, then the points node and the row (1 race and class).
+      if (!fe.create_stats.stats.empty()) {
+        std::cout << "create-stats " << release.root.filename().string() << ":";
+        for (const auto &st : fe.create_stats.stats) std::cout << " " << st.value << "/" << st.down << "/" << st.up;
+        std::cout << " points=" << fe.create_stats.points << " row=" << fe.create_stats.by_class << "\n";
       }
       // RQ-158: a package with more than one create model: each race, then
       // each model's clip count and joint count (the first create's).

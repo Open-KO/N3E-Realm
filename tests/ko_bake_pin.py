@@ -511,9 +511,17 @@ CLIENT = Path("assets/ko")
 # the release index follows. Default features 96942ffc... -> 0daa0f41...;
 # classic 427332a7... -> 883dcdeb...; 1097 798d80f8... -> 5f229efc.... The plain
 # cooks and the homelands keep their pins.
+# RQ-173 changed them again: N3FE version 26 binds create's stat arrows (item
+# 15: the five values with their left and right arrows, text_bonus and the
+# row's key) and the message create_points_left (row 1913 under 1901); the
+# arrows are no longer fixed disabled nor text_bonus hidden: front-end.bin
+# grows from 56,348,696 to 56,348,916 bytes; the release index follows.
+# Default features 0daa0f41... -> e798df20...; classic 883dcdeb... ->
+# 73fe5f1f...; 1097 5f229efc... -> ffc7446f.... The plain cooks and the
+# homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "0daa0f41481d1edc9804ae0bc07327bb7d33a7d966f00589be425afaabf8d2b6"),
+    "features": (["--features"], "e798df2012f3496f12740fb38132268de5cb9ad3e21fcec762a7aa71ac872c9e"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -534,13 +542,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "883dcdebec572f3242a1b9e0a6c1f8fcd297da16ac57468100011cab12d6a39f"),
+    "features": (["--features"], "73fe5f1fc98cb4a6c5320a2cebb8ac4c0f8da96b91524f5a5bd013a2dd84c9dc"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "5f229efc30fee5077a4b0de60a00cac636d50d2f316aab6d97ae0fa350b4e8ff"),
+    "features": (["--features"], "ffc7446f76f68ab0765649e160faec885a8fe325b0545373c5106b65d05931ef"),
 }
 
 

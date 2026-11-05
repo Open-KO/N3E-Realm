@@ -898,7 +898,10 @@ enum class FrontAction : uint32_t {
   none, login, exit, login_group, realm_group, realm_list, realm_connect, notice, select_prev,
   select_next, back, char_info, create_confirm, name_field, char_view, class_desc, progress,
   version, info, message, ok, title, login_closed, select_start, select_create, select_delete,
-  char_name, char_level, char_class, yes, no, create_race, create_class, count
+  char_name, char_level, char_class, yes, no, create_race, create_class,
+  // Version 26 (RQ-173): create's stat arrows and the texts they write
+  // (FrontCreateStats; 1298's 00604f90, 00605950).
+  create_stat_down, create_stat_up, create_stat, create_points, count
 };
 enum class FrontScreen : uint32_t { login, select, create, loading, message, count };
 enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };
@@ -1047,6 +1050,7 @@ enum class FrontMessage : uint32_t {
   exit_confirm,       // version 14: the select's exit asks first, Yes or No (1298's btn_exit)
   create_no_race,     // version 21: create before its race is clicked (1298's 005fffd0, code 7)
   create_no_class,    // version 21: create before its class is clicked (1298's 005fffd0, code 9)
+  create_points_left, // version 26: create with stat points left (1298's 005fffd0, code 10)
   count
 };
 struct FrontMessageText {
@@ -1096,6 +1100,21 @@ struct FrontCreateClass {
   std::vector<uint32_t> specialties;
   uint32_t image = kNone;
   std::vector<uint32_t> labels;
+};
+// Version 26 (RQ-173; content/front-end.md item 15): create's stat arrows, one
+// entry per stat of the package's create rules in their order (KO's str, sta,
+// dex, int, MAP): the text its value is written in (bound to create_stat) and
+// its left and right arrows (create_stat_down, create_stat_up), then the text
+// the points left are written in (create_points, 1298's text_bonus) and
+// whether the stat row is the race's and class's (1298: NewChrValue by race x
+// 10000 + class, so a class click builds again and the left arrows wait for a
+// class, 00604f90 and 005fd120) or the race's alone (1264's by race:
+// 0043dfc0, whose class click builds nothing).
+struct FrontCreateStat { uint32_t value = 0, down = 0, up = 0; };
+struct FrontCreateStats {
+  std::vector<FrontCreateStat> stats;
+  uint32_t points = FrontCreateClass::kNone;
+  bool by_class = false;
 };
 struct FrontEnd {
   // The layouts the moves are for: the five screens (FrontScreen), then the logo.
@@ -1150,6 +1169,8 @@ struct FrontEnd {
   // Version 25 (RQ-172): create's race and class buttons, in file order.
   std::vector<FrontCreateRace> create_race_buttons;
   std::vector<FrontCreateClass> create_class_buttons;
+  // Version 26 (RQ-173): create's stat arrows (none: no stats).
+  FrontCreateStats create_stats;
 };
 FrontEnd load_front_end(const Release &release);
 } // namespace n3e

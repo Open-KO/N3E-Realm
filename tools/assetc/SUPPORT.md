@@ -244,5 +244,11 @@ A recipe's `states` takes `down` (RQ-138, Q89 (b), §9.16), cooked as fixed on w
 the button's down image in the on state and its on image left out (no version
 change); on a race or class button (version 25) it is the choice at each open, every
 state image kept.
+N3FE version 26 (RQ-173, §10.4) binds create's stat arrows (the create screen's
+`stats`, `points` and `stat_row`, item 15): each stat's value text and its left and
+right arrows in `character-create.json`'s stat order, the points text and the row's
+key (`class`, 1298's race and class; `race`, 1264's), checked against the package's
+create rules, with the message `create_points_left` (row 1913 under 1901). Both
+recipes bind the five stats and `text_bonus`.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

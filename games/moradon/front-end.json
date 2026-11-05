@@ -67,19 +67,17 @@
         "btn_face_left": "disabled",
         "btn_face_right": "disabled",
         "btn_hair_left": "disabled",
-        "btn_hair_right": "disabled",
-        "btn_str_left": "disabled",
-        "btn_str_right": "disabled",
-        "btn_sta_left": "disabled",
-        "btn_sta_right": "disabled",
-        "btn_dex_left": "disabled",
-        "btn_dex_right": "disabled",
-        "btn_int_left": "disabled",
-        "btn_int_right": "disabled",
-        "btn_map_left": "disabled",
-        "btn_map_right": "disabled"
+        "btn_hair_right": "disabled"
       },
-      "hidden": ["text_bonus"]
+      "stats": [
+        {"value": "text_str", "down": "btn_str_left", "up": "btn_str_right"},
+        {"value": "text_sta", "down": "btn_sta_left", "up": "btn_sta_right"},
+        {"value": "text_dex", "down": "btn_dex_left", "up": "btn_dex_right"},
+        {"value": "text_int", "down": "btn_int_left", "up": "btn_int_right"},
+        {"value": "text_map", "down": "btn_map_left", "up": "btn_map_right"}
+      ],
+      "points": "text_bonus",
+      "stat_row": "race"
     },
     "loading": {
       "ui": "installer-1264:UI_US/co_loading_us.uif",
@@ -108,6 +106,8 @@
     "create_refused": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1901}},
     "create_no_class": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1901},
                         "text": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1904}},
+    "create_points_left": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1901},
+                           "text": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1913}},
     "exit_confirm": {"text": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1502}}
   },
   "strings": {

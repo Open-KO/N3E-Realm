@@ -225,8 +225,11 @@ assert recipe_1298["messages"]["create_no_race"] == {"title": {"table": "Data/Te
                                                      "text": {"table": "Data/Texts_us.tbl", "row": 1908}}
 assert recipe_1298["messages"]["create_no_class"] == {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
                                                       "text": {"table": "Data/Texts_us.tbl", "row": 1904}}
+# RQ-173: and points left with row 1913 under 1901 (005fffd0's code 10).
+assert recipe_1298["messages"]["create_points_left"] == {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
+                                                         "text": {"table": "Data/Texts_us.tbl", "row": 1913}}
 choice_boxes = [f"{k}|{report['messages'][k]['title']}|{report['messages'][k]['text']}"
-                for k in ("create_no_race", "create_no_class")]
+                for k in ("create_no_race", "create_no_class", "create_points_left")]
 assert cooked[0] == cooked[1], "the 1298 recipe's cook is not deterministic"
 front_end_1298 = out / "front-end.bin"
 assert cooked[0][4:8] == ko_front_end.VERSION.to_bytes(4, "little"), cooked[0][:8]
@@ -899,12 +902,50 @@ LABELS = {n for v in classes_1298.values() for n in v["labels"]}
 LABELS_ALL = drawn_order(LABELS)
 LABELS_FIXED = drawn_order(LABELS - set(fixed_class["labels"]))
 LABELS_OTHER = drawn_order(LABELS - set(other_class["labels"]))
-CREATE_CHOICE = (f"open=0,0,0 column={COLUMN_ALL} labels={LABELS_ALL} empty=create_name norace=create_no_race "
-                 f"class=1,0 column={COLUMN_ALL} labels={LABELS_FIXED} classfirst=create_no_race "
-                 f"race=1,0,1 column={COLUMN_RACE} labels={LABELS_ALL} model={FIXED['race']} "
-                 f"row={race_button_1298['default']} noclass=create_no_class both=1,1,1 labels={LABELS_FIXED} "
-                 f"again=1,0,1 labels={LABELS_FIXED} other=1,1,0,1 labels={LABELS_OTHER} create=none sent=1 "
-                 f"as={FIXED['race']},{other_specialty} reopen={COLUMN_ALL} labels={LABELS_ALL}")
+# RQ-173 (version 26, KO-FINDINGS 10.4): the stat values and the points left
+# empty from the open until the race click's build (1298's reset 006066b0),
+# then the stat row's (005fd120 by the race's default class; create.bin's,
+# the package's table, which package_1298 keeps) and its bonus; with no class a
+# right arrow spends a point and a left one takes none back (00604f90 finds no
+# row for class -1); Create says no class before points left; each class click
+# that changes the class builds again and resets the points; then Create says
+# points left (code 10, row 1913 under 1901); the right arrows spend until
+# none is left, a left arrow takes one back above the row's base, and Create
+# sends the values; each open empties them again.
+TABLE_ID = ko_create.plan(Path("games/moradon"), chosen,
+                          json.loads(Path("games/moradon/realm-config.json").read_text()).get("create", {}))["table"]
+_, STAT_ROWS = ko_create.values(RULES, TABLE_ID, pinned)
+
+
+def stat_row(specialty):
+    """(base, bonus) of the package's table row for the fixed race and `specialty`."""
+    row = STAT_ROWS[ko_create.row_id(RULES["tables"][TABLE_ID], FIXED["race"], specialty)]
+    return [row[c] for c in RULES["columns"]["stats"]], row[RULES["columns"]["bonus"]]
+
+
+def stat_texts(values, points):
+    return "/".join(map(str, values + [points]))
+
+
+NO_STATS = "/".join(["-"] * (RULES["stats"] + 1))
+base_default, bonus_default = stat_row(race_button_1298["default"])
+base_fixed, bonus_fixed = stat_row(FIXED["specialty"])
+base_other, bonus_other = stat_row(other_specialty)
+assert bonus_default > 1 and bonus_other > 1 and RULES["stats"] == 5, (bonus_default, bonus_other)
+SPENT = base_other[:4] + [base_other[4] + bonus_other]
+MOVED = [SPENT[0] + 1] + SPENT[1:4] + [SPENT[4] - 1]
+CREATE_CHOICE = (f"open=0,0,0 column={COLUMN_ALL} labels={LABELS_ALL} stats={NO_STATS} empty=create_name "
+                 f"norace=create_no_race class=1,0 column={COLUMN_ALL} labels={LABELS_FIXED} "
+                 f"classfirst=create_no_race race=1,0,1 column={COLUMN_RACE} labels={LABELS_ALL} "
+                 f"model={FIXED['race']} row={race_button_1298['default']} "
+                 f"stats={stat_texts(base_default, bonus_default)} "
+                 f"noclassarrows={stat_texts([base_default[0] + 1] + base_default[1:], bonus_default - 1)} "
+                 f"noclass=create_no_class both=1,1,1 labels={LABELS_FIXED} "
+                 f"stats={stat_texts(base_fixed, bonus_fixed)} again=1,0,1 labels={LABELS_FIXED} "
+                 f"other=1,1,0,1 labels={LABELS_OTHER} stats={stat_texts(base_other, bonus_other)} "
+                 f"points=create_points_left spent={stat_texts(SPENT, 0)} moved={stat_texts(MOVED, 0)} "
+                 f"create=none sent=1 as={FIXED['race']},{other_specialty},{'/'.join(map(str, MOVED))} "
+                 f"reopen={COLUMN_ALL} labels={LABELS_ALL} stats={NO_STATS}")
 # RQ-125: 1298's in-select create, co_characterCreate_us.uif (row 2's, as
 # 005fab40 loads it), its root at the origin and its panels where its Tick
 # (00606450) clamps their slides: Group_class at (50, H - 30 - h), Group_race at
@@ -1025,7 +1066,7 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     choice = re.search(r"^FRONT_CREATE_CHOICE (.*)$", run.stdout, re.M)
     assert choice and choice.group(1) == CREATE_CHOICE, (size, choice and choice.group(1), CREATE_CHOICE)
     boxes = re.findall(r"^FRONT_CREATE_MESSAGE (.*)$", run.stdout, re.M)
-    assert boxes == [choice_boxes[0], choice_boxes[0], choice_boxes[1]], (size, boxes, choice_boxes)
+    assert boxes == [choice_boxes[0], choice_boxes[0], choice_boxes[1], choice_boxes[2]], (size, boxes, choice_boxes)
     # RQ-153: the stat labels in Group_class where the realm drew the panel,
     # found from the create-class shot's rect= (the class button's, as placed):
     # all five cream at the open (the create shot, the panel at rest there
@@ -1056,5 +1097,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
           f"moves them ({len(slide_frames)} frames at 32 a second, Group_class ending at "
           f"{slide_frames[-1][2]}, Group_name at {slide_frames[-1][5]}); it waits for its race and class, "
           f"Create saying rows 1908 and 1904 under 1901 until both are clicked; its stat labels cream at the "
-          f"open, \"STR\" and \"INT\" cyan after the race and the priest click")
+          f"open, \"STR\" and \"INT\" cyan after the race and the priest click; its stat values and points "
+          f"empty until the race's build, each class's build resetting them, the arrows within the row's base "
+          f"and bonus (no left arrow without a class), Create saying row 1913 until every point is spent and "
+          f"sending the values")
 print("PASS KO front end graphical")

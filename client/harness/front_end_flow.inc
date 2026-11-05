@@ -2,7 +2,9 @@
 // (n3e-test-client, N3E_HARNESS=1) only; see client/harness/harness.h.
 // Spec 11 acceptance 7: N3E_TEST_FRONT_FLOW=NAME,NAME... plays the KO screens
 // with the events a player sends (ENTER, text input, backspace): Discord login,
-// the realm, create with each name in turn until one is accepted, start, the
+// the realm, create with each name in turn until one is accepted (RQ-173: its
+// stat points first spent with the right arrows as the package's fixed choice
+// spends them), start, the
 // world. A message box is printed and dismissed; one that comes after the
 // world (a kick) ends the run. Login is one ENTER at the first frame, which
 // may come before the connection is up, and once more after a message box on
@@ -292,7 +294,38 @@
       } else if (screen == 1 ||
           (screen == 2 && !world.characters.characters_size()))
         key(SDLK_RETURN);
-      else if (screen == 3 && !front->creating() && next_name < names.size()) {
+      else if (screen == 3 && !front->creating() && front->create_choice().points > 0 && release.create &&
+               release.create->fixed) {
+        // RQ-173: the points spent as the package's fixed choice spends them,
+        // each a click on its stat's right arrow (Create refuses points left,
+        // 1298's 005fffd0 code 10, before it checks the name).
+        const auto &target = release.create->fixed->stats;
+        const auto &chosen = front->create_choice();
+        int pw = 0, ph = 0, lw = 0, lh = 0;
+        SDL_GetWindowSizeInPixels(w, &pw, &ph);
+        SDL_GetWindowSize(w, &lw, &lh);
+        for (size_t k = 0; k < chosen.stats.size() && k < target.size(); ++k) {
+          const auto r = front->node_rect(front->stat_arrow_node(k, true), pw, ph);
+          if (!r || pw <= 0 || ph <= 0) continue;
+          const float x = ((*r)[0] + (*r)[2]) / 2 * lw / pw, y = ((*r)[1] + (*r)[3]) / 2 * lh / ph;
+          for (uint32_t n = chosen.stats[k]; n < target[k]; ++n) {
+            SDL_Event ev{};
+            ev.type = SDL_EVENT_MOUSE_MOTION;
+            ev.motion.x = x, ev.motion.y = y;
+            SDL_PushEvent(&ev);
+            ev = {};
+            ev.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+            ev.button.button = SDL_BUTTON_LEFT;
+            ev.button.down = true;
+            ev.button.clicks = 1;
+            ev.button.x = x, ev.button.y = y;
+            SDL_PushEvent(&ev);
+            ev.type = SDL_EVENT_MOUSE_BUTTON_UP;
+            ev.button.down = false;
+            SDL_PushEvent(&ev);
+          }
+        }
+      } else if (screen == 3 && !front->creating() && next_name < names.size()) {
         for (size_t i = 0; i < typed.size(); ++i) key(SDLK_BACKSPACE);
         typed = names[next_name++];
         SDL_Event ev{};

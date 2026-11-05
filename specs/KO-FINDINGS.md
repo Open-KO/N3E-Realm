@@ -1545,6 +1545,31 @@ sha256 `61e9a086…136471`). The string literals were read from the files' bytes
 columns, resolved and checked by the cook as these functions draw them
 (`content/character-create.md`, "How each item is drawn"); RQ-004 and RQ-005 draw it.
 
+### 10.4 The create's stat arrows (RQ-173, 2026-11-04)
+
+Read statically in 1298's `KnightOnLine.exe` (`build/ghidra/audit-2026-09-19`,
+`-readOnly -noanalysis`, `AuditReference.java recover`; sha256 `828ab0db…43a5e5`)
+and the 1264 client (`ko1264-unpacked.exe`, `build/ghidra/rq096`; sha256
+`61e9a086…136471`); output under `build/ghidra/rq173/`, not committed. The source's
+`UICharacterCreate.cpp` (`ReceiveMessage`, `UpdateStats`) matches what is read here.
+
+| Observation | Where | Label |
+|---|---|---|
+| **Each arrow is found by its id.** After the race, class, face and hair buttons, ReceiveMessage compares the clicked node's id (`+0x30`, length `+0x34`) with `btn_str_right`, `btn_dex_right`, `btn_sta_right`, `btn_int_right` and `btn_map_right` (`006d8b0c`–`006d8acc`), then `btn_str_left` … `btn_map_left` (`006d8abc`–`006d8a7c`); a disabled or hidden state is never tested | 1298 `00604f90` | binary |
+| **A right arrow spends a point while any is left, with or without a race or class.** With the points left (the create's `+0xb0`) at least 1 it adds 1 to the player's stat (`+0x830` str, `+0x838` sta, `+0x840` dex, `+0x848` int, `+0x850` MAP), takes 1 from `+0xb0`, and writes the stat's value text (`+0x134` str, `+0x138` dex, `+0x13c` sta, `+0x140` int, `+0x144` MAP) and `text_bonus` (`+0x160`) with vtable `+0x7c` (`CN3UIString::SetStringAsInt`, `std::to_string`, source `N3UIString.cpp`) | 1298 `00604f90` | binary; source |
+| **A left arrow takes one back above the row's base, and needs the row.** It looks NewChrValue up by race × 10000 + class (`+0x48c`, `+0x494`; `00606950` at `006054fd`); with no row, as for class −1, no left arrow does anything. With a row, while the points left are below the bonus the last build gave (`+0xb4`) and the stat is above the row's (row `+0x24`.. str, sta, dex, int, MAP), it takes 1 from the stat, gives the point back and writes the two texts | 1298 `00604f90` | binary |
+| **Every build resets the points.** The build looks the row up by race × 10000 + class, the class −1 taken as the race's default (1→101, 2→102, 3→103, 4→104, 11→201, 12→202, 13→204); with a row it copies the five stats to the player and the row's bonus (`+0x28`) to both `+0xb0` and `+0xb4`, before it returns for a race without looks; with looks it ends with `00605950`, which writes the five values (`SetStringAsInt`) and `text_bonus` from `+0xb0`. A race click builds when the race changes, a class click when the class changes | 1298 `005fd120`, `00605950`, `00604f90` | binary |
+| **Each open writes them empty; the points are not reset.** The reset (`006066b0`, from Cancel `005ffb90`) runs `00605950` and then writes the five values and `text_bonus` empty. The constructor (`00603570`) zeroes `+0xb0` and `+0xb4`; neither Init (`005fab40`, which builds a new window) nor Cancel writes them otherwise, so points left at a Cancel stay for the next open, until a build | 1298 `006066b0`, `005ffb90`, `00603570`, `005fab40` | binary |
+| **Create sends the values; points left are code 10.** After an empty name (6), no race (7) and no class (9), Create posts code 10 (row 1913 under 1901, `00600750`) while `+0xb0` is above 0, then checks the letters (5); the packet carries the five stats from `+0x830`, `+0x838`, `+0x840`, `+0x848` and `+0x850`, a byte each | 1298 `005fffd0` (the check `00600047`–`0060005f`, the stats `006006d5`–`0060070e`, sent at `0060071d`) | binary |
+| **1264's arrows are the same, its row by race.** ReceiveMessage compares the same ids (`0066a270`–`0066a1e0`) with the same right-arrow rule; its left arrows look the row up by the race alone (`+0x398`, `0043ef80`), so they work without a class. Its SetChr (`00439970`, on a race change) copies the race's row's stats and bonus to the player (`+0x734` … `+0x754`) and `+0xb0`/`+0xb4`, then Reset (`0043ea10`) writes the values (`+0xfc` str, `+0x100` sta, `+0x104` dex, `+0x108` int, `+0x10c` MAP) and `text_bonus` (`+0x128`); a class click only marks its labels (`0043ee10`) and builds nothing | 1264 `0043dfc0`, `00439970`, `0043ea10` | binary |
+| **The layouts.** 1298's `co_characterCreate_us.uif` has the ten arrows as plain buttons beside `text_str` … `text_map` (empty) and `text_bonus` (empty) in `Group_class`; 1264's `Ka_CharacterCreate_us.uif` the same, its `text_bonus` holding "20" and pink (0xffff7d81). Each table's rows give 10 bonus points ("Stats and bonus points", `content/character-create.md`); row 1913 is "There are stat points still remaining. " in both text tables | the pinned tree, the 1264 install | local-asset |
+
+**Decides (RQ-173):** N3FE version 26 carries the arrows, the value texts, the
+points text and the row's key (1298's race and class, 1264's race) as item 15; the
+client keeps the points as these functions do and Create refuses points left with
+`create_points_left` (row 1913 under 1901 in both recipes), then sends the values.
+One edge differs: each open of the realm's create starts with no points (Q111).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

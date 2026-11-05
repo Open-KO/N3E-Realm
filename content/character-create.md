@@ -221,7 +221,12 @@ first eight columns. (Local-asset; 1264 lookup `0043ae40`, binary.)
 - With no class chosen (class −1) the key race × 10000 − 1 has no row, so the left
   arrows do nothing.
 - The values and `text_bonus` (`+0x160`) are written by `00605950`, which every build
-  runs. The reset `006066b0` writes them empty (§9.15).
+  runs. The reset `006066b0` writes them empty (§9.15) but leaves `+0xb0` and `+0xb4`
+  (Q111).
+- 1264's (`0043dfc0`, binary) are the same, but its left arrows look the row up by the
+  race alone, so they work without a class, and only a race change builds (SetChr
+  `00439970`, then Reset `0043ea10` writes the values and `text_bonus`;
+  KO-FINDINGS §10.4).
 
 **The build** (`005fd120`, binary):
 - With no class chosen it takes the race's default class to look up the row: 1→101,
@@ -793,10 +798,11 @@ them, GL-free (`tests/front_end.cpp`).
 **What Create sends.** `CreateCharacter` with the name, from the rules, the
 chosen race and specialty (below; a create without race and class buttons, the
 package's fixed choice: `fixed`, race and specialty), the fixed choice's face and
-hair, and stats: the chosen specialty's base with the fixed choice's points spent
-as it spends them (Moradon's ten in the fifth stat, MP: the Tuarek rogue or
-priest at 60 / 60 / 70 / 50 / 60), until the face, hair and stat arrows choose
-them (RQ-173, RQ-174; Q110), in the first slot the list leaves free
+hair until RQ-174's arrows choose them, and the stats the stat arrows chose
+(RQ-173, below; a create without arrows: the chosen specialty's base with the
+fixed choice's points spent as it spends them, Moradon's ten in the fifth stat,
+MP: the Tuarek rogue or priest at 60 / 60 / 70 / 50 / 60; Q110), in the first
+slot the list leaves free
 (`Character.slot`). The hall draws the list in slot order, so the new character
 stands where it is drawn; KO's 1298 creates in the slot in focus when it is empty
 (`005ff920`), which differs only when an empty slot in focus is not the first, and
@@ -838,6 +844,29 @@ not offer stay as they drew (Q109 (a): fixed disabled; the 1097 choice's Puri Tu
 unbound, Q90). The 1097 choice's `front-end.bin` grows from 56,347,416 to 56,348,696
 bytes (the class column's nodes and pink labels it no longer hides, and item 14); the
 package hash changes, so the hosted realm's next deploy is a new realm (Q63).
+
+**The stat arrows (RQ-173; N3FE version 26, `content/front-end.md` item 15 and
+"Actions").** The recipe names each stat's value text and its two arrows in the
+create screen's `stats` (in `character-create.json`'s stat order), the points text
+in `points` and the row's key in `stat_row`: `class` for 1298's race × 10000 + class,
+`race` for 1264's race. As KO's ("The arrows" and "The build" above; KO-FINDINGS
+§10.4, binary):
+- Every build writes the row's five stats as the values and its bonus as the points
+  left, so it resets the points spent: an open with the race chosen, a race click
+  that changes the race and, with the `class` row, a class click that changes the
+  class.
+- A right arrow spends a point while any is left; a left arrow gives one back while
+  the stat is above the row's and points have been spent, with the `class` row only
+  once a class is chosen.
+- The values and the points text are empty from each open until a build writes them.
+  Each open starts with no points (Q111: KO keeps the points left at a Cancel).
+- Create refuses points left with `create_points_left` (code 10, row 1913 under
+  1901, a new message) after no race and no class, then sends the five stats.
+
+Both recipes' `text_bonus`, hidden until now (Q52), shows the points left, and the
+arrows are no longer fixed disabled; the face and hair stay the fixed choice's until RQ-174. The 1097 choice's
+`front-end.bin` grows from 56,348,696 to 56,348,916 bytes (item 15 and the message);
+the package hash changes (Q63).
 
 ## What each item needs
 

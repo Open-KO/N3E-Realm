@@ -61,16 +61,23 @@
 // another specialty that race has): whether the new character stands and the
 // race and class buttons' draw states (0 normal, 1 down, 2 on, 3 disabled),
 // and the message each Create shows (none: the create was sent):
-//   FRONT_CREATE_CHOICE open=N,R,C column=U labels=L empty=M norace=M class=C,N column=U labels=L
-//     classfirst=M race=R,C,N column=U labels=L model=K row=S noclass=M both=R,C,N labels=L
-//     again=R,C,N labels=L other=R,O,C,N labels=L create=M sent=0|1 as=K,S reopen=U labels=L
+//   FRONT_CREATE_CHOICE open=N,R,C column=U labels=L stats=V empty=M norace=M class=C,N column=U labels=L
+//     classfirst=M race=R,C,N column=U labels=L model=K row=S stats=V noclassarrows=V noclass=M
+//     both=R,C,N labels=L stats=V again=R,C,N labels=L other=R,O,C,N labels=L stats=V points=M spent=V
+//     moved=V create=M sent=0|1 as=K,S,V reopen=U labels=L stats=V
 // (on one line; RQ-172: U the ids of create's class buttons and their images
 // that draw then, in draw order, comma-separated, `-` for none; L the same
 // for its class labels; model= the race code of the create model drawn and
 // row= the specialty whose stat row the screen holds; again= after a second
 // click on the chosen race; other= after a click on the other class (its
 // state O), whose create is then sent as race K and specialty S; reopen=
-// after a race and a class click, a Cancel and ENTER opening create again), then
+// after a race and a class click, a Cancel and ENTER opening create again;
+// RQ-173: V the stat value texts and then the points text, `/`-separated, `-`
+// for an empty one; noclassarrows= after a right and then a left click on the
+// first stat's arrows with no class; points= the Create after other=; spent=
+// after a left click on the first stat and eleven right clicks on the last;
+// moved= after a left click on the last and a right click on the first; as=
+// also the stats sent), then
 // (RQ-153) the frame of both= (the race and then the class clicked) as the shot
 // create-class, its FRONT_SHOT line (rect= the class button's) after that
 // line (RQ-172: the fixed specialty's class button's), and the box of each
@@ -467,10 +474,11 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
         if (sent) as = out.create;
         if (!front->showing_message()) return std::string("none");
         const auto kind = *front->message_kind();
-        const std::string name = kind == n3e::FrontMessage::create_name       ? "create_name"
-                                 : kind == n3e::FrontMessage::create_no_race  ? "create_no_race"
-                                 : kind == n3e::FrontMessage::create_no_class ? "create_no_class"
-                                                                              : "other";
+        const std::string name = kind == n3e::FrontMessage::create_name          ? "create_name"
+                                 : kind == n3e::FrontMessage::create_no_race     ? "create_no_race"
+                                 : kind == n3e::FrontMessage::create_no_class    ? "create_no_class"
+                                 : kind == n3e::FrontMessage::create_points_left ? "create_points_left"
+                                                                                 : "other";
         if (kind != n3e::FrontMessage::create_name)
           boxes.push_back(name + "|" + front->message_title() + "|" + front->message_text());
         key(SDLK_ESCAPE);
@@ -487,10 +495,19 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       };
       const auto until = [&] { return ids_of(false); };
       const auto labels = [&] { return ids_of(true); };
+      // RQ-173 (version 26): the stat values and the points left as the
+      // texts say them ("-" for an empty one), and a click on stat `k`'s
+      // right (`up`) or left arrow.
+      const auto stat_texts = [&] {
+        std::string out;
+        for (const auto &text : front->create_stat_texts()) out += (out.empty() ? "" : "/") + (text.empty() ? "-" : text);
+        return out;
+      };
+      const auto arrow = [&](size_t k, bool up) { press(front->stat_arrow_node(k, up)); };
       const auto race_state = [&] { return front->node_state(race_node); };
       const auto class_state = [&] { return front->node_state(class_node); };
       std::cout << "FRONT_CREATE_CHOICE open=" << stands() << "," << race_state() << "," << class_state()
-                << " column=" << until() << " labels=" << labels();
+                << " column=" << until() << " labels=" << labels() << " stats=" << stat_texts();
       std::cout << " empty=" << create(sent);
       SDL_Event typed{};
       typed.type = SDL_EVENT_TEXT_INPUT;
@@ -504,11 +521,20 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       press(race_node);
       frame();
       std::cout << " race=" << race_state() << "," << class_state() << "," << stands() << " column=" << until()
-                << " labels=" << labels() << " model=" << front->create_model_race() << " row=" << front->create_row();
+                << " labels=" << labels() << " model=" << front->create_model_race() << " row=" << front->create_row()
+                << " stats=" << stat_texts();
+      // RQ-173: with no class the right arrow spends a point; the left takes
+      // none back (1298's row by race and class has none for class -1,
+      // 00604f90); Create says no class before points left (005fffd0).
+      arrow(0, true);
+      arrow(0, false);
+      frame();
+      std::cout << " noclassarrows=" << stat_texts();
       std::cout << " noclass=" << create(sent);
       press(class_node);
       frame();
-      std::cout << " both=" << race_state() << "," << class_state() << "," << stands() << " labels=" << labels();
+      std::cout << " both=" << race_state() << "," << class_state() << "," << stands() << " labels=" << labels()
+                << " stats=" << stat_texts();
       // RQ-153: that frame, the race and then the class clicked, as the shot
       // create-class (rect= the class button's), printed after this line.
       front->draw(width, height, t, opened);
@@ -522,9 +548,23 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       press(other_node);
       frame();
       std::cout << " other=" << race_state() << "," << front->node_state(other_node) << "," << class_state() << ","
-                << stands() << " labels=" << labels();
+                << stands() << " labels=" << labels() << " stats=" << stat_texts();
+      // RQ-173: the other class's build reset the points; Create says points
+      // left (code 10); the left arrow at the row's base takes nothing back,
+      // the right arrows spend until none is left (the last click none), a
+      // left arrow takes one back and another right arrow spends it.
+      std::cout << " points=" << create(sent);
+      arrow(0, false);
+      for (int k = 0; k < 11; ++k) arrow(4, true);
+      frame();
+      std::cout << " spent=" << stat_texts();
+      arrow(4, false);
+      arrow(0, true);
+      frame();
+      std::cout << " moved=" << stat_texts();
       const auto last = create(sent);
       std::cout << " create=" << last << " sent=" << sent << " as=" << as.race << "," << as.specialty;
+      for (size_t k = 0; k < as.stats.size(); ++k) std::cout << (k ? "/" : ",") << as.stats[k];
       // RQ-133: a race click, a Cancel (ESC) and create opened again: each
       // open shows the until-race nodes again (1298's reset, 006066b0);
       // RQ-145: a class click before the Cancel, the until-class nodes too.
@@ -540,7 +580,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
       frame();
       key(SDLK_RETURN);
       frame();
-      std::cout << " reopen=" << until() << " labels=" << labels() << std::endl;
+      std::cout << " reopen=" << until() << " labels=" << labels() << " stats=" << stat_texts() << std::endl;
       std::cout << class_shot << std::endl;
       for (const auto &b : boxes) std::cout << "FRONT_CREATE_MESSAGE " << b << std::endl;
       front->jump(Screen::select);

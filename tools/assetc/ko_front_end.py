@@ -36,7 +36,10 @@ clicked, again from each open and each race click that builds (RQ-145),
 bound to KO's codes: each race button its race and the race's default class,
 each class button the specialties it stands for, its stand-in image and the
 stat labels its click marks, in place of version 22's nodes drawn until the
-race (RQ-172).
+race (RQ-172), and (version 26) create's stat arrows, each stat's value text
+and arrows, the points text and whether the stat row is the race's and
+class's (1298's) or the race's (1264's), with the message create_points_left
+(RQ-173).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -67,7 +70,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 25
+VERSION = 26
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -154,7 +157,8 @@ ACTIONS = ("", "login", "exit", "login_group", "realm_group", "realm_list", "rea
            "select_prev", "select_next", "back", "char_info", "create_confirm", "name_field", "char_view",
            "class_desc", "progress", "version", "info", "message", "ok", "title", "login_closed",
            "select_start", "select_create", "select_delete", "char_name", "char_level", "char_class",
-           "yes", "no", "create_race", "create_class")
+           "yes", "no", "create_race", "create_class", "create_stat_down", "create_stat_up", "create_stat",
+           "create_points")
 # Version 13 (RQ-109, specs/KO-FINDINGS.md 9.6): 1298's select bar
 # (co_CharacterSelect_us.uif, its ReceiveMessage 00607160): `select_start`
 # (btn_start, 005ff870: the centre click's start), `select_create` (btn_create,
@@ -176,9 +180,18 @@ MESSAGE_ONLY = ("yes", "no")
 # than one node; a choice button takes no fixed state but `down`, which makes
 # it chosen at each open (the 1097 choice's Tuarek and priest, Q52, Q89 (b)).
 CREATE_CHOICES = ("create_race", "create_class")
+# Version 26 (RQ-173, specs/KO-FINDINGS.md 9.15, 9.16): create's stat arrows
+# (1298's 00604f90, 1264's 0043dfc0 by each button's id: btn_*_left and
+# btn_*_right), each stat's value text (text_*, written by 00605950 and each
+# arrow) and the points text (text_bonus), bound by the create screen's
+# `stats` and `points` (not `bindings`). The arrows and value texts are bound
+# once per stat; an arrow takes no fixed state.
+CREATE_STATS = ("create_stat_down", "create_stat_up", "create_stat", "create_points")
+MULTI_BOUND = CREATE_CHOICES + ("create_stat_down", "create_stat_up", "create_stat")
+STAT_ROWS = {"race": 0, "class": 1}
 # Actions bound on one screen only (the others never draw or use them).
 ONLY_ON = {"login_closed": "login", **{a: "select" for a in SELECT_ONLY}, **{a: "message" for a in MESSAGE_ONLY},
-           **{a: "create" for a in CREATE_CHOICES}}
+           **{a: "create" for a in CREATE_CHOICES + CREATE_STATS}}
 # The select's info text: 1097's and 1264's one text00 (char_info), or any of
 # 1298's three (version 13); a select layout binds at least one.
 INFO_TEXTS = {"char_info", "char_name", "char_level", "char_class"}
@@ -206,6 +219,8 @@ FIXED_ON, FIXED_DISABLED, FOREGROUND, CLASS_HIDES, CLASS_SHOWS = 1, 2, 4, 16, 32
 CLASS_LABELS = {"hide": CLASS_HIDES, "show": CLASS_SHOWS}
 # Version 25 (RQ-172): the bounds of create's choice section (item 14).
 MAX_RACE_BUTTONS, MAX_CLASS_BUTTONS, MAX_SPECIALTIES, MAX_LABELS = 32, 16, 16, 8
+# Version 26 (RQ-173): at most this many stats (create.bin's bound, CreateRules::MAX_STATS).
+MAX_STATS = 8
 NO_NODE = 0xFFFFFFFF
 # A recipe's fixed states. `down` (RQ-138, Q89, specs/KO-FINDINGS.md 9.16) is
 # cooked, not a node flag: fixed on, its BS_DOWN image (state image 1) drawn
@@ -292,7 +307,7 @@ UI_SCALE = {"native": 0, "window": 1}
 # own wording, each a string or a KO text-table row ({"table", "row"}).
 MESSAGES = ("connect_failed", "disconnected", "login", "login_blocked", "login_unavailable", "create_name",
             "create_refused", "select_refused", "create_full", "delete_disabled", "exit_confirm",
-            "create_no_race", "create_no_class")
+            "create_no_race", "create_no_class", "create_points_left")
 # A KO text table's columns (Data/Texts_us.tbl: the row id and its text; the
 # 1264 and 1298 clients' tables have these types).
 TEXT_TYPES = [6, 7]
@@ -1054,6 +1069,50 @@ def create_choices(name, spec, root, bindings, states, hidden):
     return out
 
 
+def create_stats(name, spec, root, bindings, states, hidden, taken):
+    """Version 26 (RQ-173): the create screen's `stats` ([{value, down, up}],
+    one per stat of the package's create rules in their order: the text the
+    stat's value is written in and its left and right arrows, 1298's text_*,
+    btn_*_left and btn_*_right), `points` (the text the points left are
+    written in, text_bonus) and `stat_row` (`class`: the stat row is the
+    race's and class's, 1298's NewChrValue by race x 10000 + class, so a class
+    click builds again and the left arrows wait for a class, 00604f90 and
+    005fd120; `race`: the race's alone, 1264's 0043dfc0, whose class click
+    builds nothing). Each named node is bound here; `taken` holds the race and
+    class buttons' nodes. Returns {stats: [(value, down, up)], points, row}."""
+    stats = spec.get("stats", [])
+    if ("stats" in spec or "points" in spec or "stat_row" in spec) and name != "create":
+        raise ValueError("front-end stats, points and stat_row: create's only")
+    if any(action in CREATE_STATS for action in bindings.values()):
+        raise ValueError("front-end create stat actions: bound by the create screen's stats and points")
+    if type(stats) is not list or len(stats) > MAX_STATS:
+        raise ValueError("front-end stats: up to %d stats" % MAX_STATS)
+    if bool(stats) != ("points" in spec) or bool(stats) != ("stat_row" in spec):
+        raise ValueError("front-end stats: with points and stat_row, or none of the three")
+    if stats and spec["stat_row"] not in STAT_ROWS:
+        raise ValueError("front-end stat_row: one of %s" % ", ".join(STAT_ROWS))
+    out = dict(stats=[], points=None, row=STAT_ROWS.get(spec.get("stat_row"), 0))
+
+    def bind(address, action, kind):
+        node = resolve(root, address)
+        if id(node) in bindings or id(node) in hidden or id(node) in taken or id(node) in states:
+            raise ValueError("front-end %s %r: bound, hidden, fixed or named twice" % (action, address))
+        if node["kind"] != kind:
+            raise ValueError("front-end %s %r: a %s" % (action, address, "string" if kind == 6 else "button"))
+        taken.add(id(node))
+        bindings[id(node)] = action
+        return node
+
+    for at, stat in enumerate(stats):
+        if type(stat) is not dict or set(stat) != {"value", "down", "up"}:
+            raise ValueError("front-end stats[%d]: exactly {value, down, up}" % at)
+        out["stats"].append((bind(stat["value"], "create_stat", 6), bind(stat["down"], "create_stat_down", 1),
+                             bind(stat["up"], "create_stat_up", 1)))
+    if stats:
+        out["points"] = bind(spec["points"], "create_points", 6)
+    return out
+
+
 def screen(name, spec, assets, textures, fonts, find=(), placements=None, required=None, refused=(), slides=None,
            choices=None):
     """One screen's nodes in draw order, on the canvas. CN3UIBase::Load adds
@@ -1071,7 +1130,7 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
     appended to, as the section writes it; another screen may not name one.
     `choices`: a list create's race and class buttons (version 25, item 14)
     are appended to, as {data: the section's bytes, races: [(race, default)],
-    classes: [specialties]}."""
+    classes: [specialties], stats: item 15's bytes (version 26), stat_count}."""
     tree, ui = split(assets, spec["ui"])
     root = ko_hud.parse(tree.get(ui))
     # Every address resolves on KO's tree as read, before anything moves or is added.
@@ -1085,6 +1144,10 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
             raise ValueError("front-end %s: gone in version 25; the create screen's classes name each class "
                              "button's image and labels" % gone)
     chosen = create_choices(name, spec, root, bindings, states, hidden)
+    # Version 26 (RQ-173): create's stat arrows, value texts and points text.
+    taken = {id(n) for n, *_ in chosen["races"]} | {id(n) for n, *_ in chosen["classes"]} | chosen["images"] | \
+        chosen["labels"]
+    arrows = create_stats(name, spec, root, bindings, states, hidden, taken)
     wanted = [id(resolve(root, a)) for a in find]
     for extra in spec.get("added", []):
         # A string KO's layout lacks (a status line, say), in UIF
@@ -1118,7 +1181,7 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
         action = bindings.get(id(n), "")
         if action not in ACTIONS or ONLY_ON.get(action, name) != name:
             raise ValueError("front-end action %r" % action)
-        if action in seen and action not in CREATE_CHOICES:
+        if action in seen and action not in MULTI_BOUND:
             raise ValueError("front-end action %r bound twice" % action)
         if action:
             seen.add(action)
@@ -1207,8 +1270,16 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
             record += u(found[id(n)]) + u(len(codes)) + b"".join(u(c) for c in codes) + \
                 u(NO_NODE if image is None else found[id(image)]) + u(len(labels)) + \
                 b"".join(u(found[id(label)]) for label in labels)
+        # Version 26 (RQ-173): item 15, the stat arrows.
+        named = [n for entry in arrows["stats"] for n in entry] + ([arrows["points"]] if arrows["stats"] else [])
+        if any(id(n) not in found for n in named):
+            raise ValueError("front-end stats and points: a node they name is not drawn")
+        stat_record = u(len(arrows["stats"])) + b"".join(u(found[id(v)]) + u(found[id(d)]) + u(found[id(a)])
+                                                         for v, d, a in arrows["stats"])
+        stat_record += u(found[id(arrows["points"])] if arrows["stats"] else NO_NODE) + u(arrows["row"])
         choices.append(dict(data=record, races=[(race, default) for _, race, default in chosen["races"]],
-                            classes=[codes for _, codes, *_ in chosen["classes"]]))
+                            classes=[codes for _, codes, *_ in chosen["classes"]], stats=stat_record,
+                            stat_count=len(arrows["stats"])))
     data = u(len(nodes)) + b"".join(nodes)
     if placements is not None:
         # A move of a node that draws nothing (hidden) is not written.
@@ -2082,9 +2153,18 @@ def create_buttons(choice, rules):
     (Q109 (a)); the client checks a choice against create.bin as the server
     does."""
     if rules is None:
-        if choice["races"] or choice["classes"]:
-            raise ValueError("front-end races and classes: the package has no create rules (character-create.json)")
+        if choice["races"] or choice["classes"] or choice.get("stat_count"):
+            raise ValueError("front-end races, classes and stats: the package has no create rules "
+                             "(character-create.json)")
         return
+    # Version 26 (RQ-173): one arrow pair per stat of the rules, which a build
+    # reads from the chosen race's row, so a create with stats binds its race
+    # buttons.
+    if choice.get("stat_count") and choice["stat_count"] != rules["stats"]:
+        raise ValueError("front-end stats: %d, the package's create rules have %d (character-create.json)"
+                         % (choice["stat_count"], rules["stats"]))
+    if choice.get("stat_count") and not choice["races"]:
+        raise ValueError("front-end stats: a create without race buttons builds no stat row")
     entries = {r["race"]: set(r["specialties"]) for r in rules["races"]}
     for race, default in choice["races"]:
         if race not in entries:
@@ -2176,9 +2256,10 @@ def write(assets, out, config, work, rules=None):
     # Version 10 (RQ-102): each message's title and wording.
     message_section, message_report = messages_section(config, assets)
     # Version 20 (RQ-126): create's slide, after the placement; version 25
-    # (RQ-172): create's race and class buttons after it.
+    # (RQ-172): create's race and class buttons after it; version 26 (RQ-173):
+    # its stat arrows last.
     data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section + message_section + \
-        placement_section + b"".join(slides) + choices[0]["data"]
+        placement_section + b"".join(slides) + choices[0]["data"] + choices[0]["stats"]
     if len(data) > MAX_FILE:
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)

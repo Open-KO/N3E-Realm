@@ -439,7 +439,7 @@ assert choice_section(CHOSEN["data"]) == (
 assert CHOSEN["races"] == [(2, 102)] and CHOSEN["classes"] == [[101, 201], [104, 204]], CHOSEN
 shown = {i: f for i, _, f in node_records(choice_screens(class_labels="show")[2])}
 assert shown["str_01"] == shown["int_01"] == fe.CLASS_SHOWS and shown["str_02"] == 0, shown
-assert fe.CLASS_HIDES == 16 and fe.CLASS_SHOWS == 32 and fe.ACTIONS[-2:] == ("create_race", "create_class") and \
+assert fe.CLASS_HIDES == 16 and fe.CLASS_SHOWS == 32 and fe.ACTIONS[-6:-4] == ("create_race", "create_class") and \
     fe.ONLY_ON["create_race"] == "create", fe.ACTIONS
 # A race or class button `down` is chosen at each open (the 1097 choice's):
 # fixed on, every state image kept (the client draws it down while chosen).
@@ -555,6 +555,125 @@ print("PASS front-end cook: create's race and class buttons by KO's codes, each 
       "refusals; both recipes bind the Tuarek and the four classes as 1298 and 1264 map them, the 1298 recipe "
       "waiting for both, the 1097 choice choosing the Tuarek and the priest at each open" % len(choice_problems))
 
+# RQ-173 (version 26, KO-FINDINGS 9.15, 9.16): create's stat arrows (1298's
+# 00604f90 and 1264's 0043dfc0 by each button's id), bound by the create
+# screen's `stats` (each stat's value text and its left and right arrows, in
+# the package's stat order), `points` (text_bonus) and `stat_row` (`class`:
+# 1298's row by race and class; `race`: 1264's), cooked as item 15 after
+# create's choice section: a count, each stat's three nodes, the points node
+# and the row.
+STAT_NAMES = ("str", "sta", "dex", "int", "map")
+STATS = [{"value": "text_" + n, "down": "btn_%s_left" % n, "up": "btn_%s_right" % n} for n in STAT_NAMES]
+
+
+def stats_tree():
+    return node(0, "root", [button("btn_create"), button("btn_cancel"),
+                            node(8, "edit_name", [node(4, texture=""), text("")]), node(9, "area_character"),
+                            text("text_desc"), node(4, "img_priest"), text("int_01"), button("btn_race_ka_tu"),
+                            button("btn_class_priest"), text("text_bonus"), button("btn_face_left")] +
+                [x for n in STAT_NAMES for x in (text("text_" + n), button("btn_%s_left" % n),
+                                                 button("btn_%s_right" % n))])[1]
+
+
+def stats_cook(**create):
+    spec_create = {"races": CHOICE_RACES, "classes": {"btn_class_priest": CHOICE_CLASSES["btn_class_priest"] | {
+        "labels": ["int_01"]}}, "class_labels": "hide", "stats": STATS, "points": "text_bonus",
+                   "stat_row": "class", **create}
+    spec_create = {k: v for k, v in spec_create.items() if v is not None}  # None: left out
+    assets = Fixture({**trees, "create.uif": stats_tree()})
+    textures, fonts, choices = fe.Textures(assets), {}, []
+    specs = {**{n: spec(n) for n in fe.SCREENS}, "create": spec("create", **spec_create)}
+    data = [fe.screen(n, specs[n], assets, textures, fonts, choices=choices) for n in fe.SCREENS]
+    return data, choices[0]
+
+
+STAT_DATA, STAT_CHOICE = stats_cook()
+stat_index = {i: k for k, (i, _, _) in enumerate(node_records(STAT_DATA[2]))}
+stat_actions = {i: (a, f) for i, a, f in node_records(STAT_DATA[2]) if i.startswith(("text_", "btn_s", "btn_d",
+                                                                                       "btn_i", "btn_m"))}
+assert stat_actions == {**{"text_" + n: (fe.ACTIONS.index("create_stat"), 0) for n in STAT_NAMES},
+                        **{"btn_%s_left" % n: (fe.ACTIONS.index("create_stat_down"), 0) for n in STAT_NAMES},
+                        **{"btn_%s_right" % n: (fe.ACTIONS.index("create_stat_up"), 0) for n in STAT_NAMES},
+                        "text_bonus": (fe.ACTIONS.index("create_points"), 0), "text_desc": (fe.ACTIONS.index(
+                            "class_desc"), 0)}, stat_actions
+words = list(struct.unpack("<%dI" % (len(STAT_CHOICE["stats"]) // 4), STAT_CHOICE["stats"]))
+assert words == [5] + [stat_index[x] for n in STAT_NAMES for x in ("text_" + n, "btn_%s_left" % n,
+                                                                   "btn_%s_right" % n)] + \
+    [stat_index["text_bonus"], 1], words
+assert STAT_CHOICE["stat_count"] == 5 and fe.ACTIONS[-4:] == fe.CREATE_STATS and \
+    all(fe.ONLY_ON[a] == "create" for a in fe.CREATE_STATS), fe.ACTIONS
+words = list(struct.unpack("<2I", stats_cook(stat_row="race")[1]["stats"][-8:]))
+assert words == [stat_index["text_bonus"], 0], words
+# Without stats: no stats, no points node, row 0.
+assert choice_cook()[1]["stats"] == struct.pack("<3I", 0, fe.NO_NODE, 0), choice_cook()[1]["stats"]
+assert fe.MESSAGES[-1] == "create_points_left", fe.MESSAGES
+stat_problems = (
+    ("create's only", dict(specs={"login": spec("login", stats=[])})),
+    ("bound by the create screen's stats and points",
+     dict(bindings={**BINDINGS["create"], "btn_face_left": "create_stat_up"})),
+    ("up to 8 stats", dict(stats=STATS * 2)),
+    ("with points and stat_row, or none of the three", dict(points=None)),
+    ("with points and stat_row, or none of the three", dict(stat_row=None)),
+    ("with points and stat_row, or none of the three", dict(stats=None)),
+    ("stat_row: one of", dict(stat_row="specialty")),
+    ("exactly {value, down, up}", dict(stats=[{"value": "text_str", "down": "btn_str_left"}])),
+    ("bound, hidden, fixed or named twice", dict(stats=[STATS[0], STATS[0]])),
+    ("bound, hidden, fixed or named twice", dict(states={"btn_str_left": "disabled"})),
+    ("bound, hidden, fixed or named twice", dict(hidden=["text_str"])),
+    ("bound, hidden, fixed or named twice", dict(points="text_desc")),
+    ("bound, hidden, fixed or named twice",
+     dict(stats=[{"value": "text_str", "down": "btn_class_priest", "up": "btn_str_right"}])),
+    ("a string", dict(stats=[{"value": "btn_face_left", "down": "btn_str_left", "up": "btn_str_right"}])),
+    ("a button", dict(stats=[{"value": "text_str", "down": "text_sta", "up": "btn_str_right"}])))
+for reason, kw in stat_problems:
+    specs = kw.pop("specs", None)
+    try:
+        if specs:
+            assets = Fixture({**trees, "create.uif": stats_tree()})
+            textures, fonts = fe.Textures(assets), {}
+            for n in fe.SCREENS:
+                fe.screen(n, {**spec(n), **specs.get(n, {})}, assets, textures, fonts, choices=[])
+        else:
+            stats_cook(**kw)
+    except ValueError as error:
+        assert reason in str(error), (reason, error)
+        continue
+    raise AssertionError(("cooked create stats", reason, kw))
+# With the package's rules: one stat per rules stat, and race buttons to
+# build the row from.
+fe.create_buttons(STAT_CHOICE, moradon_rules)
+for reason, choice in (
+        ("stats: 4, the package's create rules have 5", STAT_CHOICE | {"stat_count": 4}),
+        ("a create without race buttons builds no stat row", STAT_CHOICE | {"races": []}),
+        ("races, classes and stats: the package has no create rules", None)):
+    try:
+        fe.create_buttons(choice or (STAT_CHOICE | {"races": [], "classes": []}),
+                          None if choice is None else moradon_rules)
+    except ValueError as error:
+        assert reason in str(error), (reason, error)
+        continue
+    raise AssertionError(("accepted create stats", reason))
+# Both recipes bind KO's arrows (binary: 1298's 00604f90 and 1264's 0043dfc0
+# by the ids btn_str_right .. btn_map_left; their value texts text_str ..
+# text_map and text_bonus, 00605950 and 0043ea10) in create.bin's stat order
+# (KO's str, sta, dex, int, MAP; NewChrValue's columns 2..6), none fixed or
+# hidden: 1298's row by race and class (005fd120's race x 10000 + class),
+# 1264's by race (0043ae40); each words points left with row 1913 under 1901
+# (005fffd0's and 0043a340's code 10).
+for recipe, row, messages, table in (
+        (create_1298, "class", messages_1298, "Data/Texts_us.tbl"),
+        (create_1097["screens"]["create"], "race", create_1097["messages"], "installer-1264:Data/Texts_us.tbl")):
+    assert recipe["stats"] == STATS and recipe["points"] == "text_bonus" and recipe["stat_row"] == row, recipe
+    assert not {n for st in STATS for n in st.values()} & (set(recipe["states"]) | set(recipe.get("hidden", []))), \
+        recipe
+    assert "text_bonus" not in recipe.get("hidden", []), recipe
+    assert messages["create_points_left"] == {"title": {"table": table, "row": 1901},
+                                              "text": {"table": table, "row": 1913}}, messages
+assert moradon_rules["stats"] == len(STATS) and moradon_rules["columns"]["stats"] == [2, 3, 4, 5, 6], moradon_rules
+print("PASS front-end cook: create's stat arrows, value texts and points text as item 15, %d refusals; both "
+      "recipes bind KO's arrows in the package's stat order, 1298's row by race and class, 1264's by race, "
+      "and word points left with row 1913" % (len(stat_problems) + 3))
+
 # RQ-138 (Q89 (b), KO-FINDINGS 9.16): the recipe state `down`, 1264's chosen
 # race and class (0043ec90 and 0043ee10 set state 3, which Render 00403a70
 # draws with BS_DOWN): fixed on in the file, the button's down image (state
@@ -624,9 +743,10 @@ assert "btn_race_ka_pt" not in create_1097["screens"]["create"]["races"], create
 # priest), so the recipe hides none of them, and the rogue is live.
 # RQ-144 (Q92 (b)): the priest's mark shows img_str and img_int (0043ee10(104)),
 # pink copies over the light "Strength" and "Intelligence"; the other three
-# are the other classes' labels, shown when they are marked. The stat values
-# stay empty and text_bonus hidden.
-assert create_1097["screens"]["create"]["hidden"] == ["text_bonus"], create_1097["screens"]["create"]["hidden"]
+# are the other classes' labels, shown when they are marked. RQ-173: the stat
+# values and text_bonus are written (Q52's empty values and hidden text_bonus
+# lifted), so the recipe hides nothing.
+assert "hidden" not in create_1097["screens"]["create"], create_1097["screens"]["create"]
 assert "btn_class_rogue" not in states_1097, states_1097
 print("PASS front-end cook: the recipe state down, the down image in the on state, the 1097 choice's Tuarek and "
       "priest chosen at each open, its Puri Tuarek unfixed and unbound, its class column and pink labels drawn "
@@ -1146,11 +1266,11 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=25, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=26, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0),
-         creates=None, choices=u(0) + u(0)):
+         creates=None, choices=u(0) + u(0), stats=u(0) + u(0xFFFFFFFF) + u(0)):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -1177,8 +1297,9 @@ def blob(version=25, slots=1, screen_data=None, font_index=None, light=None, plu
     # Version 24 (RQ-158): the create models, each a race and a model record.
     out += u(1) + u(2) + character(plug=plug) if creates is None else creates
     # Version 20 (RQ-126): create's slide, after the placement; version 25
-    # (RQ-172): create's race and class buttons, after the slide.
-    return out + music + logo + messages + placement + slide + choices + extra
+    # (RQ-172): create's race and class buttons, after the slide; version 26
+    # (RQ-173): its stat arrows, last.
+    return out + music + logo + messages + placement + slide + choices + stats + extra
 
 
 # --- the create models (version 24, RQ-158) -------------------------------------
@@ -1353,8 +1474,9 @@ EXIT_INDEX = fe.MESSAGES.index("exit_confirm")
 assert EXIT_INDEX == 10 and \
     EXIT_CONFIRM == u(1) + u(EXIT_INDEX) + string("") + u(1) + string("Enter a name. "), EXIT_CONFIRM
 # RQ-130 (version 21): create's two refusals follow it, the engine's
-# FrontMessage order (client/assets/assets.h).
-assert fe.MESSAGES[11:] == ("create_no_race", "create_no_class"), fe.MESSAGES
+# FrontMessage order (client/assets/assets.h); RQ-173 (version 26): points left
+# after them.
+assert fe.MESSAGES[11:] == ("create_no_race", "create_no_class", "create_points_left"), fe.MESSAGES
 # The recipe's tables are paths the choice's prefix check sees (RQ-084).
 assert ("messages.login.title.table", "installer-1264:Data/Texts_us.tbl") in fe.recipe_paths(
     {"messages": {"login": {"title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1}}}})
@@ -2061,6 +2183,19 @@ def choice_record(races, classes):
     return data
 
 
+def stat_record(entries, points, row):
+    """Create's stat section (item 15) from (value, down, up) node ids of
+    STAT_DATA's create screen, the points node id (None: none) and the row
+    (unchecked)."""
+    at = {i: k for k, (i, _, _) in enumerate(node_records(STAT_DATA[2]))}
+    return u(len(entries)) + b"".join(u(at[v]) + u(at[d]) + u(at[a]) for v, d, a in entries) + \
+        u(0xFFFFFFFF if points is None else at[points]) + u(row)
+
+
+STAT_ENTRIES = [("text_" + n, "btn_%s_left" % n, "btn_%s_right" % n) for n in STAT_NAMES]
+assert stat_record(STAT_ENTRIES, "text_bonus", 1) == STAT_CHOICE["stats"]
+
+
 RACE_TU = ("btn_race_ka_tu", 2, 102)
 WARRIOR = ("btn_class_warrior", [101, 201], "img_warrior", ["str_01"])
 PRIEST = ("btn_class_priest", [104, 204], "img_priest", ["str_01", "int_01"])
@@ -2133,6 +2268,44 @@ CHOICE_CASES = {
     **{"bad-choice-" + reason: blob(screen_data=CHOICE, choices=choice_record(*entries))
        for reason, entries in CHOICE_SECTIONS.items()},
     "bad-choice-truncated": blob(screen_data=CHOICE, choices=CHOSEN["data"][:-4]),
+    # RQ-173 (version 26): create's stat arrows (item 15).
+    "bad-version-25": blob(version=25),
+    "ok-create-stats": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"], stats=STAT_CHOICE["stats"]),
+    "ok-create-stats-race": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"],
+                                 stats=stat_record(STAT_ENTRIES, "text_bonus", 0)),
+    "bad-create-stats-unlisted": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"]),
+    "bad-create-stats-9": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"],
+                               stats=stat_record(STAT_ENTRIES * 2, "text_bonus", 1)[:4 + 9 * 12] + u(0) * 2),
+    "bad-create-stats-twice": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"],
+                                   stats=stat_record(STAT_ENTRIES[:4] + STAT_ENTRIES[:1], "text_bonus", 1)),
+    "bad-create-stats-node": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"], stats=stat_record(
+        [("btn_str_left", "text_str", "btn_str_right")] + STAT_ENTRIES[1:], "text_bonus", 1)),
+    "bad-create-stats-points": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"],
+                                    stats=stat_record(STAT_ENTRIES, None, 1)),
+    "bad-create-stats-points-text": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"],
+                                         stats=stat_record(STAT_ENTRIES, "text_desc", 1)),
+    "bad-create-stats-row": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"],
+                                 stats=stat_record(STAT_ENTRIES, "text_bonus", 2)),
+    "bad-create-stats-none-points": blob(screen_data=CHOICE, choices=CHOSEN["data"],
+                                         stats=u(0) + u(0) + u(0)),
+    "bad-create-stats-none-row": blob(screen_data=CHOICE, choices=CHOSEN["data"], stats=u(0) + u(0xFFFFFFFF) + u(1)),
+    "bad-create-stat-arrow-disabled": blob(screen_data=patch_node(STAT_DATA, 2, "btn_str_left", flags=2),
+                                           choices=STAT_CHOICE["data"], stats=STAT_CHOICE["stats"]),
+    "bad-create-stat-arrow-on": blob(screen_data=patch_node(STAT_DATA, 2, "btn_str_right", flags=1),
+                                     choices=STAT_CHOICE["data"], stats=STAT_CHOICE["stats"]),
+    "bad-create-stat-text-button": blob(screen_data=patch_node(STAT_DATA, 2, "btn_face_left",
+                                                               action=fe.ACTIONS.index("create_stat")),
+                                        choices=STAT_CHOICE["data"], stats=STAT_CHOICE["stats"]),
+    "bad-create-stat-arrow-text": blob(screen_data=patch_node(STAT_DATA, 2, "text_desc",
+                                                              action=fe.ACTIONS.index("create_stat_up")),
+                                       choices=STAT_CHOICE["data"], stats=STAT_CHOICE["stats"]),
+    "bad-create-stat-off-create": blob(screen_data=patch_node(bar_screens, 1, "btn_delete",
+                                                              action=fe.ACTIONS.index("create_stat_up"))),
+    "bad-create-points-twice": blob(screen_data=patch_node(STAT_DATA, 2, "text_desc",
+                                                           action=fe.ACTIONS.index("create_points")),
+                                    choices=STAT_CHOICE["data"], stats=STAT_CHOICE["stats"]),
+    "bad-create-stats-truncated": blob(screen_data=STAT_DATA, choices=STAT_CHOICE["data"],
+                                       stats=STAT_CHOICE["stats"][:-4]),
 }
 cases = {
     "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
@@ -2369,8 +2542,33 @@ try:
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
     assert any(l.startswith("refused bad-choice-truncated:") for l in run.stdout.splitlines())
+    # RQ-173: create's stat arrows, each refusal for its reason.
+    for name, reason in (("bad-version-25", "front end version"),
+                         ("bad-create-stats-unlisted", "front end create points"),
+                         ("bad-create-stats-9", "count"),
+                         ("bad-create-stats-twice", "front end create stat"),
+                         ("bad-create-stats-node", "front end create stat"),
+                         ("bad-create-stats-points", "front end create points"),
+                         ("bad-create-stats-points-text", "front end create points"),
+                         ("bad-create-stats-row", "front end create points"),
+                         ("bad-create-stats-none-points", "front end create points"),
+                         ("bad-create-stats-none-row", "front end create points"),
+                         ("bad-create-stat-arrow-disabled", "front end create stat arrow"),
+                         ("bad-create-stat-arrow-on", "front end create stat arrow"),
+                         ("bad-create-stat-text-button", "front end create stat text"),
+                         ("bad-create-stat-arrow-text", "front end create stat arrow"),
+                         ("bad-create-stat-off-create", "front end create choice off create"),
+                         ("bad-create-points-twice", "front end action bound twice")):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    assert any(l.startswith("refused bad-create-stats-truncated:") for l in run.stdout.splitlines())
+    stat_at = {i: k for k, (i, _, _) in enumerate(node_records(STAT_DATA[2]))}
+    for name, row in (("ok-create-stats", 1), ("ok-create-stats-race", 0)):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("create-stats %s:" % name))
+        assert line.split(": ", 1)[1] == " ".join("%d/%d/%d" % tuple(stat_at[x] for x in e) for e in STAT_ENTRIES) + \
+            " points=%d row=%d" % (stat_at["text_bonus"], row), line
     for name in ("ok-create-choice", "ok-create-choice-chosen", "ok-create-choice-shown",
-                 "ok-create-choice-race-only"):
+                 "ok-create-choice-race-only", "ok-create-stats", "ok-create-stats-race"):
         assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
     # RQ-172: the loaded buttons, as the cook wrote them (choice_section).
     at = {i: k for k, (i, _, _) in enumerate(node_records(CHOICE[2]))}

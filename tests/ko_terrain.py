@@ -1233,6 +1233,35 @@ print("PASS KO world vertices (RQ-193): a placement whose unnormalised rotation 
       "direction, or whose scale or position puts a vertex past 1e6 under the sentinel limit, is refused at "
       "write (N3W1 and N3W2)")
 
+# RQ-195: a part's LOD scale is its placement's largest scale and its radius
+# and its parent's radii grow with it, bounded only at the sentinel limit; the
+# writers refuse a part or parent record the client's reader refuses
+# (world_chunks.part_head and parent_bytes; tests/world_lod.py and
+# tests/world_chunks.py show the parity), so the bake fails. The probe part's
+# radius is sqrt(2), so a scale of 1000 keeps every record within its bounds
+# and 1001 passes only the part scale's (1000).
+widest = rq193_bake(scale=(1000.0, 1.0, 1.0))
+assert not widest["chunked"] and widest["world"][:4] == b"N3W1"
+assert max(p["scale"] for p in widest["built"]["chunks"] if p["kind"] == 1) == 1000.0
+try:
+    rq193_bake(scale=(1001.0, 1.0, 1.0))
+except ValueError as error:
+    assert str(error).startswith("world part scale outside"), error
+else:
+    raise AssertionError("baked a world part scale the client refuses")
+rq193_zone["opd"].write_bytes(shapes.build(name="orig_large_zone", width=128.0, depth=128.0, shapes=[
+    dict(label="odd", position=(30.0, 1.0, 40.0), parts=probe_part, scale=(1.0, 1.0, 1001.0))]))
+chunked_scaled = ko_scene.expand(rq193_zone["gtd"], rq193_zone["opd"], rq193_zone["assets"], turned["heightfield"],
+                                 detail=True, color_map=rq193_zone["tct"], chunked=True)
+try:
+    ko_scene.world2_bytes(chunked_scaled)
+except ValueError as error:
+    assert str(error).startswith("world part scale outside"), error
+else:
+    raise AssertionError("wrote an N3W2 world part scale the client refuses")
+print("PASS KO world records (RQ-195): a placement whose scale puts a part's LOD scale past 1000 under the "
+      "sentinel limit is refused at write (N3L3 and N3W2); a scale of 1000 bakes")
+
 # PQ-392 (D-205): the bind points and warp gates 1298 shows at load (event types
 # 0 and 5, 005b4690) are placed like static shapes, whatever their NPC fields and
 # 0x1000 kind; the other event types are not. The multi-texture "magic" part is

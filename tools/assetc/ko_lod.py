@@ -129,11 +129,14 @@ def serialize(built):
     out=bytearray((b'N3L3',b'N3L4',b'N3L5')[world_chunks.layout(built['chunks'])]); cfg=built['terrain_lod']
     out+=f([*cfg['origin'],cfg['patch_size'],cfg['far_factor'],cfg['bias']])
     out+=u(cfg['minimum'])+u(cfg['band'])+u(cfg['width'])
+    # RQ-195: parents, part heads, level and control distances as the client
+    # reads them (world_chunks.parent_bytes, part_head, rising).
     parents=built['parents']; out+=u(len(parents))
-    for p in parents: out+=f(p)
+    for p in parents: out+=world_chunks.parent_bytes(p)
     out+=u(len(built['chunks']));total=0
     for p in built['chunks']:
-        out+=f([*p['center'],p['radius'],p['scale']])+u(p['flags'])+u(len(p['levels']))
+        out+=world_chunks.part_head(p)+u(p['flags'])+u(len(p['levels']))
+        world_chunks.rising([d for d,_ in p['levels']],'world level distance',True)
         for d,ix in p['levels']:
             total+=len(ix);out+=f([d])+u(len(ix))+b''.join(u(i) for i in ix)
         out+=u(p['kind'])
@@ -142,6 +145,7 @@ def serialize(built):
         pm=p['progressive'];out+=u(p['parent'])+u(p['base'])
         out+=u(pm['min_vertices'])+u(pm['min_indices'])+u(p['max_vertices'])
         out+=u(len(pm['controls']))
+        world_chunks.rising([d for d,_ in pm['controls']],'world control distance',False)
         for d,budget in pm['controls']:out+=f([d])+u(budget)
         out+=u(len(pm['splits']))
         for di,dc,dv,first,group,target in pm['splits']:

@@ -444,6 +444,11 @@ def object_geometry(opd_path, assets, atlas, half, chunks=None, parents=None, he
                 center = _rotate(q,[(center[0]+ax)*sx,(center[1]+ay)*sy,(center[2]-az)*sz])
                 center = [a+b for a,b in zip(origin,center)]
                 scale = max(sx,sy,sz)
+                # RQ-195: the scale is bounded only at the sentinel limit; the
+                # writers refuse a part or parent record the client's reader
+                # refuses (world_chunks.part_head, parent_bytes: a scale above
+                # 1000, a radius above 2000, a parent radius above 10000), and
+                # the bake fails.
                 if scale <= 0: raise ValueError('nonpositive parent LOD scale')
                 pm = mesh['progressive_data']
                 record = dict(center=center,radius=radius*scale,scale=scale,

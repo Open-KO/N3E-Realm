@@ -68,8 +68,11 @@ placements with positive LOD scale and positive parent Y visibility scale are
 supported; unsupported transforms fail the LOD bake. A placement whose scale,
 position or unnormalised rotation writes a world vertex the client's reader
 refuses (a float past the cooked bound 10⁶, a normal whose single-precision
-length is at most 10⁻¹⁰) fails the world bake too (RQ-193). Local reference assets and
-raw binary output are never bundled or required downloads.
+length is at most 10⁻¹⁰) fails the world bake too (RQ-193), as does one whose
+scale writes a part or parent record the client refuses (a part scale above
+1000, a part radius above 2000, a parent radius above 10⁴, a centre past 10⁶;
+RQ-195). Local reference assets and raw binary output are never bundled or
+required downloads.
 
 KFC opt-in package capabilities: [N3I1 bags](../../content/inventory.md) and
 [N3O1 merchants](../../content/commerce.md), independently read by C++/Rust and

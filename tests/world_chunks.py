@@ -19,6 +19,7 @@ header names. Client, server and cooker refuse it without N3W2 and N3W2
 without it; the client, the writer and the cooker refuse malformed N3WT files
 (counts, levels, sizes, truncation, more banks than the client binds).
 """
+import copy
 import json
 import re
 import os
@@ -634,3 +635,118 @@ with tempfile.TemporaryDirectory(dir="build") as td:
 print("PASS world vertices (RQ-193): the writer refuses exactly the rows the client's vertex reader refuses "
       "(a float not finite or past 1e6, a normal whose single-precision length is at most 1e-10, a UV past "
       "1024); an accepted row is written and loads")
+
+# RQ-195: the chunked writer refuses a parent, a part head, a level distance or
+# a control distance exactly as the client's reader does (the shared helpers
+# world_chunks.parent_bytes, part_head and rising; tests/world_lod.py shows the
+# N3L3 parity at each edge), and a grid origin or chunk box past the cooked
+# float bound. Each field's offset is where two accepted values' bytes differ;
+# an accepted value is written there and loads, a refused one is refused by
+# the writer and, when it packs, forged there to show the client refuses it.
+# The KO bake's own case (an OPD scale past 1000) is tests/ko_terrain.py's.
+nan, inf = float("nan"), float("inf")
+_, base_vertices, base_built = fx.small()
+PART = 4  # the first progressive part (parent 0); part 0 is a terrain patch
+
+
+def parent_field(k):
+    return lambda b, v: b["parents"][0].__setitem__(k, v)
+
+
+def scale_field(b, v):
+    b["chunks"][PART]["scale"] = v
+
+
+def level_field(j):
+    return lambda b, v: b["chunks"][0]["levels"].__setitem__(j, (v, b["chunks"][0]["levels"][j][1]))
+
+
+def control_field(j):
+    def set_(b, v):
+        controls = b["chunks"][PART]["progressive"]["controls"]
+        controls[j] = (v, controls[j][1])
+    return set_
+
+
+radius_refused = [(f32_step(1e4, 1), "parent bounds"), (-1.0, "parent bounds"), (nan, "cooked finite bound"),
+                  (1e39, None)]
+rq195_cases = [
+    ("parent distance radius", parent_field(3), [12.0, 0.0, 1e4], radius_refused),
+    ("parent radius", parent_field(7), [8.0, -0.0, 1e4], radius_refused),
+    ("part scale", scale_field, [1.0, 1000.0, 1e-30],
+     [(0.0, "world part bounds"), (-0.0, "world part bounds"), (f32_step(1000.0, 1), "world part bounds"),
+      (inf, "cooked finite bound")]),
+    ("first level distance", level_field(0), [0.0, -0.0], [(1.0, "world LOD bounds"), (nan, "cooked finite bound")]),
+    ("level distance", level_field(32), [32.0, 1e6], [(31.0, "world LOD bounds"), (past, "cooked finite bound")]),
+    ("first control distance", control_field(0), [0.0, -0.5],
+     [(-1.0, "progressive control"), (20.0, "progressive control")]),
+    ("control distance", control_field(1), [20.0, 1e6], [(0.0, "progressive control"), (past, "cooked finite bound")]),
+]
+
+
+def rq195_write(set_, value):
+    b = copy.deepcopy(base_built)
+    set_(b, value)
+    return world_chunks.serialize(fx.COUNT, base_vertices, b, (0, 0), 16, 2)
+
+
+def rq195_refused(write, prefix):
+    try:
+        write()
+    except ValueError as e:
+        assert str(e).startswith(prefix), (prefix, e)
+    else:
+        raise AssertionError(("wrote a world the client refuses", prefix))
+
+
+with tempfile.TemporaryDirectory(dir="build") as td:
+    package = fx.package(td, "rq195", world_chunks.serialize(fx.COUNT, base_vertices, base_built, (0, 0), 16, 2))
+    for name, set_, accepted, refused_values in rq195_cases:
+        a, b = rq195_write(set_, accepted[0]), rq195_write(set_, accepted[1])
+        assert len(a) == len(b) and a != b, name
+        at = next(i for i in range(len(a)) if a[i] != b[i]) // 4 * 4
+        assert a[:at] + a[at + 4:] == b[:at] + b[at + 4:], name
+        for value in accepted:
+            world = rq195_write(set_, value)
+            assert world == a[:at] + struct.pack("<f", value) + a[at + 4:], (name, value)
+            install(package, "world.bin", world)
+            c = client(package)
+            assert c.returncode == 0, ("client refused a written value", name, value, c.stderr)
+        for value, why in refused_values:
+            rq195_refused(lambda: rq195_write(set_, value), "world ")
+            if why is not None:
+                install(package, "world.bin", a[:at] + struct.pack("<f", value) + a[at + 4:])
+                c = client(package)
+                assert c.returncode != 0 and why in c.stderr, (name, value, why, c.stderr)
+    # A part within its bounds can widen its chunk's box past the cooked float
+    # bound: a 3 m triangle at x = 999990..999993 whose plain part is centred
+    # at 999999 loads with radius 1 (its box reaches 1e6) and is refused at
+    # radius 2 by the writer, whose box would reach past it.
+    far = [[999990.0 + dx, 0.0, 8.0 + dz, 0, 1, 0, 0, 0, .5, .5, 1.0, float(fx.CLEAR)]
+           for dx, dz in ((0, 0), (3, 0), (0, 3))]
+    lone = dict(parents=[], terrain_lod=None, chunks=[dict(center=[999999.0, 0.0, 8.0], radius=1.0, scale=1.0,
+                                                           flags=0, levels=[(0.0, [0, 2, 1])], kind=0)])
+    origin = world_chunks.grid(lone, 16)
+    assert origin == (999984.0, 0.0, 1), origin
+    install(package, "world.bin", world_chunks.serialize(fx.COUNT, far, lone, origin[:2], 16, 1))
+    c = client(package)
+    assert c.returncode == 0, c.stderr
+    lone["chunks"][0]["radius"] = 2.0
+    rq195_refused(lambda: world_chunks.serialize(fx.COUNT, far, lone, origin[:2], 16, 1), "world chunk box ")
+    rq195_refused(lambda: world_chunks.serialize(fx.COUNT, base_vertices, base_built, (-past, 0), 16, 2),
+                  "world chunk grid ")
+    for centre in ([past, 5, 28], [4, nan, 28], [4, 5, 1e39]):
+        rq195_refused(lambda: rq195_write(lambda b, v: b["chunks"][PART].update(center=v), centre), "world part ")
+    # A plain part's centre places it: past the float range it is outside any
+    # grid (an error, not an overflow).
+    for centre in ([inf, 5, 28], [4, 5, 1e39]):
+        plain_part = lambda b, v: b["chunks"][PART].update(kind=0, center=v)
+        rq195_refused(lambda: rq195_write(plain_part, centre), "world part ")
+        b = copy.deepcopy(base_built)
+        plain_part(b, centre)
+        rq195_refused(lambda: world_chunks.grid(b, 16), "world part outside any chunk grid")
+    for radius in (f32_step(2000.0, 1), -1.0, nan):
+        rq195_refused(lambda: rq195_write(lambda b, v: b["chunks"][PART].update(radius=v), radius), "world part ")
+print("PASS N3W2 world records (RQ-195): the writer refuses exactly the parents, part scales, level distances and "
+      "control distances the client refuses, and part centres, radii, a grid origin or a chunk box past their "
+      "bounds; an accepted value is written and loads")

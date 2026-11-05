@@ -121,6 +121,73 @@ def vertex_row(v):
     return row
 
 
+# RQ-195: the client reads a parent (client/assets/assets.cpp
+# read_world_parent: position, distance radius, centre, radius) and a part's
+# head (read_world_part: centre, radius, scale) as cooked floats, a parent's
+# two radii within [0, PARENT_RADIUS], a part's radius within [0, PART_RADIUS]
+# and its scale within (0, PART_SCALE]; a part's level distances rise from
+# exactly 0 and a progressive part's control distances from above -1, each
+# compared in single precision. The chunked reader (load_world_index) also
+# reads the grid origin and each chunk's box as cooked floats. The writers
+# (`serialize`, ko_lod.serialize) refuse at write what the client refuses at
+# load, through these helpers.
+PARENT_RADIUS = 10000.0
+PART_RADIUS = 2000.0
+PART_SCALE = 1000.0
+
+
+def cooked(xs, what):
+    """(bytes, single-precision values) of the floats xs as the client's
+    Reader::f reads them; refuses one not finite or past the cooked float
+    bound once rounded to single precision."""
+    try:
+        data = f(xs)
+    except OverflowError:
+        data = None
+    if data is not None:
+        x = struct.unpack("<%df" % len(xs), data)
+        if all(abs(c) <= COOKED_FLOAT_BOUND for c in x):  # NaN fails too
+            return data, x
+    raise ValueError("%s float not finite or past the cooked float bound" % what)
+
+
+def parent_bytes(p):
+    """The 32 bytes of a parent record (position, distance radius, centre,
+    radius) the client's read_world_parent accepts."""
+    if len(p) != 8:
+        raise ValueError("world parent record")
+    data, x = cooked(list(p), "world parent")
+    if not (0 <= x[3] <= PARENT_RADIUS and 0 <= x[7] <= PARENT_RADIUS):
+        raise ValueError("world parent radius outside [0, %g]" % PARENT_RADIUS)
+    return data
+
+
+def part_head(part):
+    """The 20 bytes of a part's centre, radius and scale the client's
+    read_world_part accepts."""
+    center = list(part["center"])
+    if len(center) != 3:
+        raise ValueError("world part centre")
+    data, x = cooked([*center, part["radius"], part["scale"]], "world part")
+    if not 0 <= x[3] <= PART_RADIUS:
+        raise ValueError("world part radius outside [0, %g]" % PART_RADIUS)
+    if not 0 < x[4] <= PART_SCALE:
+        raise ValueError("world part scale outside (0, %g]" % PART_SCALE)
+    return data
+
+
+def rising(distances, what, zero):
+    """Refuses distances the client refuses: each a cooked float above the one
+    before in single precision (the first above -1), and the first exactly 0
+    when `zero` (level distances; control distances need not start at 0)."""
+    last = -1.0
+    for j, d in enumerate(distances):
+        _, (x,) = cooked([d], what)
+        if not (x > last and (j or not zero or x == 0)):
+            raise ValueError("%s not rising%s" % (what, " from 0" if zero else ""))
+        last = x
+
+
 def has_alpha(parts):
     return any(p["flags"] & ALPHA for p in parts)
 
@@ -234,14 +301,17 @@ def grid(built, size):
     terrain = built.get("terrain_lod")
     # A terrain patch's centre is placed exactly (as serialize's cell_of does);
     # every other position is rounded to float32 first.
-    points = [(x, z) if p.get("kind", 0) == 2 and terrain is not None else (_f32(x), _f32(z))
-              for p in built["chunks"] for x, z in [_position(p, built["parents"], terrain)]]
-    if not points:
-        raise ValueError("world has no parts")
-    ox = _f32(math.floor(min(x for x, _ in points) / size) * size)
-    oz = _f32(math.floor(min(z for _, z in points) / size) * size)
-    side = 1 + max(max(math.floor((x - ox) / size), math.floor((z - oz) / size))
-                   for x, z in points)
+    try:
+        points = [(x, z) if p.get("kind", 0) == 2 and terrain is not None else (_f32(x), _f32(z))
+                  for p in built["chunks"] for x, z in [_position(p, built["parents"], terrain)]]
+        if not points:
+            raise ValueError("world has no parts")
+        ox = _f32(math.floor(min(x for x, _ in points) / size) * size)
+        oz = _f32(math.floor(min(z for _, z in points) / size) * size)
+        side = 1 + max(max(math.floor((x - ox) / size), math.floor((z - oz) / size))
+                       for x, z in points)
+    except OverflowError:  # a position past the float range (RQ-195)
+        raise ValueError("world part outside any chunk grid") from None
     return ox, oz, side
 
 
@@ -249,7 +319,7 @@ def serialize(textures, vertices, built, origin, size, side):
     """N3W2 bytes. `textures` is the world's texture count (the N3WT asset's);
     `vertices` the 12-float rows, whose two slots name textures below it;
     `built` the N3L3 dict (`terrain_lod` may be None)."""
-    ox, oz, size = _f32(origin[0]), _f32(origin[1]), _f32(size)
+    _, (ox, oz, size) = cooked([origin[0], origin[1], size], "world chunk grid")
     if not (MIN_SIZE <= size <= MAX_SIZE and 1 <= side <= MAX_SIDE):
         raise ValueError("world chunk grid bounds")
     if not 1 <= textures <= MAX_TEXTURES:
@@ -257,8 +327,11 @@ def serialize(textures, vertices, built, origin, size, side):
     parents, parts = built["parents"], built["chunks"]
 
     def cell_of(x, z, exact=False):
-        gx = math.floor(((x if exact else _f32(x)) - ox) / size)
-        gz = math.floor(((z if exact else _f32(z)) - oz) / size)
+        try:
+            gx = math.floor(((x if exact else _f32(x)) - ox) / size)
+            gz = math.floor(((z if exact else _f32(z)) - oz) / size)
+        except OverflowError:  # a position past the float range (RQ-195)
+            raise ValueError("world part outside the chunk grid") from None
         if not (0 <= gx < side and 0 <= gz < side):
             raise ValueError("world part outside the chunk grid")
         return gz * side + gx
@@ -310,13 +383,15 @@ def serialize(textures, vertices, built, origin, size, side):
                         local = mapping[i] = len(order)
                         order.append(i)
                     return local
+            head = part_head(part)
             center = [_f32(c) for c in part["center"]]
             radius = _f32(part["radius"])
             for a in range(3):
                 lo[a] = min(lo[a], _floor32(center[a] - radius))
                 hi[a] = max(hi[a], _ceil32(center[a] + radius))
-            out_parts += f([*part["center"], part["radius"], part["scale"]]) + u(part["flags"])
+            out_parts += head + u(part["flags"])
             out_parts += u(len(levels))
+            rising([distance for distance, _ in levels], "world level distance", True)
             for distance, ix in levels:
                 if len(ix) > LEVEL_INDICES:
                     raise ValueError("world level index bound")
@@ -333,6 +408,7 @@ def serialize(textures, vertices, built, origin, size, side):
                 out_parts += u(local_parent[part["parent"]]) + u(local)
                 out_parts += u(pm["min_vertices"]) + u(pm["min_indices"]) + u(part["max_vertices"])
                 out_parts += u(len(pm["controls"]))
+                rising([d for d, _ in pm["controls"]], "world control distance", False)
                 for d, budget in pm["controls"]:
                     out_parts += f([d]) + u(budget)
                 out_parts += u(len(pm["splits"]))
@@ -363,9 +439,11 @@ def serialize(textures, vertices, built, origin, size, side):
                 if not (0 <= slot < textures and slot == int(slot)):
                     raise ValueError("world texture slot")
         body += b"".join(rows)
-        body += u(len(chunk_parents)) + b"".join(f(parents[i]) for i in chunk_parents)
+        body += u(len(chunk_parents)) + b"".join(parent_bytes(parents[i]) for i in chunk_parents)
         body += u(len(chunk_parts)) + out_parts
-        table += u(key % side) + u(key // side) + f(lo) + f(hi) + u(len(body))
+        # A part within the bounds can still widen its chunk's box past them.
+        box, _ = cooked(lo + hi, "world chunk box")
+        table += u(key % side) + u(key // side) + box + u(len(body))
         bodies.append(bytes(body))
     if (totals["vertices"] > TOTAL_VERTICES or totals["indices"] > TOTAL_INDICES
             or totals["parts"] > TOTAL_PARTS or totals["parents"] > TOTAL_PARENTS

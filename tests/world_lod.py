@@ -59,7 +59,6 @@ with tempfile.TemporaryDirectory(dir='build') as td:
     check(True)
     changes=[lambda b:b['chunks'][0].update(parent=1),lambda b:b['chunks'][0].update(base=3),
              lambda b:b['chunks'][0]['progressive'].update(edits=[99,4]),
-             lambda b:b['chunks'][0]['progressive'].update(controls=[(10.,3),(10.,2)]),
              lambda b:b['chunks'][0]['progressive'].update(splits=[(3,2,2,0,0,1)]),
              lambda b:b['chunks'][0]['progressive'].update(splits=[(3,2,1,0,2,1)]),
              lambda b:b['chunks'][0]['progressive'].update(splits=[(3,2,1,0,0,2)]),
@@ -73,6 +72,10 @@ with tempfile.TemporaryDirectory(dir='build') as td:
                        b['chunks'][0]['progressive'].update(min_indices=0,splits=[(0,2,1,0,0,1)],edits=[0,0]))]
     for change in changes:
         bad=copy.deepcopy(built);change(bad);install(ko_lod.serialize(bad));check(False)
+    # Controls that do not rise: the writer refuses them (RQ-195, below), so
+    # the client's refusal is shown on forged bytes.
+    controls=f([0.])+u(3)+f([100.])+u(2);assert original.count(controls)==1
+    install(original.replace(controls,f([10.])+u(3)+f([10.])+u(2)));check(False)
     for data in (original[:-1],original+b'\0'):
         install(data);check(False)
     # A rehashed engine14 index must not bypass the producer's requirement for
@@ -197,3 +200,92 @@ with tempfile.TemporaryDirectory(dir='build') as td:
     install(dark)
 print('PASS N3L4 alpha parts (PQ-379, D-201): the record after a kind 1 part, N3L3 kept without one, writer and client refuse bad factors, states, points, an alpha terrain patch and a record without its flag')
 print('PASS N3L5 opaque part bits (PQ-382, D-202): cut-at-zero and unlit bits on a kind 1 part, N3L4/N3L3 kept without them, writer and client refuse them on an alpha part or a terrain patch and bits above 6')
+
+# RQ-195: the writer refuses a parent, a part head, a level distance or a
+# control distance exactly when the client's reader would (read_world_parent:
+# cooked floats, both radii within [0, 1e4]; read_world_part: cooked floats,
+# radius within [0, 2000], scale within (0, 1000], level distances rising in
+# single precision from exactly 0, control distances from above -1). Each
+# field's offset is where two accepted values' bytes differ; an accepted value
+# is written there and loads, a refused one is refused by the writer and, when
+# it packs as a float, forged there to show the client refuses it too.
+def f32_step(x,step):  # step float32 values towards +inf
+    bits=struct.unpack('<I',struct.pack('<f',x))[0]+(step if x>=0 else -step)
+    return struct.unpack('<f',struct.pack('<I',bits))[0]
+nan,inf=math.nan,math.inf
+past=f32_step(1e6,1)
+def parent(k):
+    return lambda b,v:b['parents'][0].__setitem__(k,v)
+def head(key,k=None):
+    def set_(b,v):
+        if k is None:b['chunks'][0][key]=v
+        else:b['chunks'][0][key][k]=v
+    return set_
+def level(part,j):
+    return lambda b,v:b['chunks'][part]['levels'].__setitem__(j,(v,b['chunks'][part]['levels'][j][1]))
+def control(j):
+    return lambda b,v:b['chunks'][0]['progressive']['controls'].__setitem__(j,(v,b['chunks'][0]['progressive']['controls'][j][1]))
+radius_cases=lambda bound,why:([0.,-0.,bound,1.,bound+bound*1e-8],
+                               [(f32_step(bound,1),why),(-1e-30,why),(-1.,why),(nan,'cooked finite bound'),
+                                (inf,'cooked finite bound'),(1e39,None)])
+cases=[('parent position',parent(0),[1e6,-1e6,3.5],[(past,'cooked finite bound'),(-past,'cooked finite bound'),(nan,'cooked finite bound'),(1e39,None)]),
+       ('parent distance radius',parent(3),*radius_cases(1e4,'parent bounds')),
+       ('parent radius',parent(7),*radius_cases(1e4,'parent bounds')),
+       ('part centre',head('center',1),[1e6,-1e6,2.],[(past,'cooked finite bound'),(nan,'cooked finite bound'),(-inf,'cooked finite bound')]),
+       ('part radius',head('radius'),*radius_cases(2000.,'world part bounds')),
+       ('part scale',head('scale'),[1000.,1e-30,1.,2.5],
+        [(0.,'world part bounds'),(-0.,'world part bounds'),(-1.,'world part bounds'),(f32_step(1000.,1),'world part bounds'),
+         (nan,'cooked finite bound'),(1e39,None)]),
+       # The terrain patch's 33 levels are 0, 1, ..., 32.
+       ('first level distance',level(1,0),[0.,-0.],[(1.,'world LOD bounds'),(-1e-30,'world LOD bounds'),(nan,'cooked finite bound')]),
+       ('level distance',level(1,32),[1e6,32.,31.5,31+1e-5],
+        [(31.,'world LOD bounds'),(31+1e-7,'world LOD bounds'),(30.,'world LOD bounds'),(past,'cooked finite bound'),(inf,'cooked finite bound')]),
+       ('first control distance',control(0),[0.,-.5,f32_step(-1.,1),99.],
+        [(-1.,'progressive control'),(-2.,'progressive control'),(100.,'progressive control'),(nan,'cooked finite bound')]),
+       ('control distance',control(1),[1e6,100.,1e-30],[(0.,'progressive control'),(-.5,'progressive control'),(past,'cooked finite bound')])]
+with tempfile.TemporaryDirectory(dir='build') as td:
+    root=pathlib.Path(td)/'source';out=pathlib.Path(td)/'package'
+    shutil.copytree('games/demo',root)
+    m=json.loads((root/'package.json').read_text())
+    m.update(engine_version=13,protocol_version=7,world='map.bin',exploration=dict(turbo_multiplier=10,fog_start=25.6,fog_end=256,fog_color=[.6,.7,.8],lod='lod.bin'))
+    (root/'package.json').write_text(json.dumps(m))
+    (root/'map.bin').write_bytes(world)
+    pm=dict(min_vertices=2,min_indices=3,controls=[(0.,3),(100.,2)],splits=[(3,2,1,0,0,1)],edits=[2,4])
+    part=dict(center=[0,0,0],radius=4,scale=1,flags=4,levels=[(0.,[0,1,1,0,1,0])],kind=1,
+              parent=0,base=0,max_vertices=3,progressive=pm)
+    terrain=dict(center=[0,0,0],radius=4,scale=1,flags=2,levels=[(float(i),[0,1,2]) for i in range(33)],kind=2,patch=[0,0])
+    built=dict(terrain_lod=dict(origin=[0,0,32],patch_size=32,far_factor=3/512,bias=.6,minimum=2,band=3,width=1),
+               parents=[[0,0,0,12,0,0,0,8]],chunks=[part,terrain])
+    (root/'lod.bin').write_bytes(ko_lod.serialize(built));main.cook(root,out)
+    current=[(out/'world-lod.bin').read_bytes()]
+    def install(data):
+        path=out/'world-lod.bin';old=current[0];path.write_bytes(data);current[0]=data
+        index=(out/'release.bin').read_bytes();needle=string('world-lod.bin')+u(len(old))+hashlib.sha256(old).digest()
+        assert needle in index
+        (out/'release.bin').write_bytes(index.replace(needle,string('world-lod.bin')+u(len(data))+hashlib.sha256(data).digest()))
+    def asset_check(data):
+        install(data)
+        return subprocess.run(['build/client/n3e-asset-check',str(out)],capture_output=True,text=True)
+    def write(set_,value):
+        b=copy.deepcopy(built);set_(b,value);return ko_lod.serialize(b)
+    for name,set_,accepted,refused in cases:
+        a,b=write(set_,accepted[0]),write(set_,accepted[1])
+        assert len(a)==len(b) and a!=b,name
+        at=next(i for i in range(len(a)) if a[i]!=b[i])//4*4
+        assert a[:at]+a[at+4:]==b[:at]+b[at+4:],name
+        for value in accepted:
+            data=write(set_,value)
+            assert data==a[:at]+struct.pack('<f',value)+a[at+4:],(name,value)
+            r=asset_check(data)
+            assert r.returncode==0,('client refused a written value',name,value,r.stderr)
+        for value,why in refused:
+            try:write(set_,value)
+            except ValueError as e:assert str(e).startswith('world '),(name,value,e)
+            else:raise AssertionError(('wrote a value the client refuses',name,value))
+            if why is None:continue  # past the float range: it cannot be forged
+            r=asset_check(a[:at]+struct.pack('<f',value)+a[at+4:])
+            assert r.returncode==1 and why in r.stderr,(name,value,why,r.stderr)
+print('PASS N3L3 world records (RQ-195): the writer refuses exactly the parents, part heads, level distances and '
+      'control distances the client refuses (a float not finite or past 1e6, a parent radius outside [0, 1e4], a '
+      'part radius outside [0, 2000], a scale outside (0, 1000], distances not rising in single precision, the first '
+      'level not 0, the first control not above -1); an accepted value is written and loads')

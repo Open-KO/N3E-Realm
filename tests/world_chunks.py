@@ -750,3 +750,76 @@ with tempfile.TemporaryDirectory(dir="build") as td:
 print("PASS N3W2 world records (RQ-195): the writer refuses exactly the parents, part scales, level distances and "
       "control distances the client refuses, and part centres, radii, a grid origin or a chunk box past their "
       "bounds; an accepted value is written and loads")
+
+# RQ-196: the chunked writer writes the terrain policy through the N3L
+# writer's helper (world_chunks.policy_bytes; tests/world_lod.py shows the
+# parity at each edge). Here the far factor and bias, which place nothing,
+# are written and load at their edges; the origin, patch size and counts also
+# place the patches, so their refused values are shown at the writer and, when
+# they pack, forged into the written policy, where the client refuses them
+# before it places a patch.
+
+
+def policy_field(key, k=None):
+    if k is None:
+        return lambda b, v: b["terrain_lod"].__setitem__(key, v)
+    return lambda b, v: b["terrain_lod"][key].__setitem__(k, v)
+
+
+hundredth = struct.unpack("<f", struct.pack("<f", 0.01))[0]
+rq196_cases = [
+    ("far factor", policy_field("far_factor"), [1 / 1024, 1.0, 1e-30],
+     [(0.0, "terrain detail policy"), (-0.0, "terrain detail policy"), (f32_step(1.0, 1), "terrain detail policy"),
+      (nan, "cooked finite bound")]),
+    ("bias", policy_field("bias"), [0.6, 0.0, f32_step(1.0, -1)],
+     [(1.0, "terrain detail policy"), (-1e-30, "terrain detail policy"), (inf, "cooked finite bound"),
+      (1e39, None)]),
+]
+with tempfile.TemporaryDirectory(dir="build") as td:
+    package = fx.package(td, "rq196", world_chunks.serialize(fx.COUNT, base_vertices, base_built, (0, 0), 16, 2))
+    good = rq195_write(lambda b, v: None, None)
+    for name, set_, accepted, refused_values in rq196_cases:
+        a, b = rq195_write(set_, accepted[0]), rq195_write(set_, accepted[1])
+        assert len(a) == len(b) and a != b, name
+        at = next(i for i in range(len(a)) if a[i] != b[i]) // 4 * 4
+        assert a[:at] + a[at + 4:] == b[:at] + b[at + 4:] and a == good, name
+        if name == "far factor":
+            far_at = at
+        for value in accepted:
+            world = rq195_write(set_, value)
+            assert world == a[:at] + struct.pack("<f", value) + a[at + 4:], (name, value)
+            install(package, "world.bin", world)
+            c = client(package)
+            assert c.returncode == 0, ("client refused a written value", name, value, c.stderr)
+        for value, why in refused_values:
+            rq195_refused(lambda: rq195_write(set_, value), "terrain ")
+            if why is not None:
+                install(package, "world.bin", a[:at] + struct.pack("<f", value) + a[at + 4:])
+                c = client(package)
+                assert c.returncode != 0 and why in c.stderr, (name, value, why, c.stderr)
+    # The origin and patch size sit before the far factor; the counts after the bias.
+    terrain = base_built["terrain_lod"]
+    assert good[far_at - 16:far_at + 20] == world_chunks.policy_bytes(terrain)
+    forged = [("origin", far_at - 16, policy_field("origin", 0), [(past, "cooked finite bound"), (1e39, None)]),
+              ("origin", far_at - 8, policy_field("origin", 2), [(nan, "cooked finite bound")]),
+              ("patch size", far_at - 4, policy_field("patch_size"),
+               [(f32_step(1000.0, 1), "terrain detail policy"), (f32_step(hundredth, -1), "terrain detail policy"),
+                (0.0, "terrain detail policy"), (-1.0, "terrain detail policy")])]
+    for name, at, set_, refused_values in forged:
+        for value, why in refused_values:
+            rq195_refused(lambda: rq195_write(set_, value), "terrain ")
+            if why is not None:
+                install(package, "world.bin", good[:at] + struct.pack("<f", value) + good[at + 4:])
+                c = client(package)
+                assert c.returncode != 0 and why in c.stderr, (name, value, why, c.stderr)
+    for k, (key, top) in enumerate((("minimum", 64), ("band", 64), ("width", 256))):
+        at = far_at + 8 + 4 * k
+        assert good[at:at + 4] == struct.pack("<I", terrain[key]), key
+        for n in (0, top + 1):
+            rq195_refused(lambda: rq195_write(policy_field(key), n), "terrain policy %s outside" % key)
+            install(package, "world.bin", good[:at] + struct.pack("<I", n) + good[at + 4:])
+            c = client(package)
+            assert c.returncode != 0 and "cooked count" in c.stderr, (key, n, c.stderr)
+print("PASS N3W2 terrain policy (RQ-196): the writer refuses exactly the policies the client refuses (a float not "
+      "finite or past 1e6, a patch size outside [0.01, 1000], a far factor outside (0, 1], a bias outside [0, 1)); "
+      "the far factor and bias are written and load at their edges")

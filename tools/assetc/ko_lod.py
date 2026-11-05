@@ -127,8 +127,10 @@ def serialize(built):
     carries a texture sequence (D-212, PQ-394): only N3W6 does."""
     if world_chunks.has_sequence(built['chunks']):raise ValueError('N3L files cannot carry texture sequences (N3W6, D-212)')
     out=bytearray((b'N3L3',b'N3L4',b'N3L5')[world_chunks.layout(built['chunks'])]); cfg=built['terrain_lod']
-    out+=f([*cfg['origin'],cfg['patch_size'],cfg['far_factor'],cfg['bias']])
-    out+=u(cfg['minimum'])+u(cfg['band'])+u(cfg['width'])
+    # RQ-196: the policy as read_terrain_policy accepts it. patch_size is 8
+    # GTD spacings (always 32); width is the GTD's tiles over 8, so a GTD of
+    # more than 2049 samples (ko_terrain allows 4097) fails here.
+    out+=world_chunks.policy_bytes(cfg)
     # RQ-195: parents, part heads, level and control distances as the client
     # reads them (world_chunks.parent_bytes, part_head, rising).
     parents=built['parents']; out+=u(len(parents))

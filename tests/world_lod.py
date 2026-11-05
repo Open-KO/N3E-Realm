@@ -64,8 +64,6 @@ with tempfile.TemporaryDirectory(dir='build') as td:
              lambda b:b['chunks'][0]['progressive'].update(splits=[(3,2,1,0,0,2)]),
              lambda b:b['chunks'][1].update(patch=[1,0]),
              lambda b:b['chunks'].append(copy.deepcopy(b['chunks'][1])),
-             lambda b:b['terrain_lod'].update(patch_size=0),
-             lambda b:b['terrain_lod'].update(patch_size=1e-30),
              lambda b:b['chunks'][0]['progressive'].update(edits=[0,4]),
              lambda b:b['chunks'][0]['progressive'].update(edits=[2,2]),
              lambda b:(b['chunks'][0].update(levels=[(0.,[])]),
@@ -257,7 +255,7 @@ with tempfile.TemporaryDirectory(dir='build') as td:
     built=dict(terrain_lod=dict(origin=[0,0,32],patch_size=32,far_factor=3/512,bias=.6,minimum=2,band=3,width=1),
                parents=[[0,0,0,12,0,0,0,8]],chunks=[part,terrain])
     (root/'lod.bin').write_bytes(ko_lod.serialize(built));main.cook(root,out)
-    current=[(out/'world-lod.bin').read_bytes()]
+    current=[(out/'world-lod.bin').read_bytes()];current_good=ko_lod.serialize(built)
     def install(data):
         path=out/'world-lod.bin';old=current[0];path.write_bytes(data);current[0]=data
         index=(out/'release.bin').read_bytes();needle=string('world-lod.bin')+u(len(old))+hashlib.sha256(old).digest()
@@ -268,7 +266,7 @@ with tempfile.TemporaryDirectory(dir='build') as td:
         return subprocess.run(['build/client/n3e-asset-check',str(out)],capture_output=True,text=True)
     def write(set_,value):
         b=copy.deepcopy(built);set_(b,value);return ko_lod.serialize(b)
-    for name,set_,accepted,refused in cases:
+    def parity(name,set_,accepted,refused,prefix):
         a,b=write(set_,accepted[0]),write(set_,accepted[1])
         assert len(a)==len(b) and a!=b,name
         at=next(i for i in range(len(a)) if a[i]!=b[i])//4*4
@@ -280,12 +278,55 @@ with tempfile.TemporaryDirectory(dir='build') as td:
             assert r.returncode==0,('client refused a written value',name,value,r.stderr)
         for value,why in refused:
             try:write(set_,value)
-            except ValueError as e:assert str(e).startswith('world '),(name,value,e)
+            except ValueError as e:assert str(e).startswith(prefix),(name,value,e)
             else:raise AssertionError(('wrote a value the client refuses',name,value))
             if why is None:continue  # past the float range: it cannot be forged
             r=asset_check(a[:at]+struct.pack('<f',value)+a[at+4:])
             assert r.returncode==1 and why in r.stderr,(name,value,why,r.stderr)
+    for case in cases:parity(*case,'world ')
+    # RQ-196: the terrain policy (read_terrain_policy: cooked floats, then in
+    # single precision 0.01 <= patch_size <= 1000, 0 < far_factor <= 1,
+    # 0 <= bias < 1; minimum and band counts in [1, 64], width in [1, 256]),
+    # through world_chunks.policy_bytes, which the chunked writer shares.
+    policy=lambda key,k=None:(lambda b,v:b['terrain_lod'][key].__setitem__(k,v) if k is not None
+                              else b['terrain_lod'].__setitem__(key,v))
+    hundredth=struct.unpack('<f',struct.pack('<f',.01))[0]
+    policy_cases=[('terrain origin',policy('origin',0),[0.,1e6,-1e6,-0.],
+                   [(past,'cooked finite bound'),(nan,'cooked finite bound'),(-inf,'cooked finite bound'),(1e39,None)]),
+                  ('terrain origin z',policy('origin',2),[32.,-1e6],[(-past,'cooked finite bound')]),
+                  ('patch size',policy('patch_size'),[32.,1000.,.01,hundredth,500.25],
+                   [(f32_step(1000.,1),'terrain detail policy'),(f32_step(hundredth,-1),'terrain detail policy'),
+                    (0.,'terrain detail policy'),(1e-30,'terrain detail policy'),(-32.,'terrain detail policy'),
+                    (nan,'cooked finite bound'),(1e39,None)]),
+                  ('far factor',policy('far_factor'),[3/512,1.,1e-30],
+                   [(0.,'terrain detail policy'),(-0.,'terrain detail policy'),(-1e-30,'terrain detail policy'),
+                    (f32_step(1.,1),'terrain detail policy'),(inf,'cooked finite bound')]),
+                  ('bias',policy('bias'),[.6,0.,-0.,f32_step(1.,-1)],
+                   [(1.,'terrain detail policy'),(1-1e-9,'terrain detail policy'),(-1e-30,'terrain detail policy'),
+                    (nan,'cooked finite bound'),(1e39,None)])]
+    for case in policy_cases:parity(*case,'terrain ')
+    # The counts: the bounds load, one past either is refused by the writer
+    # and, forged, by the client (the width also sets how many patches the
+    # file must hold, so its upper bound is shown at the writer only).
+    at=4+24
+    assert write(policy('minimum'),2)[at:at+12]==u(2)+u(3)+u(1)
+    for key,top,offset in (('minimum',64,0),('band',64,4),('width',256,8)):
+        for n in (1,top):
+            data=write(policy(key),n);assert data[at+offset:at+offset+4]==u(n),(key,n)
+            if key!='width' or n==1:
+                r=asset_check(data);assert r.returncode==0,(key,n,r.stderr)
+        for n in (0,top+1,-1):
+            try:write(policy(key),n)
+            except ValueError as e:assert str(e).startswith('terrain policy %s outside'%key),(key,n,e)
+            else:raise AssertionError(('wrote a policy count the client refuses',key,n))
+            if n<0:continue
+            r=asset_check(current_good[:at+offset]+u(n)+current_good[at+offset+4:])
+            assert r.returncode==1 and 'cooked count' in r.stderr,(key,n,r.stderr)
 print('PASS N3L3 world records (RQ-195): the writer refuses exactly the parents, part heads, level distances and '
       'control distances the client refuses (a float not finite or past 1e6, a parent radius outside [0, 1e4], a '
       'part radius outside [0, 2000], a scale outside (0, 1000], distances not rising in single precision, the first '
       'level not 0, the first control not above -1); an accepted value is written and loads')
+print('PASS N3L3 terrain policy (RQ-196): the writer refuses exactly the policies the client refuses (a float not '
+      'finite or past 1e6, a patch size outside [0.01, 1000], a far factor outside (0, 1], a bias outside [0, 1) in '
+      'single precision, a minimum or band outside [1, 64], a width outside [1, 256]); an accepted value is written '
+      'and loads')

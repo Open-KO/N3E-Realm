@@ -69,10 +69,16 @@ supported; unsupported transforms fail the LOD bake. A placement whose scale,
 position or unnormalised rotation writes a world vertex the client's reader
 refuses (a float past the cooked bound 10⁶, a normal whose single-precision
 length is at most 10⁻¹⁰) fails the world bake too (RQ-193), as does one whose
-scale writes a part or parent record the client refuses (a part scale above
-1000, a part radius above 2000, a parent radius above 10⁴, a centre past 10⁶;
-RQ-195). Local reference assets and raw binary output are never bundled or
-required downloads.
+scale writes a part or parent record the client refuses (a part scale outside
+(0, 1000], a part radius outside [0, 2000], a parent radius outside [0, 10⁴], a
+centre past 10⁶; RQ-195). The writers likewise refuse a terrain policy the
+client refuses (an origin past 10⁶, a patch size outside [0.01, 1000], a far
+factor outside (0, 1], a bias outside [0, 1), a minimum or band outside
+[1, 64], a width outside [1, 256]; RQ-196). The KO bake's patch size is eight
+GTD tiles of 4 m (32), so no zone reaches the patch-size bounds; its width is
+the GTD's tiles over 8, so a GTD of more than 2049 samples (the reader allows
+4097) fails the bake at the width bound. Local reference assets and raw binary
+output are never bundled or required downloads.
 
 KFC opt-in package capabilities: [N3I1 bags](../../content/inventory.md) and
 [N3O1 merchants](../../content/commerce.md), independently read by C++/Rust and

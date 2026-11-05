@@ -188,6 +188,36 @@ def rising(distances, what, zero):
         last = x
 
 
+# RQ-196: the client's read_terrain_policy reads the origin, patch size, far
+# factor and bias as cooked floats and refuses unless, in single precision,
+# 0.01 <= patch_size <= 1000, 0 < far_factor <= 1 and 0 <= bias < 1; then the
+# minimum and band as counts in [1, 64] and the width in [1, 256].
+PATCH_SIZE = (0.01, 1000.0)
+POLICY_COUNTS = (("minimum", 64), ("band", 64), ("width", 256))
+
+
+def policy_bytes(terrain):
+    """The 36 bytes of a terrain policy the client's read_terrain_policy
+    accepts (N3L header, N3W2-6 terrain record)."""
+    origin = list(terrain["origin"])
+    if len(origin) != 3:
+        raise ValueError("terrain policy origin")
+    data, x = cooked([*origin, terrain["patch_size"], terrain["far_factor"], terrain["bias"]],
+                     "terrain policy")
+    if not _f32(PATCH_SIZE[0]) <= x[3] <= PATCH_SIZE[1]:
+        raise ValueError("terrain patch size outside [%g, %g]" % PATCH_SIZE)
+    if not 0 < x[4] <= 1:
+        raise ValueError("terrain far factor outside (0, 1]")
+    if not 0 <= x[5] < 1:
+        raise ValueError("terrain bias outside [0, 1)")
+    for key, top in POLICY_COUNTS:
+        n = terrain[key]
+        if not 1 <= n <= top:
+            raise ValueError("terrain policy %s outside [1, %d]" % (key, top))
+        data += u(n)
+    return data
+
+
 def has_alpha(parts):
     return any(p["flags"] & ALPHA for p in parts)
 
@@ -325,6 +355,9 @@ def serialize(textures, vertices, built, origin, size, side):
     if not 1 <= textures <= MAX_TEXTURES:
         raise ValueError("world texture count")
     parents, parts = built["parents"], built["chunks"]
+    # The policy places the terrain patches: check it before it does (RQ-196).
+    terrain = built.get("terrain_lod")
+    policy = None if terrain is None else policy_bytes(terrain)
 
     def cell_of(x, z, exact=False):
         try:
@@ -343,9 +376,9 @@ def serialize(textures, vertices, built, origin, size, side):
         kind = part.get("kind", 0)
         if kind == 1 and not 0 <= part["parent"] < len(parents):
             raise ValueError("world part parent")
-        if kind == 2 and built.get("terrain_lod") is None:
+        if kind == 2 and terrain is None:
             raise ValueError("terrain part without a terrain policy")
-        owned.setdefault(cell_of(*_position(part, parents, built.get("terrain_lod")), exact=kind == 2),
+        owned.setdefault(cell_of(*_position(part, parents, terrain), exact=kind == 2),
                          ([], []))[1].append(i)
 
     table, bodies = bytearray(), []
@@ -453,12 +486,7 @@ def serialize(textures, vertices, built, origin, size, side):
     magic = b"N3W6" if has_sequence(parts) else b"N3W5" if unlit else (b"N3W2", b"N3W3", b"N3W4")[layout(parts)]
     out = bytearray(magic + u(textures))
     out += f([ox, oz, size]) + u(side)
-    terrain = built.get("terrain_lod")
-    if terrain is None:
-        out += u(0)
-    else:
-        out += u(1) + f([*terrain["origin"], terrain["patch_size"], terrain["far_factor"], terrain["bias"]])
-        out += u(terrain["minimum"]) + u(terrain["band"]) + u(terrain["width"])
+    out += u(0) if policy is None else u(1) + policy
     out += u(len(chunks)) + table
     for body in bodies:
         out += body

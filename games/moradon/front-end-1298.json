@@ -56,17 +56,20 @@
         "btn_create": "create_confirm",
         "btn_cancel": "back",
         "edit_name": "name_field",
-        "text_desc": "class_desc",
-        "btn_race_ka_tu": "create_race",
-        "btn_class_priest": "create_class"
+        "text_desc": "class_desc"
       },
+      "races": {"btn_race_ka_tu": {"race": 2, "default": 102}},
+      "classes": {
+        "btn_class_warrior": {"specialties": [101, 201], "image": "img_warrior", "labels": ["str_01", "sta_01"]},
+        "btn_class_rogue": {"specialties": [102, 202], "image": "img_rogue", "labels": ["dex_01", "sta_01"]},
+        "btn_class_mage": {"specialties": [103, 203], "image": "img_mage", "labels": ["int_01", "map_01"]},
+        "btn_class_priest": {"specialties": [104, 204], "image": "img_priest", "labels": ["str_01", "int_01"]}
+      },
+      "class_labels": "hide",
       "states": {
         "btn_race_ka_at": "disabled",
         "btn_race_ka_wt": "disabled",
         "btn_race_ka_pt": "disabled",
-        "btn_class_warrior": "disabled",
-        "btn_class_rogue": "disabled",
-        "btn_class_mage": "disabled",
         "btn_face_left": "disabled",
         "btn_face_right": "disabled",
         "btn_hair_left": "disabled",
@@ -82,8 +85,6 @@
         "btn_map_left": "disabled",
         "btn_map_right": "disabled"
       },
-      "until_race": ["img_rogue", "img_priest", "btn_class_warrior", "btn_class_mage"],
-      "until_class": ["str_01", "int_01"],
       "hidden": ["btn_race_el_ba", "btn_race_el_rm", "btn_race_el_rf", "text_bonus"]
     },
     "loading": {

@@ -1353,6 +1353,11 @@ click) and the priest `down`. Race and class are still chosen from the open (Q52
 Package data only: no cook, format or client change; `make live-ko` matches the
 warrior and mage rects to their image tiles at each size. The 1298 recipe is
 unchanged (RQ-133's `until_race` already draws 1298's images).
+RQ-172 (N3FE version 25) binds every class button to KO's codes, and Moradon offers
+the Tuarek's rogue and priest, so the 1097 choice's rogue is a live NORMAL button
+as 1264's (option (c)'s button; lit under the pointer, a click choosing the rogue),
+with race and class still chosen at each open (Q52): the look at rest is (b)'s. The
+class column is drawn by the class buttons' codes, not by `hidden`.
 
 ### Q92 — The 1097 choice's stat labels: all light or 1264's pink pair
 
@@ -1423,6 +1428,12 @@ the race too) until the Tuarek click that builds or the next open, and a re-clic
 on the chosen Tuarek, which builds nothing, leaves them cyan. The cook, the client
 and the server move to version 23 together; the 1097 choice differs only by the
 version byte. The stat values stay empty and `text_bonus` hidden (Q52).
+
+RQ-172 (N3FE version 25) carries the same marks for every class: each class button
+names its two labels (1298's `006062d0` pairs: warrior `str_01`, `sta_01`; rogue
+`dex_01`, `sta_01`; mage `int_01`, `map_01`; priest `str_01`, `int_01`), flag 16
+hiding them while that class marks the create, in place of `until_class`; the
+re-click edge stays exact for every class.
 
 ### Q94 — Which races and classes the realm's create offers
 
@@ -1612,6 +1623,9 @@ RQ-004's first part moves the KO screens to (c): the client reads `create.bin` a
 sends its fixed choice whole, in the first free slot, until the screen's buttons choose
 (RQ-004's later parts). The server's (b) path stays for the panels' create, which sends
 a name alone, and is removed when no client sends one.
+RQ-172 sends the race and specialty the KO screens' buttons chose (a create with no
+buttons still sends the fixed choice), with the fixed choice's face, hair and points
+until RQ-173 and RQ-174 (Q110).
 
 ### Q101 — The account's nation and the create settings RQ-002 does not land
 
@@ -1813,4 +1827,29 @@ Options:
 **Default taken:** (a), the look the screens have now, so nothing changes until the
 maintainer picks; (b) is the nearest to KO's flow, but adds a refusal KO's 1298 never
 shows. RQ-004's race-button part draws it as decided.
+RQ-172 bound the offered races' buttons to their codes and drew the others as (a):
+the 1298 recipe's Arch, Wrinkle and Puri Tuarek and the 1097 choice's Arch and
+Wrinkle Tuarek fixed disabled, its Puri Tuarek unbound (Q90). A decision for (b) is
+recipe data (the button in `races`) plus the code-8 message; (c) is `hidden`.
+
+### Q110 — What create sends for face, hair and points before their arrows
+
+RQ-172 makes create send the race and specialty the buttons chose, but the face,
+hair and stat arrows are RQ-174's and RQ-173's. KO's Create always sends a face,
+a hair and the stats with every bonus point spent (1298 `005fffd0` code 10, 1264
+`0043a340` code 10, binary), and the server refuses a sum other than the base plus
+the bonus (Q95).
+
+Options:
+- (a) The package's fixed choice's face and hair, and its points (the fixed stats
+  less its specialty's base, Moradon's ten in MP) on the chosen specialty's base.
+- (b) Face 0, hair 0, every point in one stat chosen by the specialty (the
+  priest's MP, the rogue's DEX).
+- (c) Refuse Create until the arrows exist.
+
+**Default taken:** (a): Moradon's fixed choice is face 0, hair 0 and ten MP, so the
+rogue is sent at 60 / 60 / 70 / 50 / 60 as the priest is, and the server's check is
+unchanged. RQ-173 and RQ-174 replace it with the player's choice. Without a fixed
+choice the stats are the base alone, which Create refuses locally as the server
+would (`create_refused`, the stats refusal's words), so such a package needs RQ-173.
 

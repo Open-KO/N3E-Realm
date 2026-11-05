@@ -178,8 +178,8 @@ class View {
     use[fe.backdrop] = 1;
     for (const auto &m : fe.hall) use[m.texture] = 2;
     for (const auto &z : fe.zone) use[z.mesh.texture] = 2;
-    for (const auto *scene : {&fe.intro, &fe.select, &fe.create})
-      for (const auto &plug : scene->plugs) use[plug.mesh.texture] = 2;
+    for (size_t k = 0; k < scene_count(); ++k)
+      for (const auto &plug : scene_at(k).plugs) use[plug.mesh.texture] = 2;
     for (size_t i = 0; i < textures.size(); ++i) {
       glBindTexture(GL_TEXTURE_2D, textures[i]);
       if (use[i] == 0) {
@@ -193,9 +193,12 @@ class View {
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
       }
     }
-    for (auto *scene : {&fe.intro, &fe.select, &fe.create})
-      models.push_back(texture(scene->model.width, scene->model.height, scene->model.texture.data(),
-                               scene->model.channels == 3));
+    // RQ-172: each create model (version 24's per race) after the three.
+    for (size_t k = 0; k < scene_count(); ++k) {
+      const auto &scene = scene_at(k);
+      models.push_back(texture(scene.model.width, scene.model.height, scene.model.texture.data(),
+                               scene.model.channels == 3));
+    }
     lit = program(R"(#version 330 core
 layout(location=0) in vec3 p;layout(location=1) in vec3 n;layout(location=2) in vec2 t;
 uniform mat4 mvp,model;out vec3 wp,wn;out vec2 uv;
@@ -228,16 +231,38 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     for (auto &plug : fe.intro.plugs) intro_plugs.push_back(upload(plug.mesh));
     for (auto &plug : fe.select.plugs) select_plugs.push_back(upload(plug.mesh));
     for (auto &plug : fe.create.plugs) create_plugs.push_back(upload(plug.mesh));
+    for (auto &model : fe.create_models) {
+      auto &set = race_plugs.emplace_back();
+      for (auto &plug : model.plugs) set.push_back(upload(plug.mesh));
+    }
     // A further clip poses the model's own nodes (load_front_end checked them).
-    for (auto *scene : {&fe.intro, &fe.select, &fe.create}) {
+    for (size_t k = 0; k < scene_count(); ++k) {
+      const auto &scene = scene_at(k);
       std::vector<Scene> poses;
-      for (const auto &clip : scene->clips) {
+      for (const auto &clip : scene.clips) {
         Scene s;
-        s.nodes = scene->model.nodes;
+        s.nodes = scene.model.nodes;
         s.tracks = clip;
         poses.push_back(std::move(s));
       }
       clips.push_back(std::move(poses));
+    }
+    // RQ-172 (version 25): create's race and class buttons, and the one of
+    // each the package chooses at every open (fixed on).
+    int race_at_open = -1, class_at_open = -1;
+    const auto &created = fe.screens[size_t(FrontScreen::create)];
+    for (size_t k = 0; k < fe.create_race_buttons.size(); ++k)
+      if (created[fe.create_race_buttons[k].node].flags & FrontNode::FIXED_ON) race_at_open = int(k);
+    for (size_t k = 0; k < fe.create_class_buttons.size(); ++k)
+      if (created[fe.create_class_buttons[k].node].flags & FrontNode::FIXED_ON) class_at_open = int(k);
+    choice.bind(fe.create_race_buttons, fe.create_class_buttons, race_at_open, class_at_open);
+    create_role.assign(created.size(), {});
+    for (size_t k = 0; k < fe.create_race_buttons.size(); ++k)
+      create_role[fe.create_race_buttons[k].node] = {CreateRole::race, int(k)};
+    for (size_t k = 0; k < fe.create_class_buttons.size(); ++k) {
+      const auto &b = fe.create_class_buttons[k];
+      create_role[b.node] = {CreateRole::klass, int(k)};
+      if (b.image != FrontCreateClass::kNone) create_role[b.image] = {CreateRole::image, int(k)};
     }
     for (const auto &node : fe.screens[size_t(FrontScreen::login)]) {
       if (node.action == FrontAction::realm_group) realm_height = node.rect[3] - node.rect[1];
@@ -250,11 +275,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     fe.intro.model.texture.clear();
     fe.select.model.texture.clear();
     fe.create.model.texture.clear();
+    for (auto &model : fe.create_models) model.model.texture.clear();
   }
   ~View() {
     glDeleteTextures(GLsizei(textures.size()), textures.data());
     glDeleteTextures(GLsizei(models.size()), models.data());
-    for (auto *set : {&statics, &zone_meshes, &intro_plugs, &select_plugs, &create_plugs})
+    std::vector<std::vector<Buffer> *> sets{&statics, &zone_meshes, &intro_plugs, &select_plugs, &create_plugs};
+    for (auto &set : race_plugs) sets.push_back(&set);
+    for (auto *set : sets)
       for (auto &m : *set) {
         glDeleteBuffers(1, &m.vbo);
         glDeleteBuffers(1, &m.ebo);
@@ -379,19 +407,47 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // RQ-130 (version 21): whether create waits for a race click, and the slot
   // the new character stands at over the hall (-1: none stands, no race
   // chosen) (test hooks).
-  bool create_waits() const { return choice.waits_race || choice.waits_class; }
+  bool create_waits() const { return choice.waits(); }
   int create_figure() const { return choice.stands() ? choice.stands_at(focus) : -1; }
-  // RQ-133 (version 22), RQ-145 (version 23): the ids of create's nodes
-  // with `flag` (FrontNode::UNTIL_RACE or UNTIL_CLASS) that draw now (a test
-  // hook).
-  std::vector<std::string> until_drawn(uint32_t flag) const {
+  // RQ-172 (version 25): the ids of create's class buttons and their images
+  // that draw now (`labels` false), or of its class labels (true), in draw
+  // order (a test hook).
+  std::vector<std::string> create_column(bool labels) const {
     const auto &nodes = fe.screens[size_t(FrontScreen::create)];
     const auto shown = visible(FrontScreen::create);
     std::vector<std::string> out;
-    for (size_t i = 0; i < nodes.size(); ++i)
-      if ((nodes[i].flags & flag) && shown[i]) out.push_back(nodes[i].id);
+    for (size_t i = 0; i < nodes.size(); ++i) {
+      const bool label = nodes[i].flags & (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS);
+      const bool column = i < create_role.size() && (create_role[i].kind == CreateRole::klass ||
+                                                     create_role[i].kind == CreateRole::image);
+      if (shown[i] && (labels ? label : column)) out.push_back(nodes[i].id);
+    }
     return out;
   }
+  // RQ-172: the create node of the race button for race `code` (`race`) or
+  // of the class button standing for specialty `code`, or -1 (a test hook).
+  int choice_node(bool race, uint32_t code) const {
+    if (race) {
+      for (const auto &b : fe.create_race_buttons)
+        if (b.race == code) return int(b.node);
+    } else
+      for (const auto &b : fe.create_class_buttons)
+        if (std::find(b.specialties.begin(), b.specialties.end(), code) != b.specialties.end()) return int(b.node);
+    return -1;
+  }
+  // The state create's node `i` draws in (0 normal, 1 down, 2 on, 3
+  // disabled), and its rect in window pixels (test hooks).
+  int node_state(int i) const { return i < 0 ? -1 : button_state(FrontScreen::create, size_t(i)); }
+  std::optional<std::array<float, 4>> node_rect(int i, int width, int height) {
+    if (i < 0 || size_t(i) >= fe.screens[size_t(FrontScreen::create)].size()) return std::nullopt;
+    const auto [s, ox, oy] = view(width, height);
+    const auto r = rect(FrontScreen::create, size_t(i));
+    return std::array<float, 4>{ox + r[0] * s, oy + r[1] * s, ox + r[2] * s, oy + r[3] * s};
+  }
+  // RQ-172: the race code of the create model the new character draws (0:
+  // none), and the specialty whose stat row the screen holds (0: none).
+  uint32_t create_model_race() const { return figure_scene() < 0 ? 0 : scene_race(size_t(figure_scene())); }
+  uint32_t create_row() const { return choice.row_specialty(create_rules).value_or(0); }
   // The state the current layout's button bound to `action` draws in (0
   // normal, 1 down, 2 on, 3 disabled), or -1 (a test hook).
   int action_state(FrontAction action) const {
@@ -471,6 +527,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     size_t which;                  // 0 intro, 1 select, 2 create
     std::array<float, 4> box;      // x0 y0 x1 y1 in the viewport's NDC, y up
     std::array<int, 4> viewport;   // GL viewport: x, y (from the bottom), w, h
+    uint32_t race = 0;             // create: the race code of the model drawn (RQ-172)
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) {
@@ -527,10 +584,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         button = box_key(box_style(message->kind), key);
       } else if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT)
         button = hit(FrontScreen::message, cx, cy);
-      if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) pressed = hit(FrontScreen::message, cx, cy);
+      if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+        pressed_node = hit_node(FrontScreen::message, cx, cy);
+        pressed = hit(FrontScreen::message, cx, cy);
+      }
       const auto answer = box_press(message->kind, button);
       if (answer.exits) out.command = Command::exit;
-      if (answer.closes) message.reset(), pressed = FrontAction::none;
+      if (answer.closes) message.reset(), pressed = FrontAction::none, pressed_node = -1;
       return out;
     }
     if (state == Screen::loading) return out;
@@ -578,7 +638,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       return out;
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_DOWN && e.button.button == SDL_BUTTON_LEFT) {
-      pressed = hit(ui, cx, cy);
+      pressed_node = hit_node(ui, cx, cy);
+      pressed = pressed_node < 0 ? FrontAction::none : fe.screens[size_t(ui)][size_t(pressed_node)].action;
       if (pressed == FrontAction::realm_list && e.button.clicks >= 2) return act(FrontAction::realm_connect);
       // CGameProcCharacterSelect: a click in the centre of the screen
       // chooses the character in front (ENTER does the same); primary()
@@ -590,8 +651,16 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     if (e.type == SDL_EVENT_MOUSE_BUTTON_UP && e.button.button == SDL_BUTTON_LEFT) {
       const auto was = pressed;
-      pressed = FrontAction::none;
-      if (was != FrontAction::none && hit(ui, cx, cy) == was) return act(was);
+      const int node = pressed_node;
+      pressed = FrontAction::none, pressed_node = -1;
+      // RQ-172: the release acts on the button it was pressed on (the race
+      // and class buttons share their actions).
+      if (was != FrontAction::none && hit_node(ui, cx, cy) == node) {
+        acted_node = node;
+        const auto acted = act(was);
+        acted_node = -1;
+        return acted;
+      }
     }
     return out;
   }
@@ -662,7 +731,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       logo_ui();
     else
       ui(layout(), context, now);
-    if (state == Screen::create && !in_hall_create() && choice.stands()) {
+    if (state == Screen::create && !in_hall_create() && choice.stands() && figure_scene() >= 0) {
       flush();
       character_view(width, height, now);
       begin_ui(width, height);
@@ -685,6 +754,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::vector<GLuint> textures, models;
   GLuint lit = 0, flat = 0, vao = 0, vbo = 0;
   std::vector<Buffer> statics, zone_meshes, intro_plugs, select_plugs, create_plugs;
+  std::vector<std::vector<Buffer>> race_plugs;  // RQ-172: each further create model's
   std::vector<std::vector<Scene>> clips;  // per scene: each clip's poses
   Screen state = Screen::login;
   struct Message {
@@ -699,8 +769,17 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // where the moves put it (empty at rest).
   SlideState create_slide;
   std::vector<std::array<float, 2>> slide_shift;
-  // RQ-130 (version 21): create's race and class, when the package waits for them.
+  // RQ-130 (version 21): create's race and class, when the package waits for
+  // them; RQ-172 (version 25): its buttons by KO's codes, and each create
+  // node's part in them (a race or class button, a class's image).
   CreateChoice choice;
+  struct CreateRole {
+    enum Kind { none, race, klass, image } kind = none;
+    int button = -1;
+  };
+  std::vector<CreateRole> create_role;
+  // The node of the button pressed and of the one a release acts on (-1 none).
+  int pressed_node = -1, acted_node = -1;
   bool waiting = false;  // RQ-108: a login under way (login_waiting)
   bool line_hidden = false;  // RQ-123: a Back's login and list (login_line_hidden)
   // The select camera: the slot it is at and the slot in focus, which is the
@@ -811,13 +890,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     update_slide();
   }
   // RQ-130 (version 21): each open starts with nothing chosen that the
-  // package's create waits for (1298's Init 005fab40 and Cancel 005ffb90).
-  void open_choice() {
-    bool race = false, klass = false;
-    for (const auto &n : fe.screens[size_t(FrontScreen::create)])
-      race = race || n.action == FrontAction::create_race, klass = klass || n.action == FrontAction::create_class;
-    choice.open(race, klass);
-  }
+  // package's create waits for (1298's Init 005fab40 and Cancel 005ffb90);
+  // RQ-172: but the package's choice at the open.
+  void open_choice() { choice.open(); }
   std::array<int, 2> slide_extent() const {
     return scaled ? std::array<int, 2>{int(fe.canvas_width), int(fe.canvas_height)} : placed_size;
   }
@@ -941,19 +1016,25 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         on = select_arrow_shows(fe.select_arrows == FrontSelectArrows::hide,
                                 nodes[i].action == FrontAction::select_next, focus, order.front(), order.back());
       }
-      // RQ-133 (version 22): create's nodes drawn only until its race is
-      // chosen (1298's race click, 006060f0, hides the class buttons the race
-      // cannot take and the images of those it can; each open's reset,
-      // 006066b0 by 00605950, shows them all again).
-      if (screen == FrontScreen::create && (nodes[i].flags & FrontNode::UNTIL_RACE)) on = on && !choice.race;
-      // RQ-145 (version 23, Q93 (b)): create's nodes drawn until a class is
-      // clicked and again from each open and each race click that builds
-      // (1298's 006062d0 hides the clicked class's cream stat labels;
-      // 005fd120's 00605950 shows them all; render/create_choice.h).
-      if (screen == FrontScreen::create && (nodes[i].flags & FrontNode::UNTIL_CLASS)) on = on && !choice.marked;
+      if (screen == FrontScreen::create) on = on && create_drawn(i);
       shown[i] = on;
     }
     return shown;
+  }
+  // RQ-172 (version 25): whether create's node `i` draws by the choice: a
+  // class button only once its race can take it and its image only while the
+  // race cannot (both before a race: 1298's 006060f0 and reset 006066b0,
+  // 1264's 0043ec90), and a class label by the marked class (006062d0,
+  // 0043ee10; render/create_choice.h).
+  bool create_drawn(size_t i) const {
+    const auto &n = fe.screens[size_t(FrontScreen::create)][i];
+    if (const auto flag = n.flags & (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS))
+      if (!choice.label_drawn(uint32_t(i), flag)) return false;
+    if (i >= create_role.size()) return true;
+    const auto &role = create_role[i];
+    if (role.kind == CreateRole::klass) return choice.class_drawn(create_rules, size_t(role.button));
+    if (role.kind == CreateRole::image) return choice.image_drawn(create_rules, size_t(role.button));
+    return true;
   }
   // The node rect on the canvas; the server group slides.
   std::array<float, 4> rect(FrontScreen screen, size_t i) const {
@@ -975,7 +1056,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (j == 0) return false;
     }
   }
-  FrontAction hit(FrontScreen screen, float x, float y) const {
+  // The topmost bound button or list under (x, y): its node, or -1.
+  int hit_node(FrontScreen screen, float x, float y) const {
     const auto &nodes = fe.screens[size_t(screen)];
     const auto shown = visible(screen);
     for (size_t i = nodes.size(); i-- > 0;) {
@@ -983,20 +1065,33 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (!shown[i] || n.action == FrontAction::none || (n.flags & FrontNode::FIXED_DISABLED)) continue;
       if (n.kind != FrontNode::BUTTON && n.kind != FrontNode::LIST) continue;
       const auto r = rect(screen, i);
-      if (x >= r[0] && x < r[2] && y >= r[1] && y < r[3]) return n.action;
+      if (x >= r[0] && x < r[2] && y >= r[1] && y < r[3]) return int(i);
     }
-    return FrontAction::none;
+    return -1;
+  }
+  FrontAction hit(FrontScreen screen, float x, float y) const {
+    const int i = hit_node(screen, x, y);
+    return i < 0 ? FrontAction::none : fe.screens[size_t(screen)][size_t(i)].action;
   }
   FrontAction hit(FrontScreen screen, std::array<float, 2> p) const { return hit(screen, p[0], p[1]); }
   int button_state(FrontScreen screen, size_t i) const {
     const auto &n = fe.screens[size_t(screen)][i];
     if (n.flags & FrontNode::FIXED_DISABLED) return 3;
     // RQ-130: a chosen race or class draws down, under the pointer too
-    // (006060f0 and 006062d0 set UI_STATE_BUTTON_DOWN).
-    if (choice.down(n.action)) return 1;
-    const bool over = n.action != FrontAction::none && hit(screen, pointer) == n.action;
-    if (over && pressed == n.action) return 1;
-    if (over || (n.flags & FrontNode::FIXED_ON)) return 2;
+    // (006060f0 and 006062d0 set UI_STATE_BUTTON_DOWN); RQ-172: each button
+    // by its own choice, one fixed on only chosen at the open.
+    bool choice_button = false;
+    if (screen == FrontScreen::create && i < create_role.size()) {
+      const auto &role = create_role[i];
+      if (role.kind == CreateRole::race || role.kind == CreateRole::klass) {
+        choice_button = true;
+        if (role.kind == CreateRole::race ? choice.race_down(size_t(role.button)) : choice.class_down(size_t(role.button)))
+          return 1;
+      }
+    }
+    const bool over = n.action != FrontAction::none && hit_node(screen, pointer[0], pointer[1]) == int(i);
+    if (over && pressed == n.action && pressed_node == int(i)) return 1;
+    if (over || (!choice_button && (n.flags & FrontNode::FIXED_ON))) return 2;
     return 0;
   }
   Output primary() {
@@ -1156,11 +1251,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // (ReceiveMessage 00604f90): a race click chooses the race and unchooses
     // the class; the click that builds the new character puts it at the slot
     // the camera is at (005fd120 by +0x38c: the slot a flight left).
+    // RQ-172 (version 25): each button its own race or class.
     case FrontAction::create_race:
-      if (state == Screen::create && !pending_create) choice.click_race(at_slot);
-      break;
     case FrontAction::create_class:
-      if (state == Screen::create && !pending_create) choice.click_class(at_slot);
+      if (state == Screen::create && !pending_create && acted_node >= 0 && size_t(acted_node) < create_role.size()) {
+        const auto &role = create_role[size_t(acted_node)];
+        if (role.kind == CreateRole::race) choice.click_race(size_t(role.button), at_slot);
+        if (role.kind == CreateRole::klass) choice.click_class(size_t(role.button), at_slot);
+      }
       break;
     case FrontAction::create_confirm:
       if (state == Screen::create && !pending_create) {
@@ -1190,11 +1288,21 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
           show_message(FrontMessage::create_full, "No more characters can be made in this realm.");
           break;
         }
+        // RQ-172: the chosen race and specialty, refused as the server's
+        // Policy::choice would (Q95), in its box and the package's words,
+        // after the name and the slot as the server checks them.
+        const auto request = create_request(create_rules, uint32_t(slot), choice);
+        if (create_rules && request.race)
+          if (const auto refused = create_choice_refusal(*create_rules, create_rules->nation, request.race,
+                                                         request.specialty, request.face, request.hair, request.stats)) {
+            show_message(FrontMessage::create_refused, create_refused_text(create_rules, *refused));
+            break;
+          }
         pending_create = true;
         known = list ? list->characters_size() : 0;
         out.command = Command::create;
         out.name = name;
-        out.create = create_request(create_rules, uint32_t(slot));
+        out.create = request;
       }
       break;
     default: break;
@@ -1284,7 +1392,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     static const GLenum factors[] = {GL_ZERO, GL_ONE, GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR, GL_SRC_ALPHA,
                                      GL_ONE_MINUS_SRC_ALPHA, GL_DST_ALPHA, GL_ONE_MINUS_DST_ALPHA,
                                      GL_DST_COLOR, GL_ONE_MINUS_DST_COLOR};
-    const auto &scene = which == 0 ? fe.intro : which == 1 ? fe.select : fe.create;
+    const auto &scene = scene_at(which);
     const auto vertices = scene.model.skin(pose);
     const auto mvp = detail::mul(vp, model);
     std::array<float, 4> box{1e9f, 1e9f, -1e9f, -1e9f};
@@ -1298,7 +1406,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     std::array<int, 4> viewport{};
     glGetIntegerv(GL_VIEWPORT, viewport.data());
-    drawn_boxes.push_back({which, box, viewport});
+    drawn_boxes.push_back({std::min<size_t>(which, 2), box, viewport, which >= 2 ? scene_race(which) : 0});
     glBindVertexArray(vao);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
     glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(float), vertices.data(), GL_STREAM_DRAW);
@@ -1327,7 +1435,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       glDrawArrays(GL_TRIANGLES, GLint(run.first), GLsizei(run.count));
     }
     glDisable(GL_BLEND);
-    const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : create_plugs;
+    const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : which == 2 ? create_plugs
+                                                                                       : race_plugs[which - 3];
     for (size_t i = 0; i < plugs.size(); ++i) {
       const auto &plug = scene.plugs[i];
       const auto joint = scene.model.joint_matrix(pose, plug.joint);
@@ -1355,6 +1464,23 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   }
   // The camera still turning to the slot in focus (1097: state 1).
   bool turning() const { return at_slot != focus; }
+  // The scenes by index: 0 intro, 1 select, 2 the first create model, then
+  // (version 24, RQ-158) each further create model in file order.
+  size_t scene_count() const { return 3 + fe.create_models.size(); }
+  const FrontScene &scene_at(size_t which) const {
+    return which == 0 ? fe.intro : which == 1 ? fe.select : which == 2 ? fe.create : fe.create_models[which - 3];
+  }
+  uint32_t scene_race(size_t which) const { return which >= 2 ? fe.create_races[which - 2] : 0; }
+  // RQ-172: the create model the new character draws: the chosen race's
+  // (1298's build 005fd120 builds the race's looks row; none for a race the
+  // package ships no create model for, as 005fd120 builds nothing without a
+  // row), or the first without race buttons; -1 none.
+  int figure_scene() const {
+    const auto code = choice.race_code();
+    if (!code) return 2;
+    const auto at = std::find(fe.create_races.begin(), fe.create_races.end(), *code);
+    return at == fe.create_races.end() ? -1 : int(2 + (at - fe.create_races.begin()));
+  }
   const Scene &clip_scene(size_t scene, size_t clip) const {
     return clips[scene][std::min(clip, clips[scene].size() - 1)];
   }
@@ -1481,9 +1607,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       const auto &slot = fe.slots[i];
       draw_character(1, posed(seats.players.at(size_t(i))), vp, detail::translate_yaw(slot.position, slot.yaw));
     }
-    if (in_hall_create() && !turning() && choice.stands()) {
+    if (in_hall_create() && !turning() && choice.stands() && figure_scene() >= 0) {
       const auto &slot = fe.slots[size_t(choice.stands_at(focus))];
-      draw_character(2, pose(2, 0, now, true), vp, detail::translate_yaw(slot.position, slot.create_yaw));
+      const auto which = size_t(figure_scene());
+      draw_character(which, pose(which, 0, now, true), vp, detail::translate_yaw(slot.position, slot.create_yaw));
     }
   }
   // Create: the player's own model breathing in `char_view`, as KO's
@@ -1511,7 +1638,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     scene.ambient = {.3f, .3f, .3f};
     lights(scene, {});
     fog(nullptr, eye);
-    draw_character(2, pose(2, 0, now, true), view_projection(camera, eye, w, h), detail::translate_yaw({0, 0, 0}, 0));
+    const auto which = size_t(figure_scene());
+    draw_character(which, pose(which, 0, now, true), view_projection(camera, eye, w, h),
+                   detail::translate_yaw({0, 0, 0}, 0));
     glDisable(GL_SCISSOR_TEST);
     glViewport(0, 0, width, height);
   }

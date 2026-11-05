@@ -31,8 +31,12 @@ and class buttons, which a create that binds them waits for, with two
 messages (RQ-130), (version 22) create's nodes drawn only until its race
 is chosen (RQ-133), (version 23) create's nodes drawn until a class is
 clicked, again from each open and each race click that builds (RQ-145),
-and (version 24) a create model per race the package's create rules name
-(`models.create`, RQ-158).
+(version 24) a create model per race the package's create rules name
+(`models.create`, RQ-158), and (version 25) create's race and class buttons
+bound to KO's codes: each race button its race and the race's default class,
+each class button the specialties it stands for, its stand-in image and the
+stat labels its click marks, in place of version 22's nodes drawn until the
+race (RQ-172).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -63,7 +67,7 @@ import ko_hud
 import ko_nameplates
 import ko_scene
 
-VERSION = 24
+VERSION = 25
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -166,8 +170,11 @@ MESSAGE_ONLY = ("yes", "no")
 # Version 21 (RQ-130, specs/KO-FINDINGS.md 9.15): create's race and class
 # buttons (1298's ReceiveMessage 00604f90): a create that binds one opens with
 # it not chosen and waits for its click, Create refusing until then
-# (005fffd0's codes 7 and 9: create_no_race, create_no_class). Each is a
-# button with no fixed state.
+# (005fffd0's codes 7 and 9: create_no_race, create_no_class). Version 25
+# (RQ-172): every race and class button, each bound by the create screen's
+# `races` and `classes` (not `bindings`), so these two may be bound to more
+# than one node; a choice button takes no fixed state but `down`, which makes
+# it chosen at each open (the 1097 choice's Tuarek and priest, Q52, Q89 (b)).
 CREATE_CHOICES = ("create_race", "create_class")
 # Actions bound on one screen only (the others never draw or use them).
 ONLY_ON = {"login_closed": "login", **{a: "select" for a in SELECT_ONLY}, **{a: "message" for a in MESSAGE_ONLY},
@@ -183,23 +190,30 @@ REQUIRED = {"login": {"login", "exit", "login_group", "realm_group", "realm_list
 # The client's strings, in file order. {level}, {class}, {name} and {version}
 # are the only substitutions the client makes.
 STRINGS = ("select_info", "select_hint", "class_name", "class_desc", "loading_info", "version")
-# Node flags. UNTIL_RACE (version 22, RQ-133, specs/KO-FINDINGS.md 9.15):
-# a create node drawn only until the race is chosen, the recipe's create
-# `until_race` (1298's 006060f0 hides the class buttons the race cannot take
-# and their img_* stand in their place; the images of the classes it can are
-# hidden), in a create that binds `create_race`.
-# UNTIL_CLASS (version 23, RQ-145, Q93 (b), 9.15): a create node drawn until a
-# class is clicked, and again from each open and each race click that builds
-# the character, the recipe's create `until_class` (1298's 006062d0 hides the
-# clicked class's cream stat labels, its *_01, for their cyan *_02; the build
-# 005fd120 shows them all; a click on the race already chosen builds nothing),
-# in a create that binds `create_class`, none of them also until the race.
-FIXED_ON, FIXED_DISABLED, FOREGROUND, UNTIL_RACE, UNTIL_CLASS = 1, 2, 4, 8, 16
+# Node flags. Version 22's UNTIL_RACE (8, RQ-133) is gone in version 25: the
+# class buttons' stand-in images (the create screen's `classes`) do its work.
+# CLASS_HIDES (16; version 23's UNTIL_CLASS, RQ-145, Q93 (b), KO-FINDINGS 9.15)
+# and CLASS_SHOWS (32, version 25, RQ-172): a stat label of a class button
+# (`classes`' `labels`), drawn unless, or only while, the class whose click
+# last marked the create names it, as the create's `class_labels` says:
+# `hide`, 1298's (006062d0 hides the clicked class's cream *_01 labels for their
+# cyan *_02; its build 005fd120 and reset 006066b0 show them all), or `show`,
+# 1264's (0043ee10 shows the clicked class's pink img_* labels; its Reset
+# 0043ea10 hides them all). A class click marks the create; each open and each
+# race click that builds the character clear the mark (a click on the race
+# already chosen builds nothing and keeps it).
+FIXED_ON, FIXED_DISABLED, FOREGROUND, CLASS_HIDES, CLASS_SHOWS = 1, 2, 4, 16, 32
+CLASS_LABELS = {"hide": CLASS_HIDES, "show": CLASS_SHOWS}
+# Version 25 (RQ-172): the bounds of create's choice section (item 14).
+MAX_RACE_BUTTONS, MAX_CLASS_BUTTONS, MAX_SPECIALTIES, MAX_LABELS = 32, 16, 16, 8
+NO_NODE = 0xFFFFFFFF
 # A recipe's fixed states. `down` (RQ-138, Q89, specs/KO-FINDINGS.md 9.16) is
 # cooked, not a node flag: fixed on, its BS_DOWN image (state image 1) drawn
 # in the down and on states and its BS_ON image (2) not written, so it draws
 # as 1264's chosen race and class (0043ec90 and 0043ee10 set state 3, which
-# Render 00403a70 draws with BS_DOWN).
+# Render 00403a70 draws with BS_DOWN). On a race or class button (version 25)
+# it is the choice made at each open instead: flag 1 with every state image
+# kept, the client drawing the button down while it is chosen.
 STATES = {"on": FIXED_ON, "down": FIXED_ON, "disabled": FIXED_DISABLED}
 BUTTON_DOWN, BUTTON_ON = 1, 2
 # Mesh flags. A zone mesh (version 8) takes UNLIT, and one of CUT_ZERO (opaque,
@@ -954,7 +968,94 @@ def slide_nodes(root, slide):
     return out
 
 
-def screen(name, spec, assets, textures, fonts, find=(), placements=None, required=None, refused=(), slides=None):
+def ids_list(value, what, low=1, high=65535, most=MAX_SPECIALTIES):
+    if type(value) is not list or not 1 <= len(value) <= most or \
+            any(type(v) is not int or not low <= v <= high for v in value) or len(set(value)) != len(value):
+        raise ValueError("front-end %s: 1 to %d distinct ids %d..%d" % (what, most, low, high))
+    return value
+
+
+def create_choices(name, spec, root, bindings, states, hidden):
+    """Version 25 (RQ-172): the create screen's `races` ({node: {race,
+    default}}: each race button's KO race code and the class a build takes
+    for its stat row before a class is chosen, 1298's 005fd120) and `classes`
+    ({node: {specialties, image, labels}}: the specialty codes a class button
+    stands for, by nation, as 1298's 006062d0 and 1264's 0043ee10 map their
+    four buttons; the image 006060f0 and 0043ec90 show in its place while the
+    chosen race cannot take it; the stat labels its click marks), with
+    `class_labels` (`hide` or `show`, CLASS_LABELS) when any class names
+    labels. Each named node is bound to create_race or create_class here, so
+    `bindings` may not bind those actions. Returns {races: [(node, race,
+    default)], classes: [(node, specialties, image or None, [labels])], flag,
+    labels: {id}, images: {id}}."""
+    races, classes = spec.get("races", {}), spec.get("classes", {})
+    if (races or classes or "class_labels" in spec) and name != "create":
+        raise ValueError("front-end races, classes and class_labels: create's only")
+    if any(action in CREATE_CHOICES for action in bindings.values()):
+        raise ValueError("front-end create_race and create_class: bound by the create screen's races and classes")
+    if type(races) is not dict or type(classes) is not dict or len(races) > MAX_RACE_BUTTONS or \
+            len(classes) > MAX_CLASS_BUTTONS:
+        raise ValueError("front-end races and classes: up to %d race and %d class buttons"
+                         % (MAX_RACE_BUTTONS, MAX_CLASS_BUTTONS))
+    out = dict(races=[], classes=[], flag=0, labels=set(), images=set())
+    taken = set()
+
+    def button(address, action):
+        node = resolve(root, address)
+        if id(node) in bindings or id(node) in hidden or id(node) in taken:
+            raise ValueError("front-end %s %r: bound, hidden or named twice" % (action, address))
+        taken.add(id(node))
+        bindings[id(node)] = action
+        return node
+
+    codes = set()
+    for address, value in races.items():
+        if type(value) is not dict or set(value) != {"race", "default"}:
+            raise ValueError("front-end races %r: exactly {race, default}" % address)
+        race, default = ids_list([value["race"]], "races %r race" % address)[0], \
+            ids_list([value["default"]], "races %r default" % address)[0]
+        if race in codes:
+            raise ValueError("front-end races: race %d twice" % race)
+        codes.add(race)
+        out["races"].append((button(address, "create_race"), race, default))
+    specialties = set()
+    mode = spec.get("class_labels")
+    if mode is not None and mode not in CLASS_LABELS:
+        raise ValueError("front-end class_labels: one of %s" % ", ".join(CLASS_LABELS))
+    for address, value in classes.items():
+        if type(value) is not dict or "specialties" not in value or set(value) - {"specialties", "image", "labels"}:
+            raise ValueError("front-end classes %r: {specialties, image, labels}" % address)
+        codes = ids_list(value["specialties"], "classes %r specialties" % address)
+        if set(codes) & specialties:
+            raise ValueError("front-end classes: a specialty in two class buttons")
+        specialties |= set(codes)
+        node = button(address, "create_class")
+        image = None
+        if value.get("image") is not None:
+            image = resolve(root, value["image"])
+            if image["kind"] != 4 or id(image) in hidden or id(image) in out["images"] or id(image) in taken:
+                raise ValueError("front-end classes %r image: an image, not hidden, one class's" % address)
+            out["images"].add(id(image))
+        labels = value.get("labels", [])
+        if type(labels) is not list or len(labels) > MAX_LABELS:
+            raise ValueError("front-end classes %r labels: up to %d nodes" % (address, MAX_LABELS))
+        resolved = [resolve(root, a) for a in labels]
+        if len({id(n) for n in resolved}) != len(resolved) or any(id(n) in hidden for n in resolved):
+            raise ValueError("front-end classes %r labels: a node named twice or hidden" % address)
+        if resolved and mode is None:
+            raise ValueError("front-end classes: labels need the create screen's class_labels")
+        out["labels"] |= {id(n) for n in resolved}
+        out["classes"].append((node, codes, image, resolved))
+    if out["labels"] & (out["images"] | taken):
+        raise ValueError("front-end classes labels: a race or class button or a class image")
+    if mode is not None and not out["labels"]:
+        raise ValueError("front-end class_labels: no class names labels")
+    out["flag"] = CLASS_LABELS.get(mode, 0)
+    return out
+
+
+def screen(name, spec, assets, textures, fonts, find=(), placements=None, required=None, refused=(), slides=None,
+           choices=None):
     """One screen's nodes in draw order, on the canvas. CN3UIBase::Load adds
     each child at the front and Render walks the list backwards, so a parent
     draws before its children and the children in file order; a button draws
@@ -967,27 +1068,23 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
     `required` replaces the screen's REQUIRED actions and `refused` names
     actions it may not bind (version 19: a create over the hall, no
     `char_view`). `slides`: a list create's slide (version 20, item 13) is
-    appended to, as the section writes it; another screen may not name one."""
+    appended to, as the section writes it; another screen may not name one.
+    `choices`: a list create's race and class buttons (version 25, item 14)
+    are appended to, as {data: the section's bytes, races: [(race, default)],
+    classes: [specialties]}."""
     tree, ui = split(assets, spec["ui"])
     root = ko_hud.parse(tree.get(ui))
     # Every address resolves on KO's tree as read, before anything moves or is added.
     table = lambda key: {id(resolve(root, a)): v for a, v in spec.get(key, {}).items()}
     bindings, texts, states = table("bindings"), table("text"), table("states")
     hidden = {id(resolve(root, a)) for a in spec.get("hidden", [])}
-    # Version 22 (RQ-133): create's nodes drawn only until its race is chosen.
-    until = [id(resolve(root, a)) for a in spec.get("until_race", [])]
-    if until and name != "create":
-        raise ValueError("front-end until_race: create's only")
-    if len(set(until)) != len(until) or set(until) & hidden:
-        raise ValueError("front-end until_race: a node named twice or hidden")
-    until = set(until)
-    # Version 23 (RQ-145): create's nodes drawn until a class is clicked.
-    until_class = [id(resolve(root, a)) for a in spec.get("until_class", [])]
-    if until_class and name != "create":
-        raise ValueError("front-end until_class: create's only")
-    if len(set(until_class)) != len(until_class) or set(until_class) & (hidden | until):
-        raise ValueError("front-end until_class: a node named twice, hidden or until the race")
-    until_class = set(until_class)
+    # Version 25 (RQ-172): version 22's until_race and 23's until_class give
+    # way to the class buttons' images and labels (create_choices).
+    for gone in ("until_race", "until_class"):
+        if gone in spec:
+            raise ValueError("front-end %s: gone in version 25; the create screen's classes name each class "
+                             "button's image and labels" % gone)
+    chosen = create_choices(name, spec, root, bindings, states, hidden)
     wanted = [id(resolve(root, a)) for a in find]
     for extra in spec.get("added", []):
         # A string KO's layout lacks (a status line, say), in UIF
@@ -1021,7 +1118,7 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
         action = bindings.get(id(n), "")
         if action not in ACTIONS or ONLY_ON.get(action, name) != name:
             raise ValueError("front-end action %r" % action)
-        if action in seen:
+        if action in seen and action not in CREATE_CHOICES:
             raise ValueError("front-end action %r bound twice" % action)
         if action:
             seen.add(action)
@@ -1029,12 +1126,10 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
             if states[id(n)] not in STATES:
                 raise ValueError("front-end state %r" % states[id(n)])
             flags |= STATES[states[id(n)]]
-        if action in CREATE_CHOICES and (kind != "button" or id(n) in states):
-            raise ValueError("front-end %s: a button with no fixed state" % action)
-        if id(n) in until:
-            flags |= UNTIL_RACE
-        if id(n) in until_class:
-            flags |= UNTIL_CLASS
+        if action in CREATE_CHOICES and (kind != "button" or states.get(id(n), "down") != "down"):
+            raise ValueError("front-end %s: a button with no fixed state but down" % action)
+        if id(n) in chosen["labels"]:
+            flags |= chosen["flag"]
         record = u(KINDS[kind]) + u(0xFFFFFFFF if parent is None else parent) + f(n["rect"]) + \
             string(n["id"][:64]) + u(ACTIONS.index(action)) + u(flags) + u(mask)
         if kind == "image" and not n["texture"]:
@@ -1067,7 +1162,10 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
         if kind == "edit":
             return
         down = states.get(id(n)) == "down"
-        if down and (kind != "button" or not any(c["kind"] == 4 and c["reserved"] == BUTTON_DOWN and c["texture"]
+        # Version 25: a race or class button chosen at each open keeps all its
+        # state images (the client draws it down while it is chosen).
+        preset, down = down and action in CREATE_CHOICES, down and action not in CREATE_CHOICES
+        if (down or preset) and (kind != "button" or not any(c["kind"] == 4 and c["reserved"] == BUTTON_DOWN and c["texture"]
                                                  for c in n["children"])):
             raise ValueError("front-end state down: a button with no down image")
         for c in n["children"]:
@@ -1093,14 +1191,24 @@ def screen(name, spec, assets, textures, fonts, find=(), placements=None, requir
         missing = missing | {"char_info"}
     if missing:
         raise ValueError("front-end %s: unbound %s" % (name, sorted(missing)))
-    if until and "create_race" not in seen:
-        raise ValueError("front-end until_race: a create that binds no create_race")
-    if any(n not in found for n in until):
-        raise ValueError("front-end until_race: a node it names is not drawn")
-    if until_class and "create_class" not in seen:
-        raise ValueError("front-end until_class: a create that binds no create_class")
-    if any(n not in found for n in until_class):
-        raise ValueError("front-end until_class: a node it names is not drawn")
+    if choices is not None and name == "create":
+        drawn = [n for n, *_ in chosen["races"]] + [n for n, *_ in chosen["classes"]] + \
+            [image for *_, image, _ in chosen["classes"] if image is not None] + \
+            [label for *_, labels in chosen["classes"] for label in labels]
+        if any(id(n) not in found for n in drawn):
+            raise ValueError("front-end races and classes: a node they name is not drawn")
+        for which, entries in (("race", chosen["races"]), ("class", chosen["classes"])):
+            if sum(states.get(id(entry[0])) == "down" for entry in entries) > 1:
+                raise ValueError("front-end %s buttons: more than one down (chosen at each open)" % which)
+        record = u(len(chosen["races"])) + b"".join(u(found[id(n)]) + u(race) + u(default)
+                                                     for n, race, default in chosen["races"])
+        record += u(len(chosen["classes"]))
+        for n, codes, image, labels in chosen["classes"]:
+            record += u(found[id(n)]) + u(len(codes)) + b"".join(u(c) for c in codes) + \
+                u(NO_NODE if image is None else found[id(image)]) + u(len(labels)) + \
+                b"".join(u(found[id(label)]) for label in labels)
+        choices.append(dict(data=record, races=[(race, default) for _, race, default in chosen["races"]],
+                            classes=[codes for _, codes, *_ in chosen["classes"]]))
     data = u(len(nodes)) + b"".join(nodes)
     if placements is not None:
         # A move of a node that draws nothing (hidden) is not written.
@@ -1963,6 +2071,36 @@ def node_end(data, at):
     return at
 
 
+def create_buttons(choice, rules):
+    """Version 25 (RQ-172): with the package's create rules, each race button
+    names a race of `races` and as its default a specialty of that race (the
+    class 1298's build 005fd120 takes for the stat row before one is chosen:
+    1->101, 2->102, 3->103, 4->104, 11->201, 12->202, 13->204), each class
+    button only specialties some race has, and a race takes at most one
+    specialty of each class button (the click chooses that one). The buttons
+    of races the package does not offer are the recipe's to leave unbound
+    (Q109 (a)); the client checks a choice against create.bin as the server
+    does."""
+    if rules is None:
+        if choice["races"] or choice["classes"]:
+            raise ValueError("front-end races and classes: the package has no create rules (character-create.json)")
+        return
+    entries = {r["race"]: set(r["specialties"]) for r in rules["races"]}
+    for race, default in choice["races"]:
+        if race not in entries:
+            raise ValueError("front-end races: race %d is not one of the package's (character-create.json)" % race)
+        if default not in entries[race]:
+            raise ValueError("front-end races: race %d's default %d is not one of its specialties" % (race, default))
+    known = set().union(*entries.values()) if entries else set()
+    for codes in choice["classes"]:
+        if set(codes) - known:
+            raise ValueError("front-end classes: specialty %s is no race's (character-create.json)"
+                             % ", ".join(map(str, sorted(set(codes) - known))))
+        for race, offered in entries.items():
+            if len(set(codes) & offered) > 1:
+                raise ValueError("front-end classes: race %d takes two specialties of one class button" % race)
+
+
 def cook(assets, out, config_path, work):
     """Writes front-end.bin into the directory `out`; returns its provenance.
     `assets` is the choice's `Inputs`, or one tree. The package's create rules
@@ -1990,14 +2128,17 @@ def write(assets, out, config, work, rules=None):
     if set(config["screens"]) != set(SCREENS):
         raise ValueError("front-end screens")
     textures, fonts = Textures(assets), {}
-    placements, slides = [], []
+    placements, slides, choices = [], [], []
     # Version 19 (RQ-125): a create over the hall draws its new character in
     # the hall, so its layout binds no char_view.
     over_hall = create_mode(config["select"]) == "hall"
     unviewed = dict(required=REQUIRED["create"] - {"char_view"}, refused={"char_view"}) if over_hall else {}
     screens = b"".join(screen(n, config["screens"][n], assets, textures, fonts, placements=placements,
-                              slides=slides, **(unviewed if n == "create" else {}))
+                              slides=slides, choices=choices, **(unviewed if n == "create" else {}))
                        for n in SCREENS)
+    # Version 25 (RQ-172): create's race and class buttons name the package's
+    # races and specialties (character-create.json).
+    create_buttons(choices[0], rules)
     # Version 9 (RQ-101): the logo screen, or none; its textures and fonts
     # join the tables before they are written.
     track_count = len((config.get("music") or {}).get("tracks", []))
@@ -2034,9 +2175,10 @@ def write(assets, out, config, work, rules=None):
     tracks, played = music(assets, config.get("music"))
     # Version 10 (RQ-102): each message's title and wording.
     message_section, message_report = messages_section(config, assets)
-    # Version 20 (RQ-126): create's slide, after the placement.
+    # Version 20 (RQ-126): create's slide, after the placement; version 25
+    # (RQ-172): create's race and class buttons after it.
     data += u(len(fonts)) + atlases + screens + table + scenes + tracks + logo_section + message_section + \
-        placement_section + b"".join(slides)
+        placement_section + b"".join(slides) + choices[0]["data"]
     if len(data) > MAX_FILE:
         raise ValueError("front-end.bin past its bound")
     (out / "front-end.bin").write_bytes(data)

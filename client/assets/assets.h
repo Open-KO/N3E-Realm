@@ -904,13 +904,15 @@ enum class FrontScreen : uint32_t { login, select, create, loading, message, cou
 enum class FrontString : uint32_t { select_info, select_hint, class_name, class_desc, loading_info, version, count };
 struct FrontNode {
   static constexpr uint32_t IMAGE = 0, TEXT = 1, BUTTON = 2, EDIT = 3, PROGRESS = 4, GROUP = 5, AREA = 6, LIST = 7;
-  // UNTIL_RACE (version 22, RQ-133): a create node drawn only until the race
-  // is chosen (1298's 006060f0, KO-FINDINGS 9.15; render/create_choice.h), in
-  // a create that binds create_race. UNTIL_CLASS (version 23, RQ-145): a
-  // create node drawn until a class is clicked and again from each open and
-  // each race click that builds the character (1298's 006062d0 and 005fd120),
-  // in a create that binds create_class.
-  static constexpr uint32_t FIXED_ON = 1, FIXED_DISABLED = 2, FOREGROUND = 4, UNTIL_RACE = 8, UNTIL_CLASS = 16;
+  // Version 25 (RQ-172; content/front-end.md, "Actions"): a stat label of
+  // create's class buttons (FrontCreateClass::labels), drawn unless
+  // (CLASS_HIDES, version 23's flag 16: 1298's 006062d0 hides the clicked
+  // class's cream labels) or only while (CLASS_SHOWS: 1264's 0043ee10 shows
+  // its pink ones) the class whose click last marked the create names it
+  // (render/create_choice.h). Version 22's flag 8 (drawn until the race) is
+  // gone: the class buttons' stand-in images do its work. FIXED_ON on a race
+  // or class button: chosen at each open (the 1097 choice's, Q52, Q89 (b)).
+  static constexpr uint32_t FIXED_ON = 1, FIXED_DISABLED = 2, FOREGROUND = 4, CLASS_HIDES = 16, CLASS_SHOWS = 32;
   uint32_t kind = 0, parent = 0, flags = 0, mask = 15;
   FrontAction action = FrontAction::none;
   std::array<float, 4> rect{}, uv{};
@@ -1080,6 +1082,21 @@ struct FrontSlideNode {
   float num = 1, den = 1;
 };
 struct FrontSlide { float rate = 0, floor = 0; std::vector<FrontSlideNode> nodes; };
+// Version 25 (RQ-172; content/front-end.md item 14): create's race buttons,
+// each its node, KO's race code and the specialty a build takes for the stat
+// row before a class is chosen (1298's 005fd120), and its class buttons, each
+// its node, the specialties it stands for (one per nation: 1298's 006062d0,
+// 1264's 0043ee10), the image drawn in its place while the chosen race cannot
+// take it (1298's 006060f0, 1264's 0043ec90; kNone: none) and the stat labels
+// its click marks.
+struct FrontCreateRace { uint32_t node = 0, race = 0, base = 0; };
+struct FrontCreateClass {
+  static constexpr uint32_t kNone = 0xffffffffu;
+  uint32_t node = 0;
+  std::vector<uint32_t> specialties;
+  uint32_t image = kNone;
+  std::vector<uint32_t> labels;
+};
 struct FrontEnd {
   // The layouts the moves are for: the five screens (FrontScreen), then the logo.
   static constexpr size_t kLogoLayout = size_t(FrontScreen::count);
@@ -1130,6 +1147,9 @@ struct FrontEnd {
   bool scale_to_window = false;
   // Version 20 (RQ-126): create's slide (none: no nodes).
   FrontSlide create_slide;
+  // Version 25 (RQ-172): create's race and class buttons, in file order.
+  std::vector<FrontCreateRace> create_race_buttons;
+  std::vector<FrontCreateClass> create_class_buttons;
 };
 FrontEnd load_front_end(const Release &release);
 } // namespace n3e

@@ -158,6 +158,14 @@ if os.environ.get("N3E_GRAPHICAL") != "1":
 import ko_front_end  # noqa: E402
 
 import front_end_choice  # noqa: E402
+import ko_create  # noqa: E402
+
+# RQ-172: the package's create rules (character-create.json): the races create
+# offers and their specialties, and the fixed choice the screens' clicks start
+# from.
+RULES = ko_create.rules(Path("games/moradon"))
+OFFERED = {r["race"]: r["specialties"] for r in RULES["races"] if r["race"] in RULES["content"]}
+FIXED = RULES["fixed"]
 
 # RQ-078: every front end games/moradon offers (front-ends.json) cooks twice to
 # the same bytes and the client loader takes it; the one realm-config.json
@@ -371,16 +379,17 @@ create_recipe = screen_recipes["create"]
 NORMAL = {ident: normal_tile(LAYOUTS["create"], ident) for ident in
           (n["id"] for n in descendants(LAYOUTS["create"]) if n["kind"] == 1 and n["id"].startswith("btn_race_"))
           if ident not in create_recipe.get("states", {}) and ident not in create_recipe.get("bindings", {})
-          and ident not in create_recipe.get("hidden", [])}
+          and ident not in create_recipe.get("races", {}) and ident not in create_recipe.get("hidden", [])}
 if chosen == "1097":
     assert sorted(NORMAL) == ["btn_race_ka_pt"], sorted(NORMAL)
 
 
-# RQ-142 (Q91 (b), KO-FINDINGS 9.16, the maintainer's "Match 1264, Rogue
-# inert"): a class image the chosen recipe draws with its button hidden stands
-# in the button's place, as 1264's img_warrior and img_mage after a Tuarek
-# click (0043ec90(2) hides those buttons and shows their images). Each (id,
-# the image's rect, its texels).
+# RQ-142 (Q91 (b), KO-FINDINGS 9.16): a class image stands in its button's
+# place while the chosen race cannot take the class, as 1264's img_warrior and
+# img_mage after a Tuarek click (0043ec90(2) hides those buttons and shows
+# their images); RQ-172: the client draws it so from the class buttons' codes
+# and the race the recipe chooses at each open (the 1097 choice's Tuarek, Q52).
+# Each (id, the image's rect, its texels).
 def image_tile(tree, ident):
     image = find(tree, ident)
     w, h, rgba = ko_front_end.texture(create_tree_of_choice.get(image["texture"]))
@@ -390,12 +399,12 @@ def image_tile(tree, ident):
                            for y in range(y1 - y0) for x in range(x1 - x0)]
 
 
-CLASS_IMAGES = {f"img_{c}": image_tile(LAYOUTS["create"], f"img_{c}") for c in ("warrior", "rogue", "mage", "priest")
-                if f"img_{c}" not in create_recipe.get("hidden", [])
-                and f"btn_class_{c}" in create_recipe.get("hidden", [])}
+OPEN_RACE = next((v["race"] for k, v in create_recipe.get("races", {}).items()
+                  if create_recipe.get("states", {}).get(k) == "down"), None)
+CLASS_IMAGES = {v["image"]: image_tile(LAYOUTS["create"], v["image"]) for v in create_recipe.get("classes", {}).values()
+                if OPEN_RACE is not None and not set(v["specialties"]) & set(OFFERED.get(OPEN_RACE, []))}
 if chosen == "1097":
     assert sorted(CLASS_IMAGES) == ["img_mage", "img_warrior"], sorted(CLASS_IMAGES)
-    assert {"img_rogue", "img_priest"} <= set(create_recipe["hidden"]), create_recipe["hidden"]
 
 
 # RQ-144 (Q92 (b), KO-FINDINGS 9.16, the maintainer's "Pink Str/Int, as
@@ -408,7 +417,11 @@ STAT_LABELS = {ident: find(LAYOUTS["create"], ident)["rect"]
                for ident in ("img_str", "img_sta", "img_dex", "img_int", "img_map")}
 for ident in STAT_LABELS:
     assert find(LAYOUTS["create"], ident)["color"] & 0xffffff == 0xff8080, ident
-SHOWN_STATS = [ident for ident in STAT_LABELS if ident not in create_recipe.get("hidden", [])]
+# RQ-172: the class the recipe chooses at each open marks its own labels
+# (class_labels show: 1264's 0043ee10 for it).
+OPEN_LABELS = next((v.get("labels", []) for k, v in create_recipe.get("classes", {}).items()
+                    if create_recipe.get("states", {}).get(k) == "down"), [])
+SHOWN_STATS = [ident for ident in STAT_LABELS if ident in OPEN_LABELS and create_recipe.get("class_labels") == "show"]
 if chosen == "1097":
     assert SHOWN_STATS == ["img_str", "img_int"], SHOWN_STATS
 
@@ -841,25 +854,57 @@ CREATE_FLY = (f"click=create path={fly_index} frames={fly_frames:.6g} slot=1 foc
 # RQ-130: create opened at rest: no character and both buttons normal; Create
 # says create_name (empty), then create_no_race (a class clicked first too),
 # then, a race click having unchosen the class, create_no_class; with both
-# clicked it sends. A chosen button draws down under the pointer.
-# RQ-133 (KO-FINDINGS 9.15): the recipe's until-race nodes, in the layout's
-# order, draw at each open and after a class click, none once the race is
-# clicked (006060f0(2) hides the warrior and mage buttons and the rogue and
-# priest images), and all again after a Cancel and a new open (006066b0).
-UNTIL_1298 = "img_rogue,img_priest,btn_class_warrior,btn_class_mage"
-assert sorted(UNTIL_1298.split(",")) == sorted(recipe_1298["screens"]["create"]["until_race"]), recipe_1298
-# RQ-145 (Q93 (b), KO-FINDINGS 9.15): the recipe's until-class nodes, the
-# cream "STR" and "INT" (str_01, int_01, over their cyan str_02 and int_02),
-# draw at each open, hide on a priest click (006062d0(104)), draw again on the
-# race click that builds the character (005fd120's 00605950), stay hidden on a
-# second click on the chosen race, which builds nothing (00604f90), and draw
-# again after a Cancel and a new open.
-LABELS_1298 = "str_01,int_01"
-assert sorted(LABELS_1298.split(",")) == sorted(recipe_1298["screens"]["create"]["until_class"]), recipe_1298
-CREATE_CHOICE = (f"open=0,0,0 until={UNTIL_1298} labels={LABELS_1298} empty=create_name norace=create_no_race "
-                 f"class=1,0 until={UNTIL_1298} labels=- classfirst=create_no_race race=1,0,1 until=- "
-                 f"labels={LABELS_1298} noclass=create_no_class both=1,1,1 labels=- again=1,0,1 labels=- "
-                 f"create=none sent=1 reopen={UNTIL_1298} labels={LABELS_1298}")
+# clicked it sends. A chosen button draws down under the pointer. The buttons
+# pressed are the fixed choice's race and specialty (the Tuarek priest) and
+# the other specialty that race has (the rogue).
+# RQ-172 (version 25, KO-FINDINGS 9.15): the class column in the layout's
+# draw order: every class button over its img_* at each open and after a
+# class click (the reset 006066b0's 00605950); after the Tuarek click
+# (006060f0(2)) the warrior and mage images in place of their buttons and the
+# rogue and priest buttons without their images; all again after a Cancel and
+# a new open. The race click builds the Tuarek's create model and takes its
+# default class, 102 (005fd120), for the stat row.
+# RQ-145 (Q93 (b)) and RQ-172: the cream labels (*_01, over their cyan *_02)
+# draw at each open; a class click hides its own two (006062d0: the priest
+# str_01 and int_01, the rogue dex_01 and sta_01); the race click that builds
+# draws them again (005fd120's 00605950), a second click on the chosen race,
+# which builds nothing (00604f90), leaves them; the rogue click, whose create
+# is then sent as the Tuarek rogue (2, 102).
+create_1298_recipe = recipe_1298["screens"]["create"]
+create_tree_1298 = ko_hud.parse(pinned.get(create_1298_recipe["ui"]))
+
+
+def drawn_order(ids):
+    """`ids` in the create layout's draw order (the cook's: each parent, then
+    its children in file order), comma-separated, `-` for none."""
+    out = [n["id"] for n in descendants(create_tree_1298) if n["id"] in ids]
+    return ",".join(dict.fromkeys(out)) or "-"
+
+
+classes_1298 = create_1298_recipe["classes"]
+fixed_class = next(v for v in classes_1298.values() if FIXED["specialty"] in v["specialties"])
+other_class = next(v for v in classes_1298.values() if FIXED["specialty"] not in v["specialties"]
+                   and set(v["specialties"]) & set(OFFERED[FIXED["race"]]))
+other_specialty = next(s for s in other_class["specialties"] if s in OFFERED[FIXED["race"]])
+assert fixed_class["labels"] == ["str_01", "int_01"] and sorted(other_class["labels"]) == ["dex_01", "sta_01"], \
+    classes_1298
+race_button_1298 = next(v for v in create_1298_recipe["races"].values() if v["race"] == FIXED["race"])
+COLUMN_ALL = drawn_order({n for k, v in classes_1298.items() for n in (k, v["image"])})
+COLUMN_RACE = drawn_order({n for k, v in classes_1298.items() for n in (
+    (k,) if set(v["specialties"]) & set(OFFERED[FIXED["race"]]) else (v["image"],))})
+assert COLUMN_RACE.split(",") == [x for x in COLUMN_ALL.split(",")
+                                  if x in ("img_warrior", "img_mage", "btn_class_rogue", "btn_class_priest")], \
+    COLUMN_RACE
+LABELS = {n for v in classes_1298.values() for n in v["labels"]}
+LABELS_ALL = drawn_order(LABELS)
+LABELS_FIXED = drawn_order(LABELS - set(fixed_class["labels"]))
+LABELS_OTHER = drawn_order(LABELS - set(other_class["labels"]))
+CREATE_CHOICE = (f"open=0,0,0 column={COLUMN_ALL} labels={LABELS_ALL} empty=create_name norace=create_no_race "
+                 f"class=1,0 column={COLUMN_ALL} labels={LABELS_FIXED} classfirst=create_no_race "
+                 f"race=1,0,1 column={COLUMN_RACE} labels={LABELS_ALL} model={FIXED['race']} "
+                 f"row={race_button_1298['default']} noclass=create_no_class both=1,1,1 labels={LABELS_FIXED} "
+                 f"again=1,0,1 labels={LABELS_FIXED} other=1,1,0,1 labels={LABELS_OTHER} create=none sent=1 "
+                 f"as={FIXED['race']},{other_specialty} reopen={COLUMN_ALL} labels={LABELS_ALL}")
 # RQ-125: 1298's in-select create, co_characterCreate_us.uif (row 2's, as
 # 005fab40 loads it), its root at the origin and its panels where its Tick
 # (00606450) clamps their slides: Group_class at (50, H - 30 - h), Group_race at
@@ -880,11 +925,10 @@ for stat in ("str", "dex", "sta", "int", "map"):
     assert cream["rect"] == cyan["rect"] and cream["text"] == cyan["text"], stat
     assert find(group_class, f"{stat}_01") is cream, stat
     STATS_1298[stat] = cream["rect"]
-CYAN_1298 = [ident.split("_")[0] for ident in LABELS_1298.split(",")]
-# The button bound to create_class, whose placed rect the create-class shot logs.
-CLASS_BUTTON_1298 = find(group_class, next(ident for ident, action in recipe_1298["screens"]["create"]["bindings"].items()
-                                           if action == "create_class"))
-assert CLASS_BUTTON_1298 is not None, recipe_1298["screens"]["create"]["bindings"]
+CYAN_1298 = [ident.split("_")[0] for ident in fixed_class["labels"]]
+# The fixed specialty's class button, whose placed rect the create-class shot logs.
+CLASS_BUTTON_1298 = find(group_class, next(ident for ident, v in classes_1298.items() if v is fixed_class))
+assert CLASS_BUTTON_1298 is not None, classes_1298
 assert CYAN_1298 == ["str", "int"], CYAN_1298
 
 

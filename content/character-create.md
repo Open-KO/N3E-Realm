@@ -652,9 +652,9 @@ one converting as that frame held.
 **Shipped (RQ-158, Q102, Q105).** Each race of `models.create` has its create model
 in `front-end.bin` (N3FE version 24, `content/front-end.md` item 8): KO's `InitChr`
 for the race, its looks row's joint, animation and parts (face 0, hair 0, an empty
-name setting no part), breathing. The create screen is the models' first consumer
-(RQ-004); until it draws the chosen race's, create draws the first, the select
-character's race. Moradon ships the Karus races that convert on the front-end path
+name setting no part), breathing. The create screen is the models' first consumer:
+since RQ-172 a race click draws the chosen race's (a create without race buttons
+draws the first, the select character's race). Moradon ships the Karus races that convert on the front-end path
 (local-asset; `tests/ko_player_races.py` cooks each):
 
 | Race | Create model | Bytes it adds to `front-end.bin` |
@@ -790,21 +790,54 @@ them, GL-free (`tests/front_end.cpp`).
 - Without rules the rule is the server's legacy one (1..24 ASCII letters, digits, `_`
   and `-`), checked the same way.
 
-**What Create sends.** `CreateCharacter` with the name and, from the rules, the
-package's fixed choice (`fixed`: race, specialty, face, hair and the stats with its
-points spent; Moradon's the Tuarek priest at 60 / 60 / 70 / 50 / 60) in the first slot
-the list leaves free (`Character.slot`). The hall draws the list in slot order, so
-the new character stands where it is drawn; KO's 1298 creates in the slot in focus
-when it is empty (`005ff920`), which differs only when an empty slot in focus is not
-the first, and waits for RQ-005's hall by slot. A package without rules, or without a
-fixed choice, sends race 0 and the name, as before. The server checks the choice as any
-create (Q95); its race-0 path (Q100) stays for the panels' create.
+**What Create sends.** `CreateCharacter` with the name, from the rules, the
+chosen race and specialty (below; a create without race and class buttons, the
+package's fixed choice: `fixed`, race and specialty), the fixed choice's face and
+hair, and stats: the chosen specialty's base with the fixed choice's points spent
+as it spends them (Moradon's ten in the fifth stat, MP: the Tuarek rogue or
+priest at 60 / 60 / 70 / 50 / 60), until the face, hair and stat arrows choose
+them (RQ-173, RQ-174; Q110), in the first slot the list leaves free
+(`Character.slot`). The hall draws the list in slot order, so the new character
+stands where it is drawn; KO's 1298 creates in the slot in focus when it is empty
+(`005ff920`), which differs only when an empty slot in focus is not the first, and
+waits for RQ-005's hall by slot (RQ-177). A package without rules sends race 0 and
+the name, as before. The server checks the choice as any create (Q95); its race-0
+path (Q100) stays for the panels' create.
 
-How the race buttons of races the package does not offer draw once the buttons choose
-(Q105 leaves Moradon offering the Tuarek alone) is Q109; until it is decided they stay
-as they draw now.
+Moradon's cooked bytes were unchanged by this first part.
 
-Moradon's cooked bytes are unchanged; no package or feature pin changes.
+**The race and class buttons (RQ-172; N3FE version 25, `content/front-end.md` item
+14 and "Actions").** Each race button carries its KO race code and the race's
+default class, and each class button the specialty codes it stands for (one per
+nation), the image 1298 and 1264 show in its place and the stat labels its click
+marks; the recipe names them in the create screen's `races` and `classes`, and the
+cook checks them against `character-create.json`. As 1298 (binary, "Races and
+classes" above):
+- A race click chooses the race, unchooses the class and, when the race changed,
+  builds the new character from the race's create model (`models.create`; none
+  drawn for a race without one) and clears the class's marks (`00604f90`,
+  `005fd120`). With no class chosen the build takes the race's default class for its
+  stat row (`005fd120`: 1→101, 2→102, 3→103, 4→104, 11→201, 12→202, 13→204), which
+  RQ-173 shows.
+- Once a race is chosen, the class buttons it cannot take (the races of
+  `create.bin`: a race the package does not offer takes none) are hidden for their
+  images and the images of those it can are hidden (`006060f0`; 1264 `0043ec90`).
+  Before a race every class button draws over its image (the reset `006066b0`).
+- A class click chooses, for the chosen race, the one of the button's specialties
+  the race has, and marks its own labels: 1298's cream pair hidden (`006062d0`),
+  1264's pink pair shown (`0043ee10`).
+- Create refuses, after the name, no race and no class, the choice as the server's
+  `Policy::choice` would (`create_choice_refusal`, Q95), in the server's words of
+  that refusal, so a create the screen sends is one the server takes.
+
+The 1298 recipe waits for both clicks (RQ-130); the 1097 choice chooses the Tuarek
+and the priest at each open (Q52), its look at the open what Q89 to Q92 decided, its
+rogue now a live button as 1264's (Q91). Moradon offers the Tuarek's rogue (102) and
+priest (104), so both screens make either. The race buttons of races the package does
+not offer stay as they drew (Q109 (a): fixed disabled; the 1097 choice's Puri Tuarek
+unbound, Q90). The 1097 choice's `front-end.bin` grows from 56,347,416 to 56,348,696
+bytes (the class column's nodes and pink labels it no longer hides, and item 14); the
+package hash changes, so the hosted realm's next deploy is a new realm (Q63).
 
 ## What each item needs
 
@@ -833,9 +866,9 @@ Moradon's cooked bytes are unchanged; no package or feature pin changes.
   and the skills and class rules RQ-007 needs. All of it is package data under
   `games/moradon`.
 - **RQ-004 (screen).** As 1298 draws it:
-  - the nation's race buttons, all live;
-  - the class buttons enabled per race, the others hidden for their images;
-  - the default class on a race click;
+  - the nation's race buttons, all live (RQ-172; Q109 for races not offered);
+  - the class buttons enabled per race, the others hidden for their images (RQ-172);
+  - the default class on a race click (RQ-172);
   - face and hair arrows that clamp;
   - the stat arrows, with every build resetting the points;
   - the description texts and the hover;

@@ -965,12 +965,13 @@ impl Release {
 }
 
 /// front-end.bin's header (spec 11, content/front-end.md): the N3FE version
-/// this server's client reads (24 since RQ-158: a create model per race,
-/// after RQ-145's create nodes drawn until a class is clicked, RQ-133's nodes
+/// this server's client reads (25 since RQ-172: create's race and class
+/// buttons bound to KO's codes, after RQ-158's create model per race,
+/// RQ-145's create nodes drawn until a class is clicked, RQ-133's nodes
 /// drawn until the race is chosen and RQ-130's create race and class
 /// choices) and the character slot count, 1 to 3.
 fn front_end_slots(mut p: Reader) -> Result<u32> {
-    if p.take(4)? != b"N3FE" || p.u()? != 24 {
+    if p.take(4)? != b"N3FE" || p.u()? != 25 {
         return Err(bad("front end magic/version"));
     }
     let slots = p.u()?;
@@ -991,9 +992,9 @@ mod front_end_tests {
         Reader::from_bytes(b)
     }
     #[test]
-    fn reads_the_slot_count_of_version_24() {
+    fn reads_the_slot_count_of_version_25() {
         for slots in 1..=3 {
-            assert_eq!(front_end_slots(header(b"N3FE", 24, slots)).unwrap(), slots);
+            assert_eq!(front_end_slots(header(b"N3FE", 25, slots)).unwrap(), slots);
         }
     }
     #[test]
@@ -1079,17 +1080,21 @@ mod front_end_tests {
             "version 23 (one create model)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 25, 3)).is_err(),
-            "version 25"
+            front_end_slots(header(b"N3FE", 24, 3)).is_err(),
+            "version 24 (no race and class buttons)"
         );
-        assert!(front_end_slots(header(b"N3FX", 24, 3)).is_err(), "magic");
-        assert!(front_end_slots(header(b"N3FE", 24, 0)).is_err(), "no slots");
         assert!(
-            front_end_slots(header(b"N3FE", 24, 4)).is_err(),
+            front_end_slots(header(b"N3FE", 26, 3)).is_err(),
+            "version 26"
+        );
+        assert!(front_end_slots(header(b"N3FX", 25, 3)).is_err(), "magic");
+        assert!(front_end_slots(header(b"N3FE", 25, 0)).is_err(), "no slots");
+        assert!(
+            front_end_slots(header(b"N3FE", 25, 4)).is_err(),
             "four slots"
         );
         assert!(
-            front_end_slots(Reader::from_bytes(b"N3FE\x18\0\0".to_vec())).is_err(),
+            front_end_slots(Reader::from_bytes(b"N3FE\x19\0\0".to_vec())).is_err(),
             "truncated"
         );
     }

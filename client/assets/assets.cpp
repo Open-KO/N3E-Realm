@@ -2859,7 +2859,7 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 24, "front end version");
+  need(r.u() == 25, "front end version");
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -2920,15 +2920,22 @@ FrontEnd load_front_end(const Release &release) {
       const auto action = r.u();
       need(action < uint32_t(FrontAction::count), "front end action");
       n.action = FrontAction(action);
-      need(n.action == FrontAction::none || bound.insert(n.action).second, "front end action bound twice");
+      // Version 25 (RQ-172): every race and class button is bound, so those
+      // two actions may be bound more than once.
+      const bool choice = n.action == FrontAction::create_race || n.action == FrontAction::create_class;
+      need(n.action == FrontAction::none || bound.insert(n.action).second || choice, "front end action bound twice");
       n.flags = r.u();
       n.mask = r.u();
-      need(n.flags <= 31 && n.mask >= 1 && n.mask <= 15, "front end node state");
+      // Flag 8 (version 22's) is gone in version 25.
+      need(n.flags <= 63 && !(n.flags & 8) && n.mask >= 1 && n.mask <= 15, "front end node state");
       // Version 21 (RQ-130): create's race and class choices are buttons the
-      // player clicks, so neither fixed on nor fixed disabled.
-      need((n.action != FrontAction::create_race && n.action != FrontAction::create_class) ||
-               (n.kind == FrontNode::BUTTON && !(n.flags & (FrontNode::FIXED_ON | FrontNode::FIXED_DISABLED))),
+      // player clicks, so never fixed disabled; version 25: fixed on, chosen
+      // at each open.
+      need(!choice || (n.kind == FrontNode::BUTTON && !(n.flags & FrontNode::FIXED_DISABLED)),
            "front end create choice");
+      need((n.flags & (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS)) !=
+               (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS),
+           "front end class label");
       if (n.kind == FrontNode::IMAGE) {
         n.texture = r.u();
         n.uv = r.floats<4>();
@@ -2983,21 +2990,10 @@ FrontEnd load_front_end(const Release &release) {
     if (screen != size_t(FrontScreen::create))
       for (auto action : {FrontAction::create_race, FrontAction::create_class})
         need(!bound.contains(action), "front end create choice off create");
-    // Version 22 (RQ-133): a node drawn only until the race is chosen is
-    // create's, in a create that waits for its race (1298's 006060f0).
+    // Version 25 (RQ-172): a class label is create's (item 14 names it).
     for (const auto &n : fe.screens[screen])
-      need(!(n.flags & FrontNode::UNTIL_RACE) ||
-               (screen == size_t(FrontScreen::create) && bound.contains(FrontAction::create_race)),
-           "front end until race");
-    // Version 23 (RQ-145): a node drawn only until a class is clicked is
-    // create's, in a create that waits for its class, and not also drawn only
-    // until the race (1298's 006062d0 hides the class's labels; 005fd120's
-    // build shows them again).
-    for (const auto &n : fe.screens[screen])
-      need(!(n.flags & FrontNode::UNTIL_CLASS) ||
-               (screen == size_t(FrontScreen::create) && bound.contains(FrontAction::create_class) &&
-                !(n.flags & FrontNode::UNTIL_RACE)),
-           "front end until class");
+      need(!(n.flags & (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS)) || screen == size_t(FrontScreen::create),
+           "front end class label off create");
   }
   for (auto &s : fe.strings) s = ascii(text(1024));
   // D3DLIGHT9's range is unclamped (the intro's point lights carry 1e6 and
@@ -3268,7 +3264,7 @@ FrontEnd load_front_end(const Release &release) {
     need(bound.empty(), "front end logo action");
     for (const auto &n : logo.nodes)
       need((n.kind == FrontNode::GROUP || n.kind == FrontNode::IMAGE || n.kind == FrontNode::TEXT) &&
-               !(n.flags & (FrontNode::UNTIL_RACE | FrontNode::UNTIL_CLASS)),
+               !(n.flags & (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS)),
            "front end logo node");
     const auto groups = r.count(8);
     auto seconds = [&](float v) { return std::isfinite(v) && v >= 0 && v <= 60; };
@@ -3402,6 +3398,75 @@ FrontEnd load_front_end(const Release &release) {
     }
     fe.create_slide.nodes.push_back(n);
   }
+  // 14. Version 25 (RQ-172): create's race buttons (at most 32: each a node
+  // bound to create_race, its race code 1-65535 and its default specialty
+  // 1-65535, each node and race once) and class buttons (at most 16: each a
+  // node bound to create_class, 1-16 specialties 1-65535, none in two
+  // buttons, its image, an image node no race or class button is and no
+  // other class's, or none, and up to 8 labels, each a node flagged
+  // CLASS_HIDES or CLASS_SHOWS, one flag for the whole create). Every node
+  // bound to create_race or create_class is one button's, every flagged label
+  // some class's, and at most one race and one class button chosen at each
+  // open (FIXED_ON).
+  auto bound_to = [&](FrontAction action, uint32_t node) {
+    return node < created.size() && created[node].action == action;
+  };
+  const auto races = r.count(32, 0);
+  std::set<uint32_t> race_nodes, race_codes, class_nodes, specialties, images, labels;
+  for (uint32_t i = 0; i < races; ++i) {
+    FrontCreateRace b;
+    b.node = r.u();
+    b.race = r.u();
+    b.base = r.u();
+    need(bound_to(FrontAction::create_race, b.node) && race_nodes.insert(b.node).second && b.race >= 1 &&
+             b.race <= 65535 && race_codes.insert(b.race).second && b.base >= 1 && b.base <= 65535,
+         "front end create race button");
+    fe.create_race_buttons.push_back(b);
+  }
+  const auto classes = r.count(16, 0);
+  uint32_t label_flag = 0;
+  for (uint32_t i = 0; i < classes; ++i) {
+    FrontCreateClass b;
+    b.node = r.u();
+    need(bound_to(FrontAction::create_class, b.node) && class_nodes.insert(b.node).second,
+         "front end create class button");
+    const auto codes = r.count(16);
+    for (uint32_t k = 0; k < codes; ++k) {
+      const auto code = r.u();
+      need(code >= 1 && code <= 65535 && specialties.insert(code).second, "front end create class specialty");
+      b.specialties.push_back(code);
+    }
+    b.image = r.u();
+    need(b.image == FrontCreateClass::kNone ||
+             (b.image < created.size() && created[b.image].kind == FrontNode::IMAGE && images.insert(b.image).second),
+         "front end create class image");
+    const auto marks = r.count(8, 0);
+    for (uint32_t k = 0; k < marks; ++k) {
+      const auto node = r.u();
+      need(node < created.size(), "front end create class label");
+      const auto flag = created[node].flags & (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS);
+      need(flag != 0 && (label_flag == 0 || flag == label_flag) &&
+               std::find(b.labels.begin(), b.labels.end(), node) == b.labels.end(),
+           "front end create class label");
+      label_flag = flag;
+      labels.insert(node);
+      b.labels.push_back(node);
+    }
+    fe.create_class_buttons.push_back(std::move(b));
+  }
+  int race_presets = 0, class_presets = 0;
+  for (uint32_t i = 0; i < created.size(); ++i) {
+    const auto &n = created[i];
+    need(n.action != FrontAction::create_race || race_nodes.contains(i), "front end create race button");
+    need(n.action != FrontAction::create_class || class_nodes.contains(i), "front end create class button");
+    need(!(n.flags & (FrontNode::CLASS_HIDES | FrontNode::CLASS_SHOWS)) || labels.contains(i),
+         "front end create class label");
+    race_presets += n.action == FrontAction::create_race && (n.flags & FrontNode::FIXED_ON);
+    class_presets += n.action == FrontAction::create_class && (n.flags & FrontNode::FIXED_ON);
+  }
+  for (auto image : images) need(!race_nodes.contains(image) && !class_nodes.contains(image) && !labels.contains(image),
+                                 "front end create class image");
+  need(race_presets <= 1 && class_presets <= 1, "front end create choice at open");
   r.end();
   return fe;
 }

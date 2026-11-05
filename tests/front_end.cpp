@@ -505,48 +505,110 @@ int main(int argc, char **argv) {
     // the character at the slot in focus. RQ-145 (Q93 (b)): a class click
     // marks its labels (006062d0); an open or a race click that builds clears
     // the marks (005fd120 shows them all), a click on the race already chosen
-    // keeps them.
-    using A = n3e::FrontAction;
+    // keeps them. RQ-172 (version 25): each button its KO code: the class
+    // buttons a chosen race cannot take hidden for their images, the images of
+    // those it can hidden (006060f0, 1264's 0043ec90); each class its own
+    // labels (006062d0's pairs: warrior str sta, rogue dex sta, mage int map,
+    // priest str int), hidden (1298) or shown (1264, 0043ee10) while marked;
+    // the race's default class for the stat row before a class (005fd120);
+    // the 1097 choice's Tuarek and priest chosen at each open (Q52, Q89 (b)).
     using M = n3e::FrontMessage;
+    using n3e::FrontCreateClass;
+    using n3e::FrontCreateRace;
+    using n3e::FrontNode;
+    n3e::CreateRules rules;
+    rules.stats = 5, rules.nation = 1;
+    rules.races = {{2, 1, 4, 3, {{102, 10, {60, 60, 70, 50, 50}}, {104, 10, {60, 60, 70, 50, 50}}}}};
+    rules.fixed = n3e::CreateRules::Fixed{2, 104, 0, 0, {60, 60, 70, 50, 60}};
+    const std::optional<n3e::CreateRules> with = rules;
+    // Nodes: race buttons 10 (the Tuarek) and 11 (the Wrinkle Tuarek, which
+    // create.bin does not offer); class buttons 20-23 with images 30-33 and
+    // labels 40 str, 41 dex, 42 sta, 43 int, 44 map.
+    const std::vector<FrontCreateRace> races{{10, 2, 102}, {11, 3, 103}};
+    const std::vector<FrontCreateClass> classes{{20, {101, 201}, 30, {40, 42}},
+                                                {21, {102, 202}, 31, {41, 42}},
+                                                {22, {103, 203}, 32, {43, 44}},
+                                                {23, {104, 204}, 33, {40, 43}}};
     n3e::front::CreateChoice c;
+    c.bind(races, classes, -1, -1);
     std::string fail;
-    auto want = [&](const char *step, bool stands, int at, std::optional<M> refusal, bool race_down, bool class_down,
-                    bool marked) {
-      if (c.stands() != stands || (stands && c.stands_at(2) != at) || c.refusal() != refusal ||
-          c.down(A::create_race) != race_down || c.down(A::create_class) != class_down || c.marked != marked)
-        fail = fail.empty() ? step : fail;
+    auto want = [&](const char *step, bool ok) {
+      if (!ok && fail.empty()) fail = step;
     };
-    c.open(true, true);
-    want("open", false, -1, M::create_no_race, false, false, false);
-    c.click_class(1);  // a class first: chosen, no character (no race to build)
-    want("class first", false, -1, M::create_no_race, false, true, true);
-    c.click_race(1);   // the race in flight from slot 1: built there; the class unchosen
-    want("race", true, 1, M::create_no_class, true, false, false);
-    c.click_race(2);   // the same race again: the class unchosen, not built again
-    want("race again", true, 1, M::create_no_class, true, false, false);
-    c.click_class(2);  // the class: built again at the camera's slot
-    want("class", true, 2, std::nullopt, true, true, true);
-    c.click_class(0);  // the same class: not built again
-    want("class again", true, 2, std::nullopt, true, true, true);
-    c.click_race(1);   // the race already chosen: the class unchosen, its marks kept (no build)
-    want("race after class", true, 2, M::create_no_class, true, false, true);
-    c.open(true, true);  // a reopen (Cancel, or a create the server took)
-    want("reopen", false, -1, M::create_no_race, false, false, false);
-    c.open(true, false);  // a race button and no class button
-    c.click_race(0);
-    want("race only", true, 0, std::nullopt, true, false, false);
-    c.open(false, false);  // the 1097 choice: chosen from the open, at the slot in focus
-    want("chosen", true, 2, std::nullopt, false, false, false);
-    c.click_race(1), c.click_class(1);
-    want("chosen, clicked", true, 2, std::nullopt, false, false, false);
+    auto drawn = [&](uint32_t flag) {
+      std::string out;
+      for (uint32_t n = 40; n <= 44; ++n) out += c.label_drawn(n, flag) ? '1' : '0';
+      return out;
+    };
+    auto column = [&] {
+      std::string out;
+      for (size_t k = 0; k < classes.size(); ++k)
+        out += std::string(c.class_drawn(with, k) ? "B" : "-") + (c.image_drawn(with, k) ? "I" : "-");
+      return out;
+    };
+    const auto H = FrontNode::CLASS_HIDES, S = FrontNode::CLASS_SHOWS;
+    want("open", c.waits() && !c.stands() && c.refusal() == M::create_no_race && !c.race_down(0) &&
+                     !c.class_down(3) && c.marked == -1 && column() == "BIBIBIBI" && drawn(H) == "11111" &&
+                     !c.row_specialty(with));
+    c.click_class(3, 1);  // the priest first: chosen, no character (no race to build), its labels marked
+    want("class first", !c.stands() && c.refusal() == M::create_no_race && c.class_down(3) && c.marked == 3 &&
+                            drawn(H) == "01101" && column() == "BIBIBIBI");
+    c.click_race(0, 1);  // the Tuarek in flight from slot 1: built there; the class unchosen, the marks cleared
+    want("race", c.stands() && c.stands_at(2) == 1 && c.refusal() == M::create_no_class && c.race_down(0) &&
+                     !c.class_down(3) && c.marked == -1 && drawn(H) == "11111" && column() == "-IB--IB-" &&
+                     c.row_specialty(with) == 102u);
+    c.click_race(0, 2);  // the same race again: not built again
+    want("race again", c.stands_at(2) == 1 && c.refusal() == M::create_no_class);
+    c.click_class(3, 2);  // the priest: built again at the camera's slot
+    want("class", c.stands_at(0) == 2 && !c.refusal() && c.class_down(3) && drawn(H) == "01101" &&
+                      c.row_specialty(with) == 104u);
+    c.click_class(3, 0);  // the same class: not built again
+    want("class again", c.stands_at(0) == 2);
+    c.click_race(0, 1);  // the race already chosen: the class unchosen, its marks kept (no build)
+    want("race after class", c.stands_at(0) == 2 && c.refusal() == M::create_no_class && c.marked == 3 &&
+                                 drawn(H) == "01101" && c.row_specialty(with) == 102u);
+    c.click_class(1, 1);  // the rogue: its own labels (dex, sta)
+    want("rogue", c.class_down(1) && !c.class_down(3) && c.marked == 1 && drawn(H) == "10011" &&
+                      c.specialty(with, 2) == 102u);
+    const auto q = n3e::front::create_request(with, 1, c);
+    want("rogue sent", q.slot == 1 && q.race == 2 && q.specialty == 102 && q.face == 0 && q.hair == 0 &&
+                           q.stats == std::vector<uint32_t>{60, 60, 70, 50, 60} &&
+                           !n3e::create_choice_refusal(rules, 1, q.race, q.specialty, q.face, q.hair, q.stats));
+    c.click_race(1, 0);  // a race create.bin does not offer: it takes no class
+    want("not offered", c.stands_at(2) == 0 && column() == "-I-I-I-I" && c.row_specialty(with) == 103u);
+    c.click_class(0, 0);  // (a hidden button the client never hits; its code is not the race's)
+    const auto r = n3e::front::create_request(with, 0, c);
+    want("not offered sent", r.race == 3 && n3e::create_choice_refusal(rules, 1, r.race, r.specialty, r.face, r.hair,
+                                                                        r.stats) == n3e::CreateRules::Refusal::mismatch);
+    c.open();  // a reopen (Cancel, or a create the server took)
+    want("reopen", !c.stands() && c.refusal() == M::create_no_race && c.marked == -1 && column() == "BIBIBIBI");
+    // The 1097 choice: the Tuarek and the priest chosen at each open, the
+    // priest's labels shown (1264's pink img_str and img_int); the rogue live.
+    c.bind(races, classes, 0, 3);
+    want("chosen", !c.waits() && c.stands() && c.stands_at(2) == 2 && !c.refusal() && c.race_down(0) &&
+                       c.class_down(3) && drawn(S) == "10010" && column() == "-IB--IB-");
+    const auto fixed = n3e::front::create_request(with, 0, c);
+    want("chosen sent", fixed.race == 2 && fixed.specialty == 104 && fixed.stats == rules.fixed->stats);
+    c.click_race(0, 1);  // 1264's race click unchooses the class too (0043ec90), the labels kept
+    want("chosen race", c.refusal() == M::create_no_class && drawn(S) == "10010" && c.stands_at(2) == 2);
+    c.click_class(1, 1);
+    want("chosen rogue", !c.refusal() && drawn(S) == "01100");
+    c.open();
+    want("chosen reopen", c.race_down(0) && c.class_down(3) && drawn(S) == "10010");
+    // A create that binds neither: both chosen, the fixed choice sent.
+    c.bind({}, {}, -1, -1);
+    want("unbound", !c.waits() && c.stands() && c.stands_at(2) == 2 && !c.refusal() &&
+                        n3e::front::create_request(with, 0, c).specialty == 104);
     if (!fail.empty()) {
       std::cerr << "FAIL create choice: " << fail << "\n";
       return 1;
     }
     std::cout << "PASS create choice: 1298's create waits for its race (the class unchosen by each race click), "
                  "builds the character at the camera's slot on the click that changes a value, refuses no race "
-                 "then no class, marks the clicked class until an open or a build; a create that binds neither "
-                 "keeps both chosen\n";
+                 "then no class; each button its KO code, the classes a race cannot take hidden for their images, "
+                 "each class marking its own labels until an open or a build, the race's default class for the stat "
+                 "row; the chosen race and specialty sent with the fixed choice's points; the 1097 choice chosen "
+                 "at each open; a create that binds neither keeps both chosen\n";
   }
   {
     // RQ-004: Moradon's rules as create.bin carries them (one race of two
@@ -675,6 +737,24 @@ int main(int argc, char **argv) {
       // RQ-113: a select whose arrows both draw at the end of the row.
       if (fe.select_arrows != n3e::FrontSelectArrows::hide)
         std::cout << "arrows " << release.root.filename().string() << ": " << uint32_t(fe.select_arrows) << "\n";
+      // RQ-172: create's race and class buttons: each race button's node,
+      // race and default; each class button's node, specialties, image and
+      // labels.
+      if (!fe.create_race_buttons.empty() || !fe.create_class_buttons.empty()) {
+        std::cout << "create-buttons " << release.root.filename().string() << ": races=";
+        const char *sep = "";
+        for (const auto &b : fe.create_race_buttons) std::cout << sep << b.node << "/" << b.race << "/" << b.base, sep = ",";
+        std::cout << " classes=";
+        sep = "";
+        for (const auto &b : fe.create_class_buttons) {
+          std::cout << sep << b.node << "/";
+          for (size_t k = 0; k < b.specialties.size(); ++k) std::cout << (k ? "+" : "") << b.specialties[k];
+          std::cout << "/" << b.image << "/";
+          for (size_t k = 0; k < b.labels.size(); ++k) std::cout << (k ? "+" : "") << b.labels[k];
+          sep = ";";
+        }
+        std::cout << "\n";
+      }
       // RQ-158: a package with more than one create model: each race, then
       // each model's clip count and joint count (the first create's).
       if (fe.create_races.size() > 1) {

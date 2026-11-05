@@ -228,11 +228,21 @@ screen's `until_class`, node flag 16, §9.15); the 1298 recipe names `str_01` an
 N3FE version 24 (RQ-158, Q105) carries a create model per race of the package's
 `character-create.json` `models.create`, the select character's race first: Moradon's
 Tuarek, Wrinkle Tuarek and Puri Tuarek (the Wrinkle Tuarek's empty lower and hair
-parts set none, as KO's `SetChr`); create still draws the first until RQ-004 draws
-the chosen race's.
+parts set none, as KO's `SetChr`); create draws the first until RQ-172 draws the
+chosen race's.
+N3FE version 25 (RQ-172, §9.15, §9.16) binds create's race and class buttons to
+KO's codes (the create screen's `races`, `classes` and `class_labels`, in place of
+`create_race` and `create_class` in `bindings`): each race button its race and
+default class, each class button its specialties, its `img_*` and its stat labels
+(node flag 16 hidden while marked, 1298's; 32 shown while marked, 1264's), checked
+against `character-create.json`. It retires version 22's `until_race` (flag 8) and
+23's `until_class`: the client swaps the classes a race cannot take for their images
+(`006060f0`, `0043ec90`) and marks each class's own labels (`006062d0`,
+`0043ee10`). Both recipes bind the Tuarek and the four classes; the 1097 choice's
+Tuarek and priest are `down`, chosen at each open.
 A recipe's `states` takes `down` (RQ-138, Q89 (b), §9.16), cooked as fixed on with
 the button's down image in the on state and its on image left out (no version
-change); the 1097 choice's Tuarek and priest are `down`, as 1264 draws its chosen
-race and class.
+change); on a race or class button (version 25) it is the choice at each open, every
+state image kept.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

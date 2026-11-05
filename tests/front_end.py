@@ -22,6 +22,7 @@ import wave
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools/assetc"))
 from common import f, string, u  # noqa: E402
+import ko_create  # noqa: E402
 import ko_front_end as fe  # noqa: E402
 
 # --- synthetic MPEG audio (RQ-018) ----------------------------------------------
@@ -359,21 +360,40 @@ for info in (("str_id",), ("str_lev",), ("str_job",)):
 print("PASS front-end cook: 1298's select bar, its info texts in place of char_info")
 
 # RQ-130 (version 21, KO-FINDINGS 9.15): 1298's create's race and class
-# buttons (00604f90), bound to create_race and create_class: each a button
-# with no fixed state, which a create that binds it waits for.
-CHOICE_BINDINGS = {**BINDINGS["create"], "btn_race_ka_tu": "create_race", "btn_class_priest": "create_class"}
+# buttons (00604f90). RQ-172 (version 25): every race and class button bound by
+# the create screen's `races` (KO's race code and the race's default class,
+# 1298's 005fd120) and `classes` (the specialty codes it stands for, the image
+# drawn in its place while the race cannot take it, 1298's 006060f0, and the
+# stat labels its click marks, 006062d0), cooked as create's choice section
+# (item 14); `class_labels` says whether a mark hides them (1298) or shows
+# them (1264, 0043ee10).
+CHOICE_RACES = {"btn_race_ka_tu": {"race": 2, "default": 102}}
+CHOICE_CLASSES = {"btn_class_warrior": {"specialties": [101, 201], "image": "img_warrior", "labels": ["str_01"]},
+                  "btn_class_priest": {"specialties": [104, 204], "image": "img_priest",
+                                       "labels": ["str_01", "int_01"]}}
 
 
 def choice_tree():
     return node(0, "root", [button("btn_create"), button("btn_cancel"),
                             node(8, "edit_name", [node(4, texture=""), text("")]), node(9, "area_character"),
-                            text("text_desc"), button("btn_race_ka_tu"), button("btn_class_priest")])[1]
+                            text("text_desc"), node(4, "img_warrior"), node(4, "img_priest"),
+                            node(4, "img_blank", texture=""), text("str_02"), text("str_01"), text("int_01"),
+                            button("btn_race_ka_tu"), button("btn_race_ka_wt"), button("btn_class_warrior"),
+                            button("btn_class_priest")])[1]
+
+
+def choice_cook(specs=None, **create):
+    spec_create = {"races": CHOICE_RACES, "classes": CHOICE_CLASSES, "class_labels": "hide", **create}
+    spec_create = {k: v for k, v in spec_create.items() if v is not None}  # None: left out
+    assets = Fixture({**trees, "create.uif": choice_tree()})
+    textures, fonts, choices = fe.Textures(assets), {}, []
+    specs = {**{n: spec(n) for n in fe.SCREENS}, "create": spec("create", **spec_create), **(specs or {})}
+    data = [fe.screen(n, specs[n], assets, textures, fonts, choices=choices) for n in fe.SCREENS]
+    return data, choices[0]
 
 
 def choice_screens(**create):
-    return cook_screens(trees={**trees, "create.uif": choice_tree()},
-                        specs={**{n: spec(n) for n in fe.SCREENS},
-                               "create": spec("create", bindings=dict(CHOICE_BINDINGS), **create)})[0]
+    return choice_cook(**create)[0]
 
 
 def node_records(data):
@@ -388,37 +408,152 @@ def node_records(data):
     return out
 
 
-CHOICE = choice_screens()
-chosen = {i: (a, f) for i, a, f in node_records(CHOICE[2]) if i.startswith(("btn_race", "btn_class"))}
-assert chosen == {"btn_race_ka_tu": (fe.ACTIONS.index("create_race"), 0),
-                  "btn_class_priest": (fe.ACTIONS.index("create_class"), 0)}, chosen
-assert fe.ACTIONS[-2:] == ("create_race", "create_class") and fe.ONLY_ON["create_race"] == "create", fe.ACTIONS
-for state in ("on", "down", "disabled"):
-    for button_id in ("btn_race_ka_tu", "btn_class_priest"):
+def choice_section(data):
+    """Create's choice section (item 14): ([(node, race, default)], [(node,
+    specialties, image, labels)])."""
+    words = list(struct.unpack("<%dI" % (len(data) // 4), data))
+    races = [tuple(words[1 + 3 * i:4 + 3 * i]) for i in range(words[0])]
+    at, classes = 2 + 3 * words[0], []
+    for _ in range(words[at - 1]):
+        node_index, count = words[at], words[at + 1]
+        codes, image, labels = words[at + 2:at + 2 + count], words[at + 2 + count], words[at + 3 + count]
+        classes.append((node_index, codes, image, words[at + 4 + count:at + 4 + count + labels]))
+        at += 4 + count + labels
+    assert at == len(words), (at, words)
+    return races, classes
+
+
+CHOICE, CHOSEN = choice_cook()
+records = node_records(CHOICE[2])
+index = {i: k for k, (i, _, _) in enumerate(records)}
+chosen = {i: (a, f) for i, a, f in records if i.startswith(("btn_race", "btn_class", "str_", "int_"))}
+assert chosen == {"btn_race_ka_tu": (fe.ACTIONS.index("create_race"), 0), "btn_race_ka_wt": (0, 0),
+                  "btn_class_warrior": (fe.ACTIONS.index("create_class"), 0),
+                  "btn_class_priest": (fe.ACTIONS.index("create_class"), 0),
+                  "str_02": (0, 0), "str_01": (0, fe.CLASS_HIDES), "int_01": (0, fe.CLASS_HIDES)}, chosen
+assert choice_section(CHOSEN["data"]) == (
+    [(index["btn_race_ka_tu"], 2, 102)],
+    [(index["btn_class_warrior"], [101, 201], index["img_warrior"], [index["str_01"]]),
+     (index["btn_class_priest"], [104, 204], index["img_priest"], [index["str_01"], index["int_01"]])]), \
+    choice_section(CHOSEN["data"])
+assert CHOSEN["races"] == [(2, 102)] and CHOSEN["classes"] == [[101, 201], [104, 204]], CHOSEN
+shown = {i: f for i, _, f in node_records(choice_screens(class_labels="show")[2])}
+assert shown["str_01"] == shown["int_01"] == fe.CLASS_SHOWS and shown["str_02"] == 0, shown
+assert fe.CLASS_HIDES == 16 and fe.CLASS_SHOWS == 32 and fe.ACTIONS[-2:] == ("create_race", "create_class") and \
+    fe.ONLY_ON["create_race"] == "create", fe.ACTIONS
+# A race or class button `down` is chosen at each open (the 1097 choice's):
+# fixed on, every state image kept (the client draws it down while chosen).
+for button_id in ("btn_race_ka_tu", "btn_class_priest"):
+    data = choice_screens(states={button_id: "down"})[2]
+    flags = {i: f for i, _, f in node_records(data)}
+    assert flags[button_id] == fe.FIXED_ON, flags
+    for state in ("on", "disabled"):
         try:
             choice_screens(states={button_id: state})
         except ValueError as error:
-            assert "a button with no fixed state" in str(error), error
+            assert "a button with no fixed state but down" in str(error), error
             continue
         raise AssertionError(("cooked a create choice with a fixed state", button_id, state))
-# The 1298 recipe binds its Tuarek and priest buttons so, neither fixed on any
-# more (RQ-125's states), and words the two refusals with 1298's rows
-# (00600750: code 7 row 1908, code 9 row 1904, each under row 1901); the 1097
-# choice binds neither (Q52: chosen from the open).
+choice_problems = (
+    ("create's only", dict(specs={"login": spec("login", races={"notice": {"race": 2, "default": 102}})})),
+    ("bound by the create screen's races and classes",
+     dict(bindings={**BINDINGS["create"], "btn_race_ka_wt": "create_race"})),
+    ("bound, hidden or named twice", dict(hidden=["btn_race_ka_tu"])),
+    ("bound, hidden or named twice", dict(bindings={**BINDINGS["create"], "btn_class_priest": "info"})),
+    ("exactly {race, default}", dict(races={"btn_race_ka_tu": {"race": 2}})),
+    ("1 to 16 distinct ids", dict(races={"btn_race_ka_tu": {"race": 0, "default": 102}})),
+    ("1 to 16 distinct ids", dict(classes={"btn_class_priest": {"specialties": []}})),
+    ("1 to 16 distinct ids", dict(classes={"btn_class_priest": {"specialties": [104, 104]}})),
+    ("race 2 twice", dict(races={**CHOICE_RACES, "btn_race_ka_wt": {"race": 2, "default": 102}})),
+    ("a specialty in two class buttons",
+     dict(classes={**CHOICE_CLASSES, "btn_class_warrior": {"specialties": [101, 204]}})),
+    ("image: an image, not hidden, one class's",
+     dict(classes={"btn_class_priest": {"specialties": [104], "image": "text_desc"}})),
+    ("image: an image, not hidden, one class's", dict(hidden=["img_priest"])),
+    ("image: an image, not hidden, one class's",
+     dict(classes={**CHOICE_CLASSES, "btn_class_warrior": {"specialties": [101], "image": "img_priest"}})),
+    ("labels: a node named twice or hidden",
+     dict(classes={"btn_class_priest": {"specialties": [104], "labels": ["str_01", "str_01"]}})),
+    ("labels: a node named twice or hidden", dict(hidden=["int_01"])),
+    ("labels need the create screen's class_labels", dict(class_labels=None)),
+    ("class_labels: one of", dict(class_labels="flash")),
+    ("class_labels: no class names labels",
+     dict(classes={"btn_class_priest": {"specialties": [104], "image": "img_priest"}})),
+    ("a race or class button or a class image",
+     dict(classes={**CHOICE_CLASSES, "btn_class_warrior": {"specialties": [101], "labels": ["img_priest"]}})),
+    ("a node they name is not drawn",
+     dict(classes={**CHOICE_CLASSES, "btn_class_warrior": {"specialties": [101], "image": "img_blank"}})),
+    ("more than one down", dict(states={"btn_class_priest": "down", "btn_class_warrior": "down"})),
+    ("until_race: gone in version 25", dict(until_race=["img_priest"])),
+    ("until_class: gone in version 25", dict(until_class=["str_01"])))
+for reason, kw in choice_problems:
+    try:
+        choice_cook(**kw)
+    except ValueError as error:
+        assert reason in str(error), (reason, error)
+        continue
+    raise AssertionError(("cooked create choices", reason, kw))
+# With the package's rules (character-create.json): each race button a race of
+# the package and its default one of that race's specialties; each class only
+# specialties some race has, a race taking at most one of a class's.
+moradon_rules = ko_create.rules(ROOT / "games/moradon")
+fe.create_buttons(CHOSEN, moradon_rules)
+fe.create_buttons({"races": [], "classes": []}, None)
+for reason, choice in (
+        ("race 5 is not one of the package's", {"races": [(5, 102)], "classes": []}),
+        ("race 2's default 101 is not one of its specialties", {"races": [(2, 101)], "classes": []}),
+        ("specialty 999 is no race's", {"races": [], "classes": [[104, 999]]}),
+        ("race 12 takes two specialties of one class button", {"races": [], "classes": [[201, 202]]}),
+        ("the package has no create rules", None)):
+    try:
+        fe.create_buttons(choice or CHOSEN, None if choice is None else moradon_rules)
+    except ValueError as error:
+        assert reason in str(error), (reason, error)
+        continue
+    raise AssertionError(("accepted create buttons", reason))
+# Both recipes bind KO's codes (binary): 1298's 006062d0 maps its four class
+# buttons to 101/201 .. 104/204 and hides each clicked class's two cream
+# labels, by Load's 00603850 order str_01, dex_01, sta_01, int_01, map_01:
+# warrior 0 and 2, rogue 1 and 2, mage 3 and 4, priest 0 and 3; 1264's
+# 0043ee10 shows the same pairs of pink img_* labels; each race button's
+# default is 005fd120's (the Tuarek's 102). Only the Tuarek, the race create
+# offers (Q105), is bound; the others keep their states (Q109 (a)). Moradon
+# offers the Tuarek's rogue and priest, so both buttons are live.
 create_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text())["screens"]["create"]
-assert create_1298["bindings"]["btn_race_ka_tu"] == "create_race" and \
-    create_1298["bindings"]["btn_class_priest"] == "create_class", create_1298["bindings"]
-assert not {"btn_race_ka_tu", "btn_class_priest"} & set(create_1298["states"]), create_1298["states"]
+create_1097 = json.loads((ROOT / "games/moradon/front-end.json").read_text())
+PAIRS = {"warrior": ("str", "sta"), "rogue": ("dex", "sta"), "mage": ("int", "map"), "priest": ("str", "int")}
+CODES = {"warrior": [101, 201], "rogue": [102, 202], "mage": [103, 203], "priest": [104, 204]}
+for recipe, label, mode in ((create_1298, "%s_01", "hide"), (create_1097["screens"]["create"], "img_%s", "show")):
+    assert recipe["races"] == {"btn_race_ka_tu": {"race": 2, "default": 102}}, recipe["races"]
+    assert {k: {**v, "labels": sorted(v["labels"])} for k, v in recipe["classes"].items()} == {
+        "btn_class_" + c: {"specialties": CODES[c], "image": "img_" + c,
+                           "labels": sorted(label % x for x in PAIRS[c])} for c in CODES}, recipe["classes"]
+    assert recipe["class_labels"] == mode and "until_race" not in recipe and "until_class" not in recipe, recipe
+    assert not {"create_race", "create_class"} & set(recipe["bindings"].values()), recipe["bindings"]
+    assert not {"btn_class_" + c for c in CODES} & {k for k, v in recipe["states"].items() if v != "down"}, recipe
+    assert recipe["states"]["btn_race_ka_at"] == recipe["states"]["btn_race_ka_wt"] == "disabled", recipe["states"]
+    fe.create_buttons({"races": [(v["race"], v["default"]) for v in recipe["races"].values()],
+                       "classes": [v["specialties"] for v in recipe["classes"].values()]}, moradon_rules)
+# The 1298 recipe waits for both (no button down) and words the two refusals
+# with 1298's rows (00600750: code 7 row 1908, code 9 row 1904, each under row
+# 1901); its Puri Tuarek stays disabled (its layout's disabled tile).
+assert "down" not in create_1298["states"].values() and create_1298["states"]["btn_race_ka_pt"] == "disabled"
 messages_1298 = json.loads((ROOT / "games/moradon/front-end-1298.json").read_text())["messages"]
 assert messages_1298["create_no_race"] == {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
                                            "text": {"table": "Data/Texts_us.tbl", "row": 1908}}, messages_1298
 assert messages_1298["create_no_class"] == {"title": {"table": "Data/Texts_us.tbl", "row": 1901},
                                             "text": {"table": "Data/Texts_us.tbl", "row": 1904}}, messages_1298
-create_1097 = json.loads((ROOT / "games/moradon/front-end.json").read_text())
-assert not {"create_race", "create_class"} & set(create_1097["screens"]["create"]["bindings"].values())
-assert not {"create_no_race", "create_no_class"} & set(create_1097.get("messages", {})), create_1097.get("messages")
-print("PASS front-end cook: create's race and class buttons, the 1298 recipe's waiting for both and wording "
-      "their refusals with 1298's rows, the 1097 choice's chosen from the open")
+# The 1097 choice: its Tuarek and priest chosen at each open (Q52, Q89 (b));
+# a Tuarek click unchooses the priest as 1264's 0043ec90 does, so Create may
+# say 1264's row 1904 under 1901 (0043a340, 0043a820); a race is never
+# unchosen, so it words no create_no_race.
+assert create_1097["messages"]["create_no_class"] == {
+    "title": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1901},
+    "text": {"table": "installer-1264:Data/Texts_us.tbl", "row": 1904}}, create_1097["messages"]
+assert "create_no_race" not in create_1097["messages"], create_1097["messages"]
+print("PASS front-end cook: create's race and class buttons by KO's codes, each class's image and labels, %d "
+      "refusals; both recipes bind the Tuarek and the four classes as 1298 and 1264 map them, the 1298 recipe "
+      "waiting for both, the 1097 choice choosing the Tuarek and the priest at each open" % len(choice_problems))
 
 # RQ-138 (Q89 (b), KO-FINDINGS 9.16): the recipe state `down`, 1264's chosen
 # race and class (0043ec90 and 0043ee10 set state 3, which Render 00403a70
@@ -469,7 +604,7 @@ for reason, chosen in (
         assert "state down: " + reason in str(error), (reason, error)
         continue
     raise AssertionError(("cooked state down", reason))
-# The 1097 choice: its Tuarek and priest are chosen from the open (Q52) and
+# The 1097 choice: its Tuarek and priest are chosen at each open (Q52) and
 # draw down, as 1264's chosen buttons; no button is fixed on.
 states_1097 = create_1097["screens"]["create"]["states"]
 assert states_1097["btn_race_ka_tu"] == "down" and states_1097["btn_class_priest"] == "down", states_1097
@@ -478,112 +613,24 @@ assert "on" not in states_1097.values(), states_1097
 # Tuarek's disabled image has no texture, so it takes no fixed state and no
 # action: it draws its normal tile, as 1264's race buttons at rest (0043ec90
 # sets them 2), and takes no pointer, as the fixed disabled Arch and Wrinkle
-# Tuarek, whose disabled image is their normal tile.
+# Tuarek, whose disabled image is their normal tile (Q109 (a)).
 assert "btn_race_ka_pt" not in states_1097, states_1097
 assert "btn_race_ka_pt" not in create_1097["screens"]["create"]["bindings"], create_1097["screens"]["create"]
-assert states_1097["btn_race_ka_at"] == states_1097["btn_race_ka_wt"] == "disabled", states_1097
-# RQ-142 (Q91 (b), KO-FINDINGS 9.16, the maintainer's "Match 1264, Rogue
-# inert"): after a Tuarek and a priest click 1264 hides the warrior and mage
-# buttons for img_warrior and img_mage and hides img_rogue and img_priest
-# (0043ec90(2), 0043ee10(104)). The 1097 choice, chosen from the open (Q52),
-# draws that column: the warrior and mage buttons hidden over their images,
-# the rogue still fixed disabled (inert, its normal tile), the priest down.
-hidden_1097 = set(create_1097["screens"]["create"]["hidden"])
-assert {"btn_class_warrior", "btn_class_mage", "img_rogue", "img_priest"} <= hidden_1097, hidden_1097
-assert not {"img_warrior", "img_mage", "btn_class_rogue", "btn_class_priest"} & hidden_1097, hidden_1097
-assert not {"btn_class_warrior", "btn_class_mage"} & set(states_1097), states_1097
-assert states_1097["btn_class_rogue"] == "disabled", states_1097
-# RQ-144 (Q92 (b), KO-FINDINGS 9.16, the maintainer's "Pink Str/Int, as
-# 1264"): a priest click shows img_str and img_int (0043ee10(104)), pink
-# copies over the light "Strength" and "Intelligence", and hides the other
-# three; the stat values stay empty and text_bonus hidden (Q52).
-assert not {"img_str", "img_int"} & hidden_1097, hidden_1097
-assert {"img_sta", "img_dex", "img_map", "text_bonus"} <= hidden_1097, hidden_1097
+assert "btn_race_ka_pt" not in create_1097["screens"]["create"]["races"], create_1097["screens"]["create"]
+# RQ-142 (Q91 (b)) and RQ-172: after a Tuarek and a priest click 1264 hides the
+# warrior and mage buttons for img_warrior and img_mage and hides img_rogue
+# and img_priest (0043ec90(2), 0043ee10(104)); the client draws that column
+# from the class buttons' codes and images (the Tuarek takes the rogue and the
+# priest), so the recipe hides none of them, and the rogue is live.
+# RQ-144 (Q92 (b)): the priest's mark shows img_str and img_int (0043ee10(104)),
+# pink copies over the light "Strength" and "Intelligence"; the other three
+# are the other classes' labels, shown when they are marked. The stat values
+# stay empty and text_bonus hidden.
+assert create_1097["screens"]["create"]["hidden"] == ["text_bonus"], create_1097["screens"]["create"]["hidden"]
+assert "btn_class_rogue" not in states_1097, states_1097
 print("PASS front-end cook: the recipe state down, the down image in the on state, the 1097 choice's Tuarek and "
-      "priest drawn down as 1264's chosen race and class, its Puri Tuarek unfixed and unbound, its warrior and "
-      "mage drawn as their images, its rogue inert and its priest's Strength and Intelligence pink")
-
-# RQ-133 (version 22, KO-FINDINGS 9.15): create's nodes drawn only until the
-# race is chosen (1298's 006060f0 hides the class buttons the race cannot take
-# for their img_*, and the images of the classes it can), the create's
-# `until_race`: flag 8, in a create that binds create_race.
-# RQ-145 (version 23, Q93 (b)): create's nodes drawn until a class is clicked
-# and again from each open and each race click that builds (1298's 006062d0
-# hides the class's cream stat labels; 005fd120 shows them), the create's
-# `until_class`: flag 16, in a create that binds create_class.
-def until_tree(race=True, klass=True):
-    return node(0, "root", [button("btn_create"), button("btn_cancel"),
-                            node(8, "edit_name", [node(4, texture=""), text("")]), node(9, "area_character"),
-                            text("text_desc"), node(4, "img_rogue"), node(4, "img_blank", texture=""),
-                            text("str_02"), text("str_01"),
-                            button("btn_race_ka_tu" if race else "btn_race_other"),
-                            button("btn_class_warrior"), button("btn_class_priest" if klass else "btn_class_other")])[1]
-
-
-def until_screens(race=True, klass=True, specs=None, **create):
-    gone = {"create_race"} if not race else set()
-    gone |= {"create_class"} if not klass else set()
-    bindings = {k: v for k, v in CHOICE_BINDINGS.items() if v not in gone}
-    return cook_screens(trees={**trees, "create.uif": until_tree(race, klass)},
-                        specs={**{n: spec(n) for n in fe.SCREENS},
-                               "create": spec("create", bindings=bindings, **create), **(specs or {})})[0]
-
-
-UNTIL = until_screens(until_race=["img_rogue", "btn_class_warrior"], until_class=["str_01"],
-                      states={"btn_class_warrior": "disabled"})
-until_flags = {i: f for i, _, f in node_records(UNTIL[2])
-               if i in ("img_rogue", "btn_class_warrior", "btn_class_priest", "str_01", "str_02")}
-assert fe.UNTIL_RACE == 8 and fe.UNTIL_CLASS == 16 and until_flags == {
-    "img_rogue": fe.UNTIL_RACE, "btn_class_warrior": fe.FIXED_DISABLED | fe.UNTIL_RACE, "btn_class_priest": 0,
-    "str_01": fe.UNTIL_CLASS, "str_02": 0}, until_flags
-for reason, kw in (
-        ("create's only", dict(specs={"login": spec("login", until_race=["notice"])})),
-        ("a node named twice or hidden", dict(until_race=["img_rogue", "img_rogue"])),
-        ("a node named twice or hidden", dict(until_race=["img_rogue"], hidden=["img_rogue"])),
-        ("a create that binds no create_race", dict(race=False, until_race=["img_rogue"])),
-        ("a node it names is not drawn", dict(until_race=["img_blank"]))):
-    try:
-        until_screens(**kw)
-    except ValueError as error:
-        assert "until_race: " + reason in str(error), (reason, error)
-        continue
-    raise AssertionError(("cooked until_race", reason, kw))
-for reason, kw in (
-        ("create's only", dict(specs={"login": spec("login", until_class=["notice"])})),
-        ("a node named twice, hidden or until the race", dict(until_class=["str_01", "str_01"])),
-        ("a node named twice, hidden or until the race", dict(until_class=["str_01"], hidden=["str_01"])),
-        ("a node named twice, hidden or until the race", dict(until_class=["img_rogue"], until_race=["img_rogue"])),
-        ("a create that binds no create_class", dict(klass=False, until_class=["str_01"])),
-        ("a node it names is not drawn", dict(until_class=["img_blank"]))):
-    try:
-        until_screens(**kw)
-    except ValueError as error:
-        assert "until_class: " + reason in str(error), (reason, error)
-        continue
-    raise AssertionError(("cooked until_class", reason, kw))
-# The 1298 recipe (KO-FINDINGS 9.15, RQ-133): before its race click every class
-# button and image draws (the reset 006066b0's 00605950 shows them all, the
-# images under the buttons, which come after them in the layout); the Tuarek
-# click (006060f0(2)) hides the warrior and mage buttons, whose images then
-# show, and the rogue and priest images. So img_warrior and img_mage always
-# draw, and the four until the race. The 1097 choice names none.
-assert create_1298["until_race"] == ["img_rogue", "img_priest", "btn_class_warrior", "btn_class_mage"], \
-    create_1298.get("until_race")
-assert not {"img_warrior", "img_rogue", "img_mage", "img_priest"} & set(create_1298["hidden"]), create_1298["hidden"]
-assert "until_race" not in create_1097["screens"]["create"], create_1097["screens"]["create"]
-# The 1298 recipe (KO-FINDINGS 9.15, RQ-143; RQ-145, Q93 (b), the
-# maintainer's "Match 1298"): each stat label is a cyan *_02 under a cream
-# *_01 in one rect; the priest click (006062d0(104)) hides str_01 and int_01,
-# so "STR" and "INT" read cyan, and the build (005fd120) shows them again. So
-# until_class names those two, the *_02 set always draws. The 1097 choice
-# names none (its priest is chosen from the open, Q92 (b)).
-assert create_1298["until_class"] == ["str_01", "int_01"], create_1298.get("until_class")
-labels_1298 = {"%s_%s" % (stat, n) for stat in ("str", "dex", "sta", "int", "map") for n in ("01", "02")}
-assert not labels_1298 & set(create_1298["hidden"]) and not labels_1298 & set(create_1298["until_race"]), create_1298
-assert "until_class" not in create_1097["screens"]["create"], create_1097["screens"]["create"]
-print("PASS front-end cook: create's nodes drawn until the race is chosen and until a class is clicked, the 1298 "
-      "recipe's class buttons and images as 006060f0 shows them and its STR and INT as 006062d0 shows them, the "
-      "1097 choice's none")
+      "priest chosen at each open, its Puri Tuarek unfixed and unbound, its class column and pink labels drawn "
+      "by the class buttons' codes")
 
 
 # RQ-084: a layout from another input (`<name>:<path>`) reads its textures from
@@ -1099,11 +1146,11 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=24, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=25, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0),
-         creates=None):
+         creates=None, choices=u(0) + u(0)):
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [(1, 1, bytes(4))] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
     out += u(len(tex)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in tex)
@@ -1129,8 +1176,9 @@ def blob(version=24, slots=1, screen_data=None, font_index=None, light=None, plu
     out += character(select_clips, plug=plug)
     # Version 24 (RQ-158): the create models, each a race and a model record.
     out += u(1) + u(2) + character(plug=plug) if creates is None else creates
-    # Version 20 (RQ-126): create's slide, after the placement.
-    return out + music + logo + messages + placement + slide + extra
+    # Version 20 (RQ-126): create's slide, after the placement; version 25
+    # (RQ-172): create's race and class buttons, after the slide.
+    return out + music + logo + messages + placement + slide + choices + extra
 
 
 # --- the create models (version 24, RQ-158) -------------------------------------
@@ -2001,6 +2049,45 @@ def patch_node(screen_data, index, ident, action=None, flags=None):
     raise AssertionError("no node " + ident)
 
 
+def choice_record(races, classes):
+    """Create's choice section (item 14) from (node id, race, default) and
+    (node id, specialties, image id or None, label ids) entries, node ids of
+    CHOICE's create screen (unchecked)."""
+    at = {i: k for k, (i, _, _) in enumerate(node_records(CHOICE[2]))}
+    data = u(len(races)) + b"".join(u(at[n]) + u(r) + u(d) for n, r, d in races) + u(len(classes))
+    for n, codes, image, labels in classes:
+        data += u(at[n]) + u(len(codes)) + b"".join(u(c) for c in codes) + \
+            u(0xFFFFFFFF if image is None else at[image]) + u(len(labels)) + b"".join(u(at[x]) for x in labels)
+    return data
+
+
+RACE_TU = ("btn_race_ka_tu", 2, 102)
+WARRIOR = ("btn_class_warrior", [101, 201], "img_warrior", ["str_01"])
+PRIEST = ("btn_class_priest", [104, 204], "img_priest", ["str_01", "int_01"])
+assert choice_record([RACE_TU], [WARRIOR, PRIEST]) == CHOSEN["data"]
+CHOICE_SECTIONS = {
+    "race-node": ([("btn_class_warrior", 2, 102)], [WARRIOR, PRIEST]),
+    "race-unbound": ([RACE_TU, ("btn_race_ka_wt", 3, 103)], [WARRIOR, PRIEST]),
+    "race-0": ([("btn_race_ka_tu", 0, 102)], [WARRIOR, PRIEST]),
+    "race-65536": ([("btn_race_ka_tu", 65536, 102)], [WARRIOR, PRIEST]),
+    "race-default-0": ([("btn_race_ka_tu", 2, 0)], [WARRIOR, PRIEST]),
+    "race-twice": ([RACE_TU, RACE_TU], [WARRIOR, PRIEST]),
+    "race-missing": ([], [WARRIOR, PRIEST]),
+    "class-node": ([RACE_TU], [WARRIOR, ("btn_race_ka_tu", [104], None, [])]),
+    "class-twice": ([RACE_TU], [WARRIOR, PRIEST, PRIEST]),
+    "class-missing": ([RACE_TU], [PRIEST]),
+    "class-no-specialty": ([RACE_TU], [WARRIOR, ("btn_class_priest", [], None, ["int_01"])]),
+    "class-17-specialties": ([RACE_TU], [WARRIOR, ("btn_class_priest", list(range(300, 317)), None, ["int_01"])]),
+    "class-specialty-shared": ([RACE_TU], [WARRIOR, ("btn_class_priest", [104, 201], "img_priest", ["int_01"])]),
+    "class-specialty-0": ([RACE_TU], [WARRIOR, ("btn_class_priest", [0], "img_priest", ["int_01"])]),
+    "class-image-text": ([RACE_TU], [WARRIOR, ("btn_class_priest", [104], "str_02", ["int_01"])]),
+    "class-image-twice": ([RACE_TU], [WARRIOR, ("btn_class_priest", [104], "img_warrior", ["int_01"])]),
+    "class-label-unflagged": ([RACE_TU], [WARRIOR, ("btn_class_priest", [104], "img_priest", ["str_02", "int_01"])]),
+    "class-label-twice": ([RACE_TU], [WARRIOR, ("btn_class_priest", [104], "img_priest", ["int_01", "int_01"])]),
+    "class-label-unnamed": ([RACE_TU], [WARRIOR, ("btn_class_priest", [104], "img_priest", [])]),
+}
+
+
 CHOICE_CASES = {
     # RQ-158 (version 24): a create model per race.
     "bad-version-23": blob(version=23),
@@ -2013,27 +2100,39 @@ CHOICE_CASES = {
     "bad-create-race-twice": blob(creates=u(2) + u(2) + character() + u(2) + character()),
     "bad-create-races-truncated": blob(creates=u(2) + u(2) + character() + u(3)),
     "bad-version-20": blob(version=20),
-    # RQ-133 (version 22): create's nodes drawn until the race is chosen.
     "bad-version-21": blob(version=21),
-    "ok-until-race": blob(screen_data=UNTIL),
-    "bad-until-race-no-race": blob(screen_data=patch_node(UNTIL, 2, "btn_race_ka_tu", action=0)),
-    "bad-until-race-off-create": blob(screen_data=patch_node(UNTIL, 0, "notice", flags=8)),
-    # RQ-145 (version 23): create's nodes drawn until a class is clicked.
     "bad-version-22": blob(version=22),
-    "bad-until-class-no-class": blob(screen_data=patch_node(UNTIL, 2, "btn_class_priest", action=0)),
-    "bad-until-class-off-create": blob(screen_data=patch_node(UNTIL, 0, "notice", flags=16)),
-    "bad-until-class-and-race": blob(screen_data=patch_node(UNTIL, 2, "str_01", flags=24)),
-    "bad-node-flags": blob(screen_data=patch_node(UNTIL, 2, "img_rogue", flags=32)),
-    "ok-create-choice": blob(screen_data=CHOICE),
-    "ok-create-choice-race-only": blob(screen_data=patch_node(CHOICE, 2, "btn_class_priest", action=0)),
-    "bad-create-choice-on": blob(screen_data=patch_node(CHOICE, 2, "btn_race_ka_tu", flags=1)),
-    "bad-create-choice-disabled": blob(screen_data=patch_node(CHOICE, 2, "btn_class_priest", flags=2)),
+    # RQ-172 (version 25): create's race and class buttons by KO's codes, with
+    # create's choice section (item 14).
+    "bad-version-24": blob(version=24),
+    "ok-create-choice": blob(screen_data=CHOICE, choices=CHOSEN["data"]),
+    "ok-create-choice-chosen": blob(screen_data=choice_screens(states={"btn_race_ka_tu": "down",
+                                                                       "btn_class_priest": "down"}),
+                                    choices=CHOSEN["data"]),
+    "ok-create-choice-shown": blob(screen_data=choice_screens(class_labels="show"), choices=CHOSEN["data"]),
+    "ok-create-choice-race-only": blob(screen_data=choice_cook(classes={}, class_labels=None)[0],
+                                       choices=choice_cook(classes={}, class_labels=None)[1]["data"]),
+    "bad-create-choice-unlisted": blob(screen_data=CHOICE),
+    "bad-create-choice-two-chosen": blob(screen_data=patch_node(patch_node(CHOICE, 2, "btn_class_priest", flags=1), 2,
+                                                                "btn_class_warrior", flags=1),
+                                         choices=CHOSEN["data"]),
+    "bad-create-choice-disabled": blob(screen_data=patch_node(CHOICE, 2, "btn_class_priest", flags=2),
+                                       choices=CHOSEN["data"]),
     "bad-create-choice-text": blob(screen_data=patch_node(CHOICE, 2, "text_desc",
-                                                          action=fe.ACTIONS.index("create_class"))),
+                                                          action=fe.ACTIONS.index("create_class")),
+                                   choices=CHOSEN["data"]),
     "bad-create-choice-off-create": blob(screen_data=patch_node(bar_screens, 1, "btn_delete",
                                                                 action=fe.ACTIONS.index("create_race"))),
-    "bad-create-choice-twice": blob(screen_data=patch_node(CHOICE, 2, "btn_class_priest",
-                                                           action=fe.ACTIONS.index("create_race"))),
+    "bad-node-flags-8": blob(screen_data=patch_node(CHOICE, 2, "img_warrior", flags=8), choices=CHOSEN["data"]),
+    "bad-node-flags-64": blob(screen_data=patch_node(CHOICE, 2, "img_warrior", flags=64), choices=CHOSEN["data"]),
+    "bad-class-label-off-create": blob(screen_data=patch_node(CHOICE, 0, "notice", flags=16),
+                                       choices=CHOSEN["data"]),
+    "bad-class-label-both": blob(screen_data=patch_node(CHOICE, 2, "str_01", flags=48), choices=CHOSEN["data"]),
+    "bad-class-label-unlisted": blob(screen_data=patch_node(CHOICE, 2, "str_02", flags=16), choices=CHOSEN["data"]),
+    "bad-class-label-mixed": blob(screen_data=patch_node(CHOICE, 2, "int_01", flags=32), choices=CHOSEN["data"]),
+    **{"bad-choice-" + reason: blob(screen_data=CHOICE, choices=choice_record(*entries))
+       for reason, entries in CHOICE_SECTIONS.items()},
+    "bad-choice-truncated": blob(screen_data=CHOICE, choices=CHOSEN["data"][:-4]),
 }
 cases = {
     "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
@@ -2235,22 +2334,50 @@ try:
     # RQ-130: create's race and class choices, each refusal for its reason.
     for name, reason in (("bad-version-20", "front end version"),
                          ("bad-version-21", "front end version"),
-                         ("bad-until-race-no-race", "front end until race"),
-                         ("bad-until-race-off-create", "front end until race"),
                          ("bad-version-22", "front end version"),
-                         ("bad-until-class-no-class", "front end until class"),
-                         ("bad-until-class-off-create", "front end until class"),
-                         ("bad-until-class-and-race", "front end until class"),
-                         ("bad-node-flags", "front end node state"),
-                         ("bad-create-choice-on", "front end create choice"),
+                         ("bad-version-24", "front end version"),
+                         ("bad-node-flags-8", "front end node state"),
+                         ("bad-node-flags-64", "front end node state"),
+                         ("bad-create-choice-unlisted", "front end create "),
+                         ("bad-create-choice-two-chosen", "front end create choice at open"),
                          ("bad-create-choice-disabled", "front end create choice"),
                          ("bad-create-choice-text", "front end create choice"),
                          ("bad-create-choice-off-create", "front end create choice off create"),
-                         ("bad-create-choice-twice", "front end action bound twice")):
+                         ("bad-class-label-off-create", "front end class label off create"),
+                         ("bad-class-label-both", "front end class label"),
+                         ("bad-class-label-unlisted", "front end create class label"),
+                         ("bad-class-label-mixed", "front end create class label"),
+                         ("bad-choice-race-node", "front end create race button"),
+                         ("bad-choice-race-unbound", "front end create race button"),
+                         ("bad-choice-race-0", "front end create race button"),
+                         ("bad-choice-race-65536", "front end create race button"),
+                         ("bad-choice-race-default-0", "front end create race button"),
+                         ("bad-choice-race-twice", "front end create race button"),
+                         ("bad-choice-race-missing", "front end create race button"),
+                         ("bad-choice-class-node", "front end create class button"),
+                         ("bad-choice-class-twice", "front end create class button"),
+                         ("bad-choice-class-missing", "front end create class button"),
+                         ("bad-choice-class-no-specialty", "count"),
+                         ("bad-choice-class-17-specialties", "count"),
+                         ("bad-choice-class-specialty-shared", "front end create class specialty"),
+                         ("bad-choice-class-specialty-0", "front end create class specialty"),
+                         ("bad-choice-class-image-text", "front end create class image"),
+                         ("bad-choice-class-image-twice", "front end create class image"),
+                         ("bad-choice-class-label-unflagged", "front end create class label"),
+                         ("bad-choice-class-label-twice", "front end create class label"),
+                         ("bad-choice-class-label-unnamed", "front end create class label")):
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
-    for name in ("ok-create-choice", "ok-create-choice-race-only", "ok-until-race"):
+    assert any(l.startswith("refused bad-choice-truncated:") for l in run.stdout.splitlines())
+    for name in ("ok-create-choice", "ok-create-choice-chosen", "ok-create-choice-shown",
+                 "ok-create-choice-race-only"):
         assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
+    # RQ-172: the loaded buttons, as the cook wrote them (choice_section).
+    at = {i: k for k, (i, _, _) in enumerate(node_records(CHOICE[2]))}
+    buttons = next(l for l in run.stdout.splitlines() if l.startswith("create-buttons ok-create-choice:"))
+    assert buttons.split(": ", 1)[1] == "races=%d/2/102 classes=%d/101+201/%d/%d;%d/104+204/%d/%d+%d" % (
+        at["btn_race_ka_tu"], at["btn_class_warrior"], at["img_warrior"], at["str_01"], at["btn_class_priest"],
+        at["img_priest"], at["str_01"], at["int_01"]), buttons
     # RQ-158: each create model's race, its one clip and the demo's joints, in
     # file order; 1 to 32 models, each race 1 to 65535 once.
     race_lines = {l.split(":")[0]: l.split(": ", 1)[1].split() for l in run.stdout.splitlines()

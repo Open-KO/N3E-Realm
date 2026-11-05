@@ -1456,6 +1456,20 @@ and still hides `img_sta`, `img_dex` and `img_map`, as that call does; the stat
 values stay empty and `text_bonus` hidden (Q52). `make live-ko` finds pink text in
 the two rects and none in the other three at each size.
 
+**1264's Create checks in 1298's order (RQ-172, 2026-11-04).** Read in the same
+image (`0043a340` decompiled again, `-readOnly -noanalysis`, output under
+`build/ghidra/rq172/`, not committed), for the 1097 choice's create, whose race
+click now unchooses the class:
+
+| Observation | Where | Label |
+|---|---|---|
+| **No class is code 9, row 1904.** MsgSendCharacterCreate (`0043a340`) posts, through ReportErrorCharacterCreate (`0043a820`, row 1904 for 9 under row 1901, §9.2), code 6 for an empty name (the length at the player's `+0x38c` under 1), 7 for no race (`+0x398` −1), 9 for no class (`+0x3a0` −1) and 10 for points left (`[this + 0x18] + 0xb0` above 0, taken as the bonus left, 1298's `+0xb0`), in that order, before its name letters (code 5); 1298's `005fffd0` has the same order (§9.15). `0043ec90` sets the class −1 on every race click (above), so after a Tuarek click and before a class click 1264's Create says row 1904 | 1264 `0043a340`, `0043a820`, `0043ec90` | binary |
+
+**Decides (RQ-172):** the 1097 choice names `create_no_class` as row 1904 under
+1901, the box its Create shows after a click on the chosen Tuarek; the realm checks
+the empty name, the race, the class and the name's letters in that order, its points
+still the fixed choice's (Q110).
+
 ## 10. Character create, end to end (RQ-001, 2026-11-04)
 
 KO's whole create flow is written down as the character lane's contract in

@@ -82,7 +82,7 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 24, engine 42 (so wire 30). Its layout,
+An optional presentation file, N3FE version 25, engine 42 (so wire 30). Its layout,
 bounds and the action set are in `content/front-end.md`. The client treats it as
 optional: **a package without it gets today's panels**, which is how `demo` and every
 test fixture keep working. A package with it is the realm's: the screens below
@@ -131,7 +131,8 @@ replace the panels when the client has a Discord realm config.
   own for the start clip, RQ-076),
   and the create model (the race's own looks joint and animation, `ANI_BREATH`, no
   plugs; N3FE version 2), one per race of the package's `models.create`, each with
-  its race code, the select race's first (N3FE version 24, RQ-158).
+  its race code, the select race's first (N3FE version 24, RQ-158); a create with
+  race buttons draws the chosen race's (N3FE version 25, RQ-172).
 - **Music** (N3FE version 3, RQ-018; version 5, RQ-083). Up to 4 tracks, each MPEG-1
   or MPEG-2 Layer III frames (every frame checked at load) or, since version 5,
   16-bit PCM samples (KO 1097's WAVs), each ≤ 16 MiB, looping or not, with an
@@ -255,37 +256,30 @@ replace the panels when the client has a Discord realm config.
   and the bottom edges as 1298 does, ending where 1298's leave them; the 1097 choice
   has none.
 - **Create's race and class** (N3FE version 21, RQ-130, Q87 option (b), the
-  maintainer's 2026-11-03). The package may bind create's race button
-  (`create_race`) and class button (`create_class`), each a button with no fixed
-  state (`content/front-end.md`, "Actions"); a create that binds one waits for its
-  click, as 1298's in-select create does (`specs/KO-FINDINGS.md` §9.15). Each open
-  has neither chosen; a race click chooses the race and unchooses the class, a class
-  click the class; a chosen button draws down; the new character draws only once
-  the race is chosen, over the hall at the slot the camera was on at that click;
-  Create refuses no race (`create_no_race`) and then no class (`create_no_class`)
-  after the empty name, each in the message box. The choice gates only the client's
-  Create: since RQ-004 the create sends the package's fixed choice (`create.bin`,
-  Q100) whatever the buttons chose, until RQ-004's later parts bind them to KO's
-  codes; the server validates it as any create (Q95). The 1298 recipe binds the Tuarek and the priest, the messages
-  1298's rows 1908 and 1904 under 1901; the 1097 choice binds neither, its race and
-  class chosen from the open as before.
-- **Create's nodes until the race** (N3FE version 22, RQ-133). In a create that
-  binds `create_race` the package may mark nodes drawn only until the race is
-  chosen (node flag 8, the recipe's `until_race`; `content/front-end.md`,
-  "Actions"), as 1298's race click (`006060f0`) hides the class buttons the race
-  cannot take, their greyed `img_*` standing in their place, and the images of the
-  classes it can (`specs/KO-FINDINGS.md` §9.15). The 1298 recipe draws the four
-  class images under their buttons and names `img_rogue`, `img_priest`,
-  `btn_class_warrior` and `btn_class_mage`; the 1097 choice names none.
-- **Create's nodes until a class** (N3FE version 23, RQ-145, Q93 (b)). In a create
-  that binds `create_class` the package may mark nodes drawn until a class is
-  clicked and again from each open and each race click that builds the character
-  (node flag 16, the recipe's `until_class`; `content/front-end.md`, "Actions"),
-  as 1298's class click (`006062d0`) hides its class's cream stat labels and its
-  build (`005fd120`) shows them; a click on the race already chosen builds nothing,
-  so it leaves them (`specs/KO-FINDINGS.md` §9.15). The 1298 recipe names `str_01`
-  and `int_01`, so "STR" and "INT" read in their cyan copies from the priest
-  click; the 1097 choice names none.
+  maintainer's 2026-11-03; N3FE version 25, RQ-172). The package binds create's
+  race buttons (`create_race`), each with its KO race code and the race's default
+  class, and its class buttons (`create_class`), each with the specialty codes it
+  stands for, the image shown in its place and the stat labels its click marks
+  (`content/front-end.md` item 14 and "Actions"); a choice button may be fixed on,
+  chosen at each open, and is never fixed disabled. A create with buttons waits for
+  their clicks unless one is chosen at the open, as 1298's in-select create does
+  (`specs/KO-FINDINGS.md` §9.15); a race click chooses the race, unchooses the class
+  and, on a change, draws the chosen race's create model and clears the class's
+  marks; a class click chooses, for the race, the specialty of the button the race
+  has and marks its labels (1298's hidden, 1264's shown); once a race is chosen the
+  class buttons it cannot take give way to their images (1298 `006060f0`, 1264
+  `0043ec90`); a chosen button draws down. Create refuses no race
+  (`create_no_race`) and then no class (`create_no_class`) after the empty name,
+  each in the message box, then a name or choice the server would refuse
+  (`create_refused`), and sends the chosen race and specialty (with the package's
+  fixed face, hair and points until RQ-173 and RQ-174; Q110); the server validates
+  it as any create (Q95). The 1298 recipe binds the Tuarek and the four classes and
+  waits for both, the messages 1298's rows 1908 and 1904 under 1901; the 1097
+  choice binds the same with the Tuarek and the priest chosen at each open (Q52),
+  `create_no_class` 1264's row 1904 under 1901. Version 22's nodes until the race
+  (flag 8, RQ-133) and version 23's until a class (flag 16, RQ-145) give way to the
+  class buttons' images and labels; flag 16 is now a 1298-style label (hidden while
+  marked) and flag 32 a 1264-style one (shown while marked).
 - **The placement** (N3FE version 11, RQ-106, Q82). KO draws its front end on the
   screen's own pixels, never scaled, and places each layout's root and some of its
   nodes by the viewport's size each time the layout loads (`specs/KO-FINDINGS.md`
@@ -423,7 +417,7 @@ stays private.
 | A choice's reference install is not a pinned one, its manifest is missing or names another installer, or a recipe prefix names no input (RQ-084) | The same, before anything is written. |
 | A file the cook reads from a reference install differs from its manifest's hash | The cook stops with the file and the manifest named; nothing is published. |
 | A front-end blob fails to load or validate | The client prints the error and falls back to the panels; it never refuses to start over the front end. `--self-test` fails instead, naming the blob. |
-| A package cooked before N3FE version 24 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, no select bar actions, no message box Yes and No or exit question, no select ESC or its `none`, no select Back, no select arrow rule, no create mode, no create slide, no create choices, no until-race nodes, no until-class nodes, or one create model) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
+| A package cooked before N3FE version 25 (no music section, no clip blend times and spot rate, no track kinds and restart periods, no front-clip mode, no turn mode, no zone and fog, no logo section, no message section, no placement, no `login_closed` action, no select bar actions, no message box Yes and No or exit question, no select ESC or its `none`, no select Back, no select arrow rule, no create mode, no create slide, no create choices, no until-race nodes, no until-class nodes, one create model, or no race and class buttons by KO's codes) | The server refuses it at start (`front end magic/version`); the client prints `front end version` and falls back to the panels. A Release ships the client, server and package together, so players never meet it; an operator or developer with an older local cook re-cooks it (`make realm-assets`) or installs the matching Release's package. |
 | Window smaller than the canvas (1024 × 768) | KO's placements would cut the layouts off, so the UI scales down uniformly, centred, as with `ui_scale` `window` (RQ-106). No minimum beyond SDL's. |
 | No mouse | The keyboard covers every action. |
 | An account with more characters than slots (test realms) | The select screen shows the first `character_slots`; the rest stay in the database. Create is refused as today. |
@@ -643,7 +637,20 @@ KO (`make live-ko`, needs `assets/ko`):
    `until_class` on create and refuse it off create, on a create that binds no
    `create_class`, twice, hidden, until the race too or on a node that draws
    nothing, flag 16 off create, on a create without `create_class` or with flag
-   8, a flag above 31, and a version 22 package.
+   8, a flag above 31, and a version 22 package. RQ-172 (version 25): on the 1298
+   recipe's, the buttons pressed are the fixed choice's Tuarek and priest and the
+   Tuarek's other class, the rogue; each open draws every class button over its
+   image, the Tuarek click draws `img_warrior` and `img_mage` and the rogue and
+   priest buttons, draws the Tuarek's create model and takes 102 for the stat row;
+   a priest click hides `str_01` and `int_01`, a rogue click `dex_01` and
+   `sta_01`; Create after the rogue click sends race 2 and specialty 102. On the
+   1097 choice's the open draws `img_warrior`, `img_mage`, the rogue and priest
+   buttons, the Tuarek and priest down and `img_str` and `img_int`. The cook and
+   loader take `races`, `classes` and `class_labels` (item 14) and refuse each
+   case `content/front-end.md` names, `until_race` and `until_class`, flag 8, and
+   a version 24 package; `tests/front_end.cpp` plays the choice for both recipes'
+   rules (the class column, each class's labels, the default class, the request
+   and its refusal).
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

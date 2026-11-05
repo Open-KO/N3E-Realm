@@ -24,23 +24,25 @@ its panels sliding in each time it opens (version 20, RQ-126), create's
 race and class buttons, which a create that binds them waits for, with two
 messages (version 21, RQ-130), create's nodes drawn only until its race is
 chosen (version 22, RQ-133), create's nodes drawn until a class is clicked,
-again from each open and each race click that builds (version 23, RQ-145), and a
-create model per race the package's create rules name (version 24, RQ-158).
+again from each open and each race click that builds (version 23, RQ-145), a
+create model per race the package's create rules name (version 24, RQ-158), and
+create's race and class buttons bound to KO's codes, each class button with its
+stand-in image and the stat labels its click marks (version 25, RQ-172).
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it and the server reads only
 its header. A package with it is engine 42, so wire 30 (as engines 38–41). Its bound is
 64 MiB (`FRONT_END_FILE`, `MAX_FRONT_END_ASSET`, `kFrontEndFile`), since it holds
-the character models and the UI art (Moradon's 1097 choice: 56,347,416 bytes with
-three create models, RQ-158).
+the character models and the UI art (Moradon's 1097 choice: 56,348,696 bytes with
+three create models, RQ-158, and its race and class buttons, RQ-172).
 
 Integers are little-endian u32, reals f32; strings are a u32 length and that many
 bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 24, character slots (1–3; the server's character limit),
+1. `"N3FE"`, version 25, character slots (1–3; the server's character limit),
    canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -53,9 +55,10 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    - kind (0 image, 1 text, 2 button, 3 edit, 4 progress, 5 group, 6 area,
      7 list), parent (none, `0xffffffff`, for the first node only; otherwise an
      earlier node), rect x0 y0 x1 y1 on the canvas, id (≤64 bytes), action,
-     flags (1 fixed on, 2 fixed disabled, 4 progress foreground, 8 drawn
-     only until the race is chosen: version 22, create's, "Actions"; 16 drawn
-     until a class is clicked: version 23, create's, "Actions"), state mask
+     flags (1 fixed on, 2 fixed disabled, 4 progress foreground, 16 and 32 a
+     class button's stat label, drawn unless or only while the marking class
+     names it: version 25, create's, item 14 and "Actions"; version 22's 8
+     and version 23's 16, drawn until the race or a class, are gone), state mask
      (1–15: the button states normal, down, on, disabled it draws in);
    - image: texture, uv u0 v0 u1 v1 in [0, 1];
    - text: text (≤1024 ASCII bytes), font, colour (ARGB), KO string style;
@@ -89,8 +92,9 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    `ANI_BREATH` (0), and no plugs (a new character holds nothing). The races
    are the package's `models.create` (`games/<game>/character-create.json`):
    the select character's race first (`select.character.race`, which must be
-   one of them), the model create draws, then the others in the rules' `races`
-   order, which the client keeps for the create screen per race (RQ-004). A
+   one of them), the model a create without race buttons draws, then the
+   others in the rules' `races` order; a create with race buttons (version 25,
+   item 14) draws the chosen race's (RQ-172), none for a race without one. A
    package with no `character-create.json` beside the recipe carries the select
    race's alone; a malformed one stops the cook (`ko_create.rules`). Before
    version 24 the file held one create model, the select race's. The select
@@ -244,6 +248,24 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    so a node whose travel the lead's outruns ends short of its rest; a d
    past 10⁶ ends it with every node at rest. Hit tests take the nodes where
    they draw.
+14. Create's race and class buttons (version 25, RQ-172;
+   `client/render/create_choice.h`; `specs/KO-FINDINGS.md` §9.15, §9.16,
+   binary): a race button count (≤32), each its node (a create node bound to
+   `create_race`, each once), its KO race code (1–65535, each once) and its
+   default specialty (1–65535: the class 1298's build `005fd120` takes for the
+   race's stat row while none is chosen, 1→101, 2→102, 3→103, 4→104, 11→201,
+   12→202, 13→204); then a class button count (≤16), each its node (a create
+   node bound to `create_class`, each once), a specialty count (1–16) and the
+   specialty codes it stands for (1–65535, none in two buttons: one per nation,
+   as 1298's `006062d0` and 1264's `0043ee10` map their four buttons to 101–104
+   and 201–204), its stand-in image (an image node of create no other class
+   names and no race or class button or label is, or `0xffffffff` for none)
+   and a label count (≤8) and its stat labels (create nodes each carrying flag
+   16 or flag 32, one of the two for the whole create, none twice in one
+   button). Every node bound to `create_race` or `create_class` is one
+   button's, every node with flag 16 or 32 some class's label, and at most one
+   race and one class button is fixed on (chosen at each open). The client's
+   use is "Actions" below.
 
 The client samples as KO sets its devices: UIF images with point sampling on whole
 screen pixels (`CUIManager::RenderStateSet`, `CN3UIImage::SetVB`: KO's atlases
@@ -424,7 +446,7 @@ address mode); the font atlases and the moon linear.
   and ambient (3 reals each), a vertex count (1–65536) of 8 reals (position,
   normal, uv), an index count (a multiple of 3, ≤196608), the indices.
 
-The loader refuses (version 24) a create model count outside 1–32, a create race
+The loader refuses (version 25) a create model count outside 1–32, a create race
 outside 1–65535 or named twice, an unknown action, a screen missing one of its required
 actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
 `realm_connect`; select: `select_prev`, `select_next`, `back`, `exit` and an
@@ -432,7 +454,7 @@ info text, `char_info` or (version 13) any of `char_name`, `char_level` and
 `char_class`; create: `create_confirm`, `back`, `name_field` and (version 19)
 `char_view` unless create draws over the hall, where it is refused;
 loading: `progress`; message: `message`, `ok`), an action bound twice in a
-screen, an unknown turn mode, paths in the rotate mode, a path outside the slots
+screen (but `create_race` and `create_class`, version 25), an unknown turn mode, paths in the rotate mode, a path outside the slots
 or from a slot to itself, an entry path not to slot 0, a from and to pair twice,
 the path mode without its entry path or a way between neighbours, a hall with
 a zone, a zone mesh's flags other than above, fog values outside their bounds
@@ -444,11 +466,10 @@ flag other than 0 or 1 or a text that does not replace, a node bound to
 `yes` or `no` on a screen other than the message box, or `exit_confirm` named
 without nodes bound to both on it (version 14), a node bound to `create_race`
 or `create_class` on a screen other than create, or one that is not a button
-or is fixed on or fixed disabled (version 21), a node flag above 31, flag 8
-on a screen other than create, on a create that binds no `create_race` or on
-the logo screen (version 22), flag 16 on a screen other than create, on a
-create that binds no `create_class`, with flag 8 or on the logo screen
-(version 23), a select ESC other than 0, 1 or
+or is fixed disabled (version 21; fixed on is a choice at each open since
+version 25), a node flag above 63 or with flag 8 (version 25), flags 16 and 32
+together, on a screen other than create or on the logo screen, item 14's
+bounds and references above (version 25), a select ESC other than 0, 1 or
 2 (version 15; 2 since version 16), a select Back other than 0 or 1 (version
 17), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the
@@ -491,59 +512,95 @@ name, level (decimal) and the `class_name` string while the hall is at rest
 (the loop front-clip mode: always at rest; hover: while the pointer is on the
 character, as `char_info`), and empty for an empty slot or otherwise.
 
-Create's race and class (version 21, RQ-130, `specs/KO-FINDINGS.md` §9.15,
-`client/render/create_choice.h`), create screen only, each on a button with no
-fixed state: a create that binds `create_race` waits for its race, and one that
-binds `create_class` for its class (1298's in-select create). Each time create
-opens, neither is chosen (1298's Init `005fab40` and Cancel `005ffb90` set the
-race and class to −1; a create the realm accepts returns to the select, so the
-next open starts again). A click on the `create_race` button chooses the race
-and unchooses the class (ReceiveMessage `00604f90` sets the class to −1 on
-every race click); a click on `create_class` chooses the class, with or
-without a race. A chosen button draws in its down state, under the pointer too
-(`006060f0` and `006062d0` set `UI_STATE_BUTTON_DOWN`). The new character, over
-the hall or in `char_view`, draws only once the race is chosen; over the hall it
-stands at the slot the camera was on at the click that chose the race, or at a
-later class click that chose the class (`005fd120`, which builds it on a click
-that changes either value, puts it by the camera's slot `+0x38c`: a race clicked
-while the camera flies stands at the slot the flight left). `create_confirm`
-then refuses, in `005fffd0`'s order, an empty name (`create_name`), no race
-(`create_no_race`), no class (`create_no_class`) and (RQ-004) a name the
-package's rule refuses (`create_refused`, in the package's wording of the
-server's name refusal), each in the message box; otherwise it sends the create.
-The client's own wording for the two is "Choose a race." and "Choose a class.".
-The buttons gate only the client's Create: since RQ-004 the create sends the
-package's fixed choice from `create.bin` (race, specialty, face, hair, stats)
-in the first free slot, whatever the buttons chose, until RQ-004's later parts
-bind them to KO's codes (`content/character-create.md`, "The create screen
-(RQ-004)"). A create that binds neither keeps race and class chosen from the
-open and the new character at the slot in focus, as before version 21.
+Create's race and class (version 21, RQ-130; version 25, RQ-172;
+`specs/KO-FINDINGS.md` §9.15, §9.16; `client/render/create_choice.h`), create
+screen only, on item 14's buttons, each a button that is not fixed disabled:
+each race button stands for its KO race code and each class button for its
+specialty codes. A create with race buttons waits for its race and one with
+class buttons for its class (1298's in-select create), unless one of them is
+fixed on, which is then chosen at each open (the 1097 choice's Tuarek and
+priest, Q52, Q89 (b); 1264's create itself opens with none, `00439550`, which
+the 1097 choice does not follow). Each time create opens, only that choice
+stands (1298's Init `005fab40` and Cancel `005ffb90` set the race and class to
+−1; a create the realm accepts returns to the select, so the next open starts
+again). A click on a race button chooses its race and unchooses the class
+(ReceiveMessage `00604f90` sets the class to −1 on every race click; 1264's
+`0043ec90` too); a click on a class button chooses its class, with or without a
+race. A chosen button draws in its down state (its own down image), under the
+pointer too (`006060f0` and `006062d0` set `UI_STATE_BUTTON_DOWN`; 1264's
+`0043ec90` and `0043ee10`); a fixed-on choice button draws as any other, down
+only while chosen. The new character, over the hall or in `char_view`, draws
+only once a race is chosen, as the chosen race's create model (item 8; a race
+with none draws nothing, as `005fd120` builds nothing without a looks row);
+over the hall it stands at the slot the camera was on at the click that chose
+the race, or at a later class click that chose the class (`005fd120`, which
+builds it on a click that changes either value, puts it by the camera's slot
+`+0x38c`: a race clicked while the camera flies stands at the slot the flight
+left). Until a class is chosen the build takes the race button's default
+specialty for the race's stat row (`005fd120`), which the stat values show
+(RQ-173).
 
-Create's nodes drawn until the race is chosen (version 22, RQ-133,
-`specs/KO-FINDINGS.md` §9.15, binary), create screen only, in a create that
-binds `create_race`: a node with flag 8, and its subtree, draws (and takes
-clicks) only while the race is not chosen, so from each open to the race click
-(1298's race click, `006060f0`, hides the class buttons the race cannot take,
-their `img_*` standing in their place, and the images of the classes it can;
-its reset, `006066b0` by `00605950`, shows every class button and image again
-at each open). The recipe names them in the create screen's `until_race`, a
-list of nodes of the layout, each once and none of them `hidden`; the cook
-refuses it on another screen, in a create that binds no `create_race`, and for
-a node that draws nothing.
+The class column (version 25, RQ-172, binary): before a race is chosen every
+class button draws over its stand-in image (1298's reset `006066b0` by
+`00605950`); once one is chosen, a class button draws only while the race can
+take one of its specialties (the package's `create.bin` races: a race it does
+not offer takes none; without rules, every one) and its image only while the
+race cannot, so the classes the race cannot take give way to their images
+(1298's `006060f0`, 1264's `0043ec90`: a disabled class button is hidden and
+its `img_*` shown). A class click chooses, for the chosen race, the one of its
+specialties that race has (KO: by the player's nation; 1298's `006062d0`,
+1264's `0043ee10`), and Create sends it.
 
-Create's nodes drawn until a class is clicked (version 23, RQ-145, Q93 (b),
-`specs/KO-FINDINGS.md` §9.15, binary), create screen only, in a create that
-binds `create_class`: a node with flag 16, and its subtree, draws while no class
-click has marked the create: a class click marks it, and each open and each race
-click that builds the character (the race was not chosen) clear the mark, so a
-click on the race already chosen, which unchooses the class and builds nothing,
-leaves the mark (1298's class click, `006062d0`, hides the clicked class's cream
-stat labels; its build, `005fd120`, and its reset, `006066b0`, show them by
-`00605950`; its ReceiveMessage, `00604f90`, builds only on a change of race). The
-recipe names them in the create screen's `until_class`, a list of nodes of the
-layout, each once and none of them `hidden` or in `until_race`; the cook refuses
-it on another screen, in a create that binds no `create_class`, and for a node
-that draws nothing.
+The stat labels (version 25, RQ-172; version 23's flag 16, RQ-145, Q93 (b)):
+a class click marks the create with its class, and each open (with the class
+chosen there, if any) and each race click that builds the character (the race
+changed) clear the mark, so a click on the race already chosen, which
+unchooses the class and builds nothing, leaves it (1298's `00604f90` builds
+only on a change of race; its build `005fd120` and reset `006066b0` show every
+label by `00605950`; 1264's SetChr `00439970` runs its Reset `0043ea10` on a
+change, which hides them all). A label with flag 16 draws unless the marking
+class names it (1298's `006062d0` hides the clicked class's two cream `*_01`
+labels, its `*_02` cyan copies showing: warrior `str`, `sta`; rogue `dex`,
+`sta`; mage `int`, `map`; priest `str`, `int`); one with flag 32 draws only
+while it does (1264's `0043ee10` shows the clicked class's two pink `img_*`:
+warrior `img_str`, `img_sta`; rogue `img_sta`, `img_dex`; mage `img_int`,
+`img_map`; priest `img_str`, `img_int`).
+
+`create_confirm` then refuses, in `005fffd0`'s order (1264's `0043a340`), an
+empty name (`create_name`), no race (`create_no_race`), no class
+(`create_no_class`) and (RQ-004) a name the package's rule refuses
+(`create_refused`, in the package's wording of the server's name refusal),
+each in the message box; then (RQ-172) the chosen race and specialty with the
+face, hair and stats it would send, as the server's `Policy::choice` checks
+them (`create_choice_refusal`, Q95: a race or specialty the package does not
+offer is `create_refused` in the package's wording of the server's mismatch
+refusal); otherwise it sends the create: the chosen race and specialty, the
+package's fixed face and hair and its fixed choice's points on the chosen
+specialty's base stats (until RQ-173 and RQ-174 add the arrows; Q110), in the
+first free slot. The client's own wording for the two is "Choose a race." and
+"Choose a class.". A create that binds neither keeps race and class chosen
+from the open and the new character at the slot in focus, and sends the
+package's fixed choice (Q100), as before version 21.
+
+The recipe binds the buttons in the create screen's `races` (`{"<node>":
+{"race": R, "default": S}}`) and `classes` (`{"<node>": {"specialties":
+[...], "image": "<node>", "labels": ["<node>", ...]}}`), not in `bindings`,
+with `class_labels` (`hide`, flag 16, or `show`, flag 32) when any class names
+labels; `states` may make one race and one class button `down`, chosen at each
+open, and no other state. The cook refuses them on another screen, a
+`create_race` or `create_class` in `bindings`, a node named twice or hidden, a
+race code twice, a specialty in two class buttons, an image that is not an
+image node, is hidden or is named twice, a label named twice or hidden, a label
+that is a button or an image of the column, labels without `class_labels` or
+`class_labels` without labels, a node they name that draws nothing, and (with
+the package's `character-create.json`) a race that is not one of its races, a
+default that is not one of the race's specialties, a specialty no race has, a
+class button two of whose specialties one race has, or buttons without the
+package's create rules. The race buttons of races the package does not offer
+are the recipe's to leave unbound (Q109 (a): fixed disabled, or the 1097
+choice's Puri Tuarek unfixed and unbound, Q90). Version 22's `until_race` and
+23's `until_class` are refused: the class buttons' images and labels do their
+work.
 
 A recipe screen's `states` fixes a node's button state: `on` and `disabled` are
 flags 1 and 2. `down` (RQ-138, Q89 (b), `specs/KO-FINDINGS.md` §9.16, binary) is
@@ -551,8 +608,11 @@ the cook's, with no flag or version of its own: flag 1, the button's down image
 (state image 1) written with the down and on mask bits and its on image (2) not
 written, so the button draws as one KO holds down whether or not the pointer is
 on it (1264's chosen race and class: `0043ec90` and `0043ee10` set state 3,
-which Render `00403a70` draws with `BS_DOWN`). The cook refuses `down` on a node
-that is not a button or whose down image is missing or untextured.
+which Render `00403a70` draws with `BS_DOWN`). On a race or class button
+(version 25) `down` is the choice made at each open instead: flag 1 with every
+state image kept, the client drawing the button down while it is chosen. The
+cook refuses `down` on a node that is not a button or whose down image is
+missing or untextured.
 
 The message box's styles (version 14, RQ-111, `specs/KO-FINDINGS.md` §9.7,
 `client/render/message_box.h`), message screen only: every message shows in an
@@ -781,26 +841,32 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   50 from the left, `Group_race` 50 from the right (`right`), `Group_name`
   centred (Load `00603850`'s x), each bottom 30 above the window's. Bound as
   its ReceiveMessage (`00604f90`) uses it: `btn_create` `create_confirm`,
-  `btn_cancel` `back`, `edit_name` `name_field`, `text_desc` `class_desc`,
-  and (RQ-130, version 21) `btn_race_ka_tu` `create_race` and
-  `btn_class_priest` `create_class`; states: the other races and classes,
-  face, hair and the stat arrows disabled, the Puri Tuarek too (this layout's
-  disabled image is its normal tile), the Tuarek and the priest waiting for
-  their clicks; hidden: El Morad's three
-  race buttons (Load shows Karus's and hides El Morad's for a Karus player)
-  and `text_bonus`, as the 1097 recipe. The four class images draw, each
-  under its button (RQ-133, version 22, `until_race`, §9.15, binary): each
-  open draws every class button over its `img_*` (`00605950`, by the reset
-  `006066b0`), and the Tuarek click hides the warrior and mage buttons, their
-  greyed images standing in their place, and the rogue and priest images
-  (`006060f0(2)`), so `until_race` names `img_rogue`, `img_priest`,
-  `btn_class_warrior` and `btn_class_mage`. Each stat label is a cyan `*_02`
-  under a cream `*_01` in one rect; the priest click hides `str_01` and
-  `int_01`, so "STR" and "INT" read cyan (RQ-145, version 23, `until_class`,
-  Q93 (b), the maintainer's 2026-11-04, "Match 1298"; §9.15, binary:
-  `006062d0(104)`), cream again on the Tuarek click that builds the character
-  (`005fd120`) and at each open, still cyan after a click on the chosen Tuarek
-  (`00604f90` builds nothing), so `until_class` names `str_01` and `int_01`.
+  `btn_cancel` `back`, `edit_name` `name_field`, `text_desc` `class_desc`;
+  (RQ-172, version 25, item 14) `races` binds `btn_race_ka_tu` as race 2,
+  default 102, the one race Moradon offers (Q105), and `classes` the four
+  class buttons as 1298's `006062d0` maps them (`btn_class_warrior` 101 and
+  201, `_rogue` 102 and 202, `_mage` 103 and 203, `_priest` 104 and 204), each
+  with its `img_*` and its two cream labels (warrior `str_01`, `sta_01`; rogue
+  `dex_01`, `sta_01`; mage `int_01`, `map_01`; priest `str_01`, `int_01`:
+  Load `00603850` keeps them in the order str, dex, sta, int, map, and
+  `006062d0` hides flags 0 and 2, 1 and 2, 3 and 4, 0 and 3), `class_labels`
+  `hide`; states: the other races (Q109 (a): their textured disabled tiles,
+  the Puri Tuarek's too), face, hair and the stat arrows disabled, none chosen
+  at the open; hidden: El Morad's three race buttons (Load shows Karus's and
+  hides El Morad's for a Karus player) and `text_bonus`, as the 1097 recipe.
+  Each open draws every class button over its `img_*` (`00605950`, by the
+  reset `006066b0`), each live, as 1298's are NORMAL before the race click; the
+  Tuarek click hides the warrior and mage buttons, their greyed images standing
+  in their place, and the rogue and priest images (`006060f0(2)`), the rogue
+  and the priest live (RQ-133's `until_race` drew the same for the Tuarek).
+  Each stat label is a cyan `*_02` under a cream `*_01` in one rect; a class
+  click hides its class's two cream labels, so after the priest click "STR"
+  and "INT" read cyan, after the rogue's "DEX" and "HP" (RQ-145's `until_class`,
+  Q93 (b), the maintainer's 2026-11-04, "Match 1298", for the priest; §9.15,
+  binary: `006062d0`), cream again on the Tuarek click that builds the
+  character (`005fd120`) and at each open, still marked after a click on the
+  chosen Tuarek (`00604f90` builds nothing). The Tuarek click draws the
+  Tuarek's create model and takes 102 for its stat row.
   The new character stands at the slot turned 213, 143 and 283 degrees at
   slots 0–2 (`create_yaw`; `005fd120`'s `0x406dec5d`, `0x401fbb88`,
   `0x409e0e99` for Karus). The panels slide in each time create opens
@@ -818,12 +884,10 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   at the slot the camera was on for that click (`005fd120`); a Tuarek click
   unchooses the priest; a chosen button draws down; Create says
   `create_no_race`, row 1908, or `create_no_class`, row 1904, each titled row
-  1901, as `005fffd0` and `00600750` post codes 7 and 9 (`messages`). Still
-  the realm's: the warrior, rogue and mage buttons are fixed disabled (Q52:
-  every character is a priest), so they take no pointer, where 1298's are
-  normal before the race click (the warrior and mage) and after it (the rogue),
-  lit under the pointer and taking a click; the layout's disabled image is its
-  normal one, so at rest they look as 1298's. After a Cancel
+  1901, as `005fffd0` and `00600750` post codes 7 and 9 (`messages`). Since
+  RQ-172 every class button is live as 1298's (lit under the pointer, taking a
+  click), and Create sends the Tuarek with the clicked class, the rogue (102)
+  or the priest (104). After a Cancel
   mid-flight 1298's camera flies on to the empty slot (`005ffb90` leaves it
   alone), the select at rest on the slot it left; the recipe's is put on the
   slot at once. The hall lights `ka_light_0/1` are the files both
@@ -925,7 +989,10 @@ box and loading are 1264's.
   (`right`: x = W, `left`: x = −w, `bottom`: y = H, `top`: y = −h, its start
   just past that window edge) and optionally `with` another of its nodes (num
   and den its travel and that node's at the canvas, so the two arrive
-  together; num and den 1 without it); a node the layout hides is refused. The recipe's
+  together; num and den 1 without it); a node the layout hides is refused.
+  Create's `races`, `classes` and `class_labels` (version 25, item 14;
+  create's only, none by default) bind its race and class buttons to KO's
+  codes ("Actions"). The recipe's
   `ui_scale` (`native`, the default, or `window`: item 12's flags 1, the
   realm's scaling to the window before RQ-106) is RQ-103's realm-owner switch.
 - Login (`UI_US/co_login_us.uif`, centred on the bottom edge): as KO draws it, with
@@ -977,27 +1044,34 @@ box and loading are 1264's.
   both (RQ-113, §9.13, binary: `004448f0`, `00444e60` and `004454e0` only place,
   compare and click them), the maintainer's choice (2026-11-03, "Draw both, as
   1264", RQ-124).
-- Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): Tuarek and Priest chosen
-  from the open (Q52) and fixed `down`, the layout's sunken pink tiles, as 1264
-  draws its chosen race and class (RQ-138, Q89 (b), the maintainer's 2026-11-03,
-  "Sunken, as 1264"; §9.16, binary: `0043ec90`, `0043ee10`, `00403a70`); every
-  other race, class, face, hair and stat arrow fixed disabled, the bonus points
-  hidden and the stat values empty (Q52), but the Puri Tuarek (`btn_race_ka_pt`), whose
-  disabled image has no texture: it takes no state and no action, so it draws its
-  normal grey tile as 1264's race buttons at rest, takes no pointer and does
-  nothing when clicked (RQ-139, Q90, the maintainer's 2026-11-03, "Grey button,
-  as 1264"; §9.16, binary: `0043ec90`). The class column is 1264's after a
-  Tuarek and a priest click: the warrior and mage buttons hidden, so
-  `img_warrior` and `img_mage` (darker grey tiles, drawn before the buttons and
-  the labels) stand in their place, `img_rogue` and `img_priest` hidden, the
-  rogue fixed disabled (its normal tile, inert where 1264's would take a click)
-  and the priest `down` (RQ-142, Q91 (b), the maintainer's 2026-11-03, "Match
-  1264, Rogue inert"; §9.16, binary: `0043ec90`, `0043ee10`). The stat labels
-  are 1264's after a priest click: `img_str` and `img_int` drawn, pink
-  (0xff8080) copies over the light "Strength" and "Intelligence", and
-  `img_sta`, `img_dex` and `img_map` hidden, so "Health", "Dexterity" and
-  "Magic Power" stay light (RQ-144, Q92 (b), the maintainer's 2026-11-03,
-  "Pink Str/Int, as 1264"; §9.16, binary: `0043ee10`, `0043ea10`).
+- Create (`UI_US/Ka_CharacterCreate_us.uif`, centred): the buttons bound to
+  KO's codes (RQ-172, version 25, item 14): `races` binds `btn_race_ka_tu` as
+  race 2, default 102, and `classes` the four class buttons as 1264's
+  `0043ee10` maps them (101/201 to 104/204), each with its `img_*` (the
+  darker grey tile 1264 shows in place of a class the race cannot take) and its
+  two pink labels (warrior `img_str`, `img_sta`; rogue `img_sta`, `img_dex`;
+  mage `img_int`, `img_map`; priest `img_str`, `img_int`), `class_labels`
+  `show`. The Tuarek and the priest are `down`, chosen at each open (Q52), so
+  the open looks as 1264's after a Tuarek and a priest click, as the
+  maintainer's choices had it: both drawn with their sunken down tiles (RQ-138,
+  Q89 (b), "Sunken, as 1264"; §9.16, binary: `0043ec90`, `0043ee10`,
+  `00403a70`); the warrior and mage buttons give way to `img_warrior` and
+  `img_mage` and `img_rogue` and `img_priest` are hidden, by the Tuarek's
+  classes (RQ-142, Q91 (b), "Match 1264"); "Strength" and "Intelligence" draw
+  pink over their light labels, "Health", "Dexterity" and "Magic Power" light,
+  by the priest's labels (RQ-144, Q92 (b), "Pink Str/Int, as 1264"; §9.16,
+  binary: `0043ee10`, `0043ea10`). The rogue, inert under Q91 (b), is now a
+  live NORMAL button as 1264's (lit under the pointer; a click chooses the
+  rogue, unchooses the priest and turns "Health" and "Dexterity" pink in
+  place of "Strength" and "Intelligence"), as Moradon offers the Tuarek's
+  rogue and priest. A click on the Tuarek unchooses the class (`0043ec90`), and
+  Create then says `create_no_class`, row 1904 titled 1901, as 1264's
+  `0043a340` posts code 9 through `0043a820` (`messages`). Every other race
+  (Q109 (a): the Arch and Wrinkle Tuarek fixed disabled; the Puri Tuarek,
+  whose disabled image has no texture, unfixed and unbound, its normal grey
+  tile, inert: RQ-139, Q90, "Grey button, as 1264"), the face, hair and stat
+  arrows fixed disabled, the bonus points hidden and the stat values empty
+  (Q52, until RQ-173 and RQ-174).
 - Loading (`UI_US/co_loading_us.uif`, centred; `Text_Version` at (10, 10)):
   1264's layout when no nation has won the last war (`005f9a30`); the realm has
   no war, so no victor (Q80).

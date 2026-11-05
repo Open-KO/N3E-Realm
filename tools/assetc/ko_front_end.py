@@ -1905,6 +1905,13 @@ HAND_JOINTS = (18, 19, 20)
 SHIELD = 60
 # A part slot's looks row column (UPC_DefaultLooks parts 0..9, columns 4..13).
 LOOKS_PARTS = 4
+# RQ-181: the part slots KO's build sets (row +0x34 + 4i, i = 0..9) and the
+# hand plugs it attaches (+0x2c to plug 0, the right hand, +0x30 to plug 1,
+# the left; 1298 005fd120, KO-FINDINGS 10.3). A create table may name up to
+# 16 of each (ko_create.MAX_SLOTS); a dress past these is refused rather
+# than dropped (the loader takes hands 0 and 1 alone, N3FE item 8).
+PART_SLOTS = 10
+HANDS = 2
 
 
 def scene_skeleton(head):
@@ -1924,17 +1931,25 @@ class Dressed:
     the model's tree's; each dress part (a recipe path, its input's prefix
     kept, ko_create.dress) and the texture and skin it names are its input's,
     as KO reads an item's files from the client that names it. `get` takes a
-    dress part by its path within its input."""
+    dress part by its path within its input.
 
-    def __init__(self, tree, assets, names):
+    A read is routed by its path alone, so RQ-181 routes every path a worn
+    part names: the looks parts the dresses wear (`own`, the model's tree's)
+    and the dress parts (`names`), each with its texture and skin. A path two
+    inputs' parts name (a dress part's texture that a looks part also names,
+    from another input) is refused, as one of them would read the other's
+    file."""
+
+    def __init__(self, tree, assets, names, own=()):
         self.tree, self.root, self.routes, self.paths = tree, tree.root, {}, {}
-        for name in names:
-            source, path = split(assets, name)
+        worn = [(tree, name, name) for name in own] + [split(assets, name) + (name,) for name in names]
+        for source, path, name in worn:
             part = character.part(source.get(path))
             for n in (path, part["texture"], part["skin"]):
-                if self.routes.setdefault(normal(n), source) is not source:
-                    raise ValueError("front-end create dress: %s is named by two inputs' parts" % n)
-            self.paths[name] = path
+                if n and self.routes.setdefault(normal(n), source) is not source:
+                    raise ValueError("front-end create dress: %s is named by parts of two inputs" % n)
+            if name in names:
+                self.paths[name] = path
 
     @property
     def sources(self):
@@ -1997,10 +2012,15 @@ def dress_sets(row, sets):
     part slot but the face's and the hair's, in slot order, takes its dress
     part, the bare lower under a robe none, and a slot the dress leaves (item
     0) the looks row's part, if it names one. A dress that sets the hair's
-    slot (a helmet) is refused: the order of KO's build's helmet and its
-    InitHair is unread, and no package's dress has one. A plug is (hand: 0
-    right, 1 left; the looks row's joint for it, a left-hand shield's at
-    +0x110; its file)."""
+    slot (a helmet) is refused (Q115): the order of KO's build's helmet and
+    its InitHair is unread, and no Moradon specialty's dress has one, on
+    either table. A plug is (hand: 0 right, 1 left; the looks row's joint for
+    it, a left-hand shield's at +0x110; its file).
+
+    RQ-181: refuses what the client would refuse or KO's build would not
+    draw: a part outside slots 0-9 or a plug outside hands 0 and 1 (the
+    build's, PART_SLOTS and HANDS), and a dress that draws one file in two
+    slots (the loader takes each dress part once per dress)."""
     import ko_player
     joints = {}
     for at, column in zip(("right", "left", "shield"), HAND_JOINTS):
@@ -2011,17 +2031,29 @@ def dress_sets(row, sets):
                              % (row[0], at, column))
     out = {}
     for specialty, dress in sets.items():
+        for kind, items, bound in (("part", dress["parts"], PART_SLOTS), ("plug", dress["plugs"], HANDS)):
+            for p in items:
+                if type(p["slot"]) is not int or not 0 <= p["slot"] < bound:
+                    raise ValueError("front-end create dress of specialty %d: a %s in slot %r: KO's build sets "
+                                     "%s 0 to %d (1298 005fd120)" % (specialty, kind, p["slot"],
+                                                                     "part slots" if kind == "part" else "hands",
+                                                                     bound - 1))
+            if len({p["slot"] for p in items}) != len(items):
+                raise ValueError("front-end create dress of specialty %d: a %s slot twice" % (specialty, kind))
         worn = {p["slot"]: p["file"] for p in dress["parts"]}
         if ko_player.HAIR in worn:
             raise ValueError("front-end create dress of specialty %d: a helmet (slot %d) is not drawn: KO's build's "
                              "order of the helmet and InitHair is unread" % (specialty, ko_player.HAIR))
         parts = []
-        for slot in range(10):
+        for slot in range(PART_SLOTS):
             if slot in (ko_player.FACE, ko_player.HAIR):
                 continue
             name = worn[slot] if slot in worn else row[LOOKS_PARTS + slot] or None
             if name:
                 parts.append(name)
+        if len({normal(n) for n in parts}) != len(parts):
+            raise ValueError("front-end create dress of specialty %d: one file in two part slots (%s)"
+                             % (specialty, ", ".join(parts)))
         plugs = []
         for p in dress["plugs"]:
             hand = "right" if p["slot"] == 0 else "shield" if p["kind"] == SHIELD else "left"
@@ -2067,8 +2099,11 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, 
     sets = dress_sets(row, dress) if dress else {}
     if len(sets) > MAX_DRESSES:
         raise ValueError("front-end create dresses: at most %d" % MAX_DRESSES)
-    tree = Dressed(assets, inputs, sorted({n for parts, _ in sets.values() for n in parts if n not in names})) \
-        if sets else assets
+    # The dress parts are the files ko_create.dress names, read from their
+    # inputs; the rest a dress wears are the looks row's, the model's tree's.
+    dressed = {p["file"] for d in (dress or {}).values() for p in d["parts"] if p["file"]}
+    wears = {n for parts, _ in sets.values() for n in parts}
+    tree = Dressed(assets, inputs, sorted(wears & dressed), sorted(wears - dressed)) if sets else assets
     if sets:
         # The parts the most specialties wear, the first's on a tie.
         worn = [parts for parts, _ in sets.values()]

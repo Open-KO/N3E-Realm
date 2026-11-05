@@ -557,7 +557,9 @@ CPU (`make test`):
    the 1298 recipe binds its bar as 1298 does.
    RQ-176 (version 29): the cook resolves each create model's dresses from a
    synthetic looks row (the hand joints from columns 18–20, a class-60 shield on
-   column 20) and refuses a helmet and a missing joint column; the loader takes a
+   column 20) and refuses a helmet and a missing joint column (RQ-181: and a part
+   outside slots 0–9, a plug outside hands 0 and 1, one file in two slots, a slot
+   twice, and a path parts of two inputs name); the loader takes a
    model's dress parts and dresses (up to 64 and 16) and refuses version 28 and
    each case `content/front-end.md` item 8 names; `tests/front_end.cpp` checks
    that each build dresses the new character in its row's specialty and that a

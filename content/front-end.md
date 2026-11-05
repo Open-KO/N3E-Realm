@@ -174,7 +174,13 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    `ko_create.dress` (RQ-159): its part slots in order but the face's and the
    hair's (a helmet in the hair's slot is refused, KO's order of the helmet
    and `InitHair` being unread), each a dress part, none for the robe's bare
-   lower, or the looks row's part where the dress leaves the slot; the parts
+   lower, or the looks row's part where the dress leaves the slot. RQ-181:
+   the cook refuses a dress the build would not draw or the loader would
+   refuse: a part outside slots 0–9 or a plug outside hands 0 and 1 (the
+   build sets part slots 0–9 and attaches two hand plugs, 1298 `005fd120`,
+   though a create table may name 16 of each), one file drawn in two slots,
+   and a path (a worn part, its texture or skin) that parts of two inputs
+   name, each input's files being read by path; the parts
    the most specialties wear (the first's on a tie) are the model's own
    parts (body 1), and the others' follow as dress parts, each once, drawn in
    place of the model's own (body 0). A plug's joint is the looks row's
@@ -551,12 +557,13 @@ address mode); the font atlases and the moon linear.
   and ambient (3 reals each), a vertex count (1–65536) of 8 reals (position,
   normal, uv), an index count (a multiple of 3, ≤196608), the indices.
 
-The loader refuses (version 29) a dress part count above 64, a dress count
-above 16, a dress specialty outside 1–65535 or named twice on a model, a body
-flag above 1, dress parts with the body, more than 10, outside the dress
-parts or named twice in a dress, a dress part no dress wears, a dress part
-that is not its model's skeleton (as a face), more than two plugs, a hand
-above 1 or twice, a plug joint outside the model's joints, (version 27) a create model count outside 1–32, a create race
+The loader refuses a dress part count above 64, a dress count above 16, a
+dress specialty outside 1–65535 or named twice on a model, a body flag above
+1, dress parts with the body, more than 10, outside the dress parts or named
+twice in a dress, a dress part no dress wears, a dress part that is not its
+model's skeleton (as a face), more than two plugs, a hand above 1 or twice, a
+plug joint outside the model's joints (version 29; version 28 is refused as
+every older version is), a create model count outside 1–32, a create race
 outside 1–65535 or named twice, a face or hair count above 32, a part that is
 not N3S1 or N3SM, has tracks, or whose nodes, joints or instance scale are
 not its model's (version 27), an unknown action, a screen missing one of its required
@@ -593,7 +600,7 @@ rest above 2, a tip on a node outside create, of a group above 2 or below the
 last tip's, not an area for group 0 or a button for groups 1 and 2, or named
 twice, more than 32 tips, a rest 0 with a colour, open text or tips, and a rest
 1 or 2 without a create node bound to `class_desc` or a rest 2 with open text
-(version 28), (version 29; version 28 is refused as every older version is), a select ESC other than 0, 1 or
+(version 28), a select ESC other than 0, 1 or
 2 (version 15; 2 since version 16), a select Back other than 0 or 1 (version
 17), placement flags
 other than 0 or 1, a move of a node outside its layout or of a logo screen the

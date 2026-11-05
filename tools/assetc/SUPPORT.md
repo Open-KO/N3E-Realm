@@ -261,7 +261,8 @@ the parts most of them wear are the model's own, the others' cooked once each fr
 their input (a 1264 Item file on the 1298 skeleton for the 1097 choice), the robe's
 lower left bare, and the hand plugs on the looks row's joints (columns 18, 19 and
 20, a class-60 shield on the last) scaled by the model's height as `PlugSet` does.
-A dress with a helmet is refused (Q115). The client draws the dress of the
-specialty whose row the last build took.
+A dress with a helmet is refused (Q115), and (RQ-181) a part outside slots 0–9, a
+plug outside hands 0 and 1, one file in two slots and a path parts of two inputs
+name. The client draws the dress of the specialty whose row the last build took.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

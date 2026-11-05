@@ -1973,5 +1973,6 @@ Options:
 - (b) Draw the helmet over the hair (the hair hidden while the dress is drawn).
 - (c) Draw the hair and leave the helmet out.
 
-**Default taken:** (a), `ko_front_end.dress_sets` refuses it ("a helmet the create
-draws over the hair is unread"). Changing it is cook and client work.
+**Default taken:** (a), `ko_front_end.dress_sets` refuses it ("a helmet (slot 5) is
+not drawn: KO's build's order of the helmet and InitHair is unread"). Changing it is
+cook and client work.

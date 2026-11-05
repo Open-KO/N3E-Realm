@@ -495,14 +495,6 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // none), and the specialty whose stat row the screen holds (0: none).
   uint32_t create_model_race() const { return figure_scene() < 0 ? 0 : scene_race(size_t(figure_scene())); }
   uint32_t create_row() const { return choice.row_specialty(create_rules).value_or(0); }
-  // RQ-176 (version 29): the specialty whose dress the new character wears
-  // (0: none, its model's own parts), a test hook.
-  uint32_t create_dress() const {
-    const auto which = figure_scene();
-    if (which < 0) return 0;
-    const auto at = dress_at(size_t(which));
-    return at < 0 ? 0 : scene_at(size_t(which)).dresses[size_t(at)].specialty;
-  }
   // RQ-173 (version 26): what create's stat value texts say, in the stats'
   // order, then the points text (test hooks; empty before a build).
   std::vector<std::string> create_stat_texts() const {
@@ -1577,7 +1569,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // hair), each skinned with the model's pose.
   //
   // RQ-176 (version 29): a create model wears the dress of the specialty
-  // whose row the last build took (create_dress): its own parts, or the
+  // whose row the last build took (dress_at): its own parts, or the
   // dress parts in their place, then the face and hair, then the dress's
   // hand plugs on their joints (KO's 005fd120 sets the parts and plugs;
   // 004196a0 draws a character's parts, then its plugs).

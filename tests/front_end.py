@@ -1444,9 +1444,83 @@ for reason, call in dress_refusals.items():
     except ValueError:
         continue
     raise AssertionError("front-end cook accepted " + reason)
+# RQ-181: what the client would refuse or KO's build (1298 005fd120, part
+# slots 0-9, hands 0 and 1) would not draw is refused at the cook, each for
+# its reason: a part in slot 10, a plug in slot 2 (the loader's hand 2), one
+# file in two slots (the loader's repeated index; a dress file a looks part
+# also names, any case) and a slot named twice.
+worn = fe.dress_sets(LOOKS_ROW, {102: dict(parts=[dict(slot=9, item=1, file="N")], plugs=[])})
+assert worn == {102: (("u.n3cpart", "l.n3cpart", "h.n3cpart", "t.n3cpart", "N"), ())}, worn
+dress_slot_refusals = {
+    "a part in slot 10": ({102: dict(parts=[dict(slot=10, item=1, file="X")], plugs=[])}, "a part in slot 10"),
+    "a part in slot 15": ({102: dict(parts=[dict(slot=15, item=1, file="X")], plugs=[])}, "a part in slot 15"),
+    "a plug in slot 2": ({102: dict(parts=[], plugs=[dict(slot=2, item=4, kind=71, file="P")])}, "a plug in slot 2"),
+    "a file in two slots": ({102: dict(parts=[dict(slot=0, item=1, file="A"), dict(slot=6, item=3, file="A")],
+                                       plugs=[])}, "one file in two part slots"),
+    "a dress file a looks part names": ({102: dict(parts=[dict(slot=6, item=3, file="H.N3CPART")], plugs=[])},
+                                        "one file in two part slots"),
+    "a part slot twice": ({102: dict(parts=[dict(slot=0, item=1, file="A"), dict(slot=0, item=2, file="B")],
+                                     plugs=[])}, "a part slot twice"),
+    "a hand twice": ({102: dict(parts=[], plugs=[dict(slot=1, item=4, kind=71, file="P"),
+                                                 dict(slot=1, item=5, kind=60, file="S")])}, "a plug slot twice"),
+}
+for reason, (sets, expected) in dress_slot_refusals.items():
+    try:
+        fe.dress_sets(LOOKS_ROW, sets)
+    except ValueError as error:
+        assert expected in str(error), (reason, str(error))
+        continue
+    raise AssertionError("front-end cook accepted " + reason)
 print("PASS front-end cook: each specialty's create dress drawn as KO's build sets it, the robe's lower bare, the "
       "looks part where it leaves a slot, each plug on its hand's joint (a shield on its own); %d refusals"
-      % len(dress_refusals))
+      % (len(dress_refusals) + len(dress_slot_refusals)))
+
+
+class PartTree:
+    """A stand-in input tree of KO parts: {path: (texture, skin)}, read by
+    any case as ko_character.Assets reads."""
+
+    def __init__(self, parts):
+        self.root, self.sources = pathlib.Path("."), {}
+        self.parts = {fe.normal(k): v for k, v in parts.items()}
+
+    def has(self, name):
+        return fe.normal(name) in self.parts
+
+    def get(self, name):
+        def ko_string(t):
+            return struct.pack("<i", len(t)) + t.encode()
+        texture, skin = self.parts[fe.normal(name)]
+        self.sources[name] = "read"
+        return (ko_string("p") + struct.pack("<i", 0) + struct.pack("<17f", *([1.0] * 4 + [0.0] * 13)) +
+                struct.pack("<6I", *[0] * 6) + ko_string(texture) + ko_string(skin))
+
+
+# RQ-181: Dressed routes each worn part's path, texture and skin to its input:
+# the looks parts (the model's tree's) and the dress parts (theirs). A path a
+# looks part and another input's dress part both name is refused; one input's
+# own reads, and two inputs' different paths, are not.
+MODEL_TREE = PartTree({"Chr\\l.n3cpart": ("Chr\\l.dxt", "Chr\\l.n3cskins"),
+                       "Item\\d.n3cpart": ("Item\\t.dxt", "Item\\d.n3cskins")})
+ITEM_TREE = PartTree({"Item/d.n3cpart": ("Item/t.dxt", "Item/d.n3cskins"),
+                      "Item/e.n3cpart": ("Item/e.dxt", "Item/e.n3cskins"),
+                      "Item/f.n3cpart": ("Chr/L.DXT", "Item/f.n3cskins")})
+TWO = fe.Inputs([MODEL_TREE, ITEM_TREE], [None, "items"])
+dressed = fe.Dressed(MODEL_TREE, TWO, ["items:Item/e.n3cpart"], ["Chr\\l.n3cpart"])
+assert dressed.paths == {"items:Item/e.n3cpart": "Item/e.n3cpart"}, dressed.paths
+assert dressed.routes[fe.normal("Chr/l.dxt")] is MODEL_TREE and dressed.routes[fe.normal("Item/e.dxt")] is ITEM_TREE
+assert fe.Dressed(MODEL_TREE, TWO, ["Item\\d.n3cpart"], ["Chr\\l.n3cpart"]).routes[fe.normal("Item/t.dxt")] \
+    is MODEL_TREE
+for reason, names, expected in (("a dress part's texture a looks part names", ["items:Item/f.n3cpart"], "Chr/L.DXT"),
+                            ("a dress part two inputs name", ["items:Item/d.n3cpart", "Item\\d.n3cpart"],
+                             "Item")):
+    try:
+        fe.Dressed(MODEL_TREE, TWO, names, ["Chr\\l.n3cpart"])
+    except ValueError as error:
+        assert "named by parts of two inputs" in str(error) and expected in str(error), (reason, str(error))
+        continue
+    raise AssertionError("front-end cook accepted " + reason)
+print("PASS front-end cook: each worn part's files read from its own input, a path two inputs' parts name refused")
 
 
 # --- the logo screen (version 9, RQ-101) ---------------------------------------

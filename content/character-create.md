@@ -914,8 +914,9 @@ and hair" above; KO-FINDINGS §10.5, binary):
   moves the value and draws nothing new, as KO's.
 - Create sends them; the server checks them under the race's counts (Q95).
 
-The parts weigh against `front-end.bin`'s 64 MiB bound (local-asset, the
-pinned tree; `tests/ko_player_races.py` cooks each):
+The parts weighed against `front-end.bin`'s 64 MiB bound, which RQ-183 has
+since raised to 256 MiB (local-asset, the pinned tree; `tests/ko_player_races.py`
+cooks each):
 
 | Race | Create model record before (bytes) | With its faces and hairs | Faces, hairs |
 |---|---|---|---|

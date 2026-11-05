@@ -155,8 +155,14 @@ pub struct Release {
 /// select (content/front-end.md). The server hashes it in blocks and reads
 /// only its header.
 pub const MAX_FRONT_END_ASSET: u64 = 256 * 1024 * 1024;
-/// A file's length, SHA-256 and first four bytes, read in 1 MiB blocks within
-/// `limit` (RQ-183: front-end.bin is hashed without holding it).
+/// The first bytes `hash_file` keeps: the most the server reads of an asset it
+/// otherwise only hashes (front-end.bin's 12-byte header; render-detail.bin's
+/// magic and projection, 16; world, texture and overlay magic, 4).
+pub const HASH_HEAD: usize = 16;
+/// A file's length, SHA-256 and first `HASH_HEAD` bytes (fewer if it is
+/// shorter), read in 1 MiB blocks within `limit`, as the client hashes its
+/// world files (client/assets/assets.cpp): RQ-183 for front-end.bin, RQ-185
+/// for every manifest asset, so no asset is held whole to be hashed.
 pub fn hash_file(path: &Path, limit: u64) -> Result<(u64, [u8; 32], Vec<u8>)> {
     use std::io::Read;
     if fs::metadata(path)?.len() > limit {
@@ -166,7 +172,7 @@ pub fn hash_file(path: &Path, limit: u64) -> Result<(u64, [u8; 32], Vec<u8>)> {
     let mut f = fs::File::open(path)?.take(limit + 1);
     let mut hasher = openssl::sha::Sha256::new();
     let mut block = vec![0u8; 1 << 20];
-    let (mut n, mut head) = (0u64, Vec::with_capacity(4));
+    let (mut n, mut head) = (0u64, Vec::with_capacity(HASH_HEAD));
     loop {
         let k = match f.read(&mut block) {
             Ok(0) => break,
@@ -174,8 +180,8 @@ pub fn hash_file(path: &Path, limit: u64) -> Result<(u64, [u8; 32], Vec<u8>)> {
             Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
             Err(e) => return Err(e.into()),
         };
-        if head.len() < 4 {
-            head.extend_from_slice(&block[..k.min(4 - head.len())]);
+        if head.len() < HASH_HEAD {
+            head.extend_from_slice(&block[..k.min(HASH_HEAD - head.len())]);
         }
         hasher.update(&block[..k]);
         n += k as u64;
@@ -185,13 +191,20 @@ pub fn hash_file(path: &Path, limit: u64) -> Result<(u64, [u8; 32], Vec<u8>)> {
     }
     Ok((n, hasher.finish(), head))
 }
-/// The first `n` bytes of a file (fewer if it is shorter).
-fn read_head(path: &Path, n: u64) -> Result<Reader> {
-    use std::io::Read;
-    let mut bytes = Vec::new();
-    fs::File::open(path)?.take(n).read_to_end(&mut bytes)?;
-    Ok(Reader::from_bytes(bytes))
+/// A manifest asset's bound: the world files and render detail are map sized,
+/// front-end.bin holds every race's create model, the rest 16 MiB.
+fn asset_bound(name: &str) -> u64 {
+    match name {
+        "front-end.bin" => MAX_FRONT_END_ASSET,
+        "render-detail.bin" => MAX_RENDER_DETAIL_ASSET,
+        "world.bin" => MAX_CHUNKED_WORLD_ASSET,
+        "world-textures.bin" => MAX_WORLD_TEXTURES_ASSET,
+        "world-overlay.bin" => MAX_WORLD_OVERLAY_ASSET,
+        _ => MAX_ASSET,
+    }
 }
+/// render-detail.bin's bound; the server reads only its magic and projection.
+pub const MAX_RENDER_DETAIL_ASSET: u64 = 128 * 1024 * 1024;
 pub fn load(root: &Path) -> Result<Release> {
     let mut r = Reader::open(&root.join("release.bin"))?;
     let hash = sha256(&r.bytes)
@@ -247,6 +260,9 @@ pub fn load(root: &Path) -> Result<Release> {
     let mut files = BTreeSet::new();
     let mut assets = BTreeMap::new();
     let mut world_magic: Option<u8> = None;
+    // Each asset's first bytes, from the hash read (RQ-185): what the server
+    // reads of front-end.bin and render-detail.bin comes from the bytes hashed.
+    let mut heads: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     let root = fs::canonicalize(root)?;
     for _ in 0..n {
         let name = r.string()?;
@@ -265,37 +281,17 @@ pub fn load(root: &Path) -> Result<Release> {
         if path.parent() != Some(root.as_path()) {
             return Err(bad("asset containment"));
         }
-        // RQ-183: front-end.bin, up to 256 MiB that the server never
-        // interprets past its header, is hashed in blocks.
-        if name == "front-end.bin" {
-            let (bytes, digest, _) = hash_file(&path, MAX_FRONT_END_ASSET)?;
-            if bytes != size as u64 || digest.as_slice() != hash {
-                return Err(bad("asset hash/length mismatch"));
-            }
-            assets.insert(name, hash);
-            continue;
-        }
-        let f = Reader::open_bounded(
-            &path,
-            if name == "render-detail.bin" {
-                128 * 1024 * 1024
-            } else if name == "world.bin" {
-                MAX_CHUNKED_WORLD_ASSET
-            } else if name == "world-textures.bin" {
-                MAX_WORLD_TEXTURES_ASSET
-            } else if name == "world-overlay.bin" {
-                MAX_WORLD_OVERLAY_ASSET
-            } else {
-                MAX_ASSET
-            },
-        )?;
-        if f.bytes.len() != size || sha256(&f.bytes).as_slice() != hash {
+        // RQ-183/RQ-185: every asset is hashed in 1 MiB blocks within its
+        // bound, never held whole; the assets the server parses are read
+        // again below by their loaders (each within 16 MiB).
+        let (bytes, digest, head) = hash_file(&path, asset_bound(&name))?;
+        if bytes != size as u64 || digest.as_slice() != hash {
             return Err(bad("asset hash/length mismatch"));
         }
         if name == "world.bin" {
             // Magic and size only: the server never interprets world geometry.
-            world_magic = match f.bytes.get(..4) {
-                Some(b"N3W1") if f.bytes.len() as u64 <= MAX_WORLD_ASSET => Some(1),
+            world_magic = match head.get(..4) {
+                Some(b"N3W1") if bytes <= MAX_WORLD_ASSET => Some(1),
                 // N3W3 (PQ-379, D-201): N3W2 with alpha parts; N3W4 (PQ-382,
                 // D-202): N3W3 with the opaque part bits; N3W5 (PQ-388, D-203):
                 // N3W4 with single-layer unlit vertices; N3W6 (PQ-394, D-212):
@@ -304,12 +300,13 @@ pub fn load(root: &Path) -> Result<Release> {
                 _ => return Err(bad("world asset magic/size")),
             };
         }
-        if name == "world-textures.bin" && f.bytes.get(..4) != Some(b"N3WT".as_slice()) {
+        if name == "world-textures.bin" && head.get(..4) != Some(b"N3WT".as_slice()) {
             return Err(bad("world texture magic"));
         }
-        if name == "world-overlay.bin" && f.bytes.get(..4) != Some(b"N3WO".as_slice()) {
+        if name == "world-overlay.bin" && head.get(..4) != Some(b"N3WO".as_slice()) {
             return Err(bad("world overlay magic"));
         }
+        heads.insert(name.clone(), head);
         assets.insert(name,hash);
     }
     r.end()?;
@@ -541,13 +538,14 @@ pub fn load(root: &Path) -> Result<Release> {
         return Err(bad("audio compatibility"));
     }
     // Spec 11: the server reads only front-end.bin's header (magic, version
-    // and slot count; hashed in blocks above), for the slot count; the
-    // client reads the rest.
+    // and slot count), for the slot count, from the bytes it hashed above;
+    // the client reads the rest.
     let character_slots = if files.remove("front-end.bin") {
         if engine < 42 || !presentation {
             return Err(bad("front end compatibility"));
         }
-        front_end_slots(read_head(&root.join("front-end.bin"), FRONT_END_HEADER)?)?
+        let header = heads.remove("front-end.bin").unwrap_or_default();
+        front_end_slots(Reader::from_bytes(header))?
     } else {
         8
     };
@@ -634,7 +632,8 @@ pub fn load(root: &Path) -> Result<Release> {
     if (engine < 15 && detail != (engine == 14)) || (detail && !exploration) { return Err(bad("render detail compatibility")); }
     if detail {
         if !presentation { return Err(bad("render detail requires player presentation")); }
-        let mut d = Reader::open_bounded(&root.join("render-detail.bin"), 128*1024*1024)?;
+        // The magic and projection, from the bytes hashed above (RQ-185).
+        let mut d = Reader::from_bytes(heads.remove("render-detail.bin").unwrap_or_default());
         // N3D3 (PQ-348, D-191) is N3D2 with a render state per appearance
         // entry, and N3DI / N3DJ (RQ-164, engine 44) N3D2 / N3D3 with
         // influence tables; the client reads the geometry, the tables and
@@ -1018,8 +1017,8 @@ impl Release {
 /// RQ-145's create nodes drawn until a class is clicked, RQ-133's nodes
 /// drawn until the race is chosen and RQ-130's create race and class
 /// choices) and the character slot count, 1 to 3.
-/// The bytes of front-end.bin the server reads: magic, version, slot count.
-const FRONT_END_HEADER: u64 = 12;
+/// The bytes of front-end.bin the server reads: magic, version, slot count,
+/// 12 bytes, from the first `HASH_HEAD` bytes it hashed (RQ-185).
 fn front_end_slots(mut p: Reader) -> Result<u32> {
     if p.take(4)? != b"N3FE" || p.u()? != 29 {
         return Err(bad("front end magic/version"));
@@ -1165,14 +1164,23 @@ mod front_end_tests {
         );
     }
     // RQ-183: front-end.bin up to 256 MiB, hashed in 1 MiB blocks (the
-    // digest of the whole file), its slot count from the header alone. The
-    // files are sparse: no 256 MiB is written.
+    // digest of the whole file), its slot count from the hashed bytes'
+    // header alone (RQ-185). The files are sparse: no 256 MiB is written,
+    // and the file is removed even when an assert fails.
     #[test]
     fn hashes_in_blocks_within_the_bound_and_reads_only_the_header() {
-        use super::{hash_file, read_head, FRONT_END_HEADER, MAX_FRONT_END_ASSET};
+        use super::{hash_file, HASH_HEAD, MAX_FRONT_END_ASSET};
+        struct Remove(std::path::PathBuf);
+        impl Drop for Remove {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
         assert_eq!(MAX_FRONT_END_ASSET, 256 << 20);
-        let path =
-            std::env::temp_dir().join(format!("n3e-front-end-bound-{}.bin", std::process::id()));
+        let temp = Remove(
+            std::env::temp_dir().join(format!("n3e-front-end-bound-{}.bin", std::process::id())),
+        );
+        let path = &temp.0;
         let mut head = b"N3FE".to_vec();
         for v in [29u32, 3, 1024, 768] {
             head.extend_from_slice(&v.to_le_bytes());
@@ -1181,31 +1189,35 @@ mod front_end_tests {
             let mut bytes = head.clone();
             bytes.extend_from_slice(&[7; 3 << 20]);
             bytes.extend_from_slice(tail);
-            std::fs::write(&path, &bytes).unwrap();
-            let f = std::fs::OpenOptions::new().write(true).open(&path).unwrap();
+            std::fs::write(path, &bytes).unwrap();
+            let f = std::fs::OpenOptions::new().write(true).open(path).unwrap();
             f.set_len(len).unwrap();
             bytes
         };
         // A block boundary falls inside the written bytes: the digest is the
-        // whole file's.
+        // whole file's, the head its first HASH_HEAD bytes.
         let small = write(head.len() as u64 + (3 << 20) + 5, b"tail!");
-        let (n, digest, magic) = hash_file(&path, MAX_FRONT_END_ASSET).unwrap();
+        let (n, digest, first) = hash_file(path, MAX_FRONT_END_ASSET).unwrap();
         let whole = openssl::sha::sha256(&small);
         assert_eq!(
-            (n, digest, magic.as_slice()),
-            (small.len() as u64, whole, &b"N3FE"[..])
+            (n, digest, first.as_slice()),
+            (small.len() as u64, whole, &small[..HASH_HEAD])
         );
         for len in [(64 << 20) + 1, MAX_FRONT_END_ASSET] {
             write(len, b"");
-            let (n, _, magic) = hash_file(&path, MAX_FRONT_END_ASSET).unwrap();
-            assert_eq!((n, magic.as_slice()), (len, &b"N3FE"[..]));
-            let header = read_head(&path, FRONT_END_HEADER).unwrap();
-            assert_eq!(front_end_slots(header).unwrap(), 3);
+            let (n, _, first) = hash_file(path, MAX_FRONT_END_ASSET).unwrap();
+            assert_eq!((n, &first[..4]), (len, &b"N3FE"[..]));
+            assert_eq!(front_end_slots(Reader::from_bytes(first)).unwrap(), 3);
         }
+        // A file shorter than HASH_HEAD keeps all its bytes, and a short
+        // header is refused as truncated.
+        std::fs::write(path, b"N3FE\x1d\0\0\0").unwrap();
+        let (n, _, first) = hash_file(path, MAX_FRONT_END_ASSET).unwrap();
+        assert_eq!((n, first.as_slice()), (8, &b"N3FE\x1d\0\0\0"[..]));
+        assert!(front_end_slots(Reader::from_bytes(first)).is_err());
         write(MAX_FRONT_END_ASSET + 1, b"");
-        let error = hash_file(&path, MAX_FRONT_END_ASSET).unwrap_err();
+        let error = hash_file(path, MAX_FRONT_END_ASSET).unwrap_err();
         assert_eq!(error.to_string(), "file bound");
-        std::fs::remove_file(&path).unwrap();
     }
 }
 #[cfg(test)]

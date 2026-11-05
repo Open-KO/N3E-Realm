@@ -503,6 +503,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       if (nodes[i].action == action) return int(i);
     return -1;
   }
+  // RQ-180 (RQ-175, version 28): create's description text as the last
+  // frame's pass left it, with its package (rest, colour, open text and
+  // tips), and the id of create's node `i` (test hooks).
+  const CreateDescription &create_description() const { return description; }
+  const std::string &create_node_id(size_t i) const { return fe.screens[size_t(FrontScreen::create)].at(i).id; }
   // The state the current layout's button bound to `action` draws in (0
   // normal, 1 down, 2 on, 3 disabled), or -1 (a test hook).
   int action_state(FrontAction action) const {

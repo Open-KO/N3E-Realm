@@ -88,6 +88,18 @@
 // line (RQ-172: the fixed specialty's class button's), and the box of each
 // refusal it words:
 //   FRONT_CREATE_MESSAGE M|title|text
+// then (RQ-180), for a create with description text (version 28, RQ-175),
+// its rest and colour, and the text (a JSON string) after each step: create
+// opened by ENTER on the empty slot at rest (open), the pointer on each tip's
+// node in the package's order (hover), off every node (away), on the first
+// tip and off, a click on the fixed race's button (race), on the first tip and
+// off, a click on the fixed specialty's class button (class), on the race
+// button and off, then a Cancel and ENTER (reopen):
+//   FRONT_CREATE_DESC rest=none|keep|chosen colour=AARRGGBB tips=N
+//   FRONT_CREATE_DESC_TEXT open|hover|away|race|class|reopen <node id>|- "text"
+// then the shots create-desc-open (the open) and create-desc-hover (the
+// pointer on the first tip), drawn at the same time, rect= the class_desc
+// node's;
 // then the screens' music (FRONT_MUSIC, below), and exits. RQ-101: the logo
 // screen's shots are logo-<group> at a time in each group's hold and
 // logo-fade half way into the first group's fade-in, with rect= the logo
@@ -611,6 +623,114 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
                 << " looks=" << looks() << std::endl;
       std::cout << class_shot << std::endl;
       for (const auto &b : boxes) std::cout << "FRONT_CREATE_MESSAGE " << b << std::endl;
+      front->jump(Screen::select);
+    }
+    // RQ-180 (RQ-175, version 28, KO-FINDINGS 10.6): for a create with
+    // description text, create opened by ENTER on the empty slot in focus at
+    // rest and its slide run out, then the pointer moved and a frame drawn
+    // (KO's MouseProc pass runs each tick) before each report of the text
+    // (FRONT_CREATE_DESC_TEXT, below; the node the pointer is on, `-` off
+    // every node at the window's top-left).
+    if (front->create_description().active()) {
+      list.Clear();
+      const n3e::front::Context opened{"Local Realm", "", release.version, &list, 0};
+      double t = 400;
+      const auto &desc = front->create_description();
+      const auto fixed = release.create && release.create->fixed ? *release.create->fixed : n3e::CreateRules::Fixed{};
+      const int race_node = front->choice_node(true, fixed.race), class_node = front->choice_node(false, fixed.specialty);
+      const auto frame = [&] { front->draw(width, height, t += .25, opened); };
+      const auto move = [&](int node) {
+        float x = 0, y = 0;
+        if (const auto r = node >= 0 ? front->node_rect(node, width, height) : std::nullopt)
+          x = ((*r)[0] + (*r)[2]) / 2, y = ((*r)[1] + (*r)[3]) / 2;
+        SDL_Event e{};
+        e.type = SDL_EVENT_MOUSE_MOTION;
+        front->event(e, x, y, width, height);
+        return std::pair{x, y};
+      };
+      const auto press = [&](int node) {
+        const auto [x, y] = move(node);
+        SDL_Event e{};
+        e.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+        e.button.button = SDL_BUTTON_LEFT;
+        e.button.clicks = 1;
+        front->event(e, x, y, width, height);
+        e.type = SDL_EVENT_MOUSE_BUTTON_UP;
+        front->event(e, x, y, width, height);
+      };
+      // The text as a JSON string (KO's rows hold line breaks).
+      const auto quoted = [](const std::string &s) {
+        std::ostringstream out;
+        out << '"';
+        for (const unsigned char c : s) {
+          if (c == '"' || c == '\\') out << '\\' << c;
+          else if (c == '\n') out << "\\n";
+          else if (c < 0x20 || c >= 0x7f) out << "\\u00" << "0123456789abcdef"[c >> 4] << "0123456789abcdef"[c & 15];
+          else out << c;
+        }
+        return out.str() + '"';
+      };
+      const auto said = [&](const char *step, int node) {
+        const std::string id = node < 0 ? std::string("-") : front->create_node_id(size_t(node));
+        std::cout << "FRONT_CREATE_DESC_TEXT " << step << " " << id << " " << quoted(desc.shown) << std::endl;
+      };
+      // Hover `node` (or leave every node, -1), a frame, the text.
+      const auto hover = [&](const char *step, int node) {
+        move(node);
+        frame();
+        said(step, node);
+      };
+      // ENTER on the empty slot at rest, a frame, and the slide (if any) run out.
+      const auto open = [&] {
+        key(SDLK_RETURN);
+        frame();
+        for (int k = 0; k < 60 && front->create_sliding(); ++k) frame();
+      };
+      static const char *rests[] = {"none", "keep", "chosen"};
+      char colour[9];
+      std::snprintf(colour, sizeof colour, "%08x", unsigned(desc.package.color));
+      std::cout << "FRONT_CREATE_DESC rest=" << rests[size_t(desc.package.rest)] << " colour=" << colour
+                << " tips=" << desc.package.tips.size() << std::endl;
+      front->select_at(0);
+      front->draw(width, height, t, opened);
+      // The pointer off every node before create opens (the earlier blocks
+      // left it on a button).
+      move(-1);
+      open();
+      said("open", -1);
+      // The open's frame and the first tip's, both at the same time (the hall
+      // still between them), as the shots create-desc-open and
+      // create-desc-hover (rect= the class_desc node's), printed last.
+      front->draw(width, height, t, opened);
+      const auto open_shot = capture_shot("create-desc-open", A::class_desc);
+      const int first = desc.package.tips.empty() ? -1 : int(desc.package.tips[0].node);
+      move(first);
+      front->draw(width, height, t, opened);
+      const auto hover_shot = capture_shot("create-desc-hover", A::class_desc);
+      said("hover", first);
+      // Each tip in KO's loop order, then off them.
+      for (const auto &tip : desc.package.tips) hover("hover", int(tip.node));
+      hover("away", -1);
+      hover("hover", first);
+      hover("away", -1);
+      // The fixed race clicked (the pointer on it), a stat area, off them;
+      // the fixed specialty's class clicked, the race again, off them.
+      press(race_node);
+      frame();
+      said("race", race_node);
+      hover("hover", first);
+      hover("away", -1);
+      press(class_node);
+      frame();
+      said("class", class_node);
+      hover("hover", race_node);
+      hover("away", -1);
+      // A Cancel (ESC) and create opened again.
+      key(SDLK_ESCAPE);
+      frame();
+      open();
+      said("reopen", -1);
+      std::cout << open_shot << std::endl << hover_shot << std::endl;
       front->jump(Screen::select);
     }
     if (asked)

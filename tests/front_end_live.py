@@ -129,6 +129,15 @@ from the player's own KO data.
      and draw again on a new open; in the frames (RQ-153) the five labels'
      rects hold cream (0xfdf8d0) text at the open, and after the race and the
      priest click "STR" and "INT" cyan (0x80ffff), "DEX", "HP" and "MP" cream.
+   - create's description text (RQ-180, RQ-175, KO-FINDINGS 10.6), on the
+     chosen package's and the 1298 recipe's: opened by ENTER on an empty slot,
+     the pointer on each stat area, class and race button the recipe names
+     shows its tooltip, the row of the recipe client's own table; off them the
+     1097 choice keeps the last text written (1264's 0043eb00), row 6124 from
+     each open, and the 1298 recipe shows the chosen class's tooltip, else the
+     chosen race's, else nothing (1298's 00605bf0), so nothing at each open;
+     the open's frame and the first tip's differ only at the text, the tip's in
+     yellow (0xffffff00) and the open's in yellow (1097) or not drawn (1298).
 
 No server or stack.
 """
@@ -461,6 +470,73 @@ def differing(a_path, b_path, inside):
     return tuple(counts)
 
 
+# RQ-180 (RQ-175, KO-FINDINGS 10.6): create's description text, as the test
+# client reports it after each step (client/harness/front_end_captures.inc,
+# FRONT_CREATE_DESC_TEXT), worked out here from the recipe and the rows of the
+# recipe client's own text table (the cook's text_row): each tip's text while
+# the pointer is on its node, whatever the node's state (IsIn reads the rect
+# only). Off them, `keep` (1264's MouseProc 0043eb00) leaves the last text
+# written, the open's row 6124 from each open; `chosen` (1298's 00605bf0)
+# shows the chosen class's tip, else the chosen race's, else nothing, so the
+# open shows nothing.
+def description_steps(recipe_create, assets):
+    described = recipe_create["descriptions"]
+    tips = [(ident, ko_front_end.text_row(assets, ref, "descriptions %s %s" % (key, ident)))
+            for key, _ in ko_front_end.DESCRIPTION_GROUPS for ident, ref in described.get(key, {}).items()]
+    text = dict(tips)
+    keep = described["rest"] == "keep"
+    opened = ko_front_end.text_row(assets, described["open"], "descriptions open") if keep else ""
+    race = next(k for k, v in recipe_create["races"].items() if v["race"] == FIXED["race"])
+    klass = next(k for k, v in recipe_create["classes"].items() if FIXED["specialty"] in v["specialties"])
+    first = tips[0][0]
+    steps = [("open", "-", opened), ("hover", first, text[first])] + [("hover", i, t) for i, t in tips]
+    steps += [("away", "-", tips[-1][1] if keep else ""), ("hover", first, text[first]),
+              ("away", "-", text[first] if keep else "")]
+    steps += [("race", race, text[race]), ("hover", first, text[first]),
+              ("away", "-", text[first] if keep else text[race])]
+    steps += [("class", klass, text[klass]), ("hover", race, text[race]),
+              ("away", "-", text[race] if keep else text[klass])]
+    head = "rest=%s colour=%s tips=%d" % (described["rest"], described["colour"].lower(), len(tips))
+    return head, steps + [("reopen", "-", opened)], keep
+
+
+def yellow(pixels):
+    """Pixels of KO's description yellow (0xffffff00), the glyphs' cores."""
+    return sum(p[0] >= 200 and p[1] >= 200 and p[2] <= 80 for p in pixels)
+
+
+def check_descriptions(size, stdout, want):
+    """The description steps as `want` (description_steps) has them, and the
+    frames: the open's and the first tip's, drawn at the same time, differ
+    only at the text (its rect and the few pixels KO's unclipped glyphs stand
+    past it), the tip's drawn in yellow, the open's yellow (keep's open row)
+    or not drawn (chosen's nothing). Returns the yellow pixels of each."""
+    head, steps, keep = want
+    found = re.search(r"^FRONT_CREATE_DESC (.*)$", stdout, re.M)
+    assert found and found.group(1) == head, (size, found and found.group(1), head)
+    got = [(step, node, json.loads(text)) for step, node, text in
+           re.findall(r'^FRONT_CREATE_DESC_TEXT (\S+) (\S+) (".*")$', stdout, re.M)]
+    assert got == steps, (size, [(g, s) for g, s in zip(got, steps) if g != s] or (len(got), len(steps)))
+    shots = {m.group(1): (Path(m.group(2)), tuple(map(int, m.group(3).split(",")))) for m in re.finditer(
+        r"^FRONT_SHOT name=(create-desc-\w+) size=\S+ path=(\S+) rect=(\S+) ", stdout, re.M)}
+    assert set(shots) == {"create-desc-open", "create-desc-hover"}, (size, sorted(shots))
+    (opened, rect), (hovered, _) = shots["create-desc-open"], shots["create-desc-hover"]
+    margin = 8
+    inside, outside = differing(opened, hovered, [(rect[0] - margin, rect[1] - margin, rect[2] + margin,
+                                                   rect[3] + margin)])
+    assert inside > 100 and outside == 0, (size, rect, inside, outside)
+    lit = yellow(region(opened, rect)), yellow(region(hovered, rect))
+    assert lit[1] > 100 and (lit[0] > 50 if keep else lit[0] == 0), (size, rect, lit)
+    return lit
+
+
+DESCRIPTIONS = description_steps(screen_recipes["create"], choice_inputs)
+DESCRIPTIONS_1298 = description_steps(recipe_1298["screens"]["create"], pinned)
+if chosen == "1097":
+    assert DESCRIPTIONS[2] and DESCRIPTIONS[1][0] == ("open", "-", "\n\nKarus Character Window."), DESCRIPTIONS[1][0]
+assert not DESCRIPTIONS_1298[2] and DESCRIPTIONS_1298[1][0] == ("open", "-", ""), DESCRIPTIONS_1298[1][0]
+
+
 # RQ-111 (1298) and RQ-115 (1264), KO-FINDINGS 9.7 and 9.8: the select's Exit
 # asks row 1502 with Yes and No (MB_YESNO, BEHAVIOR_EXIT) in the box the
 # manager loads and centres; ESC and No close it, ENTER, the keypad's ENTER and
@@ -578,7 +654,7 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     assert got == want, (size, {k: (got.get(k), v) for k, v in want.items() if got.get(k) != v})
     assert set(shots) == {"login", "login-waiting", "realms", "realms-unnamed", "select-1", "select-2", "select-3", "create",
                           "loading-start", "loading-world", "message", "message-titled", "message-exit", "logo-0",
-                          "logo-1", "logo-2", "logo-fade"}, shots.keys()
+                          "logo-1", "logo-2", "logo-fade", "create-desc-open", "create-desc-hover"}, shots.keys()
 
     path, rect, boxes = shots["login"]
     assert [k for k, _ in boxes] == ["intro"], boxes
@@ -682,6 +758,9 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
         else:
             assert pink == 0 and light > 100, (size, ident, pink, light)
 
+    # RQ-180: create's description text (KO-FINDINGS 10.6).
+    described = check_descriptions(size, run.stdout, DESCRIPTIONS)
+
     start, rect, _ = shots["loading-start"]
     world = shots["loading-world"][0]
     share = lit_share(start, rect), lit_share(world, rect)
@@ -768,7 +847,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
           f"intro box {shots['login'][2][0][1]}, "
           f"realm name {realm_name} px in the list, the copyright line at {line[:2]} ({white} white px) "
           f"instead of the bar while a login waits and on the realm list (neither after a Back), 1-3 characters in the hall, create stands "
-          f"{x1 - x0}x{y1 - y0} with no seams, loading {share[0]:.2f} -> {share[1]:.2f}, the logo's three "
+          f"{x1 - x0}x{y1 - y0} with no seams, its description text KO's rows as the pointer and the rest say "
+          f"({described[0]} and {described[1]} yellow px), loading {share[0]:.2f} -> {share[1]:.2f}, the logo's three "
           f"groups (faded {ratio:.2f}), music {frames} PCM frames, restarted, looped and played once; "
           f"the select's Exit and ESC ask yes or no in its box at {exit_box}, ESC and No closing it, ENTER and Yes "
           f"leaving; Back lands on the realm list")
@@ -1096,6 +1176,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
                 assert cyan > 50 and cream <= 2, (size, name, stat, cyan, cream)
             else:
                 assert cream > 50 and cyan <= 2, (size, name, stat, cyan, cream)
+    # RQ-180: create's description text (KO-FINDINGS 10.6).
+    described = check_descriptions(size, run.stdout, DESCRIPTIONS_1298)
     print(f"PASS front-end captures 1298 recipe {size}: 1298's select bar at ({x0}, {y0}), unscaled, its ten "
           f"bound nodes where 1298's Load puts them, its info texts filled for a character and empty without; "
           f"its Exit asks yes or no in its centred box at ({bx}, {by}), ESC and No closing it, ENTER and Yes leaving the game; "
@@ -1110,5 +1192,6 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
           f"open, \"STR\" and \"INT\" cyan after the race and the priest click; its stat values and points "
           f"empty until the race's build, each class's build resetting them, the arrows within the row's base "
           f"and bonus (no left arrow without a class), Create saying row 1913 until every point is spent and "
-          f"sending the values")
+          f"sending the values; its description text empty at the open ({described[0]} yellow px), the "
+          f"tooltip under the pointer ({described[1]}), else the chosen class's, else the race's")
 print("PASS KO front end graphical")

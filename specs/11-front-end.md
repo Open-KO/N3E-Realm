@@ -678,7 +678,15 @@ KO (`make live-ko`, needs `assets/ko`):
    arrows before the name (`front_end_flow_live`). The cook and loader take
    `stats`, `points` and `stat_row` (item 15) and refuse each case
    `content/front-end.md` names and a version 25 package; `tests/front_end.cpp`
-   plays the arrows for both rows (1298's race and class, 1264's race).
+   plays the arrows for both rows (1298's race and class, 1264's race). RQ-180
+   (RQ-175, version 28): on the chosen package's and the 1298 recipe's create,
+   opened by ENTER on an empty slot, the pointer on each stat area, class and
+   race button the recipe names shows that tooltip, the recipe client's row; off
+   them the 1097 choice keeps the last text (row 6124 at each open, after a
+   Cancel too) and the 1298 recipe shows nothing until the Tuarek click, then the
+   Tuarek's text, and after the priest click the priest's, nothing again at a new
+   open; the open's frame and the first tip's differ only at the text, drawn in
+   yellow (the 1298 recipe's open draws none) (KO-FINDINGS §10.6).
 7. **Flow** (`tests/front_end_flow_live.py`). Against a native server with the Discord
    stand-in (`tests/discord_standin.py`, as `discord_login_live.py`), the test client
    playing the screens with key and text events:

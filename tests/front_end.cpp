@@ -1037,13 +1037,20 @@ int main(int argc, char **argv) {
           for (const auto *parts : {&scene.faces, &scene.hairs, &scene.dress_parts})
             for (const auto &part : *parts) skin(part, pose);
         }
-        // RQ-005: then each select character's model.
+        // RQ-005: then each select character's model; RQ-198: then the
+        // select model's and each select character's faces and hairs.
         for (const auto &m : fe.select_models) skin(m.scene.model, m.scene.model.sample(0.5f));
+        for (const auto *parts : {&fe.select.faces, &fe.select.hairs})
+          for (const auto &part : *parts) skin(part, fe.select.model.sample(0.5f));
+        for (const auto &m : fe.select_models)
+          for (const auto *parts : {&m.scene.faces, &m.scene.hairs})
+            for (const auto &part : *parts) skin(part, m.scene.model.sample(0.5f));
         std::cout << "\n";
       }
       // RQ-005 (version 31): select-models NAME: each select character's
-      // race, its specialties (+-joined), its clip count and its plug joints
-      // (+-joined, `-` none); class-names NAME: each specialty=text.
+      // race, its specialties (+-joined), its clip count, its plug joints
+      // (+-joined, `-` none) and (RQ-198, version 33) its face and hair part
+      // counts (+-joined); class-names NAME: each specialty=text.
       if (!fe.select_models.empty()) {
         std::cout << "select-models " << release.root.filename().string() << ":";
         for (const auto &m : fe.select_models) {
@@ -1052,9 +1059,15 @@ int main(int argc, char **argv) {
           std::cout << "/" << m.scene.clips.size() << "/";
           if (m.scene.plugs.empty()) std::cout << "-";
           for (size_t i = 0; i < m.scene.plugs.size(); ++i) std::cout << (i ? "+" : "") << m.scene.plugs[i].joint;
+          std::cout << "/" << m.scene.faces.size() << "+" << m.scene.hairs.size();
         }
         std::cout << "\n";
       }
+      // RQ-198 (version 33): select-looks NAME: the select model's face and
+      // hair part counts, when it has any.
+      if (!fe.select.faces.empty() || !fe.select.hairs.empty())
+        std::cout << "select-looks " << release.root.filename().string() << ": " << fe.select.faces.size() << "+"
+                  << fe.select.hairs.size() << "\n";
       if (!fe.class_names.empty()) {
         std::cout << "class-names " << release.root.filename().string() << ":";
         for (const auto &[specialty, text] : fe.class_names) std::cout << " " << specialty << "=" << text;

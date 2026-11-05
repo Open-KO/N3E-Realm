@@ -2053,3 +2053,24 @@ a character would read as a bug to a player, and (b) is what the hall showed unt
 now. The info text shows the class name the package gives the specialty, or the
 `class_name` string ("Unknown Class", KO's default in both `0052e3e0` and
 `00613ea0`).
+
+### Q119 — A select character's face or hair past the package's parts
+
+RQ-198: the select hall draws each listed character's own face and hair by its numbers,
+as KO's AddChr formats the looks row's file name with them (1097 `0043ba10`, 1298
+`005fb4f0`; `specs/KO-FINDINGS.md` §8.5). The front end carries `create.bin`'s faces
+and hairs per select model (Moradon's 4 and 3), and the server's create refuses any
+other number, so only a character created before the package's rules (face and hair
+0), one whose race has no such part (the Wrinkle Tuarek's hair), or one created under
+an older `create.bin` with more faces or hairs can name a part the file lacks. KO
+then names a file the tree does not hold; what its part load does with that was not
+read.
+
+Options:
+- (a) Draw no face or hair part (the model's other parts still draw), as create
+  draws none past its parts (RQ-174).
+- (b) Draw part 0 in its place.
+- (c) Carry every numbered file the tree holds, not `create.bin`'s count.
+
+**Default taken:** (a). It is create's rule, and with the server's own check no
+character created under the current rules reaches it.

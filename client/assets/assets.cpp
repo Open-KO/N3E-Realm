@@ -594,7 +594,7 @@ Release load_release(const std::filesystem::path &root) {
   // add client presentation only and keep wire 30; so do 41 (PQ-272),
   // 42 (spec 11: front-end.bin), 43 (RQ-163: N3SI player clips), 44
   // (RQ-164: N3DI / N3DJ render detail with influence tables), 45
-  // (RQ-165: N3FE version 32 since RQ-005, front-end models with influence tables) and
+  // (RQ-165: N3FE version 34 since RQ-198, front-end models with influence tables) and
   // 46 (RQ-188: N3ST track-only player clips).
   need(engine >= 1 && engine <= 46 &&
            (engine >= 38 ? protocol == 30
@@ -2916,9 +2916,11 @@ FrontEnd load_front_end(const Release &release) {
   // Tuarek's create model), from engine 45; Scene::skin sums every
   // influence, as KO's 00419f00. RQ-005: version 31 (32 with tables) adds
   // the select characters per race and class and the class names (item 17).
+  // RQ-198: version 33 (34 with tables) adds the select model's and each
+  // select character's face and hair parts by number (items 7 and 17).
   const auto version = r.u();
-  need(version == 31 || (version == 32 && release.engine >= 45), "front end version");
-  const bool tables = version == 32;
+  need(version == 33 || (version == 34 && release.engine >= 45), "front end version");
+  const bool tables = version == 34;
   // A model record's or part's scene: N3S1 or N3SM, or with tables N3SI or N3SJ.
   auto scene_magic = [&](const std::string &magic, Scene &s, const char *what) {
     need(magic == "N3S1" || magic == "N3SM" || (tables && (magic == "N3SI" || magic == "N3SJ")), what);
@@ -3290,17 +3292,11 @@ FrontEnd load_front_end(const Release &release) {
          "front end fog range");
   } else
     need(fe.fog.color == V{0, 0, 0} && fe.fog.start == 0 && fe.fog.end == 0, "front end fog off");
-  model(fe.select);
-  // The front, start and rest clips (1097: pre_select, selected, dummy;
-  // 1298: its clips 1, 2 and 0).
-  need(fe.select.clips.size() == 3, "front end select clips");
-  // Version 24 (RQ-158): a create model per race (1-32, each race 1-65535
-  // once); the first is the one create draws, the others are kept for the
-  // create screen per race (RQ-004).
-  // Version 27 (RQ-174): each model's face and hair parts by number (0-32
-  // each): a byte length and an N3S1 or N3SM scene (version 32: or N3SI or
-  // N3SJ) with no tracks, its nodes, joints and instance scale the model's,
-  // so the model's pose skins it.
+  // Version 27 (RQ-174): a create model's face and hair parts by number
+  // (0-32 each): a byte length and an N3S1 or N3SM scene (the tables
+  // version: or N3SI or N3SJ) with no tracks, its nodes, joints and instance
+  // scale the model's, so the model's pose skins it. Version 33 (RQ-198):
+  // the select model's and each select character's too.
   auto create_parts = [&](const Scene &body, std::vector<Scene> &out, uint32_t most = 32) {
     const auto count = r.count(most, 0);
     for (uint32_t i = 0; i < count; ++i) {
@@ -3317,6 +3313,18 @@ FrontEnd load_front_end(const Release &release) {
            "front end create part skeleton");
     }
   };
+  model(fe.select);
+  // The front, start and rest clips (1097: pre_select, selected, dummy;
+  // 1298: its clips 1, 2 and 0).
+  need(fe.select.clips.size() == 3, "front end select clips");
+  // Version 33 (RQ-198): after its plugs, its faces and hairs by number, as
+  // AddChr sets each character's own (1097 0043ba10, 1298 005fb4f0).
+  create_parts(fe.select.model, fe.select.faces);
+  create_parts(fe.select.model, fe.select.hairs);
+  // Version 24 (RQ-158): a create model per race (1-32, each race 1-65535
+  // once); the first is the one create draws, the others are kept for the
+  // create screen per race (RQ-004); each with its faces and hairs (version
+  // 27, above).
   const auto create_models = r.count(32);
   for (uint32_t i = 0; i < create_models; ++i) {
     const auto race = r.u();
@@ -3708,6 +3716,9 @@ FrontEnd load_front_end(const Release &release) {
     }
     model(m.scene);
     need(m.scene.clips.size() == 3, "front end select clips");
+    // Version 33 (RQ-198): its faces and hairs by number, as item 7's.
+    create_parts(m.scene.model, m.scene.faces);
+    create_parts(m.scene.model, m.scene.hairs);
     fe.select_models.push_back(std::move(m));
   }
   // Then the class names (1097 0052e3e0, 1298 00613ea0: KO's text for a

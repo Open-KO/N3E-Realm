@@ -6,7 +6,7 @@ slot count read from the header alone). The loader of the whole file
 (n3e-front-end-check, and ko_front_end's own bound) is tests/front_end.py's.
 
 Synthetic, no KO data: the engine 41 package of tests/npc_scale_live.py made
-engine 42 with a front-end.bin of a version 31 header (3 slots, 1024x768) and
+engine 42 with a front-end.bin of a version 33 header (3 slots, 1024x768) and
 zeros, which neither the cook nor either release load reads past. A file past
 64 MiB passes all three; one exactly 256 MiB passes both release loads; one a
 byte past 256 MiB is refused by each for its size. The files are under build/,

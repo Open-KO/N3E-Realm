@@ -504,7 +504,7 @@ struct Release {
   uint32_t protocol = 1;
   // The release's engine version; from 43 the player clips may be N3SI (RQ-163),
   // from 44 the render detail N3DI / N3DJ (RQ-164), from 45 the front end's
-  // models N3SI / N3SJ (RQ-165, N3FE version 32 since RQ-005) and from 46 the player clips
+  // models N3SI / N3SJ (RQ-165, N3FE version 34 since RQ-198) and from 46 the player clips
   // other than player-idle.bin N3ST, their tracks alone (RQ-188).
   uint32_t engine = 1;
   uint32_t npc_health = 1;
@@ -996,7 +996,9 @@ struct FrontScene {
   std::vector<FrontPlug> plugs;
   // Version 27 (RQ-174): a create model's face and hair parts by number
   // (InitFace, InitHair), each a scene with no tracks on the model's nodes
-  // and joints, drawn with the model's pose; none for the other scenes.
+  // and joints, drawn with the model's pose; version 33 (RQ-198) the select
+  // model's and each select character's too (AddChr's face and hair by the
+  // character's numbers); none for the intro.
   std::vector<Scene> faces, hairs;
   // Version 29 (RQ-176): a create model's dress parts (scenes as its faces
   // and hairs) and each specialty's dress; none for the other scenes, and
@@ -1184,7 +1186,7 @@ struct FrontCreateDescriptions {
 // as KO's AddChr chooses the joint, animation and plugs by race and class
 // (source GameProcCharacterSelect.cpp; 1097 0043ba10, 1298 005fb4f0): the
 // race and the specialties it draws, and the model (the select model's
-// three clips by role, its plugs).
+// three clips by role, its plugs; version 33, RQ-198: its faces and hairs).
 struct FrontSelectModel {
   uint32_t race = 0;
   std::vector<uint32_t> specialties;

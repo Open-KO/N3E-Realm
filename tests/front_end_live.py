@@ -178,7 +178,11 @@ FIXED = RULES["fixed"]
 # RQ-005: the hall's FRONT_HALL line on the 1097 choice (client/harness/
 # front_end_captures.inc): the priest and race 0 on the select model (its
 # mace), the rogue on select character 0 (bow and quiver).
-HALL_1097 = "models=-1,0,-1 plugs=1,2,1 classes=Priest|Rogue|Unknown_Class"
+# RQ-198: each character's own face and hair by its numbers (the priest's 1
+# and 2, the rogue's 3 and 1, race 0's 0 and 5, past the select model's 3
+# hairs: none), as AddChr's "%s%s%.2d%s" sets them.
+LOOKS = "looks=1/2,3/1,0/-1"
+HALL_1097 = "models=-1,0,-1 plugs=1,2,1 classes=Priest|Rogue|Unknown_Class " + LOOKS
 
 # RQ-078: every front end games/moradon offers (front-ends.json) cooks twice to
 # the same bytes and the client loader takes it; the one realm-config.json
@@ -720,7 +724,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     # (1097 0043ba10: the rogue's upc_ka_tu_rog joint with bow and quiver,
     # select character 0; the priest and race 0 the select model with its
     # mace), and each class as 0052e3e0 names it (rows 1417 and 1418, the
-    # class_name string's KO default for none).
+    # class_name string's KO default for none). RQ-198 (version 33): each
+    # with its own face and hair by number (0043ba10's "%s%s%.2d%s").
     hall = re.search(r"^FRONT_HALL (.*)$", run.stdout, re.M)
     assert hall and (chosen != "1097" or hall.group(1) == HALL_1097), (size, hall and hall.group(1))
 
@@ -1178,9 +1183,10 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     assert arrows and arrows.group(1) == "left=1,1 right=1,1", (size, arrows and arrows.group(1))
     # RQ-005: 1298 poses a Tuarek of any class from upc_ka_tu (005fb4f0), so
     # every character draws the select model, with no plug (005fca40 plugs
-    # only items); its classes from 00613ea0's rows of its own table.
+    # only items); its classes from 00613ea0's rows of its own table; RQ-198:
+    # each character's own face and hair (005fb4f0's record +0x1c and +0x20).
     hall = re.search(r"^FRONT_HALL (.*)$", run.stdout, re.M)
-    assert hall and hall.group(1) == "models=-1,-1,-1 plugs=0,0,0 classes=Priest|Rogue|Unknown_Class", \
+    assert hall and hall.group(1) == "models=-1,-1,-1 plugs=0,0,0 classes=Priest|Rogue|Unknown_Class " + LOOKS, \
         (size, hall and hall.group(1))
     # The bar's art is drawn there: its three backdrop images span it.
     art = region(shots["select-1"][0], (x0, y0 + 2, x0 + bar_w, y0 + bar_h - 2))

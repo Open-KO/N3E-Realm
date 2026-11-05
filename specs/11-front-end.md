@@ -82,9 +82,10 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 31, engine 42 (so wire 30), or
-version 32, engine 45, when its models carry influence tables (RQ-165; 29 and 30
-before RQ-005's select characters), at most
+An optional presentation file, N3FE version 33, engine 42 (so wire 30), or
+version 34, engine 45, when its models carry influence tables (RQ-165; 29 and 30
+before RQ-005's select characters, 31 and 32 before RQ-198's select faces and
+hairs), at most
 256 MiB (RQ-183: the cook, the client and the server each refuse a larger one).
 Its layout, bounds and the action set are in `content/front-end.md`. The client
 treats it as optional: **a package without it gets today's panels**, which is how
@@ -143,7 +144,10 @@ replace the panels when the client has a Discord realm config.
   with the race and specialties it draws; a character none draws stands as the
   select model. And each specialty's class name (KO's text for its class code),
   which the select's `{class}` and `char_class` show; a specialty without one
-  shows the `class_name` string.
+  shows the `class_name` string. Since N3FE version 33 (RQ-198) the select model
+  and each select character carry their faces and hairs by number, as a create
+  model does, and the hall draws each character's own face and hair
+  (`Character.face`, `hair`), as AddChr sets them.
 - **Music** (N3FE version 3, RQ-018; version 5, RQ-083). Up to 4 tracks, each MPEG-1
   or MPEG-2 Layer III frames (every frame checked at load) or, since version 5,
   16-bit PCM samples (KO 1097's WAVs), each ≤ 16 MiB, looping or not, with an
@@ -369,8 +373,9 @@ visible equipment (`appearance`, as `Entity.appearance`), and `CreateCharacter`
 carries KO's create packet's fields; both, the refusals and the package's create
 rules (`create.bin`) are `content/character-create.md`, "The realm's create". The
 select hall draws each character with the package's select character for its race
-and specialty and shows its class's name (RQ-005, N3FE version 31); its face, hair
-and visible equipment are not drawn there yet (RQ-005's follow-ups).
+and specialty and shows its class's name (RQ-005, N3FE version 31), with its own
+face and hair (RQ-198, N3FE version 33); its visible equipment is not drawn there
+yet (RQ-197).
 
 ### Server
 
@@ -609,6 +614,21 @@ CPU (`make test`):
    classes=Priest|Rogue|Unknown_Class`, and on the 1298 recipe with the select
    model and no plugs, with the same classes (`FRONT_HALL`,
    `tests/front_end_live.py`, local-asset).
+   RQ-198 superseded these versions again: the plain version is 33 and the tables
+   version 34 (31 and 32 are refused with every older version); the loader refuses
+   34 below engine 45, 35, and a table in 33; the cook takes 34 at engine 45 only
+   and 33 at 42; the server refuses 34 at engine 44 and 31, 32 and 35 at 45.
+   RQ-198 (version 33, select faces and hairs): the loader takes a synthetic
+   file's select model's and select characters' face and hair parts (as a create
+   model's, up to 32 each) and refuses a count past 32, a part with tracks, off its
+   model's skeleton or scale, of another magic or length, a table in version 33,
+   and a file without them (`tests/front_end.py`); the cook's select model holds
+   its looks parts but the face and hair, none for an empty part
+   (`tests/front_end.py`); on both the 1097 choice and the 1298 recipe the hall
+   draws a priest with face 1 and hair 2, a rogue with face 3 and hair 1 and a
+   race 0 character with face 0 and hair 5 as `looks=1/2,3/1,0/-1` (hair 5 past
+   the select model's three: none) (`FRONT_HALL`, `tests/front_end_live.py`,
+   local-asset).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.

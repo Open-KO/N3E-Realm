@@ -395,6 +395,7 @@ Read in the 1097 image (`ko1097-unpacked.exe`, RQ-074's Ghidra project; output u
 | Observation | Where | Label |
 |---|---|---|
 | AddChr picks the joint, animation and plugs by race, and for the Tuarek, the El Morad man and woman by class too (§8.1's 1097 row; §8.3's 1298 per-race files). The source's switch returns without a character for a race or class it does not name (`default: return;`). The parts are the race's `UPC_DefaultLooks` row's, an item's where the slot holds one, the face and hair the row's file with the character's number | `GameProcCharacterSelect.cpp` `AddChr`; 1097 `0043ba10`; 1298 `005fb4f0` | source; binary |
+| **1097's face and hair (RQ-198).** After the body parts (0, 1, 3 and 4 through `0043d0f0` with the record's items `+0x28`–`+0x54`), when the race's looks row names a face (its string's length at row `+0x5c` not 0), AddChr splits that name (`00575121`, `_splitpath`) and formats `"%s%s%.2d%s"` (`005a1fa4`; `00574aef`) of its directory, name, the record's face number (`+0x1c`) and extension, and sets it as part 2 (`00447a70(2, …)`). Part 5 is the helmet item's (`+0x38`, through `0043d0f0`) when the record holds one; otherwise an empty part when the row names no hair (length at `+0x8c` 0), else the row's hair name formatted the same way with the record's hair number (`+0x20`). The face and hair are not read from a range: a number past the files the tree holds names a file that is not there (what KO then draws was not read) | 1097 `0043ba10` (decompiled in RQ-074's project; output under `build/ghidra/rq198/`, not committed) | binary |
 | **1097's class text.** The info text (`004402a0`, string 1201 "Level : %d \nSpecialty : %s \nID : %s") takes the class from `0052e3e0(record + 0x14, out)`: a switch on the class code that loads a string resource (`LoadStringA`): 101 and 201 → 0x58c (1420), 102 and 202 → 0x58a (1418), 103 and 203 → 0x58d (1421), 104 and 204 → 0x589 (1417), 105 → 0x581, 106 → 0x583, 107 → 0x584, 108 → 0x586 (and through `004840d0`) 109 → 0x588, 110 → 0x585, 111 → 0x587, 112 → 0x582, 205 → 0x57a, 206 → 0x57f, 207 → 0x580, 208 → 0x579, 209 → 0x57e, 210 → 0x57d, 211 → 0x57b, 212 → 0x57c; 1–12 → 0x518–0x523 (1304–1315, KO's class kinds); any other the literal "Unknown Class" (`005a4cfc`) | 1097 `004402a0`, `0052e3e0` | binary |
 | **1298's is the same map.** `00613ea0` (from the bar's `006074c0`) maps the same codes to the same row numbers through the text table (`00616a90` for 1–12, `00615080` for the others), and any other to "Unknown Class" (`006d8e08`) | 1298 `00613ea0` | binary |
 | The pinned tree's and the 1264 install's `Texts_us.tbl` hold the same texts at those rows: 1417 "Priest", 1418 "Rogue", 1420 "Warrior", 1421 "Magician", 1401–1416 the sixteen advanced classes (eight per nation) ("Kasar Hood" … "Sorcerer"; 1410 "Shadow Knight" with four trailing spaces), 1419 "Unconfirmed Specialty " (no code names it), 1304–1315 the class kinds | the pinned tree's and `installer-1264`'s `Data/Texts_us.tbl` | local-asset |
@@ -405,7 +406,18 @@ each listed character with its race and class's select character and shows its c
 name. The 1097 choice gives the Tuarek rogue (102, 107, 108) 1097's
 `upc_ka_tu_rog.n3joint` with the bow and quiver; the priest stays the select model. The
 1298 recipe needs none (one file per race). A character the switch would not draw stands
-as the select model (Q118). Not yet: its own face, hair and items (follow-ups).
+as the select model (Q118). Not yet then: its own face and hair (RQ-198, below) and items
+(RQ-197).
+
+**Decides (RQ-198):** `front-end.bin` version 33 carries the select model's and each
+select character's face and hair parts by number, as the create models carry theirs
+(item 8): the model holds the looks parts but the face and the hair, and its parts
+`00` up to `create.bin`'s face and hair counts follow (a created character's numbers
+are within them; the server's create refuses any other, `content/character-create.md`).
+The hall draws each listed character's own face and hair by its numbers, as 1097's
+`0043ba10` and 1298's `005fb4f0` set them, none for a number past the parts (a
+character from before the package's rules, or a row without that part, as the
+Wrinkle Tuarek's hair). A helmet in the hair's slot is RQ-197's (visible equipment).
 
 ## 9. The front end per client (RQ-078, 2026-11-02)
 

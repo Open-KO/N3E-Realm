@@ -52,7 +52,10 @@ it) model records and parts past four joint influences, N3SI or N3SJ with
 D-176's influence table, as KO's skinning sums them (RQ-165; engine 45),
 and (version 31; 32 with influence tables) the select characters per race
 and class, as KO's AddChr chooses joint, animation and plugs, and each
-specialty's class name for the select's info (RQ-005).
+specialty's class name for the select's info (RQ-005), and (version 33; 34
+with influence tables) the select model's and each select character's face
+and hair parts by number, as the create models carry theirs, so the hall
+draws each character's own face and hair (RQ-198).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -84,13 +87,14 @@ import ko_nameplates
 import ko_scene
 import world_chunks
 
-VERSION = 31
+VERSION = 33
 # RQ-165: the version of a file whose model records or parts hold D-176's
 # influence table (N3SI from N3S1, N3SJ from N3SM; content/front-end.md),
 # written only then, so a file without one keeps the base version and its
-# bytes (29 and 30 before RQ-005's select characters, 31 and 32 since).
+# bytes (29 and 30 before RQ-005's select characters, 31 and 32 before
+# RQ-198's select faces and hairs, 33 and 34 since).
 # A package with it is engine 45 (main.FRONT_END_INFLUENCES_ENGINE).
-TABLES_VERSION = 32
+TABLES_VERSION = 34
 # A model record's scene magics (version 4: N3S1 or N3SM; RQ-165: N3SI and
 # N3SJ, the same with an influence table) and the ones with a table.
 MODEL_MAGICS = (b"N3S1", b"N3SM", b"N3SI", b"N3SJ")
@@ -815,7 +819,7 @@ def model(assets, source, definition, clips, work, own_blends=None, tables=None)
     RQ-165: a model whose drawn vertices have more than four joint influences
     keeps every one, as KO's skinning sums them (00419f00, D-176): its scene
     is N3SI or N3SJ, N3S1 or N3SM with D-176's influence table, and its
-    magic is appended to `tables` (the file is then the tables version, 32)."""
+    magic is appended to `tables` (the file is then the tables version, 34)."""
     table = character.animations(assets.get(definition["animation"]), unused_word=True)
     blends = []
     for at, clip in enumerate(clips):
@@ -1665,13 +1669,44 @@ def looks(assets, race):
     return row
 
 
-def default_parts(assets, race):
-    """The race's default looks (UPC_DefaultLooks, face 0 and hair 0, as
-    ko_player): what select shows, since the wire carries no equipment."""
-    parts = looks(assets, race)[4:10]
-    parts[2] = parts[2].replace("_face.n3cpart", "_face00.n3cpart")
-    parts[5] = parts[5].replace("_hair.n3cpart", "_hair00.n3cpart")
-    return parts
+def select_parts(assets, race):
+    """The race's default looks (UPC_DefaultLooks) but the face and the hair:
+    what a select model holds, since the wire carries no equipment. Version 33
+    (RQ-198): its faces and hairs follow it by number (numbered_parts), as
+    AddChr sets the character's own (1097 0043ba10, 1298 005fb4f0)."""
+    import ko_player
+    return [n for i, n in enumerate(looks(assets, race)[LOOKS_PARTS:LOOKS_PARTS + 6])
+            if n and i not in (ko_player.FACE, ko_player.HAIR)]
+
+
+def numbered_parts(assets, joint, animation, row, faces, hairs, record, work, tables=None):
+    """A model's face and hair parts by number (version 27, RQ-174: a create
+    model's, item 8; version 33, RQ-198: the select model's, item 7, and each
+    select character's, item 17): `faces` face parts and then `hairs` hair
+    parts (a count each, then each part, create_part), part i the looks
+    `row`'s face or hair file with i as two digits before the extension
+    (InitFace and InitHair's "%02d", ko_player.numbered; 1097's AddChr
+    0043ba10 builds the same name with "%s%s%.2d%s" from the character's
+    face and hair numbers), none for a row whose part is empty (the Wrinkle
+    Tuarek's hair: InitHair, and AddChr's hair, set none). Each is skinned on
+    the model's nodes, joints and instance scale (`record`, the model's
+    record from model()). `work` names each part's directory (its name with
+    the part's kind and number). Returns (bytes, [face count, hair count])."""
+    import ko_player
+    if not 0 <= faces <= MAX_CREATE_PARTS or not 0 <= hairs <= MAX_CREATE_PARTS:
+        raise ValueError("front-end faces and hairs: 0 to %d each" % MAX_CREATE_PARTS)
+    head, _, tail = scene_tracks(record[4:4 + struct.unpack_from("<I", record)[0]])
+    out, counts = b"", []
+    for position, number in ((ko_player.FACE, faces), (ko_player.HAIR, hairs)):
+        name = row[LOOKS_PARTS + position]
+        parts = [ko_player.numbered(name, i) for i in range(number)] if name else []
+        kind = ko_player.POSITIONS[position]
+        out += u(len(parts)) + b"".join(
+            create_part(assets, joint, animation, part, work.parent / ("%s-%s-%d" % (work.name, kind, i)), head, tail,
+                        tables)
+            for i, part in enumerate(parts))
+        counts.append(len(parts))
+    return out, counts
 
 
 def intro_scene(assets, textures, config, work, tables=None):
@@ -1827,15 +1862,18 @@ def turn_paths(assets, config, slots):
     return u(len(paths)) + out, rest
 
 
-def select_scene(assets, textures, config, work, report=None, tables=None):
+def select_scene(assets, textures, config, work, report=None, tables=None, faces=1, hairs=1):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
     slots (position, yaw, the eye where the camera's turn to the slot ends
     and its spot light), the spot's growth rate, the front-clip mode, what
     ESC presses (version 15; 16: `none`), where Back lands (version 17), the
     end-of-row arrow (version 18), where create draws and, over the hall,
     the new character's turn at each slot (version 19), the turn mode and its paths (version 7), the hall, the zone and the fog
-    (version 8), the character with its clips and plugs. `report` receives
-    the zone's provenance."""
+    (version 8), the character with its clips and plugs, and (version 33,
+    RQ-198) its `faces` face and `hairs` hair parts by number
+    (numbered_parts: create.bin's counts with the package's rules, the face
+    and hair 0 alone without), as AddChr sets each character's own. `report`
+    receives the zone's provenance."""
     camera = config["camera"]
     if config.get("zone") is not None and config.get("hall") is not None:
         raise ValueError("front-end select: a hall or a zone, not both")
@@ -1898,7 +1936,7 @@ def select_scene(assets, textures, config, work, report=None, tables=None):
     # keep their records' (0043f280 and 005fef90 name FLT_MIN).
     tree, joint = character_tree(assets, look)
     _, animation = split(assets, look["animation"])
-    definition = dict(joint=joint, animation=animation, parts=default_parts(tree, look["race"]))
+    definition = dict(joint=joint, animation=animation, parts=select_parts(tree, look["race"]))
     out = (camera_record(camera) + lights(assets, config["lights"], config.get("light_manager")) +
            f(vector(config["ambient"], 3)))
     out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND]) + u(FRONT_CLIP[mode])
@@ -1910,9 +1948,12 @@ def select_scene(assets, textures, config, work, report=None, tables=None):
     # camera's fog.
     out += zone(assets, textures, config.get("zone"), report if report is not None else {})
     out += path_fog(assets, config)
-    out += model(tree, joint, definition, look["clips"], work / "select",
-                 own_blends={START_CLIP: config["start_blend"]}, tables=tables)
-    return out + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
+    record = model(tree, joint, definition, look["clips"], work / "select",
+                   own_blends={START_CLIP: config["start_blend"]}, tables=tables)
+    out += record + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
+    numbered, _ = numbered_parts(tree, joint, animation, looks(tree, look["race"]), faces, hairs, record,
+                                 work / "select", tables)
+    return out + numbered
 
 
 # Version 31 (RQ-005): at most this many select characters, each drawing at
@@ -1924,16 +1965,18 @@ MAX_CLASS_NAMES = 64
 SELECT_CHARACTER_KEYS = {"race", "specialties", "joint", "animation", "plugs", "clips"}
 
 
-def select_characters(assets, textures, config, work, rules=None, tables=None):
+def select_characters(assets, textures, config, work, rules=None, tables=None, faces=1, hairs=1):
     """Item 17's first part (version 31, RQ-005): the select characters, as
     KO's AddChr chooses its joint, animation and plugs by race and class
     (source GameProcCharacterSelect.cpp's switch; 1097 0043ba10, 1298
     005fb4f0, specs/KO-FINDINGS.md 8.1, 8.3, 8.5): the recipe's
     `select.characters`, each a race, the specialties it draws, its joint,
     animation and plugs (`clips` the select character's unless named), cooked
-    as the select model is (the race's looks parts, face 0 and hair 0; the
-    start clip's blend the select's own). A character no entry draws (its
-    race and specialty) draws the select character (item 7). With the
+    as the select model is (the race's looks parts but the face and the hair;
+    the start clip's blend the select's own; version 33, RQ-198: then its
+    `faces` face and `hairs` hair parts by number, numbered_parts). A
+    character no entry draws (its race and specialty) draws the select
+    character (item 7). With the
     package's create rules, every specialty of each `content` race is drawn
     by an entry, or by the select character for its own race, so no
     character the realm creates stands in the hall as another race.
@@ -1975,12 +2018,15 @@ def select_characters(assets, textures, config, work, rules=None, tables=None):
     for at, entry, race, specialties, plugs, clips in checked:
         tree, joint = character_tree(assets, entry)
         _, animation = split(assets, entry["animation"])
-        definition = dict(joint=joint, animation=animation, parts=default_parts(tree, race))
+        definition = dict(joint=joint, animation=animation, parts=select_parts(tree, race))
         record = model(tree, joint, definition, clips, work / ("select-%d" % at),
                        own_blends={START_CLIP: config["start_blend"]}, tables=tables)
+        numbered, counts = numbered_parts(tree, joint, animation, looks(tree, race), faces, hairs, record,
+                                          work / ("select-%d" % at), tables)
         out += u(race) + u(len(specialties)) + b"".join(u(s) for s in specialties) + record
-        out += u(len(plugs)) + b"".join(plug_record(assets, textures, p) for p in plugs)
-        report.append(dict(race=race, specialties=specialties, joint=entry["joint"], bytes=len(record)))
+        out += u(len(plugs)) + b"".join(plug_record(assets, textures, p) for p in plugs) + numbered
+        report.append(dict(race=race, specialties=specialties, joint=entry["joint"], faces=counts[0],
+                           hairs=counts[1], bytes=len(record) + len(numbered)))
     return out, report
 
 
@@ -2304,16 +2350,8 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, 
     if sets and scene_joints(head) != len(world):
         raise ValueError("front-end create model of race %d: %d joints cooked of its skeleton's %d"
                          % (race, scene_joints(head), len(world)))
-    out, counts = record + u(0), []
-    for position, number in ((ko_player.FACE, faces), (ko_player.HAIR, hairs)):
-        name = names[position]
-        parts = [ko_player.numbered(name, i) for i in range(number)] if name else []
-        kind = ko_player.POSITIONS[position]
-        out += u(len(parts)) + b"".join(
-            create_part(assets, joint, animation, part, work.parent / ("%s-%s-%d" % (work.name, kind, i)), head, tail,
-                        influenced)
-            for i, part in enumerate(parts))
-        counts.append(len(parts))
+    numbered, counts = numbered_parts(assets, joint, animation, row, faces, hairs, record, work, influenced)
+    out = record + u(0) + numbered
     # Version 29 (RQ-176): the dress parts, each once, in specialty order.
     pool = []
     for parts, _ in sets.values():
@@ -2794,11 +2832,15 @@ def write(assets, out, config, work, rules=None, create=None):
             raise ValueError("front-end string length")
         table += u(len(data)) + data
     # RQ-165: the model records and parts with an influence table; any makes
-    # the file the tables version (32).
+    # the file the tables version (34).
     tables = []
     scenes = intro_scene(assets, textures, config["intro"], pathlib.Path(work), tables)
     zone_report = {}
-    scenes += select_scene(assets, textures, config["select"], pathlib.Path(work), zone_report, tables)
+    # Version 33 (RQ-198): the select models' faces and hairs, as many as the
+    # create models' (create.bin's counts; the face and hair 0 alone without
+    # rules), since a listed character was created with one of them.
+    numbers = (rules["faces"], rules["hairs"]) if rules is not None else (1, 1)
+    scenes += select_scene(assets, textures, config["select"], pathlib.Path(work), zone_report, tables, *numbers)
     # Version 24 (RQ-158): a create model per race of models.create.
     races = create_races(config["select"]["character"]["race"], rules)
     # Version 27 (RQ-174): each with its faces and hairs (create.bin's counts);
@@ -2819,7 +2861,7 @@ def write(assets, out, config, work, rules=None, create=None):
     # Version 31 (RQ-005): the select characters per race and class, and the
     # class names, last (item 17).
     select_models, select_report = select_characters(assets, textures, config["select"], pathlib.Path(work), rules,
-                                                     tables)
+                                                     tables, *numbers)
     names_section, names_report = class_names(assets, config["select"])
     data = b"N3FE" + u(TABLES_VERSION if tables else VERSION) + u(count(config["character_slots"], 3)) + u(CANVAS[0]) + u(CANVAS[1])
     data += u(len(textures.list)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in textures.list)

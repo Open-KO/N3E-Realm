@@ -202,8 +202,9 @@ class View {
       const auto &scene = scene_at(k);
       models.push_back(texture(scene.model.width, scene.model.height, scene.model.texture.data(),
                                scene.model.channels == 3));
-      // RQ-174 (version 27): a create model's face and hair parts, by number;
-      // RQ-176 (version 29): then its dress parts.
+      // RQ-174 (version 27): a create model's face and hair parts, by number
+      // (RQ-198, version 33: a select model's too); RQ-176 (version 29): then
+      // its dress parts.
       auto &looks = part_textures.emplace_back();
       for (const auto *set : {&scene.faces, &scene.hairs, &scene.dress_parts}) {
         auto &out = looks.emplace_back();
@@ -317,6 +318,12 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     fe.create.model.texture.clear();
     for (auto &model : fe.create_models) model.model.texture.clear();
     for (auto &model : fe.select_models) model.scene.model.texture.clear();
+    // RQ-198 (version 33): the select models' faces and hairs.
+    for (auto *set : {&fe.select.faces, &fe.select.hairs})
+      for (auto &part : *set) part.texture.clear();
+    for (auto &model : fe.select_models)
+      for (auto *set : {&model.scene.faces, &model.scene.hairs})
+        for (auto &part : *set) part.texture.clear();
     for (auto *set : {&fe.create.faces, &fe.create.hairs, &fe.create.dress_parts})
       for (auto &part : *set) part.texture.clear();
     for (auto &model : fe.create_models)
@@ -608,7 +615,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     std::array<float, 4> box;      // x0 y0 x1 y1 in the viewport's NDC, y up
     std::array<int, 4> viewport;   // GL viewport: x, y (from the bottom), w, h
     uint32_t race = 0;             // create: the race code of the model drawn (RQ-172)
-    int face = -1, hair = -1;      // create: the face and hair parts drawn, -1 none (RQ-174)
+    // create: the face and hair parts drawn, -1 none (RQ-174); hall
+    // (RQ-198): the listed character's own, by its numbers.
+    int face = -1, hair = -1;
     // create: the specialty whose dress the model wears (0 none: its own
     // parts, no plugs), the dress parts drawn in place of its own (-1: its
     // own) and the hand plugs drawn (RQ-176).
@@ -1575,14 +1584,18 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // runs (N3SM) or as one opaque draw; KO's parts keep alpha test on. RQ-174
   // (version 27): a create model then draws the face and the hair the create
   // chose (InitFace, InitHair; none past its parts, as the Wrinkle Tuarek's
-  // hair), each skinned with the model's pose.
+  // hair), each skinned with the model's pose. RQ-198 (version 33): a hall
+  // model draws the listed character `who`'s own face and hair by its
+  // numbers, as AddChr sets them (1097 0043ba10, 1298 005fb4f0), none past
+  // its parts.
   //
   // RQ-176 (version 29): a create model wears the dress of the specialty
   // whose row the last build took (dress_at): its own parts, or the
   // dress parts in their place, then the face and hair, then the dress's
   // hand plugs on their joints (KO's 005fd120 sets the parts and plugs;
   // 004196a0 draws a character's parts, then its plugs).
-  void draw_character(size_t which, const std::vector<Node> &pose, const detail::Mat &vp, const detail::Mat &model) {
+  void draw_character(size_t which, const std::vector<Node> &pose, const detail::Mat &vp, const detail::Mat &model,
+                      const Character *who = nullptr) {
     const auto &scene = scene_at(which);
     const auto mvp = detail::mul(vp, model);
     std::array<float, 4> box{1e9f, 1e9f, -1e9f, -1e9f};
@@ -1590,21 +1603,21 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const int worn = create ? dress_at(which) : -1;
     const FrontDress *dress = worn >= 0 ? &scene.dresses[size_t(worn)] : nullptr;
     if (!dress || dress->body) draw_skinned(scene.model, models[which], pose, vp, model, mvp, box);
-    if (create) {
-      const auto &looks = part_textures[which];
-      if (dress && !dress->body)
-        for (auto part : dress->parts)
-          draw_skinned(scene.dress_parts[part], looks[2][part], pose, vp, model, mvp, box);
-      if (choice.face < scene.faces.size())
-        draw_skinned(scene.faces[choice.face], looks[0][choice.face], pose, vp, model, mvp, box);
-      if (choice.hair < scene.hairs.size())
-        draw_skinned(scene.hairs[choice.hair], looks[1][choice.hair], pose, vp, model, mvp, box);
-    }
+    const auto &looks = part_textures[which];
+    if (dress && !dress->body)
+      for (auto part : dress->parts)
+        draw_skinned(scene.dress_parts[part], looks[2][part], pose, vp, model, mvp, box);
+    // The face and hair numbers: create's choice, a hall character's own.
+    constexpr uint64_t none = ~uint64_t(0);
+    const uint64_t face = create ? choice.face : who ? who->face() : none;
+    const uint64_t hair = create ? choice.hair : who ? who->hair() : none;
+    const bool face_drawn = face < scene.faces.size(), hair_drawn = hair < scene.hairs.size();
+    if (face_drawn) draw_skinned(scene.faces[face], looks[0][face], pose, vp, model, mvp, box);
+    if (hair_drawn) draw_skinned(scene.hairs[hair], looks[1][hair], pose, vp, model, mvp, box);
     std::array<int, 4> viewport{};
     glGetIntegerv(GL_VIEWPORT, viewport.data());
     drawn_boxes.push_back({which == 0 ? 0u : create ? 2u : 1u, box, viewport, create ? scene_race(which) : 0,
-                           create && choice.face < scene.faces.size() ? int(choice.face) : -1,
-                           create && choice.hair < scene.hairs.size() ? int(choice.hair) : -1,
+                           face_drawn ? int(face) : -1, hair_drawn ? int(hair) : -1,
                            dress ? dress->specialty : 0u, dress && !dress->body ? int(dress->parts.size()) : -1,
                            dress ? int(dress->plugs.size()) : 0, select_model_of(which), int(scene.plugs.size())});
     const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : which == 2 ? create_plugs
@@ -1841,7 +1854,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       const auto &slot = fe.slots[i];
       const auto scene = slot_scene(i);
       draw_character(scene, posed(seats.players.at(size_t(i)), scene), vp,
-                     detail::translate_yaw(slot.position, slot.yaw));
+                     detail::translate_yaw(slot.position, slot.yaw), &list->characters(i));
     }
     if (in_hall_create() && !turning() && choice.stands() && figure_scene() >= 0) {
       const auto &slot = fe.slots[size_t(choice.stands_at(focus))];

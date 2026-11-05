@@ -209,35 +209,43 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   // KO's AddChr picks its model by race and class: per slot, the select
   // character drawn (its index in the package's, -1 the select model) and the
   // plugs it carries, then each character's class text (1097 0052e3e0, 1298
-  // 00613ea0; `_` for a space):
-  //   FRONT_HALL models=M0,M1,M2 plugs=P0,P1,P2 classes=C0|C1|C2
+  // 00613ea0; `_` for a space). RQ-198 (version 33): the priest has face 1
+  // and hair 2, the rogue face 3 and hair 1, race 0 face 0 and hair 5; per
+  // slot, the face and hair parts drawn by those numbers (AddChr's
+  // "%s%s%.2d%s"; -1 none, past the model's parts):
+  //   FRONT_HALL models=M0,M1,M2 plugs=P0,P1,P2 classes=C0|C1|C2 looks=F0/H0,F1/H1,F2/H2
   {
     list.Clear();
-    const std::array<std::pair<uint32_t, uint32_t>, 3> made{{{2, 104}, {2, 102}, {0, 0}}};
+    struct Made { uint32_t race, specialty, face, hair; };
+    const std::array<Made, 3> made{{{2, 104, 1, 2}, {2, 102, 3, 1}, {0, 0, 0, 5}}};
     for (size_t i = 0; i < made.size(); ++i) {
       auto *c = list.add_characters();
       c->set_id(i + 1);
       c->set_name("Hall" + std::to_string(i + 1));
       c->set_level(1);
-      c->set_race(made[i].first);
-      c->set_specialty(made[i].second);
+      c->set_race(made[i].race);
+      c->set_specialty(made[i].specialty);
+      c->set_face(made[i].face);
+      c->set_hair(made[i].hair);
     }
     front->jump(Screen::select);
     const n3e::front::Context context{"Local Realm", "", release.version, &list, 0};
     front->draw(width, height, 1.0, context);
     front->draw(width, height, 1.0, context);
-    std::string models, plugs, classes;
+    std::string models, plugs, classes, looks;
     for (const auto &d : front->drawn())
       if (d.which == 1) {
         models += (models.empty() ? "" : ",") + std::to_string(d.select);
         plugs += (plugs.empty() ? "" : ",") + std::to_string(d.plugs);
+        looks += (looks.empty() ? "" : ",") + std::to_string(d.face) + "/" + std::to_string(d.hair);
       }
     for (int i = 0; i < list.characters_size(); ++i) {
       auto text = front->character_class(list.characters(i));
       std::replace(text.begin(), text.end(), ' ', '_');
       classes += (i ? "|" : "") + text;
     }
-    std::cout << "FRONT_HALL models=" << models << " plugs=" << plugs << " classes=" << classes << std::endl;
+    std::cout << "FRONT_HALL models=" << models << " plugs=" << plugs << " classes=" << classes << " looks=" << looks
+              << std::endl;
   }
   std::cout << "FRONT_LOGIN";
   for (const auto &[label, screen, waiting, back] :

@@ -687,7 +687,7 @@ draws the first, the select character's race). Moradon ships the Karus races tha
 | 2 Tuarek | N3S1, the bytes of the one create model before (1,014,644) | 8: the count and its race code |
 | 3 Wrinkle Tuarek | N3S1, four parts | 1,405,656 |
 | 4 Puri Tuarek | N3S1 | 1,139,064 |
-| 1 Arch Tuarek | shipped since RQ-169: in its create dress, on either table, N3SM with no influence table, so Moradon's `front-end.bin` stays without tables (version 31 since RQ-005; 29 before); undressed (its looks parts) it would be N3SI, which a front-end record holds since RQ-165 (N3FE's tables version, 32 since RQ-005 and 30 before, engine 45) | 2,605,024 (1097 choice) and 2,603,428 (1298 recipe): its dressed record, 2,342,872 and 2,341,276 with its race code, and its plug's texture |
+| 1 Arch Tuarek | shipped since RQ-169: in its create dress, on either table, N3SM with no influence table, so Moradon's `front-end.bin` stays without tables (version 33 since RQ-198, 31 since RQ-005; 29 before); undressed (its looks parts) it would be N3SI, which a front-end record holds since RQ-165 (N3FE's tables version, 34 since RQ-198, 32 since RQ-005 and 30 before, engine 45) | 2,605,024 (1097 choice) and 2,603,428 (1298 recipe): its dressed record, 2,342,872 and 2,341,276 with its race code, and its plug's texture |
 | 11 Barbarian, 13 El Morad female | not shipped: they cook, but the realm's create is Karus until nation select (RQ-006) | (1,042,195 and 1,034,220) |
 | 12 El Morad male | not shipped: El Morad (RQ-006); its create model in its looks parts is N3SI (RQ-165), in its create dress N3S1 (1264's table) or N3SM (1298's), no influence table | — |
 
@@ -979,7 +979,8 @@ the cook (Q115). The 1097 choice's `front-end.bin` grows from 57,419,400 to
 parts take room too; RQ-183 raised the bound to 256 MiB). The package hash changes, so the hosted realm's next deploy is
 a new realm (Q63). RQ-169 adds the Arch Tuarek's dressed create model: the 1097
 choice's file grows to 61,065,488 bytes, the 1298 recipe's to 64,447,160
-(local-asset), both still version 29 then (31 since RQ-005, which grows them again: 62,338,435 and 64,447,563).
+(local-asset), both still version 29 then (31 since RQ-005, which grows them again: 62,338,435 and 64,447,563;
+33 since RQ-198: 62,918,171 and 64,736,507).
 
 **The size of every race's create model (RQ-182; local-asset, the pinned tree).**
 Cooked as RQ-165 and RQ-170 would add them (`content/front-end.md`, the bound):
@@ -1000,7 +1001,7 @@ come on top (0.26 MB a 256 × 256 texture). RQ-165: none holds an influence tabl
 1298's; RQ-169 checked it): every dress here replaces the looks lower part, whose vertices past four joint
 influences (the Arch Tuarek's 49, the El Morad male's 57) are then not drawn.
 Undressed (looks parts, four faces, three hairs) the two are N3SI, 2,780,584 and
-1,341,684 bytes, which front-end records hold since RQ-165 (N3FE's tables version, 32 since RQ-005,
+1,341,684 bytes, which front-end records hold since RQ-165 (N3FE's tables version, 34 since RQ-198,
 engine 45; `content/front-end.md` "Influence tables").
 Found on the way, for RQ-170 and RQ-006: on 1298's table the Barbarian's plug
 `Item/1_2641_00_0.n3cplug` is refused by the mesh reader ("KO normal"), as are
@@ -1051,8 +1052,9 @@ object files the pinned tree lacks (`Object/obj_war_duntree01_ip00`–`ip02`,
     plugs (`select.characters`, content/front-end.md item 17).
   - Done in RQ-005: the info bar shows the class from KO's class-name map
     (`select.class_names`; KO-FINDINGS §8.5).
-  - Not yet: face, hair and visible equipment per character. These are RQ-005's
-    follow-ups.
+  - Done in RQ-198: each character's own face and hair, by its numbers
+    (content/front-end.md items 7 and 17, N3FE version 33; KO-FINDINGS §8.5).
+  - Not yet: visible equipment per character (RQ-197).
 - **RQ-006 (nation).**
   - The login answer's nation 0 opens nation select. The question is 10420, with OK
     and Cancel; Back returns to the server list.

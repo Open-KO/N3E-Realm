@@ -523,6 +523,11 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         # RQ-164: render detail past four joint influences (the Arch Tuarek's
         # lower part) is N3DI / N3DJ, engine 44; the Tuarek's is not.
         manifest['engine_version']=max(manifest['engine_version'],main.DETAIL_INFLUENCES_ENGINE)
+    if main.front_end_version(manifest, root) == main.FRONT_END_TABLES_VERSION:
+        # RQ-165: a front end whose create, select or intro models are past
+        # four joint influences (N3SI / N3SJ records, N3FE 30) is engine 45;
+        # Moradon's create races (2, 3, 4) are not.
+        manifest['engine_version']=max(manifest['engine_version'],main.FRONT_END_INFLUENCES_ENGINE)
     (root / "package.json").write_text(json.dumps(manifest, indent=2))
 
     report["zone"] = zone["provenance"]

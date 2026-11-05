@@ -31,10 +31,12 @@ RQ-158: every race of `models.create` has its create model in front-end.bin
 create_model, KO's InitChr and SetChr parts, breathing) cooks N3S1 or N3SM,
 as a front-end model record holds; RQ-174 (version 27): without its face and
 hair, which follow it as parts on its skeleton, the rules' faces and hairs
-(none for a race without hair, the Wrinkle Tuarek). A race outside it is
-listed in UNSHIPPED with why: the front-end record's refusal for a race whose
-model has a drawn vertex past four influences (RQ-165), or none for a race
-that cooks but whose create screen the realm does not draw yet.
+(none for a race without hair, the Wrinkle Tuarek). RQ-165 (version 30): a
+race whose model or parts have a drawn vertex past four influences cooks
+them N3SI (or N3SJ), keeping every influence, as the player path does: the
+Arch Tuarek and the El Morad male. A race outside it is listed in UNSHIPPED
+with why: the front-end cook's refusal, or none for a race that cooks but
+whose create screen the realm does not draw yet.
 
 RQ-176 (version 29): each shipped create model also cooks in its
 specialties' create dress from the pinned tree's own 1298 table
@@ -63,9 +65,10 @@ OPEN = {}
 # RQ-158: convertible races whose create model the package does not ship:
 # (the front-end cook's refusal or None, why).
 UNSHIPPED = {
-    1: ("front-end model magic", "its create model is N3SI, which a front-end record does not hold (RQ-165)"),
+    1: (None, "its create model cooks N3SI (RQ-165); models.create does not name it yet (RQ-169)"),
     11: (None, "El Morad: the realm's create is Karus until nation select (RQ-006)"),
-    12: ("front-end model magic", "its create model is N3SI, which a front-end record does not hold (RQ-165)"),
+    12: (None, "El Morad: the realm's create is Karus until nation select (RQ-006); its create model cooks N3SI "
+               "(RQ-165)"),
     13: (None, "El Morad: the realm's create is Karus until nation select (RQ-006)"),
 }
 
@@ -138,9 +141,13 @@ for entry in rules["races"]:
         record = ko_front_end.create_model(assets, race, OUT / str(race) / "create", entry, rules["faces"],
                                            rules["hairs"], made)
         create_magic = record[4:8]
-        assert create_magic in (b"N3S1", b"N3SM"), (race, create_magic)
+        assert create_magic in ko_front_end.MODEL_MAGICS, (race, create_magic)
+        # RQ-165: the create model (undressed, its looks parts) holds
+        # influence tables exactly when the race's idle player scene does.
+        create_tables = made[0].get("tables", 0)
+        assert bool(create_tables) == bool(many), (race, made, many)
         assert made == [dict(race=race, faces=rules["faces"], hairs=rules["hairs"] if "hair" in positions else 0,
-                             bytes=len(record))], (race, made)
+                             bytes=len(record), **(dict(tables=create_tables) if create_tables else {}))], (race, made)
         assert shipped or UNSHIPPED[race][0] is None, (race, "now cooks a create model", UNSHIPPED[race])
     except ValueError as error:
         assert not shipped and UNSHIPPED[race][0] and UNSHIPPED[race][0] in str(error), (race, str(error))
@@ -160,9 +167,12 @@ for entry in rules["races"]:
             race, ", ".join("%d: %s, %d plugs" % (s, "its own parts" if d["body"] else "%d parts" % len(d["parts"]),
                                                   len(d["plugs"])) for s, d in worn.items()),
             dressed[0]["dress_parts"], len(dressed_record)))
-    print("PASS race %d create model: %s" % (race, "%s, %d faces, %d hairs, %d bytes in front-end.bin" % (
+    print("PASS race %d create model: %s%s" % (race, "%s, %d faces, %d hairs, %d bytes in front-end.bin" % (
         create_magic.decode(), made[0]["faces"], made[0]["hairs"], len(record)) if shipped
-        else "not shipped: " + UNSHIPPED[race][1]))
+        else "not shipped: " + UNSHIPPED[race][1],
+        ", %d of its scenes with influence tables (%s, %d bytes)" % (made[0]["tables"], create_magic.decode(),
+                                                                     len(record)) if made and made[0].get("tables")
+        else ""))
     print("PASS race %d (%s): %d parts, %d part files over its faces and hairs, %d clips, idle cooks (%s%s), "
           "render detail with its parts worn cooks (%s%s)"
           % (race, entry["looks"], len(positions), len(names), len(clips), magic.decode(),

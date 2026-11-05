@@ -925,8 +925,15 @@ int main(int argc, char **argv) {
   }
   int loaded = 0, refused = 0;
   for (int i = 1; i + 1 < argc; i += 2) {
-    const std::string want = argv[i];
+    // `ok` or `bad`, then optionally `@<engine>` (RQ-165: version 30 is read
+    // from engine 45); the release's engine is otherwise 45, the newest.
+    std::string want = argv[i];
     n3e::Release release;
+    release.engine = 45;
+    if (const auto at = want.find('@'); at != std::string::npos) {
+      release.engine = uint32_t(std::stoul(want.substr(at + 1)));
+      want.resize(at);
+    }
     release.front_end = true;
     release.root = argv[i + 1];
     std::string error;
@@ -995,6 +1002,29 @@ int main(int argc, char **argv) {
         std::cout << "\n";
       }
       if (fe.create_races.size() != fe.create_models.size() + 1) error = "create models inconsistent";
+      // RQ-165: skin NAME: per scene (the intro's model, the select's, then
+      // each create model and its faces, hairs and dress parts, each posed by
+      // its model's first clip at 0.5 s as the front end draws them) its
+      // further influences and the sum of its skinned positions.
+      {
+        std::cout << std::setprecision(9) << "skin " << release.root.filename().string() << ":";
+        auto skin = [&](const n3e::Scene &s, const std::vector<n3e::Node> &pose) {
+          double sum = 0;
+          const auto mesh = s.skin(pose);
+          for (size_t v = 0; v + 8 <= s.indices.size() * 8; v += 8)
+            for (int k = 0; k < 3; ++k) sum += mesh[v + k];
+          std::cout << " " << s.influences.size() << "/" << sum;
+        };
+        for (const auto *scene : {&fe.intro, &fe.select}) skin(scene->model, scene->model.sample(0.5f));
+        for (size_t k = 0; k < fe.create_races.size(); ++k) {
+          const auto &scene = k == 0 ? fe.create : fe.create_models[k - 1];
+          const auto pose = scene.model.sample(0.5f);
+          skin(scene.model, pose);
+          for (const auto *parts : {&scene.faces, &scene.hairs, &scene.dress_parts})
+            for (const auto &part : *parts) skin(part, pose);
+        }
+        std::cout << "\n";
+      }
       // RQ-174: a package whose create models carry face or hair parts: each
       // race, then its face and hair part counts.
       bool parted = false;

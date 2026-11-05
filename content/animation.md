@@ -70,6 +70,8 @@ such a vertex.
 The render-detail levels (`render-detail.bin`, cooked by `ko_detail`) and the 1298
 appearance parts carry such vertices too since RQ-164: N3DI / N3DJ render detail,
 engine 44 ([influence tables in render detail](appearance.md#influence-tables-in-render-detail-n3di--n3dj-engine-44-rq-164)).
+The front end's models and parts carry them since RQ-165: N3SI / N3SJ records in
+N3FE version 30, engine 45 ([front end](front-end.md#influence-tables-version-30-engine-45-rq-165)).
 No package ships that race yet (Q102).
 
 ## Runtime state and time

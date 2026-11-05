@@ -1,4 +1,4 @@
-# Front end (N3FE, engine 42)
+# Front end (N3FE, engine 42; version 30 engine 45)
 
 `front-end.bin` is an optional presentation file (spec 11): KO's 1098 login scene,
 login and server list, the Karus character select hall, character create, loading
@@ -34,13 +34,17 @@ arrows, each create model's face and hair parts carried by number in place of
 its face 0 and hair 0 (version 27, RQ-174), create's description text
 (version 28, RQ-175), and each create model's specialties in their create
 dress, the chosen create table's parts and hand plugs (version 29, RQ-176).
+Version 30 (RQ-165; "Influence tables", below) is version 29 whose model
+records and parts may carry D-176's influence table; the cook writes it only
+for a file that has one, at engine 45.
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
 Moradon's default, 1097, `games/moradon/front-end.json`); the client's
 `load_front_end` (`client/assets/assets.cpp`) reads it whole when the window
 opens. Both release loads hash it in 1 MiB blocks without holding it, and the server
 then reads only its first 12 bytes (magic, version and slot count) for the slot
-count (RQ-183). A package with it is engine 42, so wire 30 (as engines 38–41). Its
+count (RQ-183). A package with it is engine 42, so wire 30 (as engines 38–41);
+with a version 30 file, engine 45 (RQ-165). Its
 bound is 256 MiB (RQ-183: `ko_front_end.MAX_FILE` and `FRONT_END_FILE` in the cook,
 `kFrontEndFile` in the client, `MAX_FRONT_END_ASSET` in the server; a file a byte
 past it is refused by each), since it holds
@@ -64,8 +68,9 @@ RGBA8 and each model's atlas as N3S1's RGB or N3SM's RGBA):
 | Total | 58.46 | 61.84 |
 
 A create model's atlases (its own and its parts') are 64–79% of its bytes. With
-every race's create model (races 1, 11, 12 and 13 added, the N3SI ones as RQ-165
-would carry them) the 1097 choice is 66,298,836 bytes, 0.8 MB under the bound
+every race's create model (races 1, 11, 12 and 13 added, each in its create
+dress; RQ-165 found that dress leaves no vertex past four influences, so none
+needs an influence table) the 1097 choice is 66,298,836 bytes, 0.8 MB under the bound
 (1264's table dresses each race in one set, its own parts), and the 1298 recipe
 76,259,455, 9.2 MB over (its table dresses the El Morad male and female in four
 sets each, 12 dress parts: 4.7 and 4.2 MB a race). RQ-006 then adds El Morad's
@@ -86,8 +91,8 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 29, character slots (1–3; the server's character limit),
-   canvas width 1024 and height 768.
+1. `"N3FE"`, version 29 or (RQ-165) 30, character slots (1–3; the server's
+   character limit), canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
 3. Fonts: a count (≤8), each texture index, pixel size (6–48), cap height, atlas
@@ -138,8 +143,8 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    hand plugs). Version 27
    (RQ-174): the model holds every part but the face and the hair, and after
    its plugs come its faces (a count, 0–32) and its hairs (a count, 0–32),
-   each part a byte length and an N3S1 or N3SM scene of that part alone with
-   no tracks, its nodes, joints and instance scale the model's, so the
+   each part a byte length and an N3S1 or N3SM scene (version 30: or N3SI or
+   N3SJ) of that part alone with no tracks, its nodes, joints and instance scale the model's, so the
    client skins it with the model's pose. Part i is the looks row's face or
    hair file with i as two digits before the extension (`InitFace` and
    `InitHair`'s `"%02d"`, source `PlayerMySelf.cpp`); the cook writes
@@ -553,7 +558,7 @@ address mode); the font atlases and the moon linear.
   mixed toward the fog colour (the client per pixel, D3D per vertex). The intro
   and create draw without fog.
 - Model: a byte length and an N3S1 or N3SM scene (`tools/assetc/gltf.py`, atlas
-  up to 2048 a side), then a count of further clips and each clip's byte length
+  up to 2048 a side; version 30: or N3SI or N3SJ, "Influence tables" below), then a count of further clips and each clip's byte length
   and track list (N3S1's track encoding, on the model's nodes), then (version 4)
   each clip's blend time, seconds, 0–10: the time the client blends into the
   clip over. That is the KO clip record's `fTimeBlend`, which `CN3Chr::AniCurSet`
@@ -574,7 +579,7 @@ model's skeleton (as a face), more than two plugs, a hand above 1 or twice, a
 plug joint outside the model's joints (version 29; version 28 is refused as
 every older version is), a create model count outside 1–32 or a create race
 outside 1–65535 or named twice (version 24), a face or hair count above 32, a part that is
-not N3S1 or N3SM, has tracks, or whose nodes, joints or instance scale are
+not N3S1 or N3SM (or, in version 30, N3SI or N3SJ), has tracks, or whose nodes, joints or instance scale are
 not its model's (version 27), an unknown action, a screen missing one of its required
 actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
 `realm_connect`; select: `select_prev`, `select_next`, `back`, `exit` and an
@@ -617,8 +622,58 @@ file does not have, a rule of another kind or outside its bounds, a keep rule
 with a or c not 0, moves that do not leave the canvas rects where the file puts
 them, a slide (version 20) of a node outside the create layout or named twice,
 an axis other than 0 or 1, a keep start rule, a lead of no extent on its axis
-or a step or scale outside its bounds, and every reference, count and bound
-above, truncation or trailing bytes.
+or a step or scale outside its bounds, a version other than 29 or 30, version
+30 below engine 45, a model record or part of N3SI or N3SJ in version 29, an
+influence table out of order, of a vertex or joint outside the scene, of a
+weight not above 0 or of a vertex whose weights do not sum to 1 (RQ-165),
+and every reference, count and bound above, truncation or trailing bytes.
+
+### Influence tables (version 30, engine 45; RQ-165)
+
+KO draws the front end's characters with the same class as the world's: the
+login's orc (`m_pChr`) and the select hall's characters (`m_pChrs`) are
+`CN3Chr`s, and create builds its new character in the player's `m_ChrInv`, a
+`CN3Chr` as the world player's `m_Chr` is (source `GameProcLogIn_1098.h`,
+`GameProcCharacterSelect.h`, `GameProcCharacterCreate.cpp`, `PlayerMySelf.h`,
+`PlayerBase.h`). Its skin load reads any number of
+joint influences a vertex and its CPU skinning `00419f00` sums every one with its
+weight as read (binary, 1298 `KnightOnLine.exe`; D-176's evidence,
+`content/npc.md` "Influence tables"). The Arch Tuarek's looks lower part
+(`upc_ka_at_lower.n3cskins`) has 49 drawn vertices with five and the El Morad
+male's (`upc_el_rm_lower.n3cskins`) 57 (local-asset, `tests/ko_player_races.py`), so a front end that draws
+either in its looks parts needs them, as the player path does since RQ-163.
+
+- A model record's scene (the intro's, the select's, a create model's) and a
+  create part's (face, hair, dress part) may be `N3SI` (from `N3S1`) or `N3SJ`
+  (from `N3SM`): the same scene with D-176's influence table between the
+  vertices and the indices (`tools/assetc/gltf.py`; u32 count of vertices with
+  further influences, then per vertex, in strictly increasing order, u32 vertex,
+  u32 n (1–60) and n pairs of u32 skin joint and f32 weight above 0; a vertex's
+  four slots and further weights sum to 1). `ko_front_end.model` cooks with
+  `gltf.cook(..., materials=True)`, which writes the table for a vertex whose
+  further sets carry weight; each record or part has its own magic, so an N3SI
+  model may have N3S1 faces.
+- The file is version 30 when any record or part has a table, version 29
+  otherwise (byte for byte as before RQ-165). The cook's report gives the
+  version and how many scenes have tables, and each create model's report how
+  many of its own do (`tables`).
+- A package with a version 30 file is engine 45 (wire 30; `main.py` reads the
+  file's header, `FRONT_END_INFLUENCES_ENGINE`); one with a version 29 file stays
+  42 (or the 43 and 44 of its player clips and render detail). The client loads
+  version 30 only at engine 45 and reads a table only in version 30, checking it
+  as a looks model's; `Scene::skin` adds each further influence after the four
+  slots, in order, so the front end draws it as the world does. The server
+  reads only the header and takes version 30 only at engine 45.
+
+Moradon's front end needs none: its create races (2, 3, 4) have no such vertex,
+and on both create tables each specialty's create dress replaces the looks lower
+part, so the Arch Tuarek's and the El Morad male's dressed create models have
+none either (local-asset: the 1097 choice's records 2,342,872 and 1,644,968
+bytes with their race codes, the 1298 recipe's 2,341,276 and 4,678,215, each
+N3S1 with N3S1 parts). A create model in its looks lower part (a create table
+without item columns, or a dress that leaves that slot) does: undressed, the
+Arch Tuarek's and the El Morad male's are N3SI, 2,780,584 and 1,341,684 bytes
+with their race codes, four faces and three hairs (their parts N3S1).
 
 ## Actions
 

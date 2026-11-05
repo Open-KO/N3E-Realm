@@ -200,6 +200,27 @@ def render_detail_magic(manifest, root):
         return None
 
 
+# RQ-165 (content/front-end.md): front-end.bin whose model records or parts
+# have vertices past four joint influences (N3SI / N3SJ, D-176's table) is
+# N3FE version 30 (ko_front_end.TABLES_VERSION; a file without one stays
+# 29), from engine 45; like 43 and 44 it needs an engine 38+ package (wire
+# 30), which a front end (engine 42) already is.
+FRONT_END_INFLUENCES_ENGINE = 45
+FRONT_END_TABLES_VERSION = 30
+
+
+def front_end_version(manifest, root):
+    """The package's front-end.bin N3FE version (its bytes 4 to 8), or None
+    without one; a missing or unsafe file, or another magic, is left to the
+    checks that read it."""
+    try:
+        with open(safe(root, manifest["presentation"]["front-end.bin"]), "rb") as data:
+            head = data.read(8)
+    except (KeyError, OSError, ValueError, TypeError):
+        return None
+    return struct.unpack_from("<I", head, 4)[0] if len(head) == 8 and head[:4] == b"N3FE" else None
+
+
 def cook(root, out, materials=False, influences=False):
     """Cooks the package at `root` into `out`. `materials` lets the scene's
     glTF carry N3SM render states and further joint influence sets
@@ -291,6 +312,7 @@ def cook(root, out, materials=False, influences=False):
         raise ValueError("player clips mix N3S1 and N3SI: they share one mesh")
     player_influences = b"N3SI" in clip_magics
     detail_influences = render_detail_magic(manifest, root) in DETAIL_INFLUENCE_MAGICS
+    front_end_influences = front_end and front_end_version(manifest, root) == FRONT_END_TABLES_VERSION
     compatibility = 30 if templated_npc or "attachments" in manifest or front_end else 29 if reference_npc else 28 if "skills" in manifest else 26 if "consumables" in manifest else 25 if 'upper_nodes' in manifest.get('combat_animation',{}) else 24 if 'combat_animation' in manifest else 23 if 'rest' in manifest else 22 if 'appearance' in manifest else 21 if item_drops else 20 if coins else 19 if party_loot else 18 if party_rewards else 17 if "party" in manifest else 16 if "friends" in manifest else 15 if "storage_auth" in manifest else 14 if "storage" in manifest else 13 if "wear" in manifest else 12 if "stats" in manifest else 11 if "equipment" in manifest else 10 if "repair" in manifest else 9 if "commerce" in manifest else 8 if "inventory" in manifest else 7 if "exploration" in manifest else 6 if "editing" in manifest else (5 if manifest["engine_version"] >= 10 else 4) if "progression" in manifest else 3 if "life" in manifest else 2 if "movement" in manifest["gameplay"] else 1
     engine_needed = max(
         # PQ-328 (D-186): attachment models are looks models, so a
@@ -348,6 +370,10 @@ def cook(root, out, materials=False, influences=False):
         if engine_needed < 38:
             raise ValueError("N3DI / N3DJ render detail needs an engine 38+ package")
         engine_needed = max(engine_needed, DETAIL_INFLUENCES_ENGINE)
+    if front_end_influences:
+        # RQ-165: N3FE version 30 (model records with influence tables) is
+        # engine 45; the front end alone makes the package engine 42+.
+        engine_needed = max(engine_needed, FRONT_END_INFLUENCES_ENGINE)
     if any(
         type(manifest[k]) is not int or manifest[k] != value
         for k, value in [

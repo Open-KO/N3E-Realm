@@ -687,9 +687,9 @@ draws the first, the select character's race). Moradon ships the Karus races tha
 | 2 Tuarek | N3S1, the bytes of the one create model before (1,014,644) | 8: the count and its race code |
 | 3 Wrinkle Tuarek | N3S1, four parts | 1,405,656 |
 | 4 Puri Tuarek | N3S1 | 1,139,064 |
-| 1 Arch Tuarek | not shipped: N3SI, which a front-end model record does not hold (RQ-165) | — |
+| 1 Arch Tuarek | not shipped: `models.create` does not name it yet (RQ-169). Its create model in its looks parts is N3SI, which a front-end record holds since RQ-165 (N3FE version 30, engine 45); in its create dress, on either table, N3S1 | — |
 | 11 Barbarian, 13 El Morad female | not shipped: they cook, but the realm's create is Karus until nation select (RQ-006) | (1,042,195 and 1,034,220) |
-| 12 El Morad male | not shipped: N3SI (RQ-165), and El Morad (RQ-006) | — |
+| 12 El Morad male | not shipped: El Morad (RQ-006); its create model in its looks parts is N3SI (RQ-165), in its create dress N3S1 | — |
 
 Moradon's `front-end.bin` grows from 53,802,688 to 56,347,416 bytes, under its 64 MiB
 bound; the package hash changes, so the hosted
@@ -982,16 +982,21 @@ Cooked as RQ-165 and RQ-170 would add them (`content/front-end.md`, the bound):
 
 | Race | 1097 choice (1264's table) | 1298 recipe (1298's table) |
 |---|---|---|
-| 1 Arch Tuarek (N3SI) | 2,342,872 | 2,341,276 |
+| 1 Arch Tuarek | 2,342,872 | 2,341,276 |
 | 2 Tuarek | 1,589,064 | 2,569,280 (4 dress parts) |
 | 3 Wrinkle Tuarek | 1,175,838 | 1,171,694 |
 | 4 Puri Tuarek | 2,118,130 | 2,121,378 |
 | 11 Barbarian | 1,665,772 | 1,658,380, one plug refused |
-| 12 El Morad male (N3SI) | 1,644,968 | 4,678,215 (12 dress parts) |
+| 12 El Morad male | 1,644,968 | 4,678,215 (12 dress parts) |
 | 13 El Morad female | 1,660,456 | 4,164,940 (12 dress parts) |
 
 Each record's bytes with its race code; the textures its plugs add to the table
-come on top (0.26 MB a 256 × 256 texture).
+come on top (0.26 MB a 256 × 256 texture). RQ-165: each is N3S1, with N3S1 parts:
+every dress here replaces the looks lower part, whose vertices past four joint
+influences (the Arch Tuarek's 49, the El Morad male's 57) are then not drawn.
+Undressed (looks parts, four faces, three hairs) the two are N3SI, 2,780,584 and
+1,341,684 bytes, which front-end records hold since RQ-165 (N3FE version 30,
+engine 45; `content/front-end.md` "Influence tables").
 Found on the way, for RQ-170 and RQ-006: on 1298's table the Barbarian's plug
 `Item/1_2641_00_0.n3cplug` is refused by the mesh reader ("KO normal"), as are
 the 1097 choice's El Morad halls `ChrSelect/el_chairs.n3shape` and

@@ -170,7 +170,10 @@ asset screenshots remain local under `build/ko-gameplay/`. This does not create
   as before. Since RQ-164 the render detail (`ko_detail`) and the 1298
   appearance parts (`ko_appearance`) keep them too, through the strict reader's
   `influences=True` (N3DI / N3DJ render detail, engine 44;
-  content/appearance.md); a 2145 armour part still rejects more than four. The bandicoot, rejected for this before PQ-267 (one LOD0 vertex with
+  content/appearance.md); a 2145 armour part still rejects more than four.
+  Since RQ-165 the front end's models and parts (`ko_front_end.model`, the
+  looks path's `materials=True` cook) keep them as N3SI / N3SJ records in
+  N3FE version 30, engine 45 (content/front-end.md). The bandicoot, rejected for this before PQ-267 (one LOD0 vertex with
   five, a lower LOD with 48), converts with every influence
   (evidence).
   Source vertex normals (with their length) and per-corner UVs are preserved,

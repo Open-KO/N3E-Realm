@@ -588,9 +588,10 @@ Release load_release(const std::filesystem::path &root) {
   // Engines 38 (PQ-253), 39 (PQ-265: N3MM looks models with render
   // states) and 40 (PQ-283: N3NI / N3MI looks models with influence tables)
   // add client presentation only and keep wire 30; so do 41 (PQ-272),
-  // 42 (spec 11: front-end.bin), 43 (RQ-163: N3SI player clips) and 44
-  // (RQ-164: N3DI / N3DJ render detail with influence tables).
-  need(engine >= 1 && engine <= 44 &&
+  // 42 (spec 11: front-end.bin), 43 (RQ-163: N3SI player clips), 44
+  // (RQ-164: N3DI / N3DJ render detail with influence tables) and 45
+  // (RQ-165: N3FE version 30, front-end models with influence tables).
+  need(engine >= 1 && engine <= 45 &&
            (engine >= 38 ? protocol == 30
             : engine >= 15 ? protocol == engine-7
             : engine >= 13 ? protocol == 7
@@ -2867,7 +2868,19 @@ FrontEnd load_front_end(const Release &release) {
   need(release.front_end, "front end not in the package");
   Reader r(release.root / "front-end.bin", kFrontEndFile);
   r.magic("N3FE");
-  need(r.u() == 29, "front end version");
+  // RQ-165 (content/front-end.md): version 30 is 29 whose model records and
+  // parts may be N3SI or N3SJ, N3S1 or N3SM with D-176's influence table (a
+  // KO race past four joint influences, the Arch Tuarek's create model),
+  // from engine 45; Scene::skin sums every influence, as KO's 00419f00.
+  const auto version = r.u();
+  need(version == 29 || (version == 30 && release.engine >= 45), "front end version");
+  const bool tables = version == 30;
+  // A model record's or part's scene: N3S1 or N3SM, or with tables N3SI or N3SJ.
+  auto scene_magic = [&](const std::string &magic, Scene &s, const char *what) {
+    need(magic == "N3S1" || magic == "N3SM" || (tables && (magic == "N3SI" || magic == "N3SJ")), what);
+    s.channels = magic == "N3SM" || magic == "N3SJ" ? 4 : 3;
+    return magic == "N3SI" || magic == "N3SJ";
+  };
   FrontEnd fe;
   fe.character_slots = r.count(3);
   fe.canvas_width = r.u();
@@ -3084,12 +3097,10 @@ FrontEnd load_front_end(const Release &release) {
   auto model = [&](FrontScene &out) {
     const auto bytes = r.u();
     const auto start = r.p;
-    const auto magic = r.raw(4);
-    need(magic == "N3S1" || magic == "N3SM", "front end model magic");
-    out.model.channels = magic == "N3SM" ? 4 : 3;
+    const bool influences = scene_magic(r.raw(4), out.model, "front end model magic");
     read_scene_head(r, out.model, 2048);
     read_scene_tracks(r, out.model, out.model.tracks);
-    read_scene_tail(r, out.model);
+    read_scene_tail(r, out.model, influences);
     need(r.p - start == bytes, "front end model length");
     out.clips.push_back(out.model.tracks);
     const auto extra = r.count(4, 0);
@@ -3243,20 +3254,20 @@ FrontEnd load_front_end(const Release &release) {
   // once); the first is the one create draws, the others are kept for the
   // create screen per race (RQ-004).
   // Version 27 (RQ-174): each model's face and hair parts by number (0-32
-  // each): a byte length and an N3S1 or N3SM scene with no tracks, its nodes,
-  // joints and instance scale the model's, so the model's pose skins it.
+  // each): a byte length and an N3S1 or N3SM scene (version 30: or N3SI or
+  // N3SJ) with no tracks, its nodes, joints and instance scale the model's,
+  // so the model's pose skins it.
   auto create_parts = [&](const Scene &body, std::vector<Scene> &out, uint32_t most = 32) {
     const auto count = r.count(most, 0);
     for (uint32_t i = 0; i < count; ++i) {
       const auto bytes = r.u();
       const auto start = r.p;
       const auto magic = r.raw(4);
-      need(magic == "N3S1" || magic == "N3SM", "front end create part magic");
       auto &part = out.emplace_back();
-      part.channels = magic == "N3SM" ? 4 : 3;
+      const bool influences = scene_magic(magic, part, "front end create part magic");
       read_scene_head(r, part, 2048);
       read_scene_tracks(r, part, part.tracks);
-      read_scene_tail(r, part);
+      read_scene_tail(r, part, influences);
       need(r.p - start == bytes, "front end create part length");
       need(part.tracks.empty() && part.nodes == body.nodes && part.joints == body.joints && part.scale == body.scale,
            "front end create part skeleton");

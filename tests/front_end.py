@@ -1273,12 +1273,14 @@ def pcm_track(data=PCM, rate=22050, channels=2, kind=fe.PCM, frames=None, **kw):
 _, TRACKS, _ = fe.scene_tracks(model)
 
 
-def character(clips=1, blends=None, plug=None):
-    """A model record (version 4): the demo character, `clips` - 1 further
-    clips (its own tracks again), each clip's blend time, the plugs."""
+def character(clips=1, blends=None, plug=None, scene=None):
+    """A model record (version 4): the demo character (or `scene`, the demo
+    character's tracks), `clips` - 1 further clips (its own tracks again),
+    each clip's blend time, the plugs."""
+    scene = model if scene is None else scene
     plugs = u(0) if plug is None else u(1) + u(plug) + MESH
     further = (u(len(TRACKS)) + TRACKS) * (clips - 1)
-    return u(len(model)) + model + u(clips - 1) + further + f([0.3] * clips if blends is None else blends) + plugs
+    return u(len(scene)) + scene + u(clips - 1) + further + f([0.3] * clips if blends is None else blends) + plugs
 
 
 # Version 27 (RQ-174): a create model's face and hair parts. PART is the demo
@@ -1355,7 +1357,8 @@ def blob(version=29, slots=1, screen_data=None, font_index=None, light=None, plu
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0),
-         creates=None, choices=u(0) + u(0), stats=u(0) + u(0xFFFFFFFF) + u(0), descriptions=None, more_size=1):
+         creates=None, choices=u(0) + u(0), stats=u(0) + u(0xFFFFFFFF) + u(0), descriptions=None, more_size=1,
+         scene=None):
     more = (more_size, more_size, bytes(more_size * more_size * 4))
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [more] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
@@ -1364,7 +1367,8 @@ def blob(version=29, slots=1, screen_data=None, font_index=None, light=None, plu
     out += b"".join(screen_data or screens)
     out += b"".join(string(s) for s in (strings or ["Level: {level}", "ENTER", "Priest", "Loading", "Ver. {version}"]))
     lights = u(1) + raw_light(light or LIGHT)
-    out += CAMERA + lights + f([0, 0, 0]) + character(plug=plug, blends=blends) + u(0) + f([100, 50, 400, 350])
+    out += CAMERA + lights + f([0, 0, 0]) + character(plug=plug, blends=blends, scene=scene) + u(0) + \
+        f([100, 50, 400, 350])
     spot = dict(LIGHT, kind=fe.SPOT, theta=0.5, phi=0.6, range=6.0)
     out += CAMERA + u(0) + f([0, 0, 0]) + u(slots if slot_count is None else slot_count)
     out += (f([0, -1, 2, 0, 0, 0, 7]) + fe.light_record(spot)) * (slots if slot_count is None else slot_count)
@@ -1378,7 +1382,7 @@ def blob(version=29, slots=1, screen_data=None, font_index=None, light=None, plu
     if paths is None:
         paths = (u(5) + PATHS3 if slots == 3 else u(1) + path()) if turn == 1 else u(0)
     out += u(turn) + paths + u(hall) + MESH * hall + zone + fog
-    out += character(select_clips, plug=plug)
+    out += character(select_clips, plug=plug, scene=scene)
     # Version 24 (RQ-158): the create models, each a race and a model record;
     # version 27 (RQ-174): each with its face and hair parts.
     out += u(1) + u(2) + create_model(plug=plug) if creates is None else creates
@@ -2738,6 +2742,91 @@ DRESS_CASES = {
     "bad-create-dress-plug-joint": blob(creates=u(1) + u(2) + create_model(dresses=[dress(102, plugs=[(0, 999)])])),
     "bad-create-dress-truncated": blob(creates=u(1) + u(2) + character() + u(0) + u(0) + u(0) + u(1) + u(102)),
 }
+# RQ-165 (version 30, engine 45): model records and parts past four joint
+# influences, N3SI (from N3S1) or N3SJ (from N3SM) with D-176's influence
+# table. The demo character's joint-1 vertices weigh joint 1 at 0.5 in their
+# four slots and joint 0 at 0.5 in the table; the reference carries the same
+# weights in the four slots (N3S1), which the client's skinning must equal.
+DEMO_VERTEX = 64  # p, n, uv (8 f32), joints (4 u32), weights (4 f32)
+
+
+def influenced(scene, table=True, rgba=False, extra_weight=0.5):
+    """`scene` (the demo N3S1) with its joint-1 vertices split half to joint
+    0: in an influence table (`table`, weighing `extra_weight`) or in the
+    four slots; `rgba` makes it N3SM / N3SJ (an RGBA atlas and one opaque
+    render run over every index)."""
+    head, tracks, tail = fe.scene_tracks(scene)
+    assert head[:4] == b"N3S1", head[:4]
+    w, h = struct.unpack_from("<2I", head, 4)
+    atlas, skeleton = head[12:12 + w * h * 3], head[12 + w * h * 3:]
+    if rgba:
+        atlas = b"".join(atlas[i:i + 3] + b"\xff" for i in range(0, len(atlas), 3))
+    nv = struct.unpack_from("<I", tail)[0]
+    vertices = bytearray(tail[4:4 + nv * DEMO_VERTEX])
+    split = []
+    for v in range(nv):
+        at = v * DEMO_VERTEX
+        if (struct.unpack_from("<4I", vertices, at + 32)[0] == 1 and
+                struct.unpack_from("<4f", vertices, at + 48) == (1.0, 0.0, 0.0, 0.0)):
+            struct.pack_into("<4I", vertices, at + 32, 1, 0, 0, 0)
+            struct.pack_into("<4f", vertices, at + 48, *((0.5, 0, 0, 0) if table else (0.5, 0.5, 0, 0)))
+            split.append(v)
+    assert split, "no joint-1 vertex to split"
+    rest = tail[4 + nv * DEMO_VERTEX:]
+    ni = struct.unpack_from("<I", rest)[0]
+    indices, end = rest[:4 + 4 * ni], rest[4 + 4 * ni:]
+    extra = u(len(split)) + b"".join(u(v) + u(1) + u(0) + f([extra_weight]) for v in split) if table else b""
+    runs = u(1) + u(0) + u(ni) + u(0) + f([0]) + u(0) + u(0) if rgba else b""
+    magic = {(False, False): b"N3S1", (True, False): b"N3SI", (False, True): b"N3SM", (True, True): b"N3SJ"}
+    return (magic[(table, rgba)] + head[4:12] + atlas + skeleton + tracks + u(nv) + bytes(vertices) + extra +
+            indices + runs + end)
+
+
+def as_part(scene):
+    """A create part of `scene`: its scene with no tracks, length-prefixed."""
+    head, _, tail = fe.scene_tracks(scene)
+    data = head + u(0) + tail
+    return u(len(data)) + data
+
+
+SI, SJ = influenced(model), influenced(model, rgba=True)
+TABLE_REFERENCE = influenced(model, table=False)
+# The cook's scene reader takes every model magic: SJ's head is its RGBA
+# atlas, nodes and joints, and its part keeps the model's skeleton.
+assert fe.scene_tracks(SJ)[1] == TRACKS and fe.scene_skeleton(fe.scene_tracks(SJ)[0]) == fe.scene_skeleton(MODEL_HEAD)
+assert fe.channels(b"N3SJ") == fe.channels(b"N3SM") == 4 and fe.channels(b"N3SI") == fe.channels(b"N3S1") == 3
+assert fe.TABLES_VERSION == fe.VERSION + 1 and fe.TABLE_MAGICS == (b"N3SI", b"N3SJ")
+
+
+def table_creates(scene, faces=(), hairs=(), dress_parts=()):
+    """One create model (race 2) of `scene` with its parts, every dress part
+    worn by one specialty."""
+    dresses = [dress(102, 0, range(len(dress_parts)))] if dress_parts else []
+    return (u(1) + u(2) + character(scene=scene) + u(len(faces)) + b"".join(faces) + u(len(hairs)) +
+            b"".join(hairs) + u(len(dress_parts)) + b"".join(dress_parts) + u(len(dresses)) + b"".join(dresses))
+
+
+TABLE_CASES = {
+    # Every scene with a table: the intro's, the select's, the create model
+    # and its face, hair and dress part (N3SI and N3SJ mixed).
+    "ok-influences": blob(version=30, scene=SI, creates=table_creates(
+        SI, [as_part(SI)], [as_part(SJ)], [as_part(SI)])),
+    "ok-influences-n3sj": blob(version=30, scene=SJ, creates=table_creates(
+        SJ, [as_part(SJ)], [as_part(SI)], [as_part(SJ)])),
+    "ok-influences-reference": blob(scene=TABLE_REFERENCE, creates=table_creates(
+        TABLE_REFERENCE, [as_part(TABLE_REFERENCE)], [as_part(TABLE_REFERENCE)], [as_part(TABLE_REFERENCE)])),
+    "ok-influences-original": blob(creates=table_creates(model, [PART], [PART], [PART])),
+    # Version 30 may hold N3S1 alone (the cook writes it only with a table).
+    "ok-version-30-n3s1": blob(version=30),
+    "bad@44-version-30-engine-44": blob(version=30, scene=SI, creates=table_creates(SI)),
+    "bad@42-version-30-engine-42": blob(version=30),
+    "bad-version-31": blob(version=31),
+    "bad-influences-version-29": blob(scene=SI),
+    "bad-influences-n3sj-version-29": blob(creates=table_creates(SJ)),
+    "bad-influences-part-version-29": blob(creates=table_creates(model, [as_part(SI)])),
+    "bad-influences-sum": blob(version=30, scene=influenced(model, extra_weight=0.25)),
+    "bad-influences-part-skeleton": blob(version=30, creates=table_creates(SI, [BENT_PART])),
+}
 # RQ-175 (version 28): create's description text (item 16).
 DESC_AREA, DESC_CLASS, DESC_RACE = desc_at["area_character"], desc_at["btn_class_priest"], desc_at["btn_race_ka_tu"]
 DESC_TIPS = [(DESC_AREA, 0, "Looks."), (DESC_CLASS, 1, "Heals."), (DESC_RACE, 2, "Tuarek.")]
@@ -2771,6 +2860,7 @@ DESCRIPTION_CASES = {
     "bad-desc-truncated": desc_blob(DESC_CHOICE["descriptions"][:-1]),
 }
 cases = {
+    **TABLE_CASES,
     **DESCRIPTION_CASES,
     **DRESS_CASES,
     "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
@@ -2949,8 +3039,40 @@ try:
         (work / name / "front-end.bin").write_bytes(data)
         args += [name.split("-")[0], str(work / name)]
     run = subprocess.run([str(ROOT / "build/client/n3e-front-end-check"), *args], capture_output=True, text=True)
-    sys.stdout.write("".join(l for l in run.stdout.splitlines(True) if not l.startswith(("placed ", "slide "))))
+    sys.stdout.write("".join(l for l in run.stdout.splitlines(True)
+                             if not l.startswith(("placed ", "slide ", "skin "))))
     assert run.returncode == 0, run.stdout + run.stderr
+    # RQ-165: model records and parts with influence tables (version 30, engine
+    # 45), each refusal for its reason; the client skins every table as the
+    # reference's four slots (every influence summed), not as the unsplit model.
+    for name, reason in (("bad@44-version-30-engine-44", "front end version"),
+                         ("bad@42-version-30-engine-42", "front end version"),
+                         ("bad-version-31", "front end version"),
+                         ("bad-influences-version-29", "front end model magic"),
+                         ("bad-influences-n3sj-version-29", "front end model magic"),
+                         ("bad-influences-part-version-29", "front end create part magic"),
+                         ("bad-influences-sum", "weight sum"),
+                         ("bad-influences-part-skeleton", "front end create part skeleton")):
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    skins = {l.split(":")[0][len("skin "):]: [tuple(map(float, x.split("/"))) for x in l.split(": ", 1)[1].split()]
+             for l in run.stdout.splitlines() if l.startswith("skin ")}
+    reference, original = skins["ok-influences-reference"], skins["ok-influences-original"]
+    assert len(reference) == len(original) == 6, reference  # intro, select, create model, face, hair, dress part
+    assert all(n == 0 for n, _ in reference + original), (reference, original)
+    for name in ("ok-influences", "ok-influences-n3sj"):
+        drawn = skins[name]
+        assert len(drawn) == 6 and all(n > 0 for n, _ in drawn), (name, drawn)
+        assert all(abs(a - b) <= 1e-4 * max(1.0, abs(b)) for (_, a), (_, b) in zip(drawn, reference)), \
+            (name, drawn, reference)
+    apart = max(abs(a - b) for (_, a), (_, b) in zip(reference, original))
+    assert apart > 0.01, (reference, original)
+    for name in ("ok-influences", "ok-influences-n3sj", "ok-influences-reference", "ok-influences-original",
+                 "ok-version-30-n3s1"):
+        assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
+    print("PASS front-end loader influences (RQ-165): version 30 model records and parts of N3SI and N3SJ load at "
+          "engine 45 and skin as the four-slot reference (%.3f from the unsplit model); version 30 below engine 45, "
+          "version 31, a table in version 29, a table of another sum and a part off its skeleton refused" % apart)
     # RQ-095: the zone's refusals, each for its own reason.
     for name, reason in (("bad-zone-totals", "front end zone totals"),
                          ("bad-zone-vertex-totals", "front end zone totals"), ("bad-zone-meshes", "count"),
@@ -3098,7 +3220,9 @@ try:
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
     assert any(l.startswith("refused bad-create-dress-truncated:") for l in run.stdout.splitlines())
-    dress_lines = {l.split(":")[0]: l.split(": ", 1)[1] for l in run.stdout.splitlines() if l.startswith("create-dress ")}
+    # (RQ-165's ok-influences cases are checked above.)
+    dress_lines = {l.split(":")[0]: l.split(": ", 1)[1] for l in run.stdout.splitlines()
+                   if l.startswith("create-dress ") and not l.startswith("create-dress ok-influences")}
     assert dress_lines == {
         "create-dress ok-create-dress": "2/4:102/body/0,104/0+1+2+3/0+1 3/0:103/body/-",
         "create-dress ok-create-dress-64": "2/64:" + ",".join(
@@ -3106,7 +3230,8 @@ try:
         "create-dress ok-create-dress-16": "2/0:" + ",".join("%d/body/-" % (100 + k) for k in range(16))}, dress_lines
     for name in ("ok-create-dress", "ok-create-dress-64", "ok-create-dress-16"):
         assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
-    part_lines = {l.split(":")[0]: l.split(": ", 1)[1] for l in run.stdout.splitlines() if l.startswith("create-parts ")}
+    part_lines = {l.split(":")[0]: l.split(": ", 1)[1] for l in run.stdout.splitlines()
+                  if l.startswith("create-parts ") and not l.startswith("create-parts ok-influences")}
     assert part_lines == {"create-parts ok-create-parts": "2/4/3 3/4/0", "create-parts ok-create-parts-32": "2/32/32",
                           "create-parts ok-create-dress": "2/4/3 3/0/0"}, part_lines
     for name in ("ok-create-looks", "ok-create-parts", "ok-create-parts-32"):

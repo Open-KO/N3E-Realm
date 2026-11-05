@@ -82,7 +82,8 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 29, engine 42 (so wire 30), at most
+An optional presentation file, N3FE version 29, engine 42 (so wire 30), or
+version 30, engine 45, when its models carry influence tables (RQ-165), at most
 256 MiB (RQ-183: the cook, the client and the server each refuse a larger one).
 Its layout, bounds and the action set are in `content/front-end.md`. The client
 treats it as optional: **a package without it gets today's panels**, which is how
@@ -572,6 +573,16 @@ CPU (`make test`):
    past 64 MiB, both release loads take one of exactly 256 MiB, and each of the
    three refuses one a byte past for its size (`tests/front_end_bound.py`, synthetic,
    under `build/`).
+   RQ-165 (version 30, engine 45): the loader takes synthetic intro, select and
+   create models and create parts of N3SI and N3SJ in version 30 at engine 45,
+   and skins them as their four-slot reference; it refuses version 30 below
+   engine 45, version 31, a table in version 29, a table of another sum and a
+   part off its skeleton (`tests/front_end.py`); the cook takes a version 30
+   file at engine 45 only and version 29 at 42, both release loads take the
+   package and the server refuses version 30 at engine 44
+   (`tests/front_end_influences.py`, synthetic); the Arch Tuarek's and the El
+   Morad male's create models in their looks parts cook N3SI
+   (`tests/ko_player_races.py`, local-asset).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.

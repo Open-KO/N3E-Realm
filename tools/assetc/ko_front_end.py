@@ -47,7 +47,9 @@ open, the stat areas, class buttons and race buttons under the pointer and
 authored `class_desc` (RQ-175), and (version 29) each create model's
 specialties dressed as KO's build dresses them: the chosen create table's
 parts and hand plugs (RQ-159's dress), the robe's bare lower and a shield on
-its joint (RQ-176).
+its joint (RQ-176), and (version 30, written only for a file that needs
+it) model records and parts past four joint influences, N3SI or N3SJ with
+D-176's influence table, as KO's skinning sums them (RQ-165; engine 45).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -79,6 +81,15 @@ import ko_nameplates
 import ko_scene
 
 VERSION = 29
+# RQ-165: the version of a file whose model records or parts hold D-176's
+# influence table (N3SI from N3S1, N3SJ from N3SM; content/front-end.md),
+# written only then, so a file without one keeps version 29 and its bytes.
+# A package with it is engine 45 (main.FRONT_END_INFLUENCES_ENGINE).
+TABLES_VERSION = 30
+# A model record's scene magics (version 4: N3S1 or N3SM; RQ-165: N3SI and
+# N3SJ, the same with an influence table) and the ones with a table.
+MODEL_MAGICS = (b"N3S1", b"N3SM", b"N3SI", b"N3SJ")
+TABLE_MAGICS = (b"N3SI", b"N3SJ")
 # The rate KO's frame-scaled code is written for: its per-frame steps are
 # scaled by 30 / s_fFrmPerSec (source: GameProcCharacterSelect.cpp's fade,
 # N3Pond.cpp). The select spot's per-tick step (1097 binary: 0043f280 adds
@@ -581,13 +592,21 @@ def chr_file(data):
     return dict(joint=joint, parts=parts, plugs=plugs, animation=animation)
 
 
+def channels(magic):
+    """A cooked scene's atlas texel bytes: N3S1's and N3SI's RGB, N3SM's and
+    N3SJ's RGBA."""
+    return 4 if magic in (b"N3SM", b"N3SJ") else 3
+
+
 def scene_tracks(data):
-    """(head, tracks, tail) of a cooked N3SM scene (gltf.cook): a further clip
-    of the same model is carried as its tracks alone."""
+    """(head, tracks, tail) of a cooked scene (gltf.cook, MODEL_MAGICS): a
+    further clip of the same model is carried as its tracks alone. The tail
+    holds the vertices, an N3SI or N3SJ scene's influence table, the indices,
+    the runs, the instance scale and the attachment."""
     at = 4
     w, h = struct.unpack_from("<2I", data, at)
-    # N3S1's atlas is RGB, N3SM's RGBA; nodes are 44 bytes, joints 68.
-    at += 8 + w * h * (4 if data[:4] == b"N3SM" else 3)
+    # Nodes are 44 bytes, joints 68.
+    at += 8 + w * h * channels(data[:4])
     at += 4 + struct.unpack_from("<I", data, at)[0] * 44
     at += 4 + struct.unpack_from("<I", data, at)[0] * 68
     start = at
@@ -764,14 +783,19 @@ def plug_record(assets, textures, name):
         vertices, mesh["indices"], tex, ALPHA_TEST if textures.masked(tex) else 0, material[:3], material[4:7])
 
 
-def model(assets, source, definition, clips, work, own_blends=None):
+def model(assets, source, definition, clips, work, own_blends=None, tables=None):
     """A character for the front end (ko_character.convert's front-end
     switch): the first clip's N3SM, then each further clip's tracks, each
     length-prefixed, then (version 4) each clip's blend time: the time the
     client blends into the clip over. That is the clip record's fTimeBlend,
     which CN3Chr::AniCurSet takes when the caller names no time of its own
     (FLT_MIN; 1097 binary: 00447e30 reads the record's +0x2c), or, where
-    own_blends names one for the clip's position, the caller's own."""
+    own_blends names one for the clip's position, the caller's own.
+
+    RQ-165: a model whose drawn vertices have more than four joint influences
+    keeps every one, as KO's skinning sums them (00419f00, D-176): its scene
+    is N3SI or N3SJ, N3S1 or N3SM with D-176's influence table, and its
+    magic is appended to `tables` (the file is then version 30)."""
     table = character.animations(assets.get(definition["animation"]), unused_word=True)
     blends = []
     for at, clip in enumerate(clips):
@@ -791,7 +815,7 @@ def model(assets, source, definition, clips, work, own_blends=None):
                           player=False, assets=assets, front_end=True)
         meta = json.loads((target / "scene.json").read_text())
         scene, _ = gltf.cook(target, "character.gltf", meta, materials=True, atlas=2048)
-        if scene[:4] not in (b"N3S1", b"N3SM"):
+        if scene[:4] not in MODEL_MAGICS:
             raise ValueError("front-end model magic")
         blobs.append(scene)
     head, _, tail = scene_tracks(blobs[0])
@@ -801,6 +825,8 @@ def model(assets, source, definition, clips, work, own_blends=None):
         if h != head or t != tail:
             raise ValueError("front-end clips do not share one model")
         extra.append(u(len(tracks)) + tracks)
+    if blobs[0][:4] in TABLE_MAGICS and tables is not None:
+        tables.append(blobs[0][:4].decode())
     return u(len(blobs[0])) + blobs[0] + u(len(extra)) + b"".join(extra) + f(blends)
 
 
@@ -1629,14 +1655,14 @@ def default_parts(assets, race):
     return parts
 
 
-def intro_scene(assets, textures, config, work):
+def intro_scene(assets, textures, config, work, tables=None):
     """CGameProcLogIn_1098: the camera, lights 0-2, the looping character and
     its plugs, and the moon, a screen quad in 1024 x 768 units. The
     character's parts and plugs are its tree's."""
     tree, name = split(assets, config["character"])
     chr_ = chr_file(tree.get(name))
     out = camera_record(config["camera"]) + lights(assets, config["lights"]) + f(vector(config["ambient"], 3))
-    out += model(tree, name, chr_, [config["clip"]], work / "intro")
+    out += model(tree, name, chr_, [config["clip"]], work / "intro", tables=tables)
     out += u(len(chr_["plugs"])) + b"".join(plug_record(tree, textures, p) for p in chr_["plugs"])
     moon = config["backdrop"]
     tex = textures.add(moon["texture"])
@@ -1782,7 +1808,7 @@ def turn_paths(assets, config, slots):
     return u(len(paths)) + out, rest
 
 
-def select_scene(assets, textures, config, work, report=None):
+def select_scene(assets, textures, config, work, report=None, tables=None):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
     slots (position, yaw, the eye where the camera's turn to the slot ends
     and its spot light), the spot's growth rate, the front-clip mode, what
@@ -1866,7 +1892,7 @@ def select_scene(assets, textures, config, work, report=None):
     out += zone(assets, textures, config.get("zone"), report if report is not None else {})
     out += path_fog(assets, config)
     out += model(tree, joint, definition, look["clips"], work / "select",
-                 own_blends={START_CLIP: config["start_blend"]})
+                 own_blends={START_CLIP: config["start_blend"]}, tables=tables)
     return out + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
 
 
@@ -1918,7 +1944,7 @@ def scene_skeleton(head):
     """The nodes and joints of a cooked scene's head (scene_tracks): the bytes
     after its atlas."""
     w, h = struct.unpack_from("<2I", head, 4)
-    return head[12 + w * h * (4 if head[:4] == b"N3SM" else 3):]
+    return head[12 + w * h * channels(head[:4]):]
 
 
 def scene_joints(head):
@@ -1974,14 +2000,16 @@ class Dressed:
         return self.routes.get(normal(name), self.tree).get(name)
 
 
-def create_part(assets, joint, animation, name, work, head, tail):
+def create_part(assets, joint, animation, name, work, head, tail, tables=None):
     """Version 27 (RQ-174): one face or hair part of a create model (KO's
     InitFace and InitHair set it on the player, PlayerMySelf.cpp): a byte
     length and an N3S1 or N3SM scene of that part alone with no tracks, its
     nodes, joints and instance scale the model's (`head`, `tail`), so the
     client skins it with the model's pose. Version 29 (RQ-176): a dress part
-    the same way."""
-    record = model(assets, joint, dict(joint=joint, animation=animation, parts=[name]), [BREATH], work)
+    the same way. RQ-165: N3SI or N3SJ for a part past four joint
+    influences, as model's."""
+    record = model(assets, joint, dict(joint=joint, animation=animation, parts=[name]), [BREATH], work,
+                   tables=tables)
     scene = record[4:4 + struct.unpack_from("<I", record)[0]]
     part_head, _, part_tail = scene_tracks(scene)
     if scene_skeleton(part_head) != scene_skeleton(head) or part_tail[-16:] != tail[-16:]:
@@ -2095,7 +2123,7 @@ def dress_files(dress, sets):
 
 
 def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, dress=None, inputs=None,
-                 textures=None):
+                 textures=None, tables=None):
     """CGameProcCharacterCreate: the player's own model (InitChr from the
     race's UPC_DefaultLooks row: its joint, animation and default parts),
     breathing (ANI_BREATH). With the package's race `entry` ({race, looks},
@@ -2118,7 +2146,9 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, 
     it wears instead and its hand plugs. Without a dress the model holds the
     looks parts and no specialty has a dress (KO's SetChr without a row).
     `report`: a list the race, its face and hair counts, its dresses and the
-    record's bytes are appended to."""
+    record's bytes are appended to, and (RQ-165) how many of its scenes (the
+    model and its parts) hold an influence table, when any does; their
+    magics are appended to `tables`."""
     import ko_detail
     import ko_player
     row = looks(assets, race)
@@ -2147,7 +2177,8 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, 
     if not body:
         raise ValueError("front-end create model of race %d: no part to draw" % race)
     definition = dict(joint=joint, animation=animation, parts=[tree.paths.get(n, n) if sets else n for n in body])
-    record = model(tree, joint, definition, [BREATH], work)
+    influenced = []
+    record = model(tree, joint, definition, [BREATH], work, tables=influenced)
     head, _, tail = scene_tracks(record[4:4 + struct.unpack_from("<I", record)[0]])
     # The client's model joints are the skeleton's, one for one (a skeleton
     # of at most 64 joints skins with them all, ko_character.convert), so a
@@ -2161,7 +2192,8 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, 
         parts = [ko_player.numbered(name, i) for i in range(number)] if name else []
         kind = ko_player.POSITIONS[position]
         out += u(len(parts)) + b"".join(
-            create_part(assets, joint, animation, part, work.parent / ("%s-%s-%d" % (work.name, kind, i)), head, tail)
+            create_part(assets, joint, animation, part, work.parent / ("%s-%s-%d" % (work.name, kind, i)), head, tail,
+                        influenced)
             for i, part in enumerate(parts))
         counts.append(len(parts))
     # Version 29 (RQ-176): the dress parts, each once, in specialty order.
@@ -2173,7 +2205,7 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, 
         raise ValueError("front-end create dress parts: at most %d" % MAX_DRESS_PARTS)
     out += u(len(pool)) + b"".join(
         create_part(tree, joint, animation, tree.paths.get(n, n), work.parent / ("%s-dress-%d" % (work.name, i)),
-                    head, tail) for i, n in enumerate(pool))
+                    head, tail, influenced) for i, n in enumerate(pool))
     height = max(m[1][3] for m in world) if sets else 0
     out += u(len(sets))
     dresses = {}
@@ -2187,7 +2219,10 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, 
                                                             for hand, at, name in plugs])
     if report is not None:
         report.append(dict(race=race, faces=counts[0], hairs=counts[1], bytes=len(out),
-                           **(dict(dresses=dresses, dress_parts=len(pool), height=height) if sets else {})))
+                           **(dict(dresses=dresses, dress_parts=len(pool), height=height) if sets else {}),
+                           **(dict(tables=len(influenced)) if influenced else {})))
+    if tables is not None:
+        tables += influenced
     return out
 
 
@@ -2207,7 +2242,8 @@ def create_races(select_race, rules=None):
     return [(race, entries[race]) for race in order]
 
 
-def create_scene(assets, races, work, rules=None, report=None, dress=None, inputs=None, textures=None):
+def create_scene(assets, races, work, rules=None, report=None, dress=None, inputs=None, textures=None,
+                 tables=None):
     """Version 24 (RQ-158): a count, then per race its code and its create
     model (create_model), for `races` from create_races; version 27 (RQ-174):
     each with its face and hair parts, as many as the package's rules have
@@ -2225,7 +2261,7 @@ def create_scene(assets, races, work, rules=None, report=None, dress=None, input
             raise ValueError("front-end create race %r" % (race,))
         # The first keeps the work directory the one create model had.
         out += u(race) + create_model(assets, race, work / ("create" if at == 0 else "create-%d" % race), entry,
-                                      faces, hairs, report, (dress or {}).get(race), inputs, textures)
+                                      faces, hairs, report, (dress or {}).get(race), inputs, textures, tables)
     return out
 
 
@@ -2639,9 +2675,12 @@ def write(assets, out, config, work, rules=None, create=None):
         if len(data) > MAX_TEXT:
             raise ValueError("front-end string length")
         table += u(len(data)) + data
-    scenes = intro_scene(assets, textures, config["intro"], pathlib.Path(work))
+    # RQ-165: the model records and parts with an influence table; any makes
+    # the file version 30.
+    tables = []
+    scenes = intro_scene(assets, textures, config["intro"], pathlib.Path(work), tables)
     zone_report = {}
-    scenes += select_scene(assets, textures, config["select"], pathlib.Path(work), zone_report)
+    scenes += select_scene(assets, textures, config["select"], pathlib.Path(work), zone_report, tables)
     # Version 24 (RQ-158): a create model per race of models.create.
     races = create_races(config["select"]["character"]["race"], rules)
     # Version 27 (RQ-174): each with its faces and hairs (create.bin's counts);
@@ -2651,7 +2690,7 @@ def write(assets, out, config, work, rules=None, create=None):
     dress = ko_create.dress(create, assets, {race for race, _ in races}) if create is not None else None
     create_report = []
     scenes += create_scene(character_tree(assets, config["select"]["character"])[0], races, pathlib.Path(work), rules,
-                           create_report, dress, assets, textures)
+                           create_report, dress, assets, textures, tables)
     atlases = b""
     sources = {False: pathlib.Path(config["fonts"]["regular"]), True: pathlib.Path(config["fonts"]["bold"])}
     for (size, bold), _ in sorted(fonts.items(), key=lambda kv: kv[1]):
@@ -2659,7 +2698,7 @@ def write(assets, out, config, work, rules=None, create=None):
         pixels = round(size * 96 / 72)
         (w, h, rgba), (height, top, advances) = ko_nameplates.atlas(sources[bold], pixels)
         atlases += u(textures.raw(w, h, rgba)) + u(pixels) + u(height) + u(top) + f(advances)
-    data = b"N3FE" + u(VERSION) + u(count(config["character_slots"], 3)) + u(CANVAS[0]) + u(CANVAS[1])
+    data = b"N3FE" + u(TABLES_VERSION if tables else VERSION) + u(count(config["character_slots"], 3)) + u(CANVAS[0]) + u(CANVAS[1])
     data += u(len(textures.list)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in textures.list)
     tracks, played = music(assets, config.get("music"))
     # Version 10 (RQ-102): each message's title and wording.
@@ -2675,5 +2714,6 @@ def write(assets, out, config, work, rules=None, create=None):
     return dict(bytes=len(data), sha256=hashlib.sha256(data).hexdigest(), textures=len(textures.list),
                 create_races=[race for race, _ in races], create_models=create_report,
                 create_table=None if create is None else create["table"],
+                **(dict(version=TABLES_VERSION, tables=len(tables)) if tables else {}),
                 fonts=len(fonts), music=played, logo=logo_report, messages=message_report, font_substitutes=sorted(str(p) for p in sources.values()),
                 sources=dict(sorted(assets.sources.items())), **zone_report)

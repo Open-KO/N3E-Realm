@@ -1976,3 +1976,27 @@ Options:
 **Default taken:** (a), `ko_front_end.dress_sets` refuses it ("a helmet (slot 5) is
 not drawn: KO's build's order of the helmet and InitHair is unread"). Changing it is
 cook and client work.
+
+### Q116 — Front-end models past four joint influences
+
+RQ-165: a create model, a select or intro model or a create part whose drawn vertices
+have more than four joint influences (the Arch Tuarek's and the El Morad male's looks
+lower parts: 49 and 57 with five, local-asset) had no place in `front-end.bin`, whose
+records were N3S1 or N3SM. KO draws them with every influence (`CN3Chr`, `00419f00`,
+D-176).
+
+Options:
+- (a) N3FE version 30 for every file, its records free to be N3SI or N3SJ: one format,
+  but every front end's bytes change (Moradon's package hash, so a new hosted realm,
+  Q63) for a table none of them holds.
+- (b) N3SI / N3SJ records (D-176's table, as the player clips' since RQ-163) in a
+  version 30 file the cook writes only when a record or part has one, at engine 45; a
+  file without one stays version 29, byte for byte.
+- (c) A new file magic for such a file.
+
+**Default taken:** (b), as RQ-163 and RQ-164 kept every other package's bytes and
+engine (`content/front-end.md`, "Influence tables"). Found on the way: in their create
+dress, on either create table, neither race's create model holds such a vertex (each
+dress replaces the looks lower part), so RQ-169 adding the Arch Tuarek to
+`models.create` keeps Moradon's front end at version 29; the tables matter for a
+create model in its looks parts and for the select hall's per-race models (RQ-005).

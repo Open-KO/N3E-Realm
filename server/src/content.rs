@@ -223,8 +223,10 @@ pub fn load(root: &Path) -> Result<Release> {
     // 42 (spec 11: the KO front end, front-end.bin), 43 (RQ-163: N3SI
     // player clips, which the client reads and the server only hashes) and
     // 44 (RQ-164: N3DI / N3DJ render detail with influence tables, of which
-    // the server reads only the projection).
-    if !(1..=44).contains(&engine)
+    // the server reads only the projection) and 45 (RQ-165: N3FE version 30,
+    // front-end models with influence tables, of which the server reads only
+    // the header).
+    if !(1..=45).contains(&engine)
         || if engine >= 38 { protocol != 30 } else if engine >= 15 { protocol != engine - 7 } else if engine >= 13 {
             protocol != 7
         } else if engine == 12 {
@@ -545,7 +547,7 @@ pub fn load(root: &Path) -> Result<Release> {
             return Err(bad("front end compatibility"));
         }
         let header = heads.remove("front-end.bin").unwrap_or_default();
-        front_end_slots(Reader::from_bytes(header))?
+        front_end_slots(Reader::from_bytes(header), engine)?
     } else {
         8
     };
@@ -1016,11 +1018,16 @@ impl Release {
 /// bound to KO's codes, RQ-158's create model per race,
 /// RQ-145's create nodes drawn until a class is clicked, RQ-133's nodes
 /// drawn until the race is chosen and RQ-130's create race and class
-/// choices) and the character slot count, 1 to 3.
+/// choices) and the character slot count, 1 to 3. Version 30 (RQ-165) is
+/// 29 whose models may carry influence tables, from engine 45.
 /// The bytes of front-end.bin the server reads: magic, version, slot count,
 /// 12 bytes, from the first `HASH_HEAD` bytes it hashed (RQ-185).
-fn front_end_slots(mut p: Reader) -> Result<u32> {
-    if p.take(4)? != b"N3FE" || p.u()? != 29 {
+fn front_end_slots(mut p: Reader, engine: u32) -> Result<u32> {
+    if p.take(4)? != b"N3FE" {
+        return Err(bad("front end magic/version"));
+    }
+    let version = p.u()?;
+    if !(version == 29 || (version == 30 && engine >= 45)) {
         return Err(bad("front end magic/version"));
     }
     let slots = p.u()?;
@@ -1043,123 +1050,140 @@ mod front_end_tests {
     #[test]
     fn reads_the_slot_count_of_version_29() {
         for slots in 1..=3 {
-            assert_eq!(front_end_slots(header(b"N3FE", 29, slots)).unwrap(), slots);
+            assert_eq!(front_end_slots(header(b"N3FE", 29, slots), 44).unwrap(), slots);
         }
+    }
+    // RQ-165: version 30 (models with influence tables) from engine 45 only;
+    // version 29 at every engine that has a front end.
+    #[test]
+    fn reads_version_30_from_engine_45() {
+        for slots in 1..=3 {
+            assert_eq!(front_end_slots(header(b"N3FE", 30, slots), 45).unwrap(), slots);
+            assert_eq!(front_end_slots(header(b"N3FE", 29, slots), 45).unwrap(), slots);
+        }
+        assert!(
+            front_end_slots(header(b"N3FE", 30, 3), 44).is_err(),
+            "version 30 at engine 44"
+        );
+        assert!(
+            front_end_slots(header(b"N3FE", 30, 3), 42).is_err(),
+            "version 30 at engine 42"
+        );
     }
     #[test]
     fn refuses_other_versions_and_slot_counts() {
         assert!(
-            front_end_slots(header(b"N3FE", 4, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 4, 3), 44).is_err(),
             "version 4 (no PCM music)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 5, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 5, 3), 44).is_err(),
             "version 5 (no front-clip mode)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 6, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 6, 3), 44).is_err(),
             "version 6 (no turn mode)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 7, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 7, 3), 44).is_err(),
             "version 7 (no zone or fog)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 8, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 8, 3), 44).is_err(),
             "version 8 (no logo section)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 9, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 9, 3), 44).is_err(),
             "version 9 (no message titles)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 10, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 10, 3), 44).is_err(),
             "version 10 (no placement)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 11, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 11, 3), 44).is_err(),
             "version 11 (no login_closed)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 12, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 12, 3), 44).is_err(),
             "version 12 (no select bar actions)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 13, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 13, 3), 44).is_err(),
             "version 13 (no yes/no box)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 14, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 14, 3), 44).is_err(),
             "version 14 (no select escape)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 15, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 15, 3), 44).is_err(),
             "version 15 (no select escape none)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 16, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 16, 3), 44).is_err(),
             "version 16 (no select back)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 17, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 17, 3), 44).is_err(),
             "version 17 (no select arrows)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 18, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 18, 3), 44).is_err(),
             "version 18 (no create mode)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 19, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 19, 3), 44).is_err(),
             "version 19 (no create slide)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 20, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 20, 3), 44).is_err(),
             "version 20 (no create choices)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 21, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 21, 3), 44).is_err(),
             "version 21 (no until-race nodes)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 22, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 22, 3), 44).is_err(),
             "version 22 (no until-class nodes)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 23, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 23, 3), 44).is_err(),
             "version 23 (one create model)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 24, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 24, 3), 44).is_err(),
             "version 24 (no race and class buttons)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 25, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 25, 3), 44).is_err(),
             "version 25 (no stat arrows)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 26, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 26, 3), 44).is_err(),
             "version 26 (no face and hair arrows)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 27, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 27, 3), 44).is_err(),
             "version 27 (no description text)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 28, 3)).is_err(),
+            front_end_slots(header(b"N3FE", 28, 3), 44).is_err(),
             "version 28 (no create dress)"
         );
         assert!(
-            front_end_slots(header(b"N3FE", 30, 3)).is_err(),
-            "version 30"
+            front_end_slots(header(b"N3FE", 31, 3), 45).is_err(),
+            "version 31"
         );
-        assert!(front_end_slots(header(b"N3FX", 29, 3)).is_err(), "magic");
-        assert!(front_end_slots(header(b"N3FE", 29, 0)).is_err(), "no slots");
+        assert!(front_end_slots(header(b"N3FX", 29, 3), 44).is_err(), "magic");
+        assert!(front_end_slots(header(b"N3FE", 29, 0), 44).is_err(), "no slots");
         assert!(
-            front_end_slots(header(b"N3FE", 29, 4)).is_err(),
+            front_end_slots(header(b"N3FE", 29, 4), 44).is_err(),
             "four slots"
         );
         assert!(
-            front_end_slots(Reader::from_bytes(b"N3FE\x1a\0\0".to_vec())).is_err(),
+            front_end_slots(Reader::from_bytes(b"N3FE\x1a\0\0".to_vec()), 44).is_err(),
             "truncated"
         );
     }
@@ -1207,14 +1231,14 @@ mod front_end_tests {
             write(len, b"");
             let (n, _, first) = hash_file(path, MAX_FRONT_END_ASSET).unwrap();
             assert_eq!((n, &first[..4]), (len, &b"N3FE"[..]));
-            assert_eq!(front_end_slots(Reader::from_bytes(first)).unwrap(), 3);
+            assert_eq!(front_end_slots(Reader::from_bytes(first), 44).unwrap(), 3);
         }
         // A file shorter than HASH_HEAD keeps all its bytes, and a short
         // header is refused as truncated.
         std::fs::write(path, b"N3FE\x1d\0\0\0").unwrap();
         let (n, _, first) = hash_file(path, MAX_FRONT_END_ASSET).unwrap();
         assert_eq!((n, first.as_slice()), (8, &b"N3FE\x1d\0\0\0"[..]));
-        assert!(front_end_slots(Reader::from_bytes(first)).is_err());
+        assert!(front_end_slots(Reader::from_bytes(first), 44).is_err());
         write(MAX_FRONT_END_ASSET + 1, b"");
         let error = hash_file(path, MAX_FRONT_END_ASSET).unwrap_err();
         assert_eq!(error.to_string(), "file bound");

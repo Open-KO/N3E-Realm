@@ -30,6 +30,8 @@ With `influences` (the player path only, RQ-163: tools/assetc/ko_player.py and
 the player race's skill clips) a glTF may carry the further sets without
 render states, and a clip with a vertex whose further sets carry weight cooks
 as N3SI: the player scene format of engine 43 (content/animation.md).
+The front end's models (ko_front_end.model, `materials`) may cook N3SI or
+N3SJ from engine 45 (RQ-165, N3FE version 30; content/front-end.md).
 """
 
 import binascii, math, struct, zlib

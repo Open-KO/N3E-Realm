@@ -71,6 +71,7 @@ test-fast:
 	build/client/n3e-login-check
 	python tests/front_end.py
 	python tests/front_end_bound.py
+	python tests/front_end_influences.py
 	python tests/front_end_choice.py
 	python tests/character_create.py
 	python tests/ko_player_races.py

@@ -260,6 +260,14 @@ with tempfile.TemporaryDirectory(dir="build") as tmp:
     # leave out the front end (spec 11, engine 42).
     (out / "front-end.bin").unlink()
     files = {p.name: p.read_bytes() for p in out.iterdir() if p.name not in ("release.bin", "release.sha256")}
+    # Its track-only player clips (N3ST, engine 46, RQ-190) go back to whole
+    # scenes: player-idle.bin's atlas, skeleton and mesh around each clip's
+    # tracks, which is what the cooker checked and stripped.
+    import npc_looks
+    head, _, tail, _ = npc_looks.split_scene(files["player-idle.bin"], "player clip")
+    for name, data in files.items():
+        if data[:4] == b"N3ST":
+            files[name] = files["player-idle.bin"][:4] + head + data[4:] + tail
     m = json.loads((out / "recipe.json").read_text())["manifest"]
 
     def repack(changed, engine=36, protocol=29):

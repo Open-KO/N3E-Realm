@@ -2025,5 +2025,6 @@ every package with player clips has, the client already checks the other clips a
 it (`player_scenes.front()`) and draws the render detail with it, and it stays a whole
 scene, so nothing new is needed to read it. A fixed base needs no name in the file; the
 cook refuses a clip whose atlas, skeleton or mesh is not the base's byte for byte
-(`content/animation.md`, "Track-only player clips"). Whether and when Moradon opts in
-is queued separately (`moradon-player-clips-tracks`).
+(`content/animation.md`, "Track-only player clips"). Moradon opts in (RQ-190,
+`moradon-player-clips-tracks`): `games/moradon/features.json` carries the key, so every
+feature cook is engine 46 and its release hash moved (a new hosted realm, Q63).

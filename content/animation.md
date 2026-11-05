@@ -115,8 +115,16 @@ parsed copy of `player-idle.bin`'s atlas and mesh. So with N3ST the 64 MiB comba
 budget no longer bounds that memory: up to 64 combat clips, each with a copy, come to
 roughly 218 MB at the 1024 x 1024 atlas bound (64 x 3,403,796 bytes,
 [clip byte budget](combat-animation.md#clip-byte-budget-rq-166)), until the client
-shares one parse across the player clips (queued as `player-clips-share-parse`). No
-shipped package opts in yet.
+shares one parse across the player clips (queued as `player-clips-share-parse`).
+
+Moradon opts in (RQ-190): `games/moradon/features.json` carries the key, so every
+`ko_bake.py --features` cook (the realm's package, the classic and 1097 Moradons, the
+2233 glow and `--des` cooks) ships player-idle.bin whole, its other 30 player clips
+as N3ST (about 41.7 MB less) and is engine 46, which every client must read before it
+joins; `ko_bake` raises the engine as it does for the other opt-in formats. Its
+plain cooks (engine 14) carry no feature set and ship their clips whole. The client
+skins every clip to the same vertices as before (`tests/ko_bake_pin.py`, its pins
+moved for it).
 
 ## Runtime state and time
 

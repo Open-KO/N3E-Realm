@@ -100,6 +100,11 @@
   parts (`NPC_SHOWN_SHAPES`); the six Moradon pins changed for it, the homeland
   pins did not.
 
+* RQ-190 (Q117): each feature cook (default, classic, 1097) ships player-idle.bin
+  whole and its 30 other player clips as N3ST, engine 46 (`track_clips`;
+  games/moradon/features.json `player_clips`); the plain cooks ship them whole.
+  The three feature pins changed for it; no other pin did.
+
 Without `assets/ko` it prints SKIP lines: no KO data is committed. RQ-085: every
 `--features` cook draws the realm's front end, whose screens are read from the
 player's 1264 install (games/moradon/front-ends.json, build/ko-reference/installer-1264);
@@ -549,9 +554,20 @@ CLIENT = Path("assets/ko")
 # 58,460,464 to 61,065,488 bytes; the release index follows. Default features
 # 8aa786d3... -> 8698fe24...; classic ec29c864... -> 5738cde6...; 1097
 # 1f96f2dc... -> 4f99f71a.... The plain cooks and the homelands keep their pins.
+# RQ-190 (Q117) changed them again: games/moradon/features.json opts in to
+# track-only player clips (`"player_clips": "tracks"`, RQ-188), so every player
+# clip but player-idle.bin is N3ST (its track list alone) and the package is
+# engine 46 (from 42). Against RQ-169's cooks only the 30 other player clips
+# (with player-idle.bin, 44,566,812 -> 2,836,692 bytes for all 31), recipe.json
+# (the manifest's player_clips and engine_version; every source digest is
+# unchanged) and the release index change, and the client skins every clip at
+# 0, .25, .5, .75 and 1 to the same vertices as before (n3e-asset-check
+# --scene). Default features 8698fe24... -> b879a012...; classic 5738cde6... ->
+# 9869b260...; 1097 4f99f71a... -> 76f33cc2.... The plain cooks (engine 14, no
+# features.json) and the homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "8698fe24098082f9acb50a30fda5b30a266454d517920b678d2197c9d5137a94"),
+    "features": (["--features"], "b879a012547c0e7147b8eb50fe10582b5db1190a115d3f7cc946cf7035b09e06"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -572,13 +588,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "5738cde6e7e801279dd06e064541fcdde848f554b24656acc1ab0df002653e12"),
+    "features": (["--features"], "9869b2601456699d0ab0840dccf7c4cecd7ec44c8eed91ff8f533d5e23c52ba3"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "4f99f71a5bc3093edd8f9ad4260373af2266b9ec5cfc94cd3315a0ac7c04bcf7"),
+    "features": (["--features"], "76f33cc2207af4a31ff197b87dcce401246cb90a224b3130f2cbe193e8951ccf"),
 }
 
 
@@ -686,6 +702,21 @@ def heads_1298(package, report, features):
         120110048, "Item_Ext_1 row 48", 5, "Short Blade(+8)", [6812, 2529]), record
 
 
+def track_clips(package, features):
+    """RQ-190 (Q117): a feature cook ships player-idle.bin whole and its other
+    30 player clips as N3ST (games/moradon/features.json `player_clips`),
+    engine 46; a plain cook (engine 14) ships every player clip whole."""
+    manifest = json.loads((package / "recipe.json").read_text())["manifest"]
+    clips = sorted(p.name for p in package.iterdir() if p.name.endswith(".bin") and p.name != "combat-animation.bin"
+                   and p.name.startswith(("player-", "combat-")))
+    magics = {name: (package / name).read_bytes()[:4] for name in clips}
+    if not features:
+        assert "player_clips" not in manifest and b"N3ST" not in magics.values(), magics
+        return
+    assert manifest["player_clips"] == "tracks" and manifest["engine_version"] == 46, manifest["engine_version"]
+    assert len(clips) == 31 and magics.pop("player-idle.bin") == b"N3S1" and set(magics.values()) == {b"N3ST"}, magics
+
+
 def turn_sound(report, features):
     """RQ-077 (Q70, KO-FINDINGS 8.2): a feature cook binds the select arrows'
     turn sound, front-end.json's `select.turn_sound` (sound.tbl 2501,
@@ -766,6 +797,7 @@ for name, (flags, pinned) in runnable(PINS, "Moradon (key 210)").items():
     event_shapes("moradon", provenance)
     heads_1298(OUT / name / "packages" / "moradon", provenance, bool(flags))
     turn_sound(provenance, bool(flags))
+    track_clips(OUT / name / "packages" / "moradon", bool(flags))  # RQ-190
     # PQ-387: Moradon_xmas.tlt's 530 light maps (key 210's column 5).
     check = subprocess.run(["build/client/n3e-asset-check", str(OUT / name / "packages" / "moradon")],
                            capture_output=True, text=True)
@@ -780,7 +812,7 @@ if drawn is None:
 else:
     print("PASS Moradon (key 210, Reserved) cooks to the pinned release hashes: plain/--preview "
           "%s..., --features %s... (the worm drawn at %g: clip scenes, NPC name height and target marker; "
-          "the blade's 1298 tooltip head, PQ-361)"
+          "the blade's 1298 tooltip head, PQ-361; its player clips but player-idle.bin as N3ST, RQ-190)"
           % (PINS["plain"][1][:8], PINS["features"][1][:8], drawn))
 
 # PQ-217 (with PQ-234's N3W2 branch): each homeland through the bake command,
@@ -932,6 +964,7 @@ for name, (flags, pinned) in runnable(CLASSIC_PINS, "classic Moradon").items():
         worm_drawn(package, report)  # PQ-288
         heads_1298(package, report, True)  # PQ-361
         turn_sound(report, True)  # RQ-077
+        track_clips(package, True)  # RQ-190
         x0, z0, x1, z1 = moradon_features.start_area()
         assert features["layout"] == "classic" and x0 <= spawn[0] <= x1 and z0 <= spawn[2] <= z1, (spawn, features)
         assert features["spawn"][0::2] == spawn[0::2] and abs(features["spawn"][1] - spawn[1]) < 0.006, features
@@ -1027,6 +1060,7 @@ if (INSTALL_1097 / "manifest.json").is_file():
             worm_drawn(package, report)  # PQ-288
             heads_1298(package, report, True)  # PQ-361
             turn_sound(report, True)  # RQ-077
+            track_clips(package, True)  # RQ-190
             x0, z0, x1, z1 = moradon_features.start_area()
             assert features["layout"] == "1097" and x0 <= spawn[0] <= x1 and z0 <= spawn[2] <= z1, (spawn, features)
             assert features["spawn"][0::2] == spawn[0::2] and abs(features["spawn"][1] - spawn[1]) < 0.006, features

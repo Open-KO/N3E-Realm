@@ -828,5 +828,6 @@
       "delay_ms": 500,
       "cooldown_ms": 2000
     }
-  ]
+  ],
+  "player_clips": "tracks"
 }

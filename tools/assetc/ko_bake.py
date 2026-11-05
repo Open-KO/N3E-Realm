@@ -528,6 +528,11 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         # four joint influences (N3SI / N3SJ records, N3FE 30) is engine 45;
         # Moradon's dressed create races (1, 2, 3, 4) are not (RQ-169).
         manifest['engine_version']=max(manifest['engine_version'],main.FRONT_END_INFLUENCES_ENGINE)
+    if main.player_clips.mode(manifest):
+        # RQ-190 (Q117): games/moradon/features.json's `"player_clips":
+        # "tracks"` cooks every player clip but player-idle.bin as N3ST,
+        # engine 46; only the feature cooks (engine 42+) carry it.
+        manifest['engine_version']=max(manifest['engine_version'],main.player_clips.ENGINE)
     (root / "package.json").write_text(json.dumps(manifest, indent=2))
 
     report["zone"] = zone["provenance"]

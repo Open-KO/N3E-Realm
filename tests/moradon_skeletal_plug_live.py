@@ -193,8 +193,9 @@ assert state['release'] == (package / 'release.sha256').read_text().strip(), 'th
 recipe = json.loads((package / 'recipe.json').read_text())['manifest']
 # The skeletal plugs' looks models need engine 39 (attachments.engine), but
 # ko_bake --features also cooks spec 11's front end into every features package
-# and raises it to engine 42 (M4c); the bake keeps the higher, so 42, wire 30.
-assert recipe['engine_version'] == 42 and recipe['protocol_version'] == 30 and \
+# and raises it to engine 42 (M4c), and features.json's track-only player clips
+# (N3ST, RQ-190) to engine 46; the bake keeps the highest, so 46, wire 30.
+assert recipe['engine_version'] == 46 and recipe['protocol_version'] == 30 and \
     recipe['presentation'].get('front-end.bin') == 'front-end.bin', (
         recipe['engine_version'], recipe['protocol_version'], recipe['presentation'].get('front-end.bin'))
 provenance = json.loads((moradon_stack.WORK / 'ko-moradon-glow2233/provenance.json').read_text())

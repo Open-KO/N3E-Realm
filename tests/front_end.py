@@ -1424,19 +1424,23 @@ print("PASS front-end cook: a create model per race of models.create, the select
 # lower, the looks part where the dress leaves the slot; the right hand on
 # the looks row's column 18, the left on 19, a left-hand shield (class 60) on
 # 20 (1298 00467b30). A helmet and a row without the joints are refused.
+# SKELETON is the model's joint count (create_model's, ko_detail.bind_world's).
 LOOKS_ROW = ["2", "x", "j.n3joint", "a.n3anim", "u.n3cpart", "l.n3cpart", "f.n3cpart", "h.n3cpart", "t.n3cpart",
              "r.n3cpart", "", "", "", "", "", "", "", "-1", "12", "7", "5", "0"]
+SKELETON = 13
 worn = fe.dress_sets(LOOKS_ROW, {
     102: dict(parts=[dict(slot=0, item=1, file="A"), dict(slot=1, item=2, file=None), dict(slot=6, item=3, file="C")],
               plugs=[dict(slot=0, item=4, kind=71, file="P"), dict(slot=1, item=5, kind=60, file="S")]),
-    104: dict(parts=[], plugs=[dict(slot=1, item=6, kind=41, file="L"), dict(slot=0, item=7, kind=60, file="R")])})
+    104: dict(parts=[], plugs=[dict(slot=1, item=6, kind=41, file="L"), dict(slot=0, item=7, kind=60, file="R")])},
+    SKELETON)
 assert worn == {102: (("A", "h.n3cpart", "t.n3cpart", "C"), ((0, 12, "P"), (1, 5, "S"))),
                 104: (("u.n3cpart", "l.n3cpart", "h.n3cpart", "t.n3cpart"), ((1, 7, "L"), (0, 12, "R")))}, worn
 dress_refusals = {
-    "a helmet": lambda: fe.dress_sets(LOOKS_ROW, {102: dict(parts=[dict(slot=5, item=1, file="H")], plugs=[])}),
-    "a row without its hand joints": lambda: fe.dress_sets(LOOKS_ROW[:19], {102: dict(parts=[], plugs=[])}),
+    "a helmet": lambda: fe.dress_sets(LOOKS_ROW, {102: dict(parts=[dict(slot=5, item=1, file="H")], plugs=[])},
+                                      SKELETON),
+    "a row without its hand joints": lambda: fe.dress_sets(LOOKS_ROW[:19], {102: dict(parts=[], plugs=[])}, SKELETON),
     "a hand joint not a number": lambda: fe.dress_sets(LOOKS_ROW[:18] + ["x"] + LOOKS_ROW[19:],
-                                                       {102: dict(parts=[], plugs=[])}),
+                                                       {102: dict(parts=[], plugs=[])}, SKELETON),
 }
 for reason, call in dress_refusals.items():
     try:
@@ -1449,7 +1453,7 @@ for reason, call in dress_refusals.items():
 # its reason: a part in slot 10, a plug in slot 2 (the loader's hand 2), one
 # file in two slots (the loader's repeated index; a dress file a looks part
 # also names, any case) and a slot named twice.
-worn = fe.dress_sets(LOOKS_ROW, {102: dict(parts=[dict(slot=9, item=1, file="N")], plugs=[])})
+worn = fe.dress_sets(LOOKS_ROW, {102: dict(parts=[dict(slot=9, item=1, file="N")], plugs=[])}, SKELETON)
 assert worn == {102: (("u.n3cpart", "l.n3cpart", "h.n3cpart", "t.n3cpart", "N"), ())}, worn
 dress_slot_refusals = {
     "a part in slot 10": ({102: dict(parts=[dict(slot=10, item=1, file="X")], plugs=[])}, "a part in slot 10"),
@@ -1466,14 +1470,38 @@ dress_slot_refusals = {
 }
 for reason, (sets, expected) in dress_slot_refusals.items():
     try:
-        fe.dress_sets(LOOKS_ROW, sets)
+        fe.dress_sets(LOOKS_ROW, sets, SKELETON)
     except ValueError as error:
         assert expected in str(error), (reason, str(error))
         continue
     raise AssertionError("front-end cook accepted " + reason)
+# RQ-186: a plug's joint is one of the model's skeleton's (0 to its count - 1;
+# the loader refuses one at or past its joints, and a negative one would not
+# pack): a joint at the count or negative is refused for the hand a plug
+# takes; a row's joint no plug takes is not read.
+RIGHT, LEFT, SHIELD_ON = ({102: dict(parts=[], plugs=[dict(slot=s, item=4, kind=k, file="P")])}
+                          for s, k in ((0, 71), (1, 41), (1, 60)))
+assert fe.dress_sets(LOOKS_ROW[:19] + ["-1", "-5"] + LOOKS_ROW[21:], RIGHT, SKELETON) == {102: ((
+    "u.n3cpart", "l.n3cpart", "h.n3cpart", "t.n3cpart"), ((0, 12, "P"),))}
+plug_joint_refusals = {
+    "a right hand joint at the skeleton's count": (LOOKS_ROW, RIGHT, 12, "right hand's joint 12"),
+    "a right hand joint past the skeleton's count": (LOOKS_ROW, RIGHT, 1, "right hand's joint 12"),
+    "a negative left hand joint": (LOOKS_ROW[:19] + ["-1"] + LOOKS_ROW[20:], LEFT, SKELETON, "left hand's joint -1"),
+    "a shield joint at the skeleton's count": (LOOKS_ROW[:20] + ["13"] + LOOKS_ROW[21:], SHIELD_ON, SKELETON,
+                                               "shield hand's joint 13 (looks row 2, column 20)"),
+    "a negative shield joint": (LOOKS_ROW[:20] + ["-2"] + LOOKS_ROW[21:], SHIELD_ON, SKELETON,
+                                "shield hand's joint -2"),
+}
+for reason, (row, sets, joints, expected) in plug_joint_refusals.items():
+    try:
+        fe.dress_sets(row, sets, joints)
+    except ValueError as error:
+        assert expected in str(error) and "skeleton's %d joints" % joints in str(error), (reason, str(error))
+        continue
+    raise AssertionError("front-end cook accepted " + reason)
 print("PASS front-end cook: each specialty's create dress drawn as KO's build sets it, the robe's lower bare, the "
-      "looks part where it leaves a slot, each plug on its hand's joint (a shield on its own); %d refusals"
-      % (len(dress_refusals) + len(dress_slot_refusals)))
+      "looks part where it leaves a slot, each plug on its hand's joint (a shield on its own), one of the "
+      "skeleton's; %d refusals" % (len(dress_refusals) + len(dress_slot_refusals) + len(plug_joint_refusals)))
 
 
 class PartTree:
@@ -1520,6 +1548,25 @@ for reason, names, expected in (("a dress part's texture a looks part names", ["
         assert "named by parts of two inputs" in str(error) and expected in str(error), (reason, str(error))
         continue
     raise AssertionError("front-end cook accepted " + reason)
+# RQ-186: a worn file is a dress part or a looks part by its dress, not its
+# spelling: an unprefixed dress file (input 0's) spelled as another
+# specialty's looks part is both, read from input 0 where the model's tree is
+# input 0 and refused where it is not (it would read the looks part through
+# input 0).
+SHARED_ROW = LOOKS_ROW[:5] + ["Item\\d.n3cpart"] + LOOKS_ROW[6:]
+SHARED = {102: dict(parts=[dict(slot=0, item=1, file="Item\\d.n3cpart"), dict(slot=1, item=2, file="C")], plugs=[]),
+          104: dict(parts=[], plugs=[])}
+assert fe.dress_files(SHARED, fe.dress_sets(SHARED_ROW, SHARED, SKELETON)) == (
+    ["C", "Item\\d.n3cpart"], ["Item\\d.n3cpart", "h.n3cpart", "t.n3cpart", "u.n3cpart"])
+assert fe.Dressed(MODEL_TREE, TWO, ["Item\\d.n3cpart"], ["Item\\d.n3cpart"]).paths == {
+    "Item\\d.n3cpart": "Item\\d.n3cpart"}
+try:
+    fe.Dressed(MODEL_TREE, fe.Inputs([ITEM_TREE, MODEL_TREE], [None, "chr"]), ["Item\\d.n3cpart"],
+               ["Item\\d.n3cpart"])
+except ValueError as error:
+    assert "named by parts of two inputs" in str(error), str(error)
+else:
+    raise AssertionError("front-end cook accepted a looks part read through input 0 by its dress file's spelling")
 print("PASS front-end cook: each worn part's files read from its own input, a path two inputs' parts name refused")
 
 

@@ -263,6 +263,7 @@ lower left bare, and the hand plugs on the looks row's joints (columns 18, 19 an
 20, a class-60 shield on the last) scaled by the model's height as `PlugSet` does.
 A dress with a helmet is refused (Q115), and (RQ-181) a part outside slots 0–9, a
 plug outside hands 0 and 1, one file in two slots and a path parts of two inputs
-name. The client draws the dress of the specialty whose row the last build took.
+name, and (RQ-186) a plug whose looks row joint is negative or past the model's
+skeleton. The client draws the dress of the specialty whose row the last build took.
 The 1298 Karus/El Morad nation choice and the other races and classes remain
 gaps (Q51, Q52). [Contract](../../content/front-end.md).

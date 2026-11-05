@@ -559,7 +559,9 @@ CPU (`make test`):
    synthetic looks row (the hand joints from columns 18–20, a class-60 shield on
    column 20) and refuses a helmet and a missing joint column (RQ-181: and a part
    outside slots 0–9, a plug outside hands 0 and 1, one file in two slots, a slot
-   twice, and a path parts of two inputs name); the loader takes a
+   twice, and a path parts of two inputs name; RQ-186: and a plug joint outside
+   the model's skeleton, negative or at its joint count, and a looks part read
+   through input 0 by a dress file's spelling); the loader takes a
    model's dress parts and dresses (up to 64 and 16) and refuses version 28 and
    each case `content/front-end.md` item 8 names; `tests/front_end.cpp` checks
    that each build dresses the new character in its row's specialty and that a

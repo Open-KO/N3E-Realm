@@ -1921,6 +1921,13 @@ def scene_skeleton(head):
     return head[12 + w * h * (4 if head[:4] == b"N3SM" else 3):]
 
 
+def scene_joints(head):
+    """The joint count of a cooked scene's head: the client's model joints,
+    which a plug's joint indexes (nodes are 44 bytes)."""
+    skeleton = scene_skeleton(head)
+    return struct.unpack_from("<I", skeleton, 4 + struct.unpack_from("<I", skeleton)[0] * 44)[0]
+
+
 def normal(name):
     return name.replace("\\", "/").casefold()
 
@@ -1942,13 +1949,13 @@ class Dressed:
 
     def __init__(self, tree, assets, names, own=()):
         self.tree, self.root, self.routes, self.paths = tree, tree.root, {}, {}
-        worn = [(tree, name, name) for name in own] + [split(assets, name) + (name,) for name in names]
+        worn = [(tree, name, None) for name in own] + [split(assets, name) + (name,) for name in names]
         for source, path, name in worn:
             part = character.part(source.get(path))
             for n in (path, part["texture"], part["skin"]):
                 if n and self.routes.setdefault(normal(n), source) is not source:
                     raise ValueError("front-end create dress: %s is named by parts of two inputs" % n)
-            if name in names:
+            if name is not None:
                 self.paths[name] = path
 
     @property
@@ -2005,7 +2012,7 @@ def dress_plug(assets, textures, name, joint, height):
                                   material[:3], material[4:7])
 
 
-def dress_sets(row, sets):
+def dress_sets(row, sets, joints):
     """Version 29 (RQ-176): each specialty's drawn parts and plugs from its
     create dress (`sets`, ko_create.dress's for the race: {specialty: {parts,
     plugs}}), as KO's build sets them (1298 005fd120, 1264 00439970): each
@@ -2020,15 +2027,21 @@ def dress_sets(row, sets):
     RQ-181: refuses what the client would refuse or KO's build would not
     draw: a part outside slots 0-9 or a plug outside hands 0 and 1 (the
     build's, PART_SLOTS and HANDS), and a dress that draws one file in two
-    slots (the loader takes each dress part once per dress)."""
+    slots (the loader takes each dress part once per dress).
+
+    RQ-186: refuses a plug whose looks row joint is not one of the model's
+    skeleton's `joints` (0 to joints - 1): KO's render skips a plug on a
+    negative joint and indexes its joint matrices past their end with one
+    at or past the count (source N3Chr.cpp CN3Chr::Render, MatrixGet), and
+    the loader refuses either (a u32 below the model's joints)."""
     import ko_player
-    joints = {}
-    for at, column in zip(("right", "left", "shield"), HAND_JOINTS):
+    at, columns = {}, dict(zip(("right", "left", "shield"), HAND_JOINTS))
+    for hand, column in columns.items():
         try:
-            joints[at] = int(row[column])
+            at[hand] = int(row[column])
         except (IndexError, ValueError):
             raise ValueError("front-end create dress: looks row %s has no %s hand joint (column %d)"
-                             % (row[0], at, column))
+                             % (row[0], hand, column))
     out = {}
     for specialty, dress in sets.items():
         for kind, items, bound in (("part", dress["parts"], PART_SLOTS), ("plug", dress["plugs"], HANDS)):
@@ -2057,9 +2070,28 @@ def dress_sets(row, sets):
         plugs = []
         for p in dress["plugs"]:
             hand = "right" if p["slot"] == 0 else "shield" if p["kind"] == SHIELD else "left"
-            plugs.append((p["slot"], joints[hand], p["file"]))
+            if not 0 <= at[hand] < joints:
+                raise ValueError("front-end create dress of specialty %d: the %s hand's joint %d (looks row %s, "
+                                 "column %d) is not one of the skeleton's %d joints"
+                                 % (specialty, hand, at[hand], row[0], columns[hand], joints))
+            plugs.append((p["slot"], at[hand], p["file"]))
         out[specialty] = (tuple(parts), tuple(plugs))
     return out
+
+
+def dress_files(dress, sets):
+    """(dress parts, looks parts) the dresses (`sets`, dress_sets' of
+    `dress`) wear, each sorted: a worn file is a dress part where its own
+    dress names it (ko_create.dress's, read from its input), else the looks
+    row's (the model's tree's). RQ-186: by its dress, not its spelling, so a
+    spelling that is one specialty's dress file and another's looks part is
+    both, and Dressed refuses it unless one input holds both."""
+    parts, own = set(), set()
+    for specialty, (worn, _) in sets.items():
+        files = {p["file"] for p in dress[specialty]["parts"] if p["file"]}
+        for name in worn:
+            (parts if name in files else own).add(name)
+    return sorted(parts), sorted(own)
 
 
 def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, dress=None, inputs=None,
@@ -2096,14 +2128,16 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, 
     names = row[4:10]
     if not 0 <= faces <= MAX_CREATE_PARTS or not 0 <= hairs <= MAX_CREATE_PARTS:
         raise ValueError("front-end create faces and hairs: 0 to %d each" % MAX_CREATE_PARTS)
-    sets = dress_sets(row, dress) if dress else {}
+    # The skeleton's joints in KO's order (CN3Chr's joint matrices): a dress
+    # plug's joint indexes them (RQ-186), and CN3Chr::Height(), the largest
+    # joint y, scales the plugs.
+    world = ko_detail.bind_world(assets, dict(joint=joint)) if dress else []
+    sets = dress_sets(row, dress, len(world)) if dress else {}
     if len(sets) > MAX_DRESSES:
         raise ValueError("front-end create dresses: at most %d" % MAX_DRESSES)
     # The dress parts are the files ko_create.dress names, read from their
     # inputs; the rest a dress wears are the looks row's, the model's tree's.
-    dressed = {p["file"] for d in (dress or {}).values() for p in d["parts"] if p["file"]}
-    wears = {n for parts, _ in sets.values() for n in parts}
-    tree = Dressed(assets, inputs, sorted(wears & dressed), sorted(wears - dressed)) if sets else assets
+    tree = Dressed(assets, inputs, *dress_files(dress, sets)) if sets else assets
     if sets:
         # The parts the most specialties wear, the first's on a tie.
         worn = [parts for parts, _ in sets.values()]
@@ -2115,6 +2149,12 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, 
     definition = dict(joint=joint, animation=animation, parts=[tree.paths.get(n, n) if sets else n for n in body])
     record = model(tree, joint, definition, [BREATH], work)
     head, _, tail = scene_tracks(record[4:4 + struct.unpack_from("<I", record)[0]])
+    # The client's model joints are the skeleton's, one for one (a skeleton
+    # of at most 64 joints skins with them all, ko_character.convert), so a
+    # plug's joint below the skeleton's count is below the loader's.
+    if sets and scene_joints(head) != len(world):
+        raise ValueError("front-end create model of race %d: %d joints cooked of its skeleton's %d"
+                         % (race, scene_joints(head), len(world)))
     out, counts = record + u(0), []
     for position, number in ((ko_player.FACE, faces), (ko_player.HAIR, hairs)):
         name = names[position]
@@ -2134,8 +2174,7 @@ def create_model(assets, race, work, entry=None, faces=1, hairs=1, report=None, 
     out += u(len(pool)) + b"".join(
         create_part(tree, joint, animation, tree.paths.get(n, n), work.parent / ("%s-dress-%d" % (work.name, i)),
                     head, tail) for i, n in enumerate(pool))
-    # CN3Chr::Height(), the largest joint y (ko_detail.bind_world), scales the plugs.
-    height = max(m[1][3] for m in ko_detail.bind_world(assets, dict(joint=joint))) if sets else 0
+    height = max(m[1][3] for m in world) if sets else 0
     out += u(len(sets))
     dresses = {}
     for specialty, (parts, plugs) in sets.items():

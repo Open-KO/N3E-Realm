@@ -180,14 +180,23 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    build sets part slots 0–9 and attaches two hand plugs, 1298 `005fd120`,
    though a create table may name 16 of each), one file drawn in two slots,
    and a path (a worn part, its texture or skin) that parts of two inputs
-   name, each input's files being read by path; the parts
+   name, each input's files being read by path (RQ-186: a worn file is a
+   dress part where its own dress names it and a looks part where the looks
+   row does, by its dress, so one spelling that is both, an unprefixed dress
+   file in one dress and a looks part in another, is refused unless the
+   model's tree is input 0); the parts
    the most specialties wear (the first's on a tie) are the model's own
    parts (body 1), and the others' follow as dress parts, each once, drawn in
    place of the model's own (body 0). A plug's joint is the looks row's
    right hand (column 18), left hand (column 19) or, for a left-hand item of
    class 60, shield (column 20; 1298 `00467b30`'s `+0x108`, `+0x10c`,
    `+0x110`), scaled as `PlugSet` scales it (its scale y × the model's
-   `Height()`, the largest joint y, / 1.8). Without a create choice, or for a
+   `Height()`, the largest joint y, / 1.8). RQ-186: the cook refuses a plug
+   whose joint is not one of the skeleton's, negative (KO's `CN3Chr::Render`
+   skips that plug, source `N3Chr.cpp`) or at or past its joint count (KO
+   reads past its joint matrices); the model's joints are the skeleton's one
+   for one (a skeleton of at most 64 joints skins with them all), which the
+   cook checks, so the loader's bound is the skeleton's. Without a create choice, or for a
    table without item columns, the model holds the looks parts and carries no
    dresses (KO's `SetChr` without a row). The new character wears the dress
    of the specialty whose row the last build took ("Actions"), none for a
@@ -563,8 +572,8 @@ dress specialty outside 1–65535 or named twice on a model, a body flag above
 twice in a dress, a dress part no dress wears, a dress part that is not its
 model's skeleton (as a face), more than two plugs, a hand above 1 or twice, a
 plug joint outside the model's joints (version 29; version 28 is refused as
-every older version is), a create model count outside 1–32, a create race
-outside 1–65535 or named twice, a face or hair count above 32, a part that is
+every older version is), a create model count outside 1–32 or a create race
+outside 1–65535 or named twice (version 24), a face or hair count above 32, a part that is
 not N3S1 or N3SM, has tracks, or whose nodes, joints or instance scale are
 not its model's (version 27), an unknown action, a screen missing one of its required
 actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,

@@ -17,6 +17,10 @@ namespace {
 constexpr size_t WORLD_ASSET_BOUND = 32 * 1024 * 1024;
 // N3W2 (PQ-231, D-159): the chunked encoding for worlds that do not fit N3W1.
 constexpr size_t CHUNKED_WORLD_BOUND = 384u * 1024 * 1024;
+// RQ-166: the combat clips' combined bytes (combat-<i>.bin), the cooker's and
+// the server's bound too. Each clip is a whole player scene with its own atlas;
+// 64 MiB holds Moradon's 19 clips at the full 1024 x 1024 RGB atlas.
+constexpr uint64_t COMBAT_CLIP_BYTES = 64u * 1024 * 1024;
 void need(bool b, const char *why) {
   if (!b)
     throw std::runtime_error(why);
@@ -1215,7 +1219,7 @@ Release load_release(const std::filesystem::path &root) {
     auto n=a.count(64);uint64_t bytes=0;
     for(unsigned i=0;i<n;++i){
       auto name="combat-"+std::to_string(i)+".bin";need(files.erase(name)==1,"combat clip missing");
-      bytes+=std::filesystem::file_size(root/name);need(bytes<=32*1024*1024,"combat clip byte budget");
+      bytes+=std::filesystem::file_size(root/name);need(bytes<=COMBAT_CLIP_BYTES,"combat clip byte budget");
       Clip clip;clip.duration=a.f();clip.blend=a.f();auto loop=a.u();clip.loop_blend=loop;clip.markers=a.floats<2>();
       need(clip.duration>=.001f&&clip.duration<=3600&&clip.blend>=0&&clip.blend<=2&&loop<=1,"combat clip bounds");
       for(auto m:clip.markers)need(m==-1||(m>=0&&m<=clip.duration),"combat marker");

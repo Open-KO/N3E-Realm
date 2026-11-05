@@ -72,7 +72,10 @@ appearance parts carry such vertices too since RQ-164: N3DI / N3DJ render detail
 engine 44 ([influence tables in render detail](appearance.md#influence-tables-in-render-detail-n3di--n3dj-engine-44-rq-164)).
 The front end's models and parts carry them since RQ-165: N3SI / N3SJ records in
 N3FE version 30, engine 45 ([front end](front-end.md#influence-tables-version-30-engine-45-rq-165)).
-No package ships that race yet (Q102).
+No package ships that race yet (Q102). Its 512 x 512 lower texture doubles its
+atlas, so its 19 combat clips are 49,919,260 bytes, past the 32 MiB combat clip
+budget the three readers held until RQ-166 raised it to 64 MiB
+([clip byte budget](combat-animation.md#clip-byte-budget-rq-166)).
 
 ## Runtime state and time
 

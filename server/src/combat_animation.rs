@@ -56,6 +56,11 @@ pub fn landing_ticks(duration:f32,blend:f32,marker:f32,cast_ms:u32)->u32{
     let seconds=f64::from(blend)+f64::from(marker)*(f64::from(cast_ms)/1000.)/f64::from(duration);
     (seconds*20.).ceil() as u32
 }
+/// RQ-166: the combat clips' combined bytes (`combat-<i>.bin`), the cooker's
+/// and the client's bound too. Each clip is a whole player scene with its own
+/// atlas; 64 MiB holds Moradon's 19 clips at the full 1024 x 1024 RGB atlas
+/// (the Arch Tuarek's, 1024 x 776, make 49,919,260 bytes).
+pub const MAX_CLIP_BYTES:u64=64*1024*1024;
 /// Longest client notice a ranged-attack file carries (printable ASCII).
 pub const MAX_RANGED_NOTICE:u32=96;
 /// PQ-423 (D-220): longest cast-effect clip key (N3RF; the client's).
@@ -69,7 +74,7 @@ impl Policy {
         let mut looping=Vec::new();let mut bytes=0;let mut clips=Vec::new();
         for i in 0..count {
             let name=format!("combat-{i}.bin");if !files.remove(&name){return Err(bad("combat clip missing"));}
-            bytes+=std::fs::metadata(root.join(name))?.len();if bytes>32*1024*1024{return Err(bad("combat clip byte budget"));}
+            bytes+=std::fs::metadata(root.join(name))?.len();if bytes>MAX_CLIP_BYTES{return Err(bad("combat clip byte budget"));}
             let d=r.f()?;let b=r.f()?;let l=r.u()?;
             if !(0.001..=3600.).contains(&d)||!(0.0..=2.).contains(&b)||l>1{return Err(bad("combat clip bounds"));}
             // D-217: the first marker is the one 1298's cast tick tests (clip

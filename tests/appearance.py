@@ -122,6 +122,42 @@ with tempfile.TemporaryDirectory(dir='build') as tmp:
     for name in ['combat-0.bin','combat-1.bin','combat-2.bin']:
         repack({name:b'BAD!'+files[name][4:]});check(False,True)
     print('PASS N3A4 profiles/complete clips, equipment selectors, one-shot attacks and hostile reader bounds')
+    # RQ-166: the combat clips' combined bytes are bounded at 64 MiB by the
+    # cooker and both readers (32 MiB before; the Arch Tuarek's 19 clips are
+    # 49,919,260 bytes). Every player scene here takes a 1024 x 1024 RGB atlas,
+    # the player cook's largest, so the clips stay compatible: enough of them
+    # to pass 32 MiB read, enough to pass 64 MiB is refused by all three.
+    def big(data):
+        assert data[:4]==b'N3S1',data[:4]
+        w,h=struct.unpack_from('<2I',data,4)
+        return data[:4]+u(1024)+u(1024)+bytes(1024*1024*3)+data[12+w*h*3:]
+    clip=big(files['combat-0.bin']);budget=combat_animation.MAX_BYTES
+    assert budget==64*1024*1024
+    over32,over64=32*1024*1024//len(clip)+1,budget//len(clip)+1
+    assert 32*1024*1024<over32*len(clip)<=budget<over64*len(clip) and over64<=33,(len(clip),over32,over64)
+    def clips(n):
+        return dict(config,clips=[dict(config['clips'][0],source='combat-big.bin')]*n,
+                    profiles=[dict(ready=0,attacks=[k]) for k in range(1,n)])
+    def budget_release(n):
+        players={name:big(data) for name,data in files.items() if name.startswith('player-')}
+        repack({**players,'combat-animation.bin':combat_animation.cook(clips(n),m['inventory'],m['equipment']),
+                **{combat_animation.filename(i):clip for i in range(n)}})
+    budget_release(over32);check()
+    budget_release(over64)
+    for c in [['build/client/n3e-asset-check',str(out)],['target/debug/n3e-server','--check-content']]:
+        r=subprocess.run(c,env={**os.environ,'N3E_PACKAGE':str(out)},capture_output=True,text=True)
+        assert r.returncode!=0 and 'combat clip byte budget' in r.stdout+r.stderr,(c,r.stdout,r.stderr)
+    for i in range(over64):(out/combat_animation.filename(i)).unlink(missing_ok=True)
+    repack({})
+    (root/'combat-big.bin').write_bytes(clip);budget_out=Path(tmp)/'budget'
+    for n,good in [(over32,True),(over64,False)]:
+        (root/'package.json').write_text(json.dumps(dict(m,combat_animation=clips(n))))
+        try:main.cook(root,budget_out)
+        except ValueError as error:assert not good and str(error)=='combat clip byte budget',(n,error)
+        else:assert good and (budget_out/combat_animation.filename(n-1)).stat().st_size==len(clip),n
+    (root/'combat-big.bin').unlink();(root/'package.json').write_text(json.dumps(m));shutil.rmtree(budget_out)
+    print('PASS combat clip byte budget: %d clips (%d bytes) past 32 MiB read, %d (%d bytes) past 64 MiB refused by the cook and both readers'
+          %(over32,over32*len(clip),over64,over64*len(clip)))
 
     m.update(engine_version=32,protocol_version=25)
     config['upper_nodes']=[1]

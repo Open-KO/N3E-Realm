@@ -2,7 +2,12 @@
 from common import u, f
 import math
 
-MAX_BYTES=32*1024*1024
+# RQ-166: the combat clips' combined bytes, the same in both readers
+# (server/src/combat_animation.rs MAX_CLIP_BYTES, client/assets/assets.cpp
+# COMBAT_CLIP_BYTES). Each clip is a whole player scene with its own copy of
+# the atlas, so the bound follows the atlas: 64 MiB holds Moradon's 19 clips
+# at the full 1024 x 1024 RGB atlas (content/combat-animation.md).
+MAX_BYTES=64*1024*1024
 
 def filename(index):return f'combat-{index}.bin'
 

@@ -23,7 +23,8 @@ Every clip must be referenced. Attacks must have loop-blend disabled. All indice
 are checked; every nonempty item must be allowed in that equipment slot. Row keys
 must be unique and an all-empty fallback is mandatory. Unlisted combinations use
 that fallback. Extra clips are hashed canonical `combat-0.bin` through
-`combat-(count-1).bin` N3S1 files, at most32MiB combined. The client verifies their
+`combat-(count-1).bin` N3S1 files (N3SI from engine 43), at most 64 MiB combined
+([clip byte budget](#clip-byte-budget-rq-166)). The client verifies their
 skeleton/mesh/atlas compatibility and durations before entering the world.
 Truncation, trailing data, missing files and unexpected release files fail closed.
 Manifest clips also carry a `source` path; profiles contain `ready`/`attacks`,
@@ -511,3 +512,41 @@ that bound as its hold: √((range column // 10)² + 1000) on the ground plane,
 positions a glow shot fails it only when the target or the archer has
 moved apart since the acceptance
 (evidence).
+
+## Clip byte budget (RQ-166)
+
+The combat clips' combined bytes are bounded at 64 MiB (67,108,864) by the cooker
+(`tools/assetc/combat_animation.py` `MAX_BYTES`), the server
+(`server/src/combat_animation.rs` `MAX_CLIP_BYTES`) and the client
+(`client/assets/assets.cpp` `COMBAT_CLIP_BYTES`), each refusing a package past it
+with `combat clip byte budget`. The bound was 32 MiB until RQ-166; no cooked byte
+changes, and every package that read before still reads.
+
+Each clip is a whole player scene: the atlas, skeleton, its own tracks and the mesh,
+the atlas and mesh the same in every clip (the client checks it). The atlas is
+uncompressed RGB, so it is most of a clip and its size follows the race's part
+textures. Moradon's 19 combat clips (`games/moradon/combat-animation.json`), cooked
+for each race the create offers, face 0 and hair 0 (local-asset, the pinned 1298
+tree's `UPC_DefaultLooks` parts through `tools/assetc/ko_player.py`, measured for
+RQ-166):
+
+| Race | Part textures past 256 x 256 | Atlas | Clip format | 19 combat clips, bytes |
+|---|---|---|---|---|
+| Arch Tuarek (1) | lower 512 x 512 | 1024 x 776 | N3SI | 49,919,260 |
+| Tuarek (2, Moradon's player) | none | 1024 x 392 | N3S1 | 27,009,388 |
+| Wrinkle Tuarek (3) | upper 256 x 512 | 784 x 516 | N3S1 | 27,353,580 |
+| Puri Tuarek (4) | none (hair 256 x 256) | 1024 x 520 | N3S1 | 34,969,420 |
+| Barbarian (11) | none | 1024 x 393 | N3S1 | 27,512,624 |
+| El Morad male (12) | none | 1024 x 392 | N3SI | 27,221,392 |
+| El Morad female (13) | none | 1024 x 392 | N3S1 | 27,184,360 |
+
+The Arch Tuarek's lower texture is 512 x 512 where the other races' are 256 x 256,
+and its hair 256 x 256 where most are 128 x 128, which doubles its atlas (2,383,872
+bytes against the Tuarek's 1,204,224) and so nearly doubles every clip; its
+275-vertex influence table (N3SI, RQ-163) adds only 4,404 bytes a clip. The Puri
+Tuarek's 256 x 256 hair alone took it past 32 MiB too. 64 MiB holds the 19 clips at
+the largest atlas the player cook writes (1024 x 1024 RGB, 3,145,728 bytes; with the
+Arch Tuarek's largest mesh, tracks and table, 3,403,796 bytes a clip, 64,672,124 for
+19), so every race fits with room up to the atlas bound. The duplicated atlas is a
+cost of the clip format, not of the race: a clip format that shares the first player
+scene's atlas and mesh would shrink every race's clips, and is a separate change.

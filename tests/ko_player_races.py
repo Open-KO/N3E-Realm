@@ -44,6 +44,13 @@ specialties' create dress from the pinned tree's own 1298 table
 wear as the model's own parts, the others' parts after it, each plug on its
 looks row joint.
 
+RQ-166: the race whose idle scene is largest (the Arch Tuarek: its 512 x 512
+lower texture doubles the atlas every player clip carries) cooks the package's
+combat clips (ko_player.clip_indices' combat states, face 0 and hair 0) within
+the combat clip byte budget the cooker and both readers hold
+(combat_animation.MAX_BYTES, 64 MiB; they were 32 MiB, which its 19 clips,
+49,919,260 bytes, passed).
+
 RQ-169: the Arch Tuarek (1) ships. Each shipped create model is dressed
 from both create tables (1298's from the pinned tree, 1264's from the 1264
 install, SKIP without it): each dress replaces the looks lower part, so the
@@ -58,6 +65,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
 sys.path.insert(0, str(ROOT / "tools/assetc"))
 import front_end_choice  # noqa: E402
+import combat_animation  # noqa: E402
 import ko_character  # noqa: E402
 import ko_create  # noqa: E402
 import ko_detail  # noqa: E402
@@ -95,6 +103,7 @@ try:
 except front_end_choice.Refused as error:
     print("SKIP ko_player_races 1264 create dress: %s" % error)
 cooked, refused = [], []
+idle_bytes = {}
 for entry in rules["races"]:
     race = entry["race"]
     looks = ko_player.looks(assets, entry)
@@ -147,6 +156,7 @@ for entry in rules["races"]:
         continue
     assert race not in OPEN, "race %d now cooks: drop it from OPEN" % race
     cooked.append(race)
+    idle_bytes[race] = (out / "cooked-idle/scene.bin").stat().st_size
     # RQ-158: its create model, as front-end.bin carries it.
     shipped = race in rules["models"]["create"]
     assert shipped != (race in UNSHIPPED), (race, "models.create and UNSHIPPED disagree")
@@ -203,6 +213,20 @@ for entry in rules["races"]:
              ": %(vertices)d drawn vertices past four influences, at most %(most)d" % many if many else "",
              detail[:4].decode(), ": %d corners past four in level 0 and in keys %s"
              % (tables["levels"][0], sorted(tables["appearances"])) if tables else ""))
+# RQ-166: the largest player scene's combat clips fit the combat clip budget.
+largest = max(idle_bytes, key=idle_bytes.get)
+entry = ko_player.race(largest)
+definition = ko_player.looks(assets, entry)["definition"]
+combat = [(s, i) for s, i in ko_player.clip_indices(True, True, True, True) if s.startswith("combat-")]
+clip_bytes = []
+for state, index in combat:
+    out = OUT / str(largest) / "combat" / state
+    ko_character.convert(TREE, ko_player.SOURCE, out, index, 1.0, definition=definition)
+    main.cook(out, out.parent / ("cooked-" + state), influences=True)
+    clip_bytes.append((out.parent / ("cooked-" + state) / "scene.bin").stat().st_size)
+assert sum(clip_bytes) <= combat_animation.MAX_BYTES, (largest, sum(clip_bytes), combat_animation.MAX_BYTES)
+print("PASS race %d (the largest idle scene, %d bytes): its %d combat clips are %d bytes, within the %d-byte "
+      "combat clip budget" % (largest, idle_bytes[largest], len(combat), sum(clip_bytes), combat_animation.MAX_BYTES))
 assert sorted(refused) == sorted(OPEN), (refused, OPEN)
 for race in refused:
     print("OPEN race %d: %s" % (race, OPEN[race][1]))

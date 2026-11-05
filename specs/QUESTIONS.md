@@ -2000,3 +2000,30 @@ dress, on either create table, neither race's create model holds such a vertex (
 dress replaces the looks lower part), so RQ-169 adding the Arch Tuarek to
 `models.create` keeps Moradon's front end at version 29; the tables matter for a
 create model in its looks parts and for the select hall's per-race models (RQ-005).
+
+### Q117 — How a package shares the player clips' atlas and mesh
+
+RQ-188: every player clip (`player-<state>.bin`, `combat-<i>.bin`,
+`player-skill-<i>.bin`) is a whole N3S1 / N3SI scene, and the client requires the atlas
+and mesh to be the same in all of them, so about 90% of each clip repeats the first
+(local-asset: the Arch Tuarek's 19 combat clips are 49,919,260 bytes, 570,712 as
+tracks).
+
+Options:
+- (a) Cook every package's player clips as tracks from the next engine on: one format,
+  but every package's bytes and engine change (Moradon's release hash, so a new hosted
+  realm, Q63).
+- (b) An opt-in top-level manifest key, `"player_clips": "tracks"`, after which every
+  player clip but one is `N3ST` (its track list alone) at engine 46, wire 30 (the
+  package must already be engine 38+); a manifest without it cooks byte for byte as
+  before.
+- (c) Name the base scene in each N3ST file, or a base file of its own (atlas and mesh
+  with no tracks).
+
+**Default taken:** (b), with `player-idle.bin` as the base: it is the first player scene
+every package with player clips has, the client already checks the other clips against
+it (`player_scenes.front()`) and draws the render detail with it, and it stays a whole
+scene, so nothing new is needed to read it. A fixed base needs no name in the file; the
+cook refuses a clip whose atlas, skeleton or mesh is not the base's byte for byte
+(`content/animation.md`, "Track-only player clips"). Whether and when Moradon opts in
+is queued separately (`moradon-player-clips-tracks`).

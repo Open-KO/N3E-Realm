@@ -593,9 +593,10 @@ Release load_release(const std::filesystem::path &root) {
   // states) and 40 (PQ-283: N3NI / N3MI looks models with influence tables)
   // add client presentation only and keep wire 30; so do 41 (PQ-272),
   // 42 (spec 11: front-end.bin), 43 (RQ-163: N3SI player clips), 44
-  // (RQ-164: N3DI / N3DJ render detail with influence tables) and 45
-  // (RQ-165: N3FE version 30, front-end models with influence tables).
-  need(engine >= 1 && engine <= 45 &&
+  // (RQ-164: N3DI / N3DJ render detail with influence tables), 45
+  // (RQ-165: N3FE version 30, front-end models with influence tables) and
+  // 46 (RQ-188: N3ST track-only player clips).
+  need(engine >= 1 && engine <= 46 &&
            (engine >= 38 ? protocol == 30
             : engine >= 15 ? protocol == engine-7
             : engine >= 13 ? protocol == 7
@@ -2675,6 +2676,18 @@ Scene load_scene(const Release &release, const std::string &name) {
   // 00419f00 does. Every other scene stays N3S1.
   const bool player_clip = combat_name || name.starts_with("player-");
   const auto magic = r.raw(4);
+  // RQ-188 (content/animation.md): from engine 46 a player clip other than
+  // player-idle.bin may be N3ST, its track list alone; the atlas, skeleton,
+  // mesh, scale and attachment are player-idle.bin's, which stays a whole
+  // N3S1 / N3SI scene, and the tracks are bounded by its nodes.
+  if (magic == "N3ST") {
+    need(player_clip && name != "player-idle.bin" && release.engine >= 46, "cooked magic/version");
+    s = load_scene(release, "player-idle.bin");
+    s.tracks.clear();
+    read_scene_tracks(r, s, s.tracks);
+    r.end();
+    return s;
+  }
   need(magic == "N3S1" || (magic == "N3SI" && player_clip && release.engine >= 43), "cooked magic/version");
   read_scene_head(r, s);
   read_scene_tracks(r, s, s.tracks);

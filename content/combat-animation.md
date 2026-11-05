@@ -23,7 +23,7 @@ Every clip must be referenced. Attacks must have loop-blend disabled. All indice
 are checked; every nonempty item must be allowed in that equipment slot. Row keys
 must be unique and an all-empty fallback is mandatory. Unlisted combinations use
 that fallback. Extra clips are hashed canonical `combat-0.bin` through
-`combat-(count-1).bin` N3S1 files (N3SI from engine 43), at most 64 MiB combined
+`combat-(count-1).bin` N3S1 files (N3SI from engine 43, N3ST from engine 46), at most 64 MiB combined
 ([clip byte budget](#clip-byte-budget-rq-166)). The client verifies their
 skeleton/mesh/atlas compatibility and durations before entering the world.
 Truncation, trailing data, missing files and unexpected release files fail closed.
@@ -548,5 +548,8 @@ Tuarek's 256 x 256 hair alone took it past 32 MiB too. 64 MiB holds the 19 clips
 the largest atlas the player cook writes (1024 x 1024 RGB, 3,145,728 bytes; with the
 Arch Tuarek's largest mesh, tracks and table, 3,403,796 bytes a clip, 64,672,124 for
 19), so every race fits with room up to the atlas bound. The duplicated atlas is a
-cost of the clip format, not of the race: a clip format that shares the first player
-scene's atlas and mesh would shrink every race's clips, and is a separate change.
+cost of the clip format, not of the race: since RQ-188 a package may cook its player
+clips as N3ST, their tracks alone over `player-idle.bin`'s atlas and mesh (engine 46,
+[track-only player clips](animation.md#track-only-player-clips-n3st-engine-46-rq-188)),
+which takes the Arch Tuarek's 19 combat clips to 570,712 bytes. The budget counts the
+files as shipped, so it applies unchanged.

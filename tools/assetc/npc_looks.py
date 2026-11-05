@@ -57,27 +57,28 @@ def filename(index):
     return f"npc-looks-{index}.bin"
 
 
-def split_scene(data):
+def split_scene(data, what="npc looks clip"):
     """A looks clip (KINDS) as (shared head, tracks, shared tail, atlas
     bytes). The head is the atlas, nodes and joints; the tail the mesh (with
     any influence table and render runs), scale and attachment. Counts are
-    bounded as the client's reader bounds them."""
+    bounded as the client's reader bounds them. `what` names the clip in the
+    errors (tools/assetc/player_clips.py splits player clips too)."""
     if data[:4] not in KINDS:
-        raise ValueError("npc looks clip magic")
+        raise ValueError(what + " magic")
     channels = KINDS[data[:4]][1]
     at = 4
 
     def take(n):
         nonlocal at
         if at + n > len(data):
-            raise ValueError("npc looks clip truncated")
+            raise ValueError(what + " truncated")
         at += n
         return data[at - n:at]
 
     def count(limit, low=1):
         n = struct.unpack("<I", take(4))[0]
         if not low <= n <= limit:
-            raise ValueError("npc looks clip count")
+            raise ValueError(what + " count")
         return n
 
     width, height = count(1024), count(1024)

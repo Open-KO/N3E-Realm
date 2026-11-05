@@ -223,10 +223,11 @@ pub fn load(root: &Path) -> Result<Release> {
     // 42 (spec 11: the KO front end, front-end.bin), 43 (RQ-163: N3SI
     // player clips, which the client reads and the server only hashes) and
     // 44 (RQ-164: N3DI / N3DJ render detail with influence tables, of which
-    // the server reads only the projection) and 45 (RQ-165: N3FE version 30,
+    // the server reads only the projection), 45 (RQ-165: N3FE version 30,
     // front-end models with influence tables, of which the server reads only
-    // the header).
-    if !(1..=45).contains(&engine)
+    // the header) and 46 (RQ-188: N3ST track-only player clips, which the
+    // client reads and the server only hashes).
+    if !(1..=46).contains(&engine)
         || if engine >= 38 { protocol != 30 } else if engine >= 15 { protocol != engine - 7 } else if engine >= 13 {
             protocol != 7
         } else if engine == 12 {

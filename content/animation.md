@@ -77,6 +77,47 @@ atlas, so its 19 combat clips are 49,919,260 bytes, past the 32 MiB combat clip
 budget the three readers held until RQ-166 raised it to 64 MiB
 ([clip byte budget](combat-animation.md#clip-byte-budget-rq-166)).
 
+### Track-only player clips (N3ST, engine 46, RQ-188)
+
+Every player clip above is a whole scene, and the client already requires the atlas,
+skeleton and mesh to be the same in all of them (`Scene::compatible`), so all but the
+first repeat them. The atlas is uncompressed, so it is most of every clip
+([clip byte budget](combat-animation.md#clip-byte-budget-rq-166)). A package may store
+them once, as the looks models already do (N3NM, [npc.md](npc.md)):
+
+- The manifest opts in with top-level `"player_clips": "tracks"` (the only value). A
+  manifest without the key cooks byte for byte as before, at its engine.
+- `player-idle.bin`, the first player scene, stays a whole N3S1 / N3SI scene. Every
+  other player clip (`player-<state>.bin`, `combat-<i>.bin`, `player-skill-<i>.bin`)
+  cooks as `N3ST`: the magic, then N3S1's track list unchanged (u32 track count 0–384;
+  per track u32 node, u32 path 0 translation / 1 rotation / 2 scale, u32 key count
+  2–4096, per key f32 time and four f32 values), and no trailing bytes.
+- The sources stay whole scenes (`ko_player`, `ko_skills`, any glTF cook). The cooker
+  (`tools/assetc/player_clips.py`) refuses a source whose atlas, nodes, joints, mesh
+  (with any influence table), instance scale or attachment node is not
+  `player-idle.bin`'s byte for byte, and records each source's digest as before.
+- A package with N3ST clips is engine 46 (wire 30). It must already be engine 38 or
+  later; the cooker refuses it otherwise. It combines with N3SI (engine 43): the
+  influence table is `player-idle.bin`'s.
+- The client reads N3ST only from engine 46 and only for a player clip other than
+  `player-idle.bin`; it takes everything but the tracks from `player-idle.bin` and
+  bounds the tracks by its nodes, so the compatibility check holds by construction.
+  The server only hashes the clips; the combat clip budget counts the files as
+  shipped.
+
+Measured on the pinned 1298 tree's races (local-asset, `tests/ko_player_races.py`
+cooks; `player_clips.tracks_only` against each race's `player-idle.bin`): the Arch
+Tuarek's 19 combat clips go from 49,919,260 bytes to 570,712, and Moradon's (Tuarek)
+from 27,009,388 to 580,312, with all 31 of its player clips from 44,566,812 to
+2,836,692; every one of those clips has `player-idle.bin`'s atlas and mesh byte for
+byte. Runtime memory per clip is unchanged: the client still gives each clip its own
+parsed copy of `player-idle.bin`'s atlas and mesh. So with N3ST the 64 MiB combat clip
+budget no longer bounds that memory: up to 64 combat clips, each with a copy, come to
+roughly 218 MB at the 1024 x 1024 atlas bound (64 x 3,403,796 bytes,
+[clip byte budget](combat-animation.md#clip-byte-budget-rq-166)), until the client
+shares one parse across the player clips (queued as `player-clips-share-parse`). No
+shipped package opts in yet.
+
 ## Runtime state and time
 
 Priority: authoritative zero HP → death; recent nonzero replicated strike tick →

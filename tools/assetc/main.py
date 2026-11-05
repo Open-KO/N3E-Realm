@@ -31,6 +31,7 @@ import exploration
 import appearance
 import rest
 import combat_animation
+import player_clips
 import ranged_attack
 import consumables
 import skills
@@ -229,7 +230,7 @@ def cook(root, out, materials=False, influences=False):
     further sets alone (an N3SI scene.bin): only the player path passes it,
     for the throwaway package whose scene.bin is a player clip (RQ-163)."""
     manifest = load(root / "package.json")
-    if set(manifest) - {"create", "attachments", "npc_looks", "input", "pick", "postprocess", "item_heads", "skills", "consumables", "combat_animation", "ranged_attack", "rest", "appearance", "party", "friends", "storage_auth", "storage", "wear", "stats", "equipment", "repair", "commerce", "inventory", "render_detail", "exploration", "editing", "world", "world_textures", "world_overlay", "presentation", "camera", "melee", "damage", "npc", "life", "animation", "progression"} != set(
+    if set(manifest) - {"player_clips", "create", "attachments", "npc_looks", "input", "pick", "postprocess", "item_heads", "skills", "consumables", "combat_animation", "ranged_attack", "rest", "appearance", "party", "friends", "storage_auth", "storage", "wear", "stats", "equipment", "repair", "commerce", "inventory", "render_detail", "exploration", "editing", "world", "world_textures", "world_overlay", "presentation", "camera", "melee", "damage", "npc", "life", "animation", "progression"} != set(
         [
             "game_id",
             "package_version",
@@ -311,6 +312,9 @@ def cook(root, out, materials=False, influences=False):
     if b"N3SI" in clip_magics and b"N3S1" in clip_magics:
         raise ValueError("player clips mix N3S1 and N3SI: they share one mesh")
     player_influences = b"N3SI" in clip_magics
+    # RQ-188: track-only player clips (N3ST) share player-idle.bin's atlas,
+    # skeleton and mesh; only a manifest that asks for them gets them.
+    player_tracks = player_clips.mode(manifest)
     detail_influences = render_detail_magic(manifest, root) in DETAIL_INFLUENCE_MAGICS
     front_end_influences = front_end and front_end_version(manifest, root) == FRONT_END_TABLES_VERSION
     compatibility = 30 if templated_npc or "attachments" in manifest or front_end else 29 if reference_npc else 28 if "skills" in manifest else 26 if "consumables" in manifest else 25 if 'upper_nodes' in manifest.get('combat_animation',{}) else 24 if 'combat_animation' in manifest else 23 if 'rest' in manifest else 22 if 'appearance' in manifest else 21 if item_drops else 20 if coins else 19 if party_loot else 18 if party_rewards else 17 if "party" in manifest else 16 if "friends" in manifest else 15 if "storage_auth" in manifest else 14 if "storage" in manifest else 13 if "wear" in manifest else 12 if "stats" in manifest else 11 if "equipment" in manifest else 10 if "repair" in manifest else 9 if "commerce" in manifest else 8 if "inventory" in manifest else 7 if "exploration" in manifest else 6 if "editing" in manifest else (5 if manifest["engine_version"] >= 10 else 4) if "progression" in manifest else 3 if "life" in manifest else 2 if "movement" in manifest["gameplay"] else 1
@@ -364,6 +368,12 @@ def cook(root, out, materials=False, influences=False):
         if engine_needed < 38:
             raise ValueError("N3SI player clips need an engine 38+ package")
         engine_needed = max(engine_needed, PLAYER_INFLUENCES_ENGINE)
+    if player_tracks:
+        # RQ-188: N3ST player clips are engine 46, in a package that is
+        # already engine 38+ (so wire 30).
+        if engine_needed < 38:
+            raise ValueError("N3ST player clips need an engine 38+ package")
+        engine_needed = max(engine_needed, player_clips.ENGINE)
     if detail_influences:
         # RQ-164: N3DI / N3DJ render detail is engine 44, in a package that
         # is already engine 38+ (so wire 30).
@@ -504,6 +514,11 @@ def cook(root, out, materials=False, influences=False):
         extras["rest.bin"]=rest.cook(manifest["rest"])
     if "consumables" in manifest:
         extras["consumables.bin"]=consumables.cook(manifest["consumables"],manifest["inventory"])
+    # RQ-188: with `player_clips` every player clip but player-idle.bin is
+    # cooked as its tracks alone (N3ST), checked against player-idle.bin.
+    base_clip = read(safe(root, manifest["presentation"][player_clips.BASE])) if player_tracks else None
+    def player_clip(data):
+        return player_clips.tracks_only(base_clip, data) if player_tracks else data
     if "combat_animation" in manifest:
         if "rest" not in manifest:raise ValueError("combat animations require rest presentation")
         policy=manifest["combat_animation"]
@@ -512,9 +527,10 @@ def cook(root, out, materials=False, influences=False):
         for i,clip in enumerate(policy['clips']):
             data=read(safe(root,clip['source']))
             if data[:4] not in (b'N3S1',b'N3SI'):raise ValueError('combat clip magic')  # N3SI: engine 43 (RQ-163)
+            deps[clip['source']]=digest(data).hex();data=player_clip(data)
             total+=len(data)
             if total>combat_animation.MAX_BYTES:raise ValueError('combat clip byte budget')
-            extras[combat_animation.filename(i)]=data;deps[clip['source']]=digest(data).hex()
+            extras[combat_animation.filename(i)]=data
     # PQ-416 (D-216): ranged basic attacks name N3A5 profiles and add to the
     # melee radii, so they need both; the server and the client read the file.
     if "ranged_attack" in manifest:
@@ -527,7 +543,7 @@ def cook(root, out, materials=False, influences=False):
         for i in sorted({s['animation'] for s in manifest['skills']['skills']}):
             name=f'player-skill-{i}.bin';data=read(root/name)
             if data[:4] not in (b'N3S1',b'N3SI'):raise ValueError('skill clip magic')  # N3SI: engine 43 (RQ-163)
-            extras[name]=data;deps[name]=digest(data).hex()
+            extras[name]=player_clip(data);deps[name]=digest(data).hex()
     if "appearance" in manifest:
         extras["appearance.bin"]=appearance.cook(manifest["appearance"],manifest["equipment"])
     if "attachments" in manifest:
@@ -701,7 +717,7 @@ def cook(root, out, materials=False, influences=False):
                 extras[name]=data;deps[source]=digest(data).hex();continue
             if data[:4] not in ((b"N3H1", b"N3H2", b"N3H3", b"N3H4", b"N3H5", b"N3H6", b"N3H7", b"N3H8", b"N3H9", b"N3HA", b"N3HB", b"N3HC", b"N3HD", b"N3HE") if name == "hud.bin" else (b"N3TM",) if name == "target-marker.bin" else (b"N3EF", b"N3E2", b"N3E3", b"N3E4", b"N3E5") if name == "effects.bin" else (b"N3AU", b"N3A2") if name == "audio.bin" else (b"N3FE",) if name == "front-end.bin" else (b"N3S1", b"N3SI") if name.startswith("player-") else (b"N3S1",)):
                 raise ValueError("presentation magic")
-            extras[name] = data
+            extras[name] = player_clip(data) if name.startswith("player-") and name != player_clips.BASE else data
             deps[source] = digest(data).hex()
     # Canonical source manifest is part of identity; metadata floats use Python's
     # shortest finite binary64 round-trip spelling (format version 1).

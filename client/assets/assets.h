@@ -503,8 +503,9 @@ struct Release {
   bool requested_respawn = false;
   uint32_t protocol = 1;
   // The release's engine version; from 43 the player clips may be N3SI (RQ-163),
-  // from 44 the render detail N3DI / N3DJ (RQ-164) and from 45 the front end's
-  // models N3SI / N3SJ (RQ-165, N3FE version 30).
+  // from 44 the render detail N3DI / N3DJ (RQ-164), from 45 the front end's
+  // models N3SI / N3SJ (RQ-165, N3FE version 30) and from 46 the player clips
+  // other than player-idle.bin N3ST, their tracks alone (RQ-188).
   uint32_t engine = 1;
   uint32_t npc_health = 1;
   float claim_radius=3;

@@ -1244,6 +1244,44 @@ MESH = fe.mesh_record([[0, 0, 0, 0, 1, 0, 0, 0], [1, 0, 0, 0, 1, 0, 1, 0], [0, 0
                       [0, 1, 2], 0, fe.DOUBLE_SIDED, [1, 1, 1], [1, 1, 1])
 
 
+# RQ-194: a mesh vertex is 8 floats the loader reads as cooked floats
+# (Reader::f: finite, within 1e6) and bounds no further: unlike a world vertex,
+# no normal length or UV bound. The cook writes the edges as packed (a zero
+# normal, a UV of 1e6; "ok-hall-mesh-vertex-edges" loads) and refuses a float
+# past them, which the loader refuses too ("bad-hall-mesh-vertex-*"), and a
+# vertex without 8 floats.
+def raw_mesh(vertices):
+    """A hall mesh record without the cook's checks (the loader's to refuse)."""
+    return (u(0) + u(fe.DOUBLE_SIDED) + f([1] * 6) + u(len(vertices)) + b"".join(f(v) for v in vertices)
+            + u(3) + struct.pack("<3I", 0, 1, 2))
+
+
+PAST_BOUND = struct.unpack("<f", struct.pack("<I", struct.unpack("<I", struct.pack("<f", 1e6))[0] + 1))[0]
+EDGE_VERTICES = [[1e6, -1e6, 0, 0, 0, 0, 1e6, -1e6], [1, 0, 0, 0, 1, 0, 1, 0], [0, 0, 1, 0, 1, 0, 0, 1]]
+EDGE_MESH = fe.mesh_record(EDGE_VERTICES, [0, 1, 2], 0, fe.DOUBLE_SIDED, [1, 1, 1], [1, 1, 1])
+assert EDGE_MESH == raw_mesh(EDGE_VERTICES) and len(EDGE_MESH) == len(MESH)
+assert MESH == raw_mesh([[0, 0, 0, 0, 1, 0, 0, 0], [1, 0, 0, 0, 1, 0, 1, 0], [0, 0, 1, 0, 1, 0, 0, 1]])
+PAST_VERTICES = {}
+for k, bad in enumerate((PAST_BOUND, -PAST_BOUND, float("nan"), float("inf"), 1e39)):
+    vertices = [list(v) for v in EDGE_VERTICES]
+    vertices[1][k] = bad
+    try:
+        fe.mesh_record(vertices, [0, 1, 2], 0, fe.DOUBLE_SIDED, [1, 1, 1], [1, 1, 1])
+    except ValueError as e:
+        assert str(e) == "front-end mesh vertex float not finite or past the cooked float bound", (bad, e)
+    else:
+        raise AssertionError(("cook wrote a mesh vertex float the loader refuses", bad))
+    if bad != 1e39:  # 1e39 does not pack as a float at all
+        PAST_VERTICES[k] = vertices
+for vertices in ([[0] * 7] * 3, [[0] * 9] * 3, [[0] * 12] * 3):
+    try:
+        fe.mesh_record(vertices, [0, 1, 2], 0, fe.DOUBLE_SIDED, [1, 1, 1], [1, 1, 1])
+    except ValueError as e:
+        assert str(e) == "front-end mesh vertex without 8 floats", e
+    else:
+        raise AssertionError(("cook wrote a mesh vertex without 8 floats", vertices[0]))
+
+
 def raw_light(l):
     """A light record without the cook's checks (the loader's to refuse)."""
     return u(l["kind"]) + f(l["diffuse"] + l["ambient"] + l["position"] + l["direction"] +
@@ -2982,6 +3020,8 @@ cases = {
     "ok-zone-vertex-totals": blob(hall=0, zone=u(3) + MAX_VERTEX_MESH * 3),
     "bad-zone-vertex-totals": blob(hall=0, zone=u(4) + MAX_VERTEX_MESH * 3 + zone_mesh()),
     "bad-hall-zone-flags": blob(hall=1).replace(MESH, MESH[:4] + u(fe.CUT_ZERO) + MESH[8:], 1),
+    "ok-hall-mesh-vertex-edges": blob(hall=1).replace(MESH, EDGE_MESH, 1),
+    **{"bad-hall-mesh-vertex-%d" % k: blob(hall=1).replace(MESH, raw_mesh(v), 1) for k, v in PAST_VERTICES.items()},
     "bad-fog-flag": blob(fog=u(2) + f([1, 1, 1, 3, 32])),
     "bad-fog-empty": blob(fog=u(1) + f([1, 1, 1, 10, 10])),
     "bad-fog-past-far": blob(fog=u(1) + f([1, 1, 1, 3, 33])),
@@ -3057,6 +3097,10 @@ try:
                          ("bad-influences-part-skeleton", "front end create part skeleton")):
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
+    # RQ-194: each mesh vertex float the cook refuses, refused by the loader as a cooked float.
+    for k in PAST_VERTICES:
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-hall-mesh-vertex-%d:" % k))
+        assert "cooked finite bound" in line, (k, line)
     skins = {l.split(":")[0][len("skin "):]: [tuple(map(float, x.split("/"))) for x in l.split(": ", 1)[1].split()]
              for l in run.stdout.splitlines() if l.startswith("skin ")}
     reference, original = skins["ok-influences-reference"], skins["ok-influences-original"]

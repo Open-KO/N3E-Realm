@@ -79,6 +79,7 @@ import ko_character as character
 import ko_hud
 import ko_nameplates
 import ko_scene
+import world_chunks
 
 VERSION = 29
 # RQ-165: the version of a file whose model records or parts hold D-176's
@@ -752,12 +753,19 @@ class Textures:
 
 
 def mesh_record(vertices, indices, tex, flags, diffuse, ambient):
+    """A front-end mesh. Its vertices are 8 floats (position, normal, uv),
+    not world vertices: the client's front-end reader (client/assets/assets.cpp
+    `mesh`) reads each as a cooked float (Reader::f) and bounds no normal or
+    UV, so a vertex is refused, as there, only for a float not finite or past
+    the cooked float bound (RQ-194, `world_chunks.cooked`)."""
     count(len(vertices), 65536)
     count(len(indices), 3 * 65536, 3)
     if len(indices) % 3 or max(indices) >= len(vertices):
         raise ValueError("front-end mesh indices")
+    if any(len(v) != 8 for v in vertices):
+        raise ValueError("front-end mesh vertex without 8 floats")
     out = u(tex) + u(flags) + f(list(diffuse) + list(ambient)) + u(len(vertices))
-    out += b"".join(f(v) for v in vertices)
+    out += world_chunks.cooked([c for v in vertices for c in v], "front-end mesh vertex")[0]
     return out + u(len(indices)) + struct.pack("<%dI" % len(indices), *indices)
 
 
@@ -1509,7 +1517,6 @@ def zone(assets, textures, value, report):
     import ko_shapes
     import ko_terrain
     import ko_zone
-    import world_chunks
     first = assets.trees[0] if isinstance(assets, Inputs) else assets
     tree, key = split(assets, value) if type(value) is str else (first, value)
     if type(key) is str:

@@ -26,6 +26,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import havok  # noqa: E402
+import world_chunks  # noqa: E402
 
 USRDIR = Path(os.environ.get("DES_USRDIR", "build/demons-souls/usrdir"))
 
@@ -658,6 +659,14 @@ def texture_rgba(tex, size):
                               check=True, capture_output=True).stdout
 
 
+def world_vertex(pos, nrm, uv, slot):
+    """An N3W1 vertex of the level: one UV layer with the second at 0, the
+    texture's atlas slot and slot 0 (black) second, written by
+    world_chunks.vertex_row so a vertex the client's reader refuses fails the
+    level (RQ-194)."""
+    return world_chunks.vertex_row([*pos, *nrm, uv[0], uv[1], 0.0, 0.0, float(slot), 0.0])
+
+
 def level(map_id, box, limit=196000, collision_limit=64000, cell=256, pad=8, atlas_size=2048):
     """A cropped Demon's Souls level as an N3W1 world, collision triangles and placements.
 
@@ -746,7 +755,7 @@ def level(map_id, box, limit=196000, collision_limit=64000, cell=256, pad=8, atl
     world = bytearray(b"N3W1" + struct.pack("<4I", atlas_size, atlas_size, cell, pad) + bytes(atlas)
                       + struct.pack("<I", len(vertices)))
     for pos, nrm, uv, slot in vertices:
-        world += struct.pack("<12f", *pos, *nrm, uv[0], uv[1], 0.0, 0.0, float(slot), 0.0)
+        world += world_vertex(pos, nrm, uv, slot)
     world += struct.pack("<I", 3 * len(oriented)) + struct.pack("<%dI" % (3 * len(oriented)), *[k for t in oriented for k in t])
     # Collision: coarser, solid materials only (alpha-tested foliage and cloth are skipped).
     solid = {t for t in slot_of if FOURCC.get(catalog[t][0]) != b"DXT5"}

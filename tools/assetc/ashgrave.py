@@ -25,6 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gltf  # noqa: E402
 import main  # noqa: E402
 from common import f, string, u  # noqa: E402
+import world_chunks  # noqa: E402
 
 SRC = Path("build/ashgrave-src")
 OUT = Path("build/packages/ashgrave")
@@ -1388,6 +1389,15 @@ def hud(root):
 
 # ---------------------------------------------------------------- package
 
+def world_bytes(world, atlas_rgba):
+    """The N3W1 world: the atlas grid and pixels, then each vertex as
+    world_chunks.vertex_row writes it, so a vertex the client's reader refuses
+    fails the build (RQ-194), then the indices."""
+    return (b"N3W1" + u(ATLAS) + u(ATLAS) + u(CELL) + u(PAD) + atlas_rgba + u(len(world.vertices))
+            + b"".join(world_chunks.vertex_row(v) for v in world.vertices)
+            + u(len(world.indices)) + b"".join(u(i) for i in world.indices))
+
+
 def lod_bytes(world):
     xs = [v[0] for v in world.vertices]
     zs = [v[2] for v in world.vertices]
@@ -1434,9 +1444,7 @@ def generate():
         (SRC / "world-lod.bin").write_bytes(des_level["lod"])
     else:
         world, heights = build_world()
-        (SRC / (GAME + ".n3world")).write_bytes(
-            b"N3W1" + u(ATLAS) + u(ATLAS) + u(CELL) + u(PAD) + atlas() + u(len(world.vertices))
-            + b"".join(f(v) for v in world.vertices) + u(len(world.indices)) + b"".join(u(i) for i in world.indices))
+        (SRC / (GAME + ".n3world")).write_bytes(world_bytes(world, atlas()))
         (SRC / "world-lod.bin").write_bytes(lod_bytes(world))
     variant = __import__("os").environ.get("ASHGRAVE_CHARACTERS", "procedural")
     kaykit = variant == "kaykit"

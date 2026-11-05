@@ -636,6 +636,62 @@ print("PASS world vertices (RQ-193): the writer refuses exactly the rows the cli
       "(a float not finite or past 1e6, a normal whose single-precision length is at most 1e-10, a UV past "
       "1024); an accepted row is written and loads")
 
+# RQ-194: the writers that packed world vertices by hand write them through
+# world_chunks.vertex_row too: the Ashgrave N3W1 world (ashgrave.world_bytes)
+# and the Demon's Souls level's vertex (demons_souls.world_vertex; the level
+# itself needs the user's dump, so its vertex is tested on synthetic input).
+# Each accepts RQ-193's accepted rows with the bytes packed as before and
+# refuses its refused rows. The front-end's mesh vertices are not world
+# vertices (8 floats, bounded by Reader::f alone): tests/front_end.py.
+import ashgrave  # noqa: E402
+import demons_souls  # noqa: E402
+
+ash_grid = b"N3W1" + struct.pack("<4I", ashgrave.ATLAS, ashgrave.ATLAS, ashgrave.CELL, ashgrave.PAD)
+ash_world, _ = ashgrave.build_world()
+ash_rgba = bytes(4 * ashgrave.ATLAS * ashgrave.ATLAS)
+
+
+def ash_bytes(vertices):
+    w = ashgrave.World()
+    w.vertices, w.indices = vertices, ash_world.indices
+    return ashgrave.world_bytes(w, ash_rgba)
+
+
+def ash_packed(vertices):
+    return (ash_grid + ash_rgba + struct.pack("<I", len(vertices)) + b"".join(struct.pack("<12f", *v) for v in vertices)
+            + struct.pack("<I", len(ash_world.indices)) + struct.pack("<%dI" % len(ash_world.indices), *ash_world.indices))
+
+
+assert ash_bytes(ash_world.vertices) == ash_packed(ash_world.vertices)
+
+
+def des_vertex(v):
+    return demons_souls.world_vertex(v[0:3], v[3:6], v[6:8], v[10])
+
+
+des_base = list(sentinel[VERTEX])
+des_base[8:12] = [0.0, 0.0, 3.0, 0.0]  # the level's layout: one UV layer, its slot, slot 0 second
+for change in [{}] + accepted:
+    ash = with_row(ash_world.vertices, **change)
+    assert ash_bytes(ash) == ash_packed(ash), change
+    v = with_row([des_base] * (VERTEX + 1), **change)[VERTEX]
+    v[8:10] = [0.0, 0.0]
+    assert des_vertex(v) == struct.pack("<12f", *v), change
+for change in refused_rows + [dict(p=[1e39, 4, 28]), dict(n=[0, -1e39, 0])]:
+    v = with_row([des_base] * (VERTEX + 1), **change)[VERTEX]
+    writers = [("ashgrave", lambda: ash_bytes(with_row(ash_world.vertices, **change)))]
+    if not ("uv" in change and all(abs(x) <= 1024 for x in change["uv"][:2])):
+        writers.append(("demons_souls", lambda: des_vertex(v)))  # its second layer is always 0
+    for what, write in writers:
+        try:
+            write()
+        except ValueError as e:
+            assert str(e).startswith("world vertex "), (what, e)
+        else:
+            raise AssertionError(("wrote a vertex the client refuses", what, change))
+print("PASS hand-packed world vertices (RQ-194): the Ashgrave world and the Demon's Souls level vertex write "
+      "through vertex_row: the accepted rows as packed before, the refused ones refused")
+
 # RQ-195: the chunked writer refuses a parent, a part head, a level distance or
 # a control distance exactly as the client's reader does (the shared helpers
 # world_chunks.parent_bytes, part_head and rising; tests/world_lod.py shows the

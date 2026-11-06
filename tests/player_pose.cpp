@@ -128,6 +128,13 @@ int main() {
   held.begin(true, 1);
   held.cancel();
   check(!held.refresh(2, true));
+  // RQ-210: a press or hold the UI takes leaves the walk as it was (1097
+  // 0051bcc0, 0051c3a0); over the world the pick decides; outside it stops.
+  check(pointer_walk(true, WalkPointer::ui, false));
+  check(!pointer_walk(false, WalkPointer::ui, true));
+  check(pointer_walk(false, WalkPointer::world, true));
+  check(!pointer_walk(true, WalkPointer::world, false));
+  check(!pointer_walk(true, WalkPointer::outside, true));
   PlayerPose p;
   n3e::Entity e;
   e.set_health(100);

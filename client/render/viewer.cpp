@@ -2170,7 +2170,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
                 for(const auto&q:hud->data.records)if(q.binding=="item"&&q.text==clicked&&q.panel==item_panel()&&hud->visible(q)){
                   auto rect=hud->rectangle(q,pw,ph);drag_width=rect[2]-rect[0];drag_height=rect[3]-rect[1];break;
                 }
-                drag_x=mx;drag_y=my;drag_moved=false;walking_to=false;melee.stop();
+                drag_x=mx;drag_y=my;drag_moved=false;melee.stop();  // RQ-210: the walk goes on
                 hud->drag_key=clicked;hud->drag_panel=item_panel();
                 hud->drag_rect={mx-drag_width/2,my-drag_height/2,mx+drag_width/2,my+drag_height/2};
                 continue;
@@ -2281,12 +2281,16 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
               melee.stop();
             }
             melee.select(target);
-            walking_to = in_world && !picked &&
+            // RQ-210: a press the UI took (the inventory button, an open
+            // window) leaves a walk under way going, as 1097's 0051bcc0
+            // returns at the UI manager's flag before it touches the move.
+            bool aimed = in_world && !picked &&
                          orbit.ground_point(mx, my, pw, ph, scene, destination);
+            walking_to = pointer_walk(walking_to, in_world ? WalkPointer::world : WalkPointer::ui, aimed);
             // A ground click replaces E's continuous movement (one movement
             // source at a time). KO's handling of +0xae4 here is not decoded:
             // a fidelity gap, PQ-134.
-            if (walking_to) auto_move.active = false;
+            if (in_world && walking_to) auto_move.active = false;
             held_ground.begin(in_world && walking_to && !picked,
                               SDL_GetTicks() / 1000.0);
             // The left press's bindings (Ctrl+click: attack_pick) act on this
@@ -2680,7 +2684,11 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
 #if TOOLS && N3E_HARNESS
 #include "harness/editor_replay.inc"
 #endif
-      bool capture_input = network && (entry != 4 || !window_focused || feature_ui.drag.has_value() || hotbar.drag.has_value());
+      // An item drag takes the keys and the pointer but leaves a click-to-move
+      // walk going (RQ-210: KO's held-button handler, 1097 0051c3a0, returns
+      // while the UI took the mouse; the move itself goes on).
+      bool walk_capture = network && (entry != 4 || !window_focused);
+      bool capture_input = walk_capture || (network && (feature_ui.drag.has_value() || hotbar.drag.has_value()));
 #if TOOLS
       ImGui_ImplOpenGL3_NewFrame();
       ImGui_ImplSDL3_NewFrame();
@@ -2728,6 +2736,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
         ImGui::End();
       }
       capture_input = capture_input || editor.capture() || ImGui::GetIO().WantCaptureKeyboard || ImGui::GetIO().WantCaptureMouse;
+      walk_capture = walk_capture || editor.capture() || ImGui::GetIO().WantCaptureKeyboard || ImGui::GetIO().WantCaptureMouse;
 #if N3E_HARNESS
       if (smoke && frame == 13) {
         if (!capture_input || std::strchr(text, 'w') == nullptr)
@@ -2875,7 +2884,8 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           if (hud && (capture_input || !living || !world.connected)) hud->cancel_pointer();
           if(movement_cancels||capture_input||!living||!world.connected)melee.stop();
           held_ground.cancel();
-          walking_to = false;
+          if (keyboard_navigation || walk_capture || !living || !world.connected)
+            walking_to = false;
         }
         bool cursor_allowed = !capture_input && living && !keyboard_navigation;
 #if TOOLS
@@ -2888,16 +2898,20 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           SDL_GetWindowSizeInPixels(w, &pw, &ph);
           SDL_GetWindowSize(w, &lw, &lh);
           float mx = cursor_x * pw / lw, my = cursor_y * ph / lh;
-          bool in_world =
+          bool over_world =
               hud ? hud->hit(mx, my, pw, ph).empty()
                   : my > 120 && my < ph - 195 && !(mx > pw - 180 && my < 180);
-          in_world = in_world && mx >= 0 && mx < pw && my >= 0 && my < ph;
-          if (!in_world) {
-            held_ground.cancel();
-            walking_to = false;
-          } else {
-            walking_to = orbit.ground_point(mx, my, pw, ph, scene, destination);
-          }
+          bool inside = mx >= 0 && mx < pw && my >= 0 && my < ph;
+          // RQ-210: over a window the held walk keeps its last point (1097's
+          // 0051c3a0 returns at the UI manager's flag) and aims again once
+          // the pointer is back over the world; outside the window it stops.
+          auto where = !inside ? WalkPointer::outside
+                       : over_world ? WalkPointer::world
+                                    : WalkPointer::ui;
+          bool aimed = where == WalkPointer::world &&
+                       orbit.ground_point(mx, my, pw, ph, scene, destination);
+          walking_to = pointer_walk(walking_to, where, aimed);
+          if (where == WalkPointer::outside) held_ground.cancel();
         }
 #if N3E_HARNESS
 #include "harness/input_replays.inc"
@@ -2909,7 +2923,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
         }
         if (dx || dz)
           walking_to = false;
-        if (walking_to && !capture_input) {
+        if (walking_to && !walk_capture) {
           move_mode = release.movement && running ? 1 : 0;
           dx = destination[0] - world.predicted[0];
           dz = destination[2] - world.predicted[2];

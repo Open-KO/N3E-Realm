@@ -118,6 +118,9 @@ finally:
 (work/(name+'.log')).write_text(stdout+stderr)
 assert not observer_errors,observer_errors
 assert client_process.returncode==0 and 'PASS UIF SDL' in stdout,stdout+stderr
+# RQ-210: the actions replay ends with a walk kept through an inventory button click.
+if env.get('N3E_TEST_UIF_ACTIONS'):
+    assert 'PASS UIF SDL a click-to-move walk goes on through a click on the inventory button' in stdout,stdout
 if env.get('N3E_TEST_LOOT_RANGE'):
     assert 'PASS distant chest inspection with authoritative out-of-range pickup rejection' in stdout,stdout
 if env.get('N3E_TEST_MELEE_SEQUENCE'):

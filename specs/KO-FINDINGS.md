@@ -1882,6 +1882,27 @@ numbers, none under a worn key that replaces the hair's slot. Other players' pat
 the 1298 binary (its user-in and `CPlayerOther` init) is not read; the source's is
 taken.
 
+### 10.11 A walk goes on while the UI takes the mouse (RQ-210, 2026-11-06)
+
+Read statically in the 1097 project of §8.1 (`build/ghidra/rq074/proj`,
+`ko1097-unpacked.exe`, `-readOnly -noanalysis`, `refs 006e0474`, `decompile 00545390
+00509b00 0051bcc0 0051c3a0`; output under `build/ghidra/rq210/`, not committed),
+with the source's main procedure and UI manager. Not run.
+
+| Observation | Where | Label |
+|---|---|---|
+| **1097's base tick records whether the UI took the mouse.** It passes the mouse flags to the message box manager (`004b06d0`) and, when that returns 0, to the UI manager (`006e0474`) through vtable `+0x48` (`005454e4`); it then clears the manager's byte `+0xb4` (`005454fc`) and sets it to 1 when the call returned anything (`0054550b`), the source's `m_bDoneSomething`. The main tick calls it (`00507e8c`) before its local input (`00507ebe`) | 1097 `00545390` | binary |
+| **1097's left press and held button stop at that byte.** The local input (`00509b00`) calls `0051bcc0` for a left press (flag `0x1`) and `0051c3a0` while the button is held (flag `0x4`); each returns 0 as its first act when `+0xb4` is set (`0051bcd0`, `0051c3b0`), before it reads the pointer, picks or calls the move (`00512d00`). Nothing else in either stops a walk then, so a click on a window (the inventory button) or a hold over one leaves the move target where it was and the walk goes on | 1097 `00509b00`, `0051bcc0`, `0051c3a0` | binary |
+| **A window under the pointer counts, clicked or not.** `CUIManager::MouseProc` ORs each child's result into its return (`m_dwMouseFlagsCur \|= dwChildRet`), the in-region flag included, so a held button over an open window also skips `OnMouseLbtnDown`; back over the world the next tick aims again | source `UIManager.cpp` `MouseProc`; `GameProcMain.cpp` `OnMouseLBtnPress`, `OnMouseLbtnDown` | source |
+| **Opening the inventory stops nothing.** `CommandToggleUIInventory` (the I key and the command bar's button) opens or closes the window and closes the skill tree; neither it nor `CUIInventory` calls `CommandMove` or `ActionMove` | source `GameProcMain.cpp` `CommandToggleUIInventory`, `UIInventory.cpp` | source |
+
+**Decides (RQ-210):** a left press the UI takes (the command bar's inventory button,
+an open window, an item picked up to drag) leaves a click-to-move walk going, and
+a held walk whose pointer crosses a window keeps its last point and aims again over
+the world (`client/render/navigation.h` `pointer_walk`). An item drag no longer
+stops the walk; it still takes the keys. A held pointer outside the client window
+still stops the walk (n3e policy, not read in KO).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

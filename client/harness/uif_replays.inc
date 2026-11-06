@@ -797,7 +797,13 @@
           case 38:if(world.friends.entries_size()==1)click("friend:0");break;
           case 39:if(!capture_path.empty())capture(capture_path+".friend.ppm",width,height);click("friend_remove");break;
           case 40:confirm();break;
-          case 41:if(world.friends.entries_size()==0){std::cout<<"PASS UIF SDL equip/unequip, merchant stock/bag paging, close/reopen, buy/sell, masked unlock, deposit/withdraw and friend add/remove through authoritative APIs\n";run=false;}break;
+          case 41:if(world.friends.entries_size()==0){std::cout<<"PASS UIF SDL equip/unequip, merchant stock/bag paging, close/reopen, buy/sell, masked unlock, deposit/withdraw and friend add/remove through authoritative APIs\n";
+            // RQ-210: a walk under way, then a click on the command bar's
+            // inventory button (a press the UI takes, as 1097's 0051bcc0 skips).
+            destination={world.predicted[0]+30,world.predicted[1],world.predicted[2]};walking_to=true;click("inventory");}break;
+          case 42:
+            if(!walking_to||movement_intent==n3e::V{})throw std::runtime_error("a click on the inventory button stopped the walk (RQ-210)");
+            std::cout<<"PASS UIF SDL a click-to-move walk goes on through a click on the inventory button\n";walking_to=false;run=false;break;
           }
         }
         if(layout_test&&hud&&world.connected&&window_focused&&entry==4){

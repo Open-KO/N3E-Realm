@@ -129,7 +129,9 @@ Drag capture pins source instance/item, absolute indices, pages, bag/storage
 revisions, session/self identity and shop identity. Invalid/outside/same-slot
 releases restore the source. Revision/identity/page/panel changes, disconnect,
 death, focus loss, window leave/resize, keyboard input, right click, modal or
-editor capture cancel dragging. World movement is suppressed during capture.
+editor capture cancel dragging. The movement keys are suppressed during capture;
+a click-to-move walk under way goes on (RQ-210: KO 1097's held-button handler,
+`0051c3a0`, returns while the UI has the mouse; `specs/KO-FINDINGS.md` 10.11).
 Quantity confirmation rechecks revisions and a captured shop identity; the shared
 command dispatcher retains request IDs, retries and server checks. Pending item
 requests block new drags until a response. Server snapshots alone move the item.

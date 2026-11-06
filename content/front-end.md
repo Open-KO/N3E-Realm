@@ -63,7 +63,8 @@ arrows, RQ-173, its create models' four faces and three hairs, RQ-174, its
 description text, RQ-175, its create dress, RQ-176, the Arch Tuarek's
 create model, RQ-169, the Tuarek rogue's select character and the class
 names, RQ-005, the select models' four faces and three hairs, RQ-198, and
-their equipment, RQ-197: 63,427,579 bytes; the 1298 recipe's 65,791,899).
+their equipment, RQ-197: 63,427,579 bytes; the 1298 recipe's 65,791,899; with their
+part dust, RQ-205: 63,951,899 bytes; the 1298 recipe's 66,322,375 since RQ-204).
 
 The bound against what is still to come (RQ-182; local-asset, the pinned trees:
 both recipes cooked with each section's bytes counted, KO's textures stored as
@@ -1656,10 +1657,12 @@ box and loading are 1264's.
   carries Moradon's armour (appearance key 5, `Item/2_4102_10_0.n3cpart`, KO
   part slot 0) and its looks upper apart, and the four hand plug keys draw
   nothing (`item_plugs` `none`: 1097's AddChr never reads the hand items,
-  `0043ba10`), the rogue's keys the same, and the file is 63,427,579 bytes;
-  `part_dust` is `none` (the default), so key 5 draws no dust, though 1097's
-  `0043d0f0` sets it on a worn part as 1298's does (RQ-204, KO-FINDINGS §8.6;
-  drawing it changes the hosted package, its own item); `class_names` the 1264 install's rows for KO's 24 class
+  `0043ba10`), the rogue's keys the same, and the file was 63,427,579 bytes;
+  since RQ-205 `part_dust` is `draw` (the maintainer's choice, 2026-11-06), so
+  each part key is kind 6 with `Misc/Dust_Hard.dxt` and `Misc/Dust_Soft.dxt`
+  and key 5 draws its item's dust as 1097's `0043d0f0` sets it on a worn part
+  (by `Item_Org` `+0x46` with 1298's cuts; KO-FINDINGS §8.6), the maximum the
+  realm item's (Q120), and the file is 63,951,899 bytes; `class_names` the 1264 install's rows for KO's 24 class
   codes, 1097 `0052e3e0`, and `class_name` "Unknown Class", its default): 0 `pre_select` (hover), 1
   `selected` (start) and 2 `dummy` (rest, `pre_select`'s first frame). The
   hover and rest clips blend over their records' 0.3 s (`0043f280` names

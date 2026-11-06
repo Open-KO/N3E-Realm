@@ -2126,6 +2126,11 @@ item's, as for plugs. 1097's `0043d0f0` draws the same dust, but the 1097 choice
 `part_dust` `none` (the default) so the hosted package and its look are unchanged;
 turning it on is its own item.
 
+**Update (RQ-205):** the maintainer decided (2026-11-06, "Draw it, as 1097"): the 1097
+choice's `select.part_dust` is `draw`, so the hosted hall draws the dust on worn parts
+as 1097's `0043d0f0` does; the hosted `front-end.bin` and package hash change, so the
+next deploy is a new realm (Q63).
+
 ### Q121 — A 1298 hand plug's joint when the item's durability field is 0
 
 RQ-197: 1298's `005fca40` writes the hand's joint (12 right, 7 left, 5 a class-60

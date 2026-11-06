@@ -490,6 +490,12 @@ stage modulating the part's lit colour on its own UVs. The 1298 recipe is `draw`
 1097's `0043d0f0` draws it too (proposed as its own item). The maximum is the realm
 item's, as for plugs (Q120). Not drawn yet: the world's dust (`0045d5f0`).
 
+**Decides (RQ-205):** the 1097 choice draws it too, as 1097's `0043d0f0` does: its
+recipe's `select.part_dust` is `draw` (the maintainer's choice, 2026-11-06), so its part
+keys are kind 6 and the hosted `front-end.bin` (63,427,579 → 63,951,899 bytes) and
+package hash change; the maximum is the realm item's where 1097's is `Item_Org` `+0x46`
+(Q120).
+
 ## 9. The front end per client (RQ-078, 2026-11-02)
 
 Which KO client a realm's front end looks and behaves like is the realm owner's

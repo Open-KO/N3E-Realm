@@ -993,7 +993,7 @@ parts take room too; RQ-183 raised the bound to 256 MiB). The package hash chang
 a new realm (Q63). RQ-169 adds the Arch Tuarek's dressed create model: the 1097
 choice's file grows to 61,065,488 bytes, the 1298 recipe's to 64,447,160
 (local-asset), both still version 29 then (31 since RQ-005, which grows them again: 62,338,435 and 64,447,563;
-33 since RQ-198: 62,918,171 and 64,736,507; 35 since RQ-197: 63,427,579 and 65,791,899).
+33 since RQ-198: 62,918,171 and 64,736,507; 35 since RQ-197: 63,427,579 and 65,791,899; RQ-204 and RQ-205's part dust: 63,951,899 and 66,322,375).
 
 **The size of every race's create model (RQ-182; local-asset, the pinned tree).**
 Cooked as RQ-165 and RQ-170 would add them (`content/front-end.md`, the bound):

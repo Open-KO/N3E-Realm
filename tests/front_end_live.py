@@ -189,11 +189,13 @@ LOOKS = "looks=1/2,3/1,0/-1"
 WORN_1097 = "worn=1/0/0,0/1/0,1/0/0"
 # RQ-200: no hand plug, so no weapon effect (fx per slot, the frame's tail
 # links); RQ-201: nor a dust overlay (per slot, the plugs drawn with the hard
-# and with the soft dust). RQ-204: and no part dust, key 5 at 50 % as on 1298
-# (the recipe's select.part_dust none: kind 1 keys; per slot, the KO part
-# slots drawn with the hard and with the soft dust, a bit per slot).
+# and with the soft dust). RQ-204/RQ-205: the part dust as on 1298, the
+# priest's key 5 upper at 50 % with the soft dust (the recipe's
+# select.part_dust draw, as 1097's 0043d0f0 sets it: kind 6 keys; per slot,
+# the KO part slots drawn with the hard and with the soft dust, a bit per
+# slot), race 0's key 5 at 100 % (no durability listed) with none.
 HALL_1097 = ("models=-1,0,-1 plugs=1,2,1 classes=Priest|Rogue|Unknown_Class " + LOOKS + " " + WORN_1097 +
-             " fx=0,0,0 tails=0 dust=0/0,0/0,0/0 part_dust=0/0,0/0,0/0")
+             " fx=0,0,0 tails=0 dust=0/0,0/0,0/0 part_dust=0/1,0/0,0/0")
 
 # RQ-078: every front end games/moradon offers (front-ends.json) cooks twice to
 # the same bytes and the client loader takes it; the one realm-config.json

@@ -163,7 +163,7 @@ replace the panels when the client has a Discord realm config.
   the recipe's `select.part_dust` is `draw` (key kind 6, still version 35),
   and the hall draws the dust on a worn part (and on the looks lower under a
   robe, by the lower's item) as AddChrPart does; the 1298 recipe draws it,
-  the 1097 choice does not yet.
+  and since RQ-205 the 1097 choice too (1097's `0043d0f0`).
 - **Music** (N3FE version 3, RQ-018; version 5, RQ-083). Up to 4 tracks, each MPEG-1
   or MPEG-2 Layer III frames (every frame checked at load) or, since version 5,
   16-bit PCM samples (KO 1097's WAVs), each ≤ 16 MiB, looping or not, with an
@@ -709,10 +709,9 @@ CPU (`make test`):
    part key as kind 6 with `Misc/Dust_Hard.dxt` and `Misc/Dust_Soft.dxt` from
    the select model's tree where `select.part_dust` is `draw`, as kind 1 where
    it is `none` or absent, and refuses any other value (`tests/front_end.py`);
-   on the 1097 choice key 5's upper at 50 % draws no dust
-   (`part_dust=0/0,0/0,0/0`), and on the 1298 recipe it draws the soft dust
-   (`part_dust=0/1,0/0,0/0`) (`FRONT_HALL`, `tests/front_end_live.py`,
-   local-asset).
+   key 5's upper at 50 % draws the soft dust (`part_dust=0/1,0/0,0/0`) on the
+   1298 recipe and, since RQ-205 (`part_dust` `draw`), on the 1097 choice
+   (`FRONT_HALL`, `tests/front_end_live.py`, local-asset).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.

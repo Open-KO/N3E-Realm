@@ -31,7 +31,7 @@
 // and refuses its Create (005fffd0), and a create that binds neither.
 // RQ-004: the create screen's name entry and Create against the package's
 // rules (create.bin, Q99) and without them, the choice it sends (the fixed
-// one, Q100), the first free slot, and the client's own check of a choice as
+// one, Q100) in the slot given, and the client's own check of a choice as
 // the server's Policy::choice checks it (Q95).
 #include "assets/assets.h"
 #include "assets/front_place.h"
@@ -133,8 +133,8 @@ bool near(float a, float b) { return std::abs(a - b) < 1e-3f; }
 // 30 ticks a second.
 void run(n3e::front::SelectHall &hall, int focus, bool over, float seconds) {
   for (int i = 0; i < int(seconds * 30 + .5f); ++i)
-    if (focus < 0) hall.turning(3, 1 / 30.f);
-    else hall.rest(focus, 3, over, .5f, .6f, 1 / 30.f);
+    if (focus < 0) hall.turning(7, 1 / 30.f);
+    else hall.rest(focus, 7, over, .5f, .6f, 1 / 30.f);
 }
 
 std::string hall_check() {
@@ -213,6 +213,19 @@ std::string hall_check() {
   run(hall, 0, false, 1);
   if (!near(hall.played(hall.players[2]), .5f) || hall.ended(hall.players[2]))
     return "loop: a slot's rest clip ended at another model's length";
+  // RQ-177: characters in slots 0 and 2 only (KO seats each in its own
+  // slot): the empty slot 1 between them is never ticked, at rest or turning,
+  // and the hover mode's empty slot in focus shows no character's clip.
+  hall.reset();
+  for (int i = 0; i < 30; ++i) hall.rest(0, 5, false, .5f, .6f, 1 / 30.f);
+  for (int i = 0; i < 30; ++i) hall.turning(5, 1 / 30.f);
+  if (hall.players[1].elapsed != 0 || !near(hall.players[0].elapsed, 1) || !near(hall.players[2].elapsed, 2))
+    return "loop: an empty slot between two characters was ticked";
+  hall.mode = n3e::FrontClipMode::hover;
+  hall.reset();
+  for (int i = 0; i < 30; ++i) hall.rest(1, 5, true, .5f, .6f, 1 / 30.f);
+  if (hall.players[1].elapsed != 0 || hall.players[1].clip != kFrontClip || hall.info_slot != 1)
+    return "hover: the empty slot in focus between two characters was ticked";
   return "";
 }
 
@@ -470,25 +483,32 @@ int main(int argc, char **argv) {
     // RQ-109 (KO-FINDINGS 9.6, 1298 005ff920, 00607160): btn_create takes the
     // slot in focus when it is empty, else the first empty one, else none
     // (KO's row 7675); btn_delete posts its box only for a character in
-    // focus at rest.
-    struct Want { int focus, shown, slots, slot; };
+    // focus at rest. RQ-177: the taken slots (a bit each) need not be the
+    // first ones, as KO seats each character in its own slot; the slot
+    // create sends is the same (1298 005fffd0, 1097 00435d10: the slot in
+    // focus).
+    struct Want { int focus; uint32_t held; int slots, slot; };
     for (const auto &w : {Want{0, 0, 3, 0}, Want{1, 1, 3, 1}, Want{2, 1, 3, 2}, Want{0, 1, 3, 1},
-                          Want{1, 2, 3, 2}, Want{2, 2, 3, 2}, Want{0, 3, 3, -1}, Want{2, 3, 3, -1},
-                          Want{0, 1, 1, -1}, Want{0, 0, 1, 0}}) {
-      const int slot = n3e::front::select_create_slot(w.focus, w.shown, w.slots);
+                          Want{1, 3, 3, 2}, Want{2, 3, 3, 2}, Want{0, 7, 3, -1}, Want{2, 7, 3, -1},
+                          Want{0, 1, 1, -1}, Want{0, 0, 1, 0}, Want{1, 5, 3, 1}, Want{0, 5, 3, 1},
+                          Want{2, 5, 3, 1}, Want{0, 4, 3, 0}, Want{2, 4, 3, 0}, Want{1, 4, 3, 1},
+                          Want{0, 6, 3, 0}, Want{2, 2, 3, 2}, Want{-1, 1, 3, 1}, Want{3, 0, 3, 0}}) {
+      const int slot = n3e::front::select_create_slot(w.focus, w.held, w.slots);
       if (slot != w.slot) {
-        std::cerr << "FAIL select bar: create from slot " << w.focus << " with " << w.shown << " of " << w.slots
-                  << ": slot " << slot << ", want " << w.slot << "\n";
+        std::cerr << "FAIL select bar: create from slot " << w.focus << " with slots " << w.held << " of "
+                  << w.slots << " taken: slot " << slot << ", want " << w.slot << "\n";
         return 1;
       }
     }
     if (!n3e::front::select_delete_posts(0, 1, true) || n3e::front::select_delete_posts(1, 1, true) ||
-        n3e::front::select_delete_posts(0, 1, false) || n3e::front::select_delete_posts(0, 0, true)) {
+        n3e::front::select_delete_posts(0, 1, false) || n3e::front::select_delete_posts(0, 0, true) ||
+        !n3e::front::select_delete_posts(2, 5, true) || n3e::front::select_delete_posts(1, 5, true)) {
       std::cerr << "FAIL select bar: delete's box\n";
       return 1;
     }
     std::cout << "PASS select bar: 1298's create takes the slot in focus or the first empty one, or none when "
-                 "all are taken; its delete box only for a character at rest\n";
+                 "all are taken, with an empty slot between taken ones (RQ-177); its delete box only for a "
+                 "character at rest\n";
   }
   {
     // RQ-113 (KO-FINDINGS 9.6, 9.13): the realm's rule hides the arrow with
@@ -876,9 +896,6 @@ int main(int argc, char **argv) {
     auto unfixed = rules;
     unfixed.fixed.reset();
     want("by name", create_request(without, 1).race == 0 && create_request(unfixed, 1).race == 0);
-    want("free slot", create_free_slot(std::vector<uint32_t>{}, 3) == 0 &&
-                          create_free_slot(std::vector<uint32_t>{0, 2}, 3) == 1 &&
-                          create_free_slot(std::vector<uint32_t>{1, 0, 2}, 3) == -1);
     // The server's choice checks (Q95).
     using R = CreateRules::Refusal;
     const std::vector<uint32_t> base{60, 60, 70, 50, 50};
@@ -896,7 +913,7 @@ int main(int argc, char **argv) {
       return 1;
     }
     std::cout << "PASS create rules: the name entry takes printable ASCII up to the rule's longest, Create refuses "
-                 "what the rule refuses in the package's words; the fixed choice sent in the first free slot, race 0 "
+                 "what the rule refuses in the package's words; the fixed choice sent in the slot given, race 0 "
                  "without one; a choice checked as the server's\n";
   }
   {

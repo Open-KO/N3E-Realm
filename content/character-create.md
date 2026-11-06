@@ -55,7 +55,8 @@ package itself refers to rows by id only (`games/moradon/front-end-1298.json` na
    the next tick moves to select.
 3. **Select.** Create opens the create window in the focused slot or the first empty
    one. When all three slots are full it shows row 7675 instead ("Cannot create
-   additional characters.", untitled; 1298 `005ff920`, §9.14; binary).
+   additional characters.", untitled; 1298 `005ff920`, §9.14; binary). The create
+   is made in that slot (1298 `005fffd0`, 1097 `00435d10`, §10.8; binary).
 4. **Create.** The player picks a race, a class, a face and a hair, spends the bonus
    points and types a name. Create checks these locally and sends `WIZ_NEW_CHAR`
    (0x02). There is no confirm dialog.
@@ -845,12 +846,15 @@ face and hair arrows chose (RQ-174, below; a create without them: the fixed
 choice's, Q110), and the stats the stat arrows chose
 (RQ-173, below; a create without arrows: the chosen specialty's base with the
 fixed choice's points spent as it spends them, Moradon's ten in the fifth stat,
-MP: the Tuarek rogue or priest at 60 / 60 / 70 / 50 / 60; Q110), in the first
-slot the list leaves free
-(`Character.slot`). The hall draws the list in slot order, so the new character
-stands where it is drawn; KO's 1298 creates in the slot in focus when it is empty
-(`005ff920`), which differs only when an empty slot in focus is not the first, and
-waits for RQ-005's hall by slot (RQ-177). A package without rules sends race 0 and
+MP: the Tuarek rogue or priest at 60 / 60 / 70 / 50 / 60; Q110), in the slot in
+focus (`Character.slot`; RQ-177, `specs/KO-FINDINGS.md` §10.8): create opens only
+for an empty one (the centre click on it, or 1298's `btn_create` turning to the
+first empty one, `005ff920`), as KO's create sends the select's slot in focus (1298
+`005fffd0`, 1097 `00435d10`; binary), the first empty slot should it have filled
+meanwhile. The hall seats each listed character in its own slot, as KO's AddChr
+(1298 `005ff2a0`, 1097 `0043b550`; binary), so the new character stands where it
+was made, an empty slot between two taken ones staying empty, and after the create
+the select faces the slot it took. A package without rules sends race 0 and
 the name, as before. The server checks the choice as any create (Q95); its race-0
 path (Q100) stays for the panels' create.
 

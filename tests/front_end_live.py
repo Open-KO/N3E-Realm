@@ -615,6 +615,15 @@ if chosen == "1097":
 assert not DESCRIPTIONS_1298[2] and DESCRIPTIONS_1298[1][0] == ("open", "-", ""), DESCRIPTIONS_1298[1][0]
 
 
+# RQ-177 (KO-FINDINGS 10.8): KO seats each listed character in its own slot
+# (1298's list parse 005ff2a0, 1097's 0043b550) and creates in the empty slot
+# in focus (1298 005fffd0, 1097 00435d10): characters 1 and 3 in slots 0 and
+# 2 draw there; ENTER on slot 1, the row's left end, opens create for slot 1;
+# a create that does not wait for a race (a name typed, its points spent)
+# sends slot 1, and once the list has the
+# new character 2 there the select faces slot 1 and the hall draws all three.
+SEATS_WAITS = "drawn=1@0,3@2 open=create slot=1"
+SEATS_SENT = SEATS_WAITS + " sent=1 focus=1 drawn=1@0,2@1,3@2"
 # RQ-111 (1298) and RQ-115 (1264), KO-FINDINGS 9.7 and 9.8: the select's Exit
 # asks row 1502 with Yes and No (MB_YESNO, BEHAVIOR_EXIT) in the box the
 # manager loads and centres; ESC and No close it, ENTER, the keypad's ENTER and
@@ -711,6 +720,9 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     assert "FRONT_CREATE_SLIDE" not in run.stdout, size
     # RQ-130: and its race and class stand chosen from the open (Q52).
     assert "FRONT_CREATE_CHOICE" not in run.stdout, size
+    # RQ-177: each character in its own slot, create in the empty one in focus.
+    seats = re.search(r"^FRONT_SEATS (.*)$", run.stdout, re.M)
+    assert seats and seats.group(1) == SEATS_SENT, (size, seats and seats.group(1), SEATS_SENT)
     # RQ-176 (version 29, Q106 (a)): so its new character, the Tuarek priest,
     # stands in its table's dress for the priest (1264's: the rogue's set,
     # one per race) with its weapon in the right hand.
@@ -1188,6 +1200,9 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     shots = {m.group(1): (Path(m.group(2)), m.group(3)) for m in re.finditer(
         r"^FRONT_SHOT name=(\S+) size=\S+ path=(\S+) rect=(\S*) drawn=\S* origin=\S+,\S+,1$", run.stdout, re.M)}
     assert {"select-0", "select-1", "select-3"} <= set(shots), (size, sorted(shots))
+    # RQ-177: the same seats; the create waits for its race, so nothing is sent.
+    seats = re.search(r"^FRONT_SEATS (.*)$", run.stdout, re.M)
+    assert seats and seats.group(1) == SEATS_WAITS, (size, seats and seats.group(1), SEATS_WAITS)
     # The bar's root at ((W - w) >> 1, H - 10 - h), each node carried with it.
     x0, y0 = (width - bar_w) >> 1, height - 10 - bar_h
     want = {}

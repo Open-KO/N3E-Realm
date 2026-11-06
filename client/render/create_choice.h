@@ -78,13 +78,6 @@ struct CreateRequest {
   uint32_t slot = 0, race = 0, specialty = 0, face = 0, hair = 0;
   std::vector<uint32_t> stats;
 };
-// The first slot no listed character holds (the list names each one's slot,
-// RQ-002), below `slots`; -1 when all are held.
-template <class Slots> int create_free_slot(const Slots &held, int slots) {
-  for (int s = 0; s < slots; ++s)
-    if (std::find(held.begin(), held.end(), uint32_t(s)) == held.end()) return s;
-  return -1;
-}
 // The name entry (Q99). Without create rules the server's own rule: 1..24
 // ASCII letters, digits, `_` and `-` (server/src/create.rs LEGACY_NAME).
 inline constexpr uint32_t kLegacyNameMax = 24;

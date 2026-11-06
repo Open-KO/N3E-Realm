@@ -21,7 +21,7 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   refusal in KO's message box, titled as the package words a refused create
   (RQ-102, Q81: 1264's create failure title) where the Discord failure and the
   kick are untitled -> create a fresh name, sent with the package's fixed
-  choice in the first free slot (RQ-004, Q100; its stat points spent with the
+  choice in the empty slot in focus, 0 (RQ-004, Q100, RQ-177; its stat points spent with the
   stat arrows as the fixed choice spends them, before the names, RQ-173; its
   face and hair one right-arrow click each from 0, RQ-174) -> select with it (the
   pointer off, on and off the character in front: its hover clip blends in on
@@ -451,7 +451,7 @@ try:
     assert edges == [{"slot": 1, "focus": 1, "sounds": 0, "clip": 1}], edges
     assert sql("SELECT count(*) FROM characters WHERE name='Fresh'") == "1"
     # RQ-004: the screen sent KO's create packet, the package's fixed choice
-    # (Q100) in the first free slot, its stats the ones the stat arrows spent
+    # (Q100) in the empty slot in focus, 0 (RQ-177), its stats the ones the stat arrows spent
     # the points into (RQ-173), its face and hair the arrows' (RQ-174: one
     # right click each from 0, 1298's 00604f90 and 1264's 0043dfc0; the
     # server took them under create.bin's counts); nothing was sent for

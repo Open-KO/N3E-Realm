@@ -1004,7 +1004,8 @@ refusal); otherwise it sends the create: the chosen race and specialty, the
 face and hair the arrows chose (RQ-174; without them the package's fixed
 face and hair, Q110) and the stats the arrows chose (without arrows, the
 fixed choice's points on the chosen specialty's base stats; Q110), in the
-first free slot. The client's own wording for the three
+slot in focus, which create opened for (RQ-177; the first empty slot should it
+have filled meanwhile). The client's own wording for the three
 is "Choose a race.", "Choose a class." and "Spend the stat points left.". A
 create that binds neither keeps race and class chosen from the open and the new character at the slot in focus, and sends the
 package's fixed choice (Q100), as before version 21.

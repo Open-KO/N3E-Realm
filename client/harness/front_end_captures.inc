@@ -152,6 +152,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     for (int i = 0; i < characters; ++i) {
       auto *c = list.add_characters();
       c->set_id(i + 1);
+      c->set_slot(uint32_t(i));  // RQ-177: the hall seats each in its slot
       c->set_name("Shot" + std::to_string(i + 1));
       c->set_level(10 * (i + 1));
     }
@@ -237,6 +238,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     for (size_t i = 0; i < made.size(); ++i) {
       auto *c = list.add_characters();
       c->set_id(i + 1);
+      c->set_slot(uint32_t(i));
       c->set_name("Hall" + std::to_string(i + 1));
       c->set_level(1);
       c->set_race(made[i].race);
@@ -410,7 +412,11 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     // since the click; then ESC on create and a frame: the camera's slot.
     if (front->action_rect(A::select_create, width, height)) {
       list.Clear();
-      for (int i = 0; i < 2; ++i) list.add_characters()->set_id(i + 1);
+      for (int i = 0; i < 2; ++i) {
+        auto *c = list.add_characters();
+        c->set_id(i + 1);
+        c->set_slot(uint32_t(i));
+      }
       const n3e::front::Context flight{"Local Realm", "", release.version, &list, 0};
       double t = 100;
       front->select_at(0);
@@ -497,6 +503,79 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
           key(SDLK_ESCAPE);
           front->draw(width, height, t += .25, flight);
         }
+      }
+      std::cout << std::endl;
+      list.Clear();
+      front->jump(Screen::select);
+    }
+    // RQ-177: KO seats each character in its own slot (1298 005ff2a0, 1097
+    // 0043b550) and creates in the empty slot in focus (1298 005fffd0, 1097
+    // 00435d10). With characters 1 and 3 in slots 0 and 2: the hall
+    // characters drawn (id@slot); ENTER with slot 1, the row's left end, in
+    // focus: the screen and the slot Create sends; for a create that does not
+    // wait for a race click, with a name typed and its bonus points spent, the
+    // slot it sent and, once the list has the new character 2 there, the slot
+    // in focus and the hall characters drawn:
+    //   FRONT_SEATS drawn=1@0,3@2 open=create slot=1 sent=1 focus=1 drawn=1@0,2@1,3@2
+    if (front->slot_count() >= 3) {
+      list.Clear();
+      const auto seat = [&](uint64_t id, uint32_t slot) {
+        auto *c = list.add_characters();
+        c->set_id(id);
+        c->set_slot(slot);
+        c->set_name("Seat" + std::to_string(id));
+        c->set_level(1);
+      };
+      seat(1, 0);
+      seat(3, 2);
+      const n3e::front::Context seated_list{"Local Realm", "", release.version, &list, 0};
+      double t = 150;
+      const auto seated = [&] {
+        std::string out;
+        for (const auto &d : front->drawn())
+          if (d.which == 1) out += (out.empty() ? "" : ",") + std::to_string(d.character) + "@" + std::to_string(d.seat);
+        return out.empty() ? std::string("-") : out;
+      };
+      front->jump(Screen::select);
+      front->draw(width, height, t, seated_list);
+      std::cout << "FRONT_SEATS drawn=" << seated();
+      front->select_at(0);
+      front->draw(width, height, t += .25, seated_list);
+      key(SDLK_RETURN);
+      std::cout << " open=" << (front->screen() == Screen::create ? "create" : "other")
+                << " slot=" << front->create_slot();
+      if (front->screen() == Screen::create && !front->create_waits()) {
+        SDL_Event typed{};
+        typed.type = SDL_EVENT_TEXT_INPUT;
+        typed.text.text = "Seated";
+        front->event(typed, 0, 0, width, height);
+        // The bonus points into the last stat, as the fixed choice spends
+        // them (RQ-173: Create refuses points left), by its right arrow.
+        front->draw(width, height, t += .25, seated_list);
+        const auto stats = front->create_stat_texts().size();
+        const int up = stats > 1 ? front->stat_arrow_node(stats - 2, true) : -1;
+        for (int i = 0; up >= 0 && i < 64; ++i)
+          if (const auto r = front->node_rect(up, width, height)) {
+            const float x = ((*r)[0] + (*r)[2]) / 2, y = ((*r)[1] + (*r)[3]) / 2;
+            SDL_Event e{};
+            e.type = SDL_EVENT_MOUSE_MOTION;
+            front->event(e, x, y, width, height);
+            e = {};
+            e.type = SDL_EVENT_MOUSE_BUTTON_DOWN;
+            e.button.button = SDL_BUTTON_LEFT;
+            e.button.clicks = 1;
+            front->event(e, x, y, width, height);
+            e.type = SDL_EVENT_MOUSE_BUTTON_UP;
+            front->event(e, x, y, width, height);
+          }
+        const auto out = key(SDLK_RETURN);
+        if (out.command == n3e::front::Command::create) {
+          std::cout << " sent=" << out.create.slot;
+          seat(2, out.create.slot);
+          front->draw(width, height, t += .25, seated_list);
+          std::cout << " focus=" << front->front_turn().focus << " drawn=" << seated();
+        } else
+          std::cout << " sent=none:" << (front->showing_message() ? front->message_text() : "");
       }
       std::cout << std::endl;
       list.Clear();

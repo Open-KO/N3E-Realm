@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdint>
 #include <vector>
 
 namespace n3e::front {
@@ -84,7 +85,8 @@ struct SelectHall {
     else set(p, over ? kFrontClip : kRestClip, -1);
   }
   // One tick with the camera at rest on `focus` (1097 state 2, 1298 state
-  // 5), `shown` characters in the hall, the pointer `over` the centre rect
+  // 5), `held` the slots with a character (a bit per slot, RQ-177: KO seats
+  // each in its own slot), the pointer `over` the centre rect
   // or not, the front spot at most `widest`, growing by `rate` a second.
   // Hover (1097: DoProcPreselect 0043f280): the character in front plays the
   // front clip once while the pointer is over it and the rest clip (dummy)
@@ -94,9 +96,10 @@ struct SelectHall {
   // the front clip and the others play the rest clip once, every character
   // ticked; the spot widens to its widest and stays; the info text shows,
   // whatever the pointer does.
-  void rest(int focus, int shown, bool over, float widest, float rate, float dt) {
+  void rest(int focus, uint32_t held, bool over, float widest, float rate, float dt) {
     if (mode == FrontClipMode::loop) {
-      for (int i = 0; i < shown; ++i) {
+      for (int i = 0; i < int(players.size()); ++i) {
+        if (!(held >> i & 1u)) continue;
         auto &p = players.at(size_t(i));
         if (i == focus) front_at_rest(p, over);
         else set(p, kRestClip, -1);
@@ -107,7 +110,7 @@ struct SelectHall {
       info_slot = focus;
       return;
     }
-    if (focus < shown) {
+    if (focus >= 0 && focus < int(players.size()) && (held >> focus & 1u)) {
       front_at_rest(players.at(size_t(focus)), over);
       players.at(size_t(focus)).elapsed += dt;
     }
@@ -121,10 +124,11 @@ struct SelectHall {
   // (005fe5b0): every character plays the rest clip once and is ticked, and
   // the info text is hidden (1298 hides the whole select UI while it turns,
   // 005fe3c0/005fe450, as render/front_end.h does in the path turn mode).
-  void turning(int shown, float dt) {
+  void turning(uint32_t held, float dt) {
     spot_on = false;
     if (mode != FrontClipMode::loop) return;
-    for (int i = 0; i < shown; ++i) {
+    for (int i = 0; i < int(players.size()); ++i) {
+      if (!(held >> i & 1u)) continue;
       set(players.at(size_t(i)), kRestClip, -1);
       players.at(size_t(i)).elapsed += dt;
     }

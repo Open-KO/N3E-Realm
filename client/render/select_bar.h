@@ -7,23 +7,36 @@
 // additional characters."; and btn_delete to row 1501's box, "Character
 // deletion has been disabled currently", for a character in focus at rest
 // (state 5). btn_start (005ff870) is the centre click's own start, which
-// render/front_end.h's primary() already is. The realm fills its slots in
-// order, so the first empty slot is the count of characters shown.
+// render/front_end.h's primary() already is. RQ-177: the hall seats each
+// listed character in its own slot (Character.slot), as KO's AddChr seats
+// slot i's record (1097 0043b550 and 00435d10 index by 006e04d0, 1298
+// 005ff2a0), so an empty slot may lie between two taken ones; `held` is the
+// taken slots, a bit per slot.
 // No GL; render/front_end.h acts by it and tests/front_end.cpp checks it.
+#include <cstdint>
 
 namespace n3e::front {
 
+// Whether slot `slot` holds a character.
+inline bool select_held(uint32_t held, int slot) { return slot >= 0 && slot < 32 && (held >> slot & 1u); }
+
 // The slot btn_create makes a character in, or -1 when every slot holds one:
-// `focus` the slot in focus, `shown` the characters in slots 0..shown-1,
-// `slots` the package's slot count.
-inline int select_create_slot(int focus, int shown, int slots) {
-  if (focus >= shown) return focus;
-  return shown < slots ? shown : -1;
+// `focus` the slot in focus, `held` the taken slots, `slots` the package's
+// slot count. It is also the slot create sends (1298 005fffd0 and 1097
+// 00435d10 send the slot in focus, which btn_create or the click on an empty
+// slot left there).
+inline int select_create_slot(int focus, uint32_t held, int slots) {
+  if (focus >= 0 && focus < slots && !select_held(held, focus)) return focus;
+  for (int s = 0; s < slots; ++s)
+    if (!select_held(held, s)) return s;
+  return -1;
 }
 
 // Whether btn_delete posts KO's "deletion disabled" box: a character in
 // focus, the hall at rest (no turn, no start under way).
-inline bool select_delete_posts(int focus, int shown, bool at_rest) { return at_rest && focus < shown; }
+inline bool select_delete_posts(int focus, uint32_t held, bool at_rest) {
+  return at_rest && select_held(held, focus);
+}
 
 // RQ-113 (N3FE version 18, specs/KO-FINDINGS.md §9.6, §9.13): whether the
 // select's prev (`next` false) or next arrow draws with `focus` in focus, the

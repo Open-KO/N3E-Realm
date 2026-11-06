@@ -1820,6 +1820,31 @@ ticks the current frame, which the breath clip's first frame barely moves). A dr
 with a helmet is refused until the order of 1298's build and `InitHair` is read
 (Q115).
 
+### 10.8 Each character in its own slot, create in the empty one in focus (RQ-177, 2026-11-06)
+
+Read statically in n3e's 1097 image (§8.1's project `build/ghidra/rq074/`,
+`ko1097-unpacked.exe`, `-readOnly -noanalysis`; the select tick and the create's
+send recovered at their entries, `recover`, and the select index's references,
+`refs`; output under `build/ghidra/rq177/`, not committed), with RQ-109's and
+RQ-127's 1298 reads (§9.6, §9.15) and RQ-197's 1298 list parse (§8.6). Not run.
+
+| Observation | Where | Label |
+|---|---|---|
+| **1097's select index is the slot in focus.** `006e04d0` (the source's `s_iChrSelectIndex`) is written by the select Init (`0043aacf`) and by the two turns: DoJobLeft (`0043e310`) sets 1 from the centre (`+0x2c4` 1) and 0 from the right (3), DojobRight (`0043e380`) 2 from the centre and 0 from the left (2). It is read by the select tick, the create's send and two other functions (`0043f860`, `00545ff0`, not read further) | 1097 `0043e310`, `0043e380`, refs of `006e04d0` | binary |
+| **1097's click on the slot in focus indexes the select's characters by it.** The tick's click in the centre rect (`0043b550`) reads `006e04d0` as the index: with no character at `this[index + 8]` it activates the create procedure (`00545ae0(006e0490)`), else it sets the zone from the slot's record (`this[index × 0x16 + 0x14]`), the name from it and selects (vtable `+0x14`). The select keeps one character and one record per slot, the source's `m_pChrs[iIndex]` and `m_InfoChrs[iIndex]` | 1097 `0043b550` | binary |
+| **1097's create sends that slot.** The create's send (`00435d10`, called from `004396b2`) writes `0x02` and then `006e04d0` as the packet's slot byte before the name, race, class, face, hair and stats, as 1298's `005fffd0` sends `00818a20` (§9.15) and the source's `MsgSendCharacterCreate` sends `s_iChrSelectIndex` | 1097 `00435d10`; source `GameProcCharacterCreate.cpp` | binary; source |
+| **KO seats each record in its own slot.** 1298's list parse reads three records and calls AddChr for slots 0, 1 and 2 by the record's place when its name is set (`005ff2a0`, §8.6); the source's `MsgRecv_AllCharacterInfo` adds `m_InfoChrs[0]`, `[1]` and `[2]` at the centre, left and right when the ID is not empty, so an empty slot may lie between two taken ones | 1298 `005ff2a0`; source `GameProcCharacterSelect.cpp` | binary; source |
+
+**Decides (RQ-177):** the hall seats each listed character in its own slot
+(`Character.slot`; the first listed for a slot, none at or past the package's slot
+count), an empty slot between two taken ones staying empty; the centre click on an
+empty slot and 1298's `btn_create` open create for the slot in focus or, from a taken
+one, the first empty one (§9.6), and Create sends that slot; after a create the
+select faces the slot the new character took. Both the 1097 choice and the 1298
+recipe, since 1097, 1298 and the source agree. Before, the client sent the first
+slot the list left free and the hall seated the list in order, which differed only
+when the empty slot in focus was not the first.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

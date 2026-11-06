@@ -509,6 +509,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // the new character stands at over the hall (-1: none stands, no race
   // chosen) (test hooks).
   bool create_waits() const { return choice.waits(); }
+  // RQ-177: the package's select slots, and the slot Create sends now: the
+  // empty one in focus, else the first empty one, -1 none (test hooks).
+  int slot_count() const { return int(fe.slots.size()); }
+  int create_slot() const { return select_create_slot(focus, held_slots(), int(fe.slots.size())); }
   int create_figure() const { return choice.stands() ? choice.stands_at(focus) : -1; }
   // RQ-172 (version 25): the ids of create's class buttons and their images
   // that draw now (`labels` false), or of its class labels (true), in draw
@@ -590,11 +594,19 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   const std::string &message_title() const { static const std::string none; return message ? message->title : none; }
   // The server answered CreateCharacter: a longer list is a success (the
   // new character takes its slot), a refusal is shown in a message box.
+  // RQ-177: the camera faces the slot the new character took (the slot
+  // create sent, or the one the server chose for a create by name alone).
   void characters(const Characters &list) {
     if (pending_create && list.characters_size() > known) {
       pending_create = false;
       enter_select();
-      focus = std::min<int>(list.characters_size() - 1, int(fe.slots.size()) - 1);
+      int took = -1;
+      for (const auto &c : list.characters())
+        if (c.slot() < fe.slots.size() && c.slot() < 32 && !(known_held >> c.slot() & 1u)) {
+          took = int(c.slot());
+          break;
+        }
+      if (took >= 0) focus = took;
       face(focus);
     }
     known = list.characters_size();
@@ -612,7 +624,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       // clip now, for the clip DoProcPreselect sets (1298: 005fef90), so a
       // start right after the refusal plays the start clip again rather than
       // finding it ended.
-      if (focus < characters_shown()) seats.front_at_rest(seats.players.at(size_t(focus)), in_front());
+      if (listed_at(focus) >= 0) seats.front_at_rest(seats.players.at(size_t(focus)), in_front());
       show_message(FrontMessage::select_refused, detail);
     }
   }
@@ -681,6 +693,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // hall (RQ-204): the KO part slots drawn with the hard and with the soft
     // dust overlay (bit per slot).
     std::array<uint32_t, 2> part_dust{};
+    // hall (RQ-177): the slot the listed character is seated in and its id.
+    int seat = -1;
+    uint64_t character = 0;
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   // RQ-200 (Q120): the package's equipped-item effects (effects.bin) and the
@@ -1056,6 +1071,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::array<float, 2> screen_pointer{-1, -1};  // the pointer in window pixels
   std::array<int, 2> screen_size{0, 0};          // the window those pixels are of
   bool pending_create = false;
+  // RQ-177: the slots held when create was sent, to find the one it took.
+  uint32_t known_held = 0;
   std::string name;
   // RQ-004: the package's create rules (create.bin), none without them.
   std::optional<CreateRules> create_rules;
@@ -1169,8 +1186,24 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
            : state == Screen::loading ? FrontScreen::loading
                                       : FrontScreen::login;
   }
-  int characters_shown() const {
-    return list ? std::min<int>(list->characters_size(), int(fe.slots.size())) : 0;
+  // RQ-177: the listed character seated in slot `slot` (its index in the
+  // list), -1 for an empty slot. KO seats each record in its own slot (1298's
+  // list parse 005ff2a0 calls AddChr for slots 0-2 by the record's place,
+  // 1097's 0043b550 indexes its characters by the slot in focus), so the hall
+  // seats each character by its Character.slot, the first listed for a slot,
+  // none at or past the package's slot count.
+  int listed_at(int slot) const {
+    if (!list || slot < 0 || slot >= int(fe.slots.size())) return -1;
+    for (int i = 0; i < list->characters_size(); ++i)
+      if (list->characters(i).slot() == uint32_t(slot)) return i;
+    return -1;
+  }
+  // The slots that hold a character, a bit per slot (select_bar.h).
+  uint32_t held_slots() const {
+    uint32_t held = 0;
+    for (int s = 0; s < int(fe.slots.size()) && s < 32; ++s)
+      if (listed_at(s) >= 0) held |= 1u << s;
+    return held;
   }
   // The slots from left to right: 1, 0, 2 (CheckRotateLeft/Right).
   std::vector<int> slot_order() const {
@@ -1344,7 +1377,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // camera turns or the start clip plays.
     if (state == Screen::select && choosing < 0 && !turning()) {
       Output out;
-      if (focus < characters_shown()) {
+      if (const int at = listed_at(focus); at >= 0) {
         // GameProcCharacterSelect: the chosen character plays its "selected"
         // clip; the loading screen follows when it ends.
         // The select (1097: 0043ea30) sets it once with its own 0.6 s blend
@@ -1352,7 +1385,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         choosing = focus;
         seats.start(focus, fe.slots[focus].spot.theta);
         out.command = Command::select;
-        out.character = list->characters(focus).id();
+        out.character = list->characters(at).id();
       } else
         open_create();
       return out;
@@ -1460,7 +1493,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // camera flies behind it (005fe5b0 case 6).
     case FrontAction::select_create: {
       if (state != Screen::select || choosing >= 0 || turning()) break;
-      const int slot = select_create_slot(focus, characters_shown(), int(fe.slots.size()));
+      const int slot = select_create_slot(focus, held_slots(), int(fe.slots.size()));
       if (slot < 0) {
         show_message(FrontMessage::create_full, "No more characters can be made in this realm.");
         break;
@@ -1485,7 +1518,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // deletes no character either.
     case FrontAction::select_delete:
       if (state == Screen::select &&
-          select_delete_posts(focus, characters_shown(), choosing < 0 && !turning()))
+          select_delete_posts(focus, held_slots(), choosing < 0 && !turning()))
         show_message(FrontMessage::delete_disabled, "Characters cannot be deleted in this realm.");
       break;
     // RQ-130 (version 21, KO-FINDINGS 9.15): 1298's race and class buttons
@@ -1543,12 +1576,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
           show_message(FrontMessage::create_refused, create_name_refused(create_rules));
           break;
         }
-        // The first slot the list leaves free (the hall draws the list in
-        // slot order, so the new character stands where it is drawn).
-        std::vector<uint32_t> held;
-        if (list)
-          for (const auto &c : list->characters()) held.push_back(c.slot());
-        const int slot = create_free_slot(held, int(fe.slots.size()));
+        // RQ-177: the slot in focus, as KO's create sends it (1298 005fffd0
+        // and 1097 00435d10 send the select's slot in focus, 00818a20 and
+        // 006e04d0): create opens only for an empty one (primary, or
+        // btn_create's turn to the first empty one), where the new character
+        // stands and the hall then seats it; the first empty slot should the
+        // one in focus have filled meanwhile.
+        const int slot = create_slot();
         if (slot < 0) {
           show_message(FrontMessage::create_full, "No more characters can be made in this realm.");
           break;
@@ -1565,6 +1599,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
           }
         pending_create = true;
         known = list ? list->characters_size() : 0;
+        known_held = held_slots();
         out.command = Command::create;
         out.name = name;
         out.create = request;
@@ -1957,7 +1992,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     return 1;
   }
   size_t slot_scene(int slot) const {
-    return list && slot >= 0 && slot < characters_shown() ? hall_scene(list->characters(slot)) : 1;
+    const int at = listed_at(slot);
+    return at >= 0 ? hall_scene(list->characters(at)) : 1;
   }
   // The slot's clip lengths and blends from the scene its character draws.
   void seat_clips(size_t slot, size_t scene) {
@@ -2073,9 +2109,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     if (choosing >= 0)
       seats.starting(choosing, float(dt));
     else if (rest)
-      seats.rest(focus, characters_shown(), in_front(), fe.slots[focus].spot.theta, fe.spot_rate, float(dt));
+      seats.rest(focus, held_slots(), in_front(), fe.slots[focus].spot.theta, fe.spot_rate, float(dt));
     else
-      seats.turning(characters_shown(), float(dt));
+      seats.turning(held_slots(), float(dt));
     if (skip) {
       skip = false;
       if (paths() && turning()) path_camera.finish(), at_slot = focus;
@@ -2114,12 +2150,16 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     hall_meshes.clear();
     hall_tails.clear();
     hall_fx_shown.clear();
-    for (int i = 0; i < characters_shown(); ++i) {
-      const auto &slot = fe.slots[i];
+    for (int i = 0; i < int(fe.slots.size()); ++i) {
+      const int at = listed_at(i);
+      if (at < 0) continue;
+      const auto &slot = fe.slots[size_t(i)];
       const auto scene = slot_scene(i);
       const auto pose = posed(seats.players.at(size_t(i)), scene);
-      const auto &who = list->characters(i);
+      const auto &who = list->characters(at);
       draw_character(scene, pose, vp, detail::translate_yaw(slot.position, slot.yaw), &who);
+      drawn_boxes.back().seat = i;
+      drawn_boxes.back().character = who.id();
       // RQ-200: each drawn hand plug's weapon effect, on the plug's joint.
       if (scene < hall_fx.size() && !hall_fx[scene].models.empty())
         hall_weapon_effects(i, scene, pose, slot.position, slot.yaw, eye, now, who);
@@ -2328,8 +2368,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
           // 1298 (006074c0, from 005fef90) fills its info texts every tick at
           // rest, empty for an empty slot (the loop mode's select_hint).
           if (seats.info_slot < 0) value.clear();
-          else if (list && seats.info_slot < characters_shown())
-            value = filled(FrontString::select_info, context, &list->characters(seats.info_slot));
+          else if (const int at = listed_at(seats.info_slot); at >= 0)
+            value = filled(FrontString::select_info, context, &list->characters(at));
           else
             value = filled(FrontString::select_hint, context, nullptr);
           break;
@@ -2340,8 +2380,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
           // str_lev the level ("%d"), str_job the class; all three empty for
           // an empty slot.
           value.clear();
-          if (list && seats.info_slot >= 0 && seats.info_slot < characters_shown()) {
-            const auto &c = list->characters(seats.info_slot);
+          if (const int at = listed_at(seats.info_slot); at >= 0) {
+            const auto &c = list->characters(at);
             value = n.action == FrontAction::char_name    ? c.name()
                     : n.action == FrontAction::char_level ? std::to_string(std::max<uint32_t>(1, c.level()))
                                                           : class_text(&c);

@@ -551,6 +551,12 @@ preview. The engine is unchanged. A package with a robe row and a row drawing on
 lower is refused (N3D2 cannot hide a worn key). 1097's other-player order is not
 modelled (Q123). No Moradon row is a robe.
 
+**Decides (RQ-207):** the robe's entry also hides each worn lower key (render detail
+`N3DH`), since the part set releases the lower whether an item or the looks fills it
+(the rows above: a lower item under a robe is stored and part 1 set to `""`), so a
+robe row beside an ordinary lower part row cooks and draws no lower. A lower row over
+another part, or a 2145 lower part, beside a robe stays refused. No new reading.
+
 ## 9. The front end per client (RQ-078, 2026-11-02)
 
 Which KO client a realm's front end looks and behaves like is the realm owner's

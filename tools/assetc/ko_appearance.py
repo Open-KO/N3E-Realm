@@ -283,14 +283,19 @@ def cook(assets, mappings, world, textures, body_slots, positions=None):
     others, 1097 00459c60 for the player, each setting part 1 to the empty
     name through CN3Chr::PartSet, 0041b6d0 / 00447a70), so it draws no lower,
     neither the looks lower nor a worn one (1097's 00452fb0 for others keeps
-    the looks lower in some orders, Q123). n3e cannot yet hide another worn
-    key, so a robe row beside a row that draws on the lower is refused."""
+    the looks lower in some orders, Q123). A worn lower is hidden too
+    (RQ-207): each robe's report lists, as `robe.hides`, the keys of the
+    ordinary part rows whose body parts are all the lower, which ko_detail
+    writes as the robe entry's N3DH hidden keys. A row that draws on the lower
+    and elsewhere (n3e hides a whole key, KO releases one part) or a 2145
+    lower part (2233's part set under a robe is unread) beside a robe is
+    refused."""
     import ko_weapon_fx
     appearances, states, reports, weapons = [], [], [], []
     if positions is not None and len(positions) != len(body_slots):
         raise ValueError('appearance: %d part positions for %d body parts' % (len(positions), len(body_slots)))
     lower = [body_slots[i] for i, p in enumerate(positions or ()) if p == ROBE_LOWER]
-    robes = set()
+    robes, ordinary = set(), set()
     # Binary Height() is maximum joint Y, not max-minus-min or mesh bounds.
     height = max(m[1][3] for m in world)
     for key, row in enumerate(mappings, 1):
@@ -332,6 +337,7 @@ def cook(assets, mappings, world, textures, body_slots, positions=None):
             # influence (a 2145 part above keeps the four-influence reader).
             levels, texture = part_levels(assets, row['source'], slot, influences=True)
             replaces = [body_slots[i] for i in row['parts']]
+            ordinary.add(key)
             states.append(part_state(assets, row['source']))
             report = dict(parts=row['parts'], render_state=list(states[-1]))
             if key in robes:
@@ -349,9 +355,18 @@ def cook(assets, mappings, world, textures, body_slots, positions=None):
                 weapons.append(dict(fx, key=key, joint=joint, ko_item=row['ko_item'], geometry=geometry))
         reports.append(dict(item=row['item'], slot=row['slot'], source=row['source'], **report))
     if robes:
+        # RQ-207: a robe hides each worn lower, as KO's world releases it.
+        hidden = []
         for key, (replaces, _) in enumerate(appearances, 1):
-            if key not in robes and set(replaces) & set(lower):
-                raise ValueError('appearance key %d (%s) draws on the lower, which KO\'s world leaves bare under '
-                                 'a robe (key %d); n3e cannot hide a worn key yet'
-                                 % (key, mappings[key - 1].get('item'), min(robes)))
+            if key in robes or not set(replaces) & set(lower):
+                continue
+            what = 'appearance key %d (%s) draws on the lower, which KO\'s world leaves bare under a robe (key %d)' % (
+                key, mappings[key - 1].get('item'), min(robes))
+            if key not in ordinary:
+                raise ValueError("%s; it is a 2145 part, whose part set under a robe (2233's) is unread" % what)
+            if not set(replaces) <= set(lower):
+                raise ValueError('%s, and elsewhere; n3e hides a whole key' % what)
+            hidden.append(key)
+        for key in sorted(robes):
+            reports[key - 1]['robe']['hides'] = hidden
     return appearances, states, reports, weapons

@@ -1074,7 +1074,8 @@ Release load_release(const std::filesystem::path &root) {
     // N3DI / N3DJ (RQ-164): N3D2 / N3D3 with influence tables, engine 44.
     Reader d(root / "render-detail.bin", 128*1024*1024);
     const auto detail_magic=d.raw(4);
-    need(engine>=29?detail_magic=="N3D2"||detail_magic=="N3D3"||
+    // N3DH (RQ-207): layout flags after the projection, entries that hide keys.
+    need(engine>=29?detail_magic=="N3D2"||detail_magic=="N3D3"||detail_magic=="N3DH"||
                       (engine>=44&&(detail_magic=="N3DI"||detail_magic=="N3DJ")):detail_magic=="N3D1","cooked magic/version");
     result.camera.fov=d.f(); result.camera.near_plane=d.f(); result.camera.far_plane=d.f();
     need(result.camera.fov>=.2f && result.camera.fov<=2.5f && result.camera.near_plane>=.01f &&
@@ -2356,10 +2357,19 @@ RenderDetail load_render_detail(const Release &release, const Scene &skeleton) {
   // N3D3 with an influence table in every geometry (D-176's, as N3SI has),
   // for a body or appearance part past four joint influences; Scene::skin
   // sums every one, as KO's 00419f00 does.
-  const auto magic=r.raw(4);const bool states=magic=="N3D3"||magic=="N3DJ";
-  const bool tables=(magic=="N3DI"||magic=="N3DJ")&&release.engine>=44;
-  need(release.appearance.empty()?magic=="N3D1":magic=="N3D2"||magic=="N3D3"||tables,"cooked magic/version");
+  // RQ-207: N3DH has, after the projection, layout flags (1 the N3D3 states,
+  // 2 the N3DI tables, 4 the hidden keys, which it always sets) and, after
+  // each appearance entry's replacements, the keys that entry hides.
+  const auto magic=r.raw(4);const bool hiding=magic=="N3DH";
+  bool states=magic=="N3D3"||magic=="N3DJ";
+  bool tables=(magic=="N3DI"||magic=="N3DJ")&&release.engine>=44;
+  need(release.appearance.empty()?magic=="N3D1":magic=="N3D2"||magic=="N3D3"||tables||hiding,"cooked magic/version");
   r.floats<3>(); RenderDetail d;
+  if(hiding){
+    const auto flags=r.u();
+    need(flags>=4&&flags<=7&&(!(flags&2)||release.engine>=44),"render detail layout flags");
+    states=flags&1;tables=flags&2;
+  }
   for(auto &row:d.thresholds) {
     float last=0;
     for(auto &v:row) { v=r.f(); need(v>last && v<=10000,"character thresholds"); last=v; }
@@ -2454,6 +2464,10 @@ RenderDetail load_render_detail(const Release &release, const Scene &skeleton) {
     auto n=r.count(128);need(n==release.appearance.size(),"appearance geometry count");
     for(unsigned i=0;i<n;++i){AppearanceMesh a;auto count=r.count(16,0);std::set<uint32_t> seen;
       for(unsigned j=0;j<count;++j){auto slot=r.u();need(slot>=d.world_textures&&slot<nt&&seen.insert(slot).second,"appearance replacement");a.replaces.push_back(slot);}
+      if(hiding){
+        auto hidden=r.count(16,0);std::set<uint32_t> keys;
+        for(unsigned j=0;j<hidden;++j){auto key=r.u();need(key>=1&&key<=n&&key!=i+1&&keys.insert(key).second,"appearance hidden key");a.hides.push_back(key);}
+      }
       for(unsigned j=0;j<4;++j)a.levels.push_back(mesh());
       // PQ-317 (D-187): a skeletal plug's key draws no rigid mesh (2233's
       // CN3ChrTypePlug names none); every other key needs one.
@@ -2471,6 +2485,17 @@ RenderDetail load_render_detail(const Release &release, const Scene &skeleton) {
         a.state=st;
       }
       d.appearances.push_back(std::move(a));
+    }
+    if(hiding){
+      // A key that hides is hidden by none, so what a set of worn keys draws
+      // does not depend on their order; a hidden key draws no mesh, so it
+      // carries no effect or attached character to hide with it.
+      std::set<uint32_t> hidden;
+      for(const auto&a:d.appearances)hidden.insert(a.hides.begin(),a.hides.end());
+      need(!hidden.empty(),"render detail layout flags");
+      for(uint32_t k=0;k<d.appearances.size();++k)need(d.appearances[k].hides.empty()||!hidden.contains(k+1),"appearance hidden key");
+      if(release.effects)for(const auto&e:release.effects->appearance)need(!hidden.contains(e.key),"appearance hidden key");
+      if(release.attachments)for(const auto&e:release.attachments->entries)need(!hidden.contains(e.key),"appearance hidden key");
     }
   }
   r.end();

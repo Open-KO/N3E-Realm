@@ -816,7 +816,9 @@ struct DetailAttachment { DetailMesh mesh; WorldPart part; };
 // reference; blend factors). An N3D2 entry has none and draws as every key
 // did before.
 struct AppearanceState {uint32_t flags=0;float alpha_reference=0;uint32_t source=0,destination=0;};
-struct AppearanceMesh {std::vector<uint32_t> replaces;std::vector<DetailMesh> levels;std::optional<AppearanceState> state;};
+// N3DH (RQ-207): `hides`, the appearance keys this entry hides while worn.
+struct AppearanceMesh {std::vector<uint32_t> replaces;std::vector<DetailMesh> levels;std::optional<AppearanceState> state;
+                      std::vector<uint32_t> hides;};
 struct RenderDetail {
   std::array<std::array<float,4>,4> thresholds;
   std::array<uint32_t,3> workload;

@@ -377,6 +377,27 @@ int main(int argc, char **argv) {
     std::vector<n3e::AppearanceRule> mappings={{"blade",0},{"armor",0}};
     auto composition=[&](std::vector<uint32_t>keys,unsigned level){size_t count=0;n3e::draw_appearance(detail,mappings,keys,level,[&](const auto&,auto indices){count+=indices.size();});return count;};
     require(composition({},0)==3&&composition({1},0)==6&&composition({1,2},0)==6&&composition({999},0)==3&&composition({1},3)==6);
+    {
+      // RQ-207 (N3DH): a worn key hides the keys its entry names (a lower
+      // under a robe): they draw no mesh and hide no default-body part, in
+      // either order; without the hider the hidden key draws as before.
+      n3e::RenderDetail robe;robe.levels.resize(4);robe.appearances.resize(3);
+      for(auto&base:robe.levels){base.slots={1,1,1,2,2,2};base.scene.indices={0,1,2,3,4,5};}
+      robe.appearances[0].replaces={1,2};robe.appearances[0].hides={2};  // the robe: upper and the looks lower
+      robe.appearances[1].replaces={2};                                  // a worn lower
+      robe.appearances[2].replaces={};                                   // a blade
+      for(auto&part:robe.appearances){part.levels.resize(4);part.levels[0].scene.indices={0,1,2,0,1,2,0,1,2};}
+      robe.appearances[1].levels[0].scene.indices={0,1,2,0,1,2,0,1,2,0,1,2};
+      std::vector<n3e::AppearanceRule> worn={{"robe",0},{"legs",1},{"blade",2}};
+      auto drawn=[&](std::vector<uint32_t>keys){std::vector<std::pair<uint32_t,size_t>> out;
+        n3e::draw_appearance(robe,worn,keys,0,[&](const auto&,auto indices,uint32_t key){out.push_back({key,indices.size()});});return out;};
+      using Drawn=std::vector<std::pair<uint32_t,size_t>>;
+      require(drawn({2})==Drawn{{0,3},{2,12}});             // the lower alone over the looks upper
+      require(drawn({1})==Drawn{{0,0},{1,9}});              // the robe alone: no looks lower
+      require(drawn({1,2})==Drawn{{0,0},{1,9}}&&drawn({2,1})==drawn({1,2}));  // the worn lower hidden
+      require(drawn({2,3,1})==Drawn{{0,0},{1,9},{3,9}});    // a key it does not name still draws
+      require(drawn({3,2})==Drawn{{0,3},{2,12},{3,9}});
+    }
     for(auto [x,y]:{std::pair{0.f,0.f},std::pair{1023.f,767.f},std::pair{1000.f,10.f}}){auto box=tooltip_rectangle(x,y,254,200,1024,768,26);require(box[0]>=0&&box[1]>=0&&box[2]<=1024&&box[3]<=768);}
     auto giant=tooltip_rectangle(100,100,2000,2000,1024,768,26);require(giant[2]==1024&&giant[3]==768);
     n3e::WorldState loot_world;loot_world.connected=true;
@@ -389,7 +410,7 @@ int main(int argc, char **argv) {
     pickup.down("loot:1");require(pickup.up("loot:1")->operation()==2);
     loot_world.predicted[0]=10;pickup.sync(loot_world,3);require(!pickup.encounter);
     require(!pickup.open(loot_world,3,0,0));
-    std::cout<<"PASS appearance restore/replacement/LOD, tooltip edge bounds and stable pickup slots/retry/range\n";
+    std::cout<<"PASS appearance restore/replacement/LOD/hidden keys, tooltip edge bounds and stable pickup slots/retry/range\n";
     if (argc>=2) {
       auto release=n3e::load_release(argv[1]);
       HudLayout package(n3e::load_hud(release));

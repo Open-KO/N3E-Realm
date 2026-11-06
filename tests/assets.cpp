@@ -16,6 +16,35 @@ static bool shared_clip(const n3e::Release &r, const std::string &name) {
 }
 int main(int argc, char **argv) {
   try {
+    if (argc == 7 && std::string(argv[1]) == "--hidden-detail") {
+      // --hidden-detail dir engine keys effect attachment (RQ-207): the
+      // client's render detail reader on dir/render-detail.bin for a release
+      // of that engine with `keys` appearance keys (each its own slot), an
+      // N3E2 effect on key `effect` and an N3AT entry on key `attachment`
+      // (0: none), over a one-joint skeleton; prints each entry's hidden keys.
+      auto number = [&](int i) {
+        size_t end = 0;
+        auto v = std::stoul(argv[i], &end);
+        if (end != std::string(argv[i]).size()) throw std::runtime_error("hidden-detail argument");
+        return uint32_t(v);
+      };
+      n3e::Release r;
+      r.root = argv[2];
+      r.render_detail = true;
+      r.engine = number(3);
+      for (uint32_t k = 0; k < number(4); ++k) r.appearance.push_back({"key" + std::to_string(k + 1), k});
+      if (number(5)) { r.effects.emplace(); r.effects->appearance.emplace_back().key = number(5); }
+      if (number(6)) { r.attachments.emplace(); r.attachments->entries.emplace_back().key = number(6); }
+      n3e::Scene skeleton{};
+      skeleton.joints.push_back({});
+      auto detail = n3e::load_render_detail(r, skeleton);
+      for (size_t k = 0; k < detail.appearances.size(); ++k) {
+        std::cout << "key=" << k + 1 << " hides=";
+        for (size_t j = 0; j < detail.appearances[k].hides.size(); ++j) std::cout << (j ? "," : "") << detail.appearances[k].hides[j];
+        std::cout << "\n";
+      }
+      return 0;
+    }
     if (argc >= 4 && std::string(argv[2]) == "--looks") {
       // --looks i [t ...] (PQ-283): looks entry i's idle clip skinned by the
       // client (Scene::skin) at each time t in seconds (default 0, 0.25,
@@ -323,6 +352,12 @@ int main(int argc, char **argv) {
     if(r.render_detail) {
       auto detail=n3e::load_render_detail(r,n3e::load_scene(r,"player-idle.bin"));
       std::cout << "detail textures=" << detail.textures.size() << " radius=" << detail.radius << " levels=" << detail.levels.size() << " attachments=" << detail.attachments.size() << "\n";
+      // RQ-207: each N3DH entry's hidden keys.
+      for(size_t k=0;k<detail.appearances.size();++k)if(!detail.appearances[k].hides.empty()){
+        std::cout<<"detail hides key="<<k+1<<" keys=";
+        for(size_t j=0;j<detail.appearances[k].hides.size();++j)std::cout<<(j?",":"")<<detail.appearances[k].hides[j];
+        std::cout<<"\n";
+      }
     }
     if (r.world) {
       auto w = n3e::load_world(r);

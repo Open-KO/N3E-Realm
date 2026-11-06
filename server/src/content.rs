@@ -641,9 +641,12 @@ pub fn load(root: &Path) -> Result<Release> {
         // entry, and N3DI / N3DJ (RQ-164, engine 44) N3D2 / N3D3 with
         // influence tables; the client reads the geometry, the tables and
         // the states, the server only the projection below.
+        // N3DH (RQ-207) has layout flags after the projection and appearance
+        // entries that name the keys they hide, which the client reads.
         let magic = d.take(4)?;
         let tables = engine >= 44 && (magic == b"N3DI" || magic == b"N3DJ");
-        if !(if engine >= 29 { magic == b"N3D2" || magic == b"N3D3" || tables } else { magic == b"N3D1" }) {
+        let hides = magic == b"N3DH";
+        if !(if engine >= 29 { magic == b"N3D2" || magic == b"N3D3" || tables || hides } else { magic == b"N3D1" }) {
             return Err(bad("render detail magic"));
         }
         let (fov, near, far) = (d.f()?, d.f()?, d.f()?);

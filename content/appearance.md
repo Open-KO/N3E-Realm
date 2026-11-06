@@ -20,7 +20,8 @@ N3V1. Each entry has a uint32 replacement count (0..16), that many native body
 texture IDs, then four ordinary detail geometries. Existing vertex, index, joint,
 weight, texture and aggregate budgets apply. Level0 cannot be empty. Triangle
 corners must agree on material. Selected entries suppress the named default-body
-triangles; removing gear restores them. An empty lower level uses level0.
+triangles; removing gear restores them (an N3DH entry may also hide other worn
+keys, below). An empty lower level uses level0.
 World and inventory preview use the same composition and animated skeleton.
 The server validates cosmetic metadata and hashes; rendering geometry is checked
 by the native reader.
@@ -50,14 +51,47 @@ without a lower part, the Wrinkle Tuarek's, replaces the upper alone), so wearin
 suppresses the looks lower in the world and the inventory preview, for the player and
 for others alike; the formats, the wire and the server are unchanged. A robe must be
 an ordinary part row whose `parts` are all the upper's; on a plug, a 2145 row, or any
-other part row it is refused, as the hall refuses it. N3D2 cannot hide one worn key
-behind another, so a package with a robe row and any row that draws on the lower is
-refused by the cook rather than drawing a lower KO would not. The flag is the
+other part row it is refused, as the hall refuses it. A worn lower is hidden behind
+the robe since RQ-207 (below). The flag is the
 author's statement of KO's robe test for the package's player race (1298: `Item_Org`
 `+0x41`, not at El Morad for an item / 10⁶ of 266 or 969 in the world, `00462bd0`,
 or of 266 for races 11–13 in the hall; 1097: `+0x39`). No Moradon row is a robe, so
 the hosted package is unchanged. 1097's part set for others (`00452fb0`) keeps the
 looks lower in some orders (Q123).
+
+### Hidden keys (N3DH, RQ-207)
+
+An appearance entry may hide other worn keys: the robe's hides each worn lower, as
+KO's world releases the lower part under a robe whether an item or the looks fills
+it (RQ-199's evidence). `render-detail.bin` `N3DH` is N3D2, N3D3, N3DI or N3DJ with,
+after the projection (the three view floats), a u32 of layout flags: 1 the N3D3
+render state per entry, 2 the N3DI influence tables (engine 44, as N3DI), 4 hidden
+keys, which every N3DH sets (a file that hides nothing keeps the older magics, so
+every existing package keeps its bytes). The rest is the layout the flags name, and
+each appearance entry carries, after its replacements, a u32 count (0-16) and that
+many N3V1 keys it hides while worn. A key hides neither itself nor a key twice, a
+key that hides is hidden by none (so the order keys arrive in never matters), at
+least one entry hides a key, and a hidden key carries no N3E2 effect and no N3AT
+attached character (it draws no mesh, so nothing else may draw for it).
+
+The client composes as before (the first key per equipment slot) and then drops
+every key a selected key hides: a hidden key draws no mesh, suppresses no
+default-body part and so draws no dust, glow or render state, while the hiding
+key's own replacements stand. The world and the inventory preview share the
+composition (`client/render/appearance.h`), for the player and for others; the
+select hall is front-end.bin's and unchanged. The server reads only the projection
+before the flags, as for every render detail; the wire and the server's keys are
+unchanged, so the server stays the authority for what is worn. No engine version
+is added: the magic fails older readers closed (D-191's reasoning).
+
+The KO cook (`ko_appearance.cook`, `ko_detail`) writes each robe row's entry with
+the keys of every ordinary part row whose `parts` are all the lower's (the report's
+`robe.hides`), so a package with a robe row and a lower row cooks (Q123 option c).
+A row that draws on the lower and elsewhere beside a robe is refused, since n3e
+hides a whole key where KO releases one part, and so is a 2145 lower part (PQ-319)
+beside a robe, whose part set under a robe (2233's) is unread. No hosted package
+has a robe or hides a key, so every pin keeps its bytes.
+Evidence: `tests/world_robe.py`, `tests/appearance_hides.py`, `build/client/n3e-hud-check`.
 
 Binary grounding and verification.
 

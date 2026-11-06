@@ -2221,3 +2221,11 @@ Options:
 stateless composition does not keep; (c) waits for a package with a lower row (none
 today; proposed as its own item). No Moradon row is a robe, so the hosted package is
 unchanged.
+
+**RQ-207:** (c) is in place on top of (a): render detail `N3DH` lets an appearance
+entry hide other worn keys, and the KO cook writes each robe entry with the keys of
+the ordinary part rows whose parts are all the lower's, so a package with a robe row
+and a lower row cooks and draws no lower under the robe, for the player and for
+others (`content/appearance.md`, "Hidden keys"). Still refused beside a robe: a row
+over the lower and another part (n3e hides a whole key) and a 2145 lower part
+(2233's part set under a robe is unread). (b) stays unmodelled.

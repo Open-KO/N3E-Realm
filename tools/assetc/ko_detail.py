@@ -34,7 +34,7 @@ def influence_report(levels,appearances):
 def cook(assets_root,built,definition,mappings=(),world_root=None,positions=None):
     """Render detail (N3D1/N3D2/N3D3, or N3DI/N3DJ when a body or appearance
     part has a drawn vertex past four joint influences: RQ-164, engine 44,
-    render_detail.serialize). An N3W2 build's world textures are its N3WT
+    render_detail.serialize; N3DH when a robe hides a worn lower, RQ-207). An N3W2 build's world textures are its N3WT
     (`ko_scene.world_textures_bytes`), so its world subset is the transparent slot alone.
     `world_root` is the map's client root when it is not the character's (PQ-274).
     `positions` is the KO part position of each of the definition's parts
@@ -81,8 +81,11 @@ def cook(assets_root,built,definition,mappings=(),world_root=None,positions=None
     appearances,states,appearance_report,weapons=ko_appearance.cook(assets,mappings,world,textures,body_slots,positions)
     # PQ-348 (D-191): N3D3 only when a part's render state is not opaque.
     states=states if ko_appearance.needs_states(states) else None
+    # RQ-207: a robe entry hides the worn lower keys (N3DH), as KO's world
+    # releases the lower under a robe; without one the bytes are as before.
+    hides=[r.get('robe',{}).get('hides',[]) for r in appearance_report]
     payload=render_detail.serialize(view,THRESHOLDS,[30,60,100],world_count,textures,radius,levels,appearances=appearances,
-                                    states=states,influences=True)
+                                    states=states,influences=True,hides=hides if any(hides) else None)
     report=dict(view=view,character_radius=radius,character_triangles=[len(x[1])//3 for x in levels],
                 textures=len(textures),**influence_report(levels,appearances),
                 **(dict(rebuilt_normals=rebuilt) if rebuilt else {}),native_mip_levels=sum(len(c) for c in textures),

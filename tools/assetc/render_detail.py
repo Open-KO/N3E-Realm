@@ -1,4 +1,4 @@
-"""Generic N3D1/N3D2/N3D3/N3DI/N3DJ serialization. All historical selection policy is package data."""
+"""Generic N3D1/N3D2/N3D3/N3DI/N3DJ/N3DH serialization. All historical selection policy is package data."""
 import math
 import struct
 from common import *
@@ -19,6 +19,17 @@ BLEND_FACTOR_COUNT = 10
 # influence of a vertex. A package with one is engine 44.
 INFLUENCE_ENGINE = 44
 MAX_FURTHER = 60
+# N3DH (RQ-207, content/appearance.md): an appearance entry may hide other
+# worn keys. The projection (the view floats) is followed by u32 layout
+# flags: HIDE_STATES the N3D3 render state per entry, HIDE_TABLES the N3DI
+# influence tables (engine 44), HIDE_KEYS the hidden keys, which every N3DH
+# sets (a file that hides nothing keeps N3D2, N3D3, N3DI or N3DJ). The rest is the layout those flags name,
+# each appearance entry carrying, after its replacements, u32 count (0-16) and
+# that many N3V1 keys it hides while worn: such a key draws no mesh and hides
+# no default-body part. A key hides neither itself nor a key twice, and a key
+# that hides is hidden by none.
+HIDE_STATES, HIDE_TABLES, HIDE_KEYS = 1, 2, 4
+MAX_HIDDEN = 16
 # RQ-191: the client's detail reader (client/assets/assets.cpp
 # load_render_detail) reads each vertex normal's components as cooked floats
 # (Reader::f: finite, magnitude at most COOKED_FLOAT_BOUND, common) and
@@ -63,6 +74,40 @@ def check_state(state):
     return state
 
 
+def check_hides(hides, count):
+    """`hides`, one list of N3V1 keys (1-based) per appearance entry, within
+    the bounds both the cook and the client reader apply; returns it."""
+    if type(hides) is not list or len(hides) != count:
+        raise ValueError('appearance hidden key count')
+    for key, keys in enumerate(hides, 1):
+        if type(keys) is not list or len(keys) > MAX_HIDDEN or len(set(keys)) != len(keys) or any(
+                type(k) is not int or not 1 <= k <= count or k == key for k in keys):
+            raise ValueError('appearance key %d hidden keys' % key)
+    hidden = {k for keys in hides for k in keys}
+    for key, keys in enumerate(hides, 1):
+        if keys and key in hidden:
+            raise ValueError('appearance key %d hides keys and is hidden' % key)
+    return hides
+
+
+HEAD_BYTES = 20  # the magic, the projection and N3DH's layout flags
+
+
+def layout(head):
+    """N3DH's layout flags from render detail beginning with `head` (its
+    first HEAD_BYTES bytes), or None for another magic or a short head."""
+    head = bytes(head or b'')
+    return struct.unpack_from('<I', head, 16)[0] if head[:4] == b'N3DH' and len(head) >= HEAD_BYTES else None
+
+
+def has_tables(head):
+    """Whether render detail beginning with `head` (its first HEAD_BYTES
+    bytes, or fewer) carries influence tables: N3DI, N3DJ or an N3DH with
+    HIDE_TABLES (RQ-164, RQ-207), which needs engine 44."""
+    head = bytes(head or b'')
+    return head[:4] in (b'N3DI', b'N3DJ') or bool((layout(head) or 0) & HIDE_TABLES)
+
+
 def further(vertex):
     """A detail vertex's influences past its four slots that carry weight, as
     (joint, weight) pairs in order (an entry of the N3DI / N3DJ table)."""
@@ -73,7 +118,7 @@ def further(vertex):
 
 
 def serialize(view, thresholds, workload, world_count, textures, radius, levels, attachments=(), appearances=(),
-              states=None, influences=False):
+              states=None, influences=False, hides=None):
     """`states`, when not None, is one render state per appearance entry and
     makes the file N3D3; without it the bytes are N3D2's (or N3D1's) as before.
     `influences` (ko_detail, RQ-164) admits vertices with more than four
@@ -82,7 +127,13 @@ def serialize(view, thresholds, workload, world_count, textures, radius, levels,
     geometry, and without one the bytes are as before. Without `influences`
     such a vertex is refused. A vertex normal the client reader refuses (not
     finite, past the cooked float bound or without direction: check_normal)
-    is refused."""
+    is refused. `hides` (RQ-207), when not None, is one list of N3V1 keys per
+    appearance entry that the entry hides while worn (check_hides); when one
+    is not empty the file is N3DH, with the flags of the layout above, and
+    otherwise the bytes are as before."""
+    if hides is not None:
+        check_hides(hides, len(appearances))
+    hiding = hides is not None and any(hides)
     if states is not None and (not appearances or len(states) != len(appearances)):
         raise ValueError('appearance render state count')
     meshes = list(levels) + [g for g, _ in attachments] + [m for _, ms in appearances for m in ms]
@@ -94,9 +145,12 @@ def serialize(view, thresholds, workload, world_count, textures, radius, levels,
         raise ValueError('detail influence tables need appearance entries (N3DI / N3DJ)')
     if any(len(x) > MAX_FURTHER for x in extra):
         raise ValueError('detail vertex past %d joint influences' % (4 + MAX_FURTHER))
-    magic = (b'N3DJ' if tables else b'N3D3') if states is not None else \
-        (b'N3DI' if tables else b'N3D2') if appearances else b'N3D1'
-    out=bytearray(magic+f(view)+f([v for row in thresholds for v in row]))
+    if hiding:
+        magic, flags = b'N3DH', u(HIDE_KEYS | (HIDE_STATES if states is not None else 0) | (HIDE_TABLES if tables else 0))
+    else:
+        magic, flags = (b'N3DJ' if tables else b'N3D3') if states is not None else \
+            (b'N3DI' if tables else b'N3D2') if appearances else b'N3D1', b''
+    out=bytearray(magic+f(view)+flags+f([v for row in thresholds for v in row]))
     out+=b''.join(u(v) for v in workload)+u(world_count)+u(len(textures))
     for chain in textures:
         out+=u(len(chain))
@@ -131,6 +185,8 @@ def serialize(view, thresholds, workload, world_count, textures, radius, levels,
         out+=u(len(appearances))
         for index, (replaces, meshes) in enumerate(appearances):
             out+=u(len(replaces))+b''.join(u(v) for v in replaces)
+            if hiding:
+                out+=u(len(hides[index]))+b''.join(u(k) for k in hides[index])
             for mesh in meshes:out+=geometry(mesh)
             if states is not None:
                 flags, reference, source, destination = check_state(states[index])

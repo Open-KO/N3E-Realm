@@ -62,6 +62,7 @@ test-fast:
 	python tests/ko_glow_2233.py
 	python tests/world_dust.py
 	python tests/world_robe.py
+	python tests/appearance_hides.py
 	python tests/ko_chrplug_2145.py
 	python tests/ko_armour_2145.py
 	python tests/ko_hdr_2233.py

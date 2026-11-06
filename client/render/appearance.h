@@ -9,16 +9,22 @@ namespace n3e {
 // default body intact; a missing low-detail part falls back to its highest mesh.
 // `draw` takes (mesh, indices), or (mesh, indices, key) with key 0 for the
 // default body and the appearance key for each selected mesh (PQ-315).
+// RQ-207: a selected key's N3DH entry hides the keys it names (a worn lower
+// under a robe): they draw no mesh and hide no default-body part. A key that
+// hides is hidden by none (the reader's rule), so the order does not matter.
 template<class Keys, class Draw>
 void draw_appearance(const RenderDetail& detail, const std::vector<AppearanceRule>& rules,
                      const Keys& keys, unsigned level, Draw draw) {
-  std::set<unsigned> selected, slots, hidden;
+  std::set<unsigned> selected, slots, hidden, covered;
   for (auto key : keys) {
     if (!key || key > rules.size() || key > detail.appearances.size()) continue;
     if (!slots.insert(rules[key-1].slot).second) continue;
     selected.insert(key-1);
-    for (auto texture : detail.appearances[key-1].replaces) hidden.insert(texture);
   }
+  for (auto key : selected) for (auto other : detail.appearances[key].hides) covered.insert(other-1);
+  for (auto key : covered) selected.erase(key);
+  for (auto key : selected)
+    for (auto texture : detail.appearances[key].replaces) hidden.insert(texture);
   const auto& base=detail.levels.at(level);
   std::vector<uint32_t> indices;
   for(size_t i=0;i<base.scene.indices.size();i+=3) {

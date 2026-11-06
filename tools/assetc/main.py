@@ -187,18 +187,28 @@ def player_clip_magics(manifest, root):
 # parts have vertices past four joint influences is N3DI / N3DJ (N3D2 / N3D3
 # with influence tables), from engine 44; like 43 it needs an engine 38+
 # package (wire 30).
+# RQ-207: N3DH (render detail whose appearance entries hide other keys)
+# carries the tables when its layout flags say so (render_detail.has_tables).
 DETAIL_INFLUENCES_ENGINE = render_detail.INFLUENCE_ENGINE
 DETAIL_INFLUENCE_MAGICS = (b"N3DI", b"N3DJ")
+DETAIL_HIDE_MAGIC = b"N3DH"
 
 
 def render_detail_magic(manifest, root):
-    """The package's render detail magic (its first four bytes), or None
-    without one; a missing or unsafe file is left to the check that reads it."""
+    """The package's render detail head (its magic, projection and, for
+    N3DH, layout flags: render_detail.HEAD_BYTES), or None without one; a
+    missing or unsafe file is left to the check that reads it."""
     try:
         with open(safe(root, manifest["render_detail"]), "rb") as data:
-            return data.read(4)
+            return data.read(render_detail.HEAD_BYTES)
     except (KeyError, OSError, ValueError, TypeError):
         return None
+
+
+def detail_influences(manifest, root):
+    """Whether the package's render detail carries influence tables (N3DI,
+    N3DJ, or N3DH with them: engine 44)."""
+    return render_detail.has_tables(render_detail_magic(manifest, root))
 
 
 # RQ-165 (content/front-end.md): front-end.bin whose model records or parts
@@ -316,7 +326,7 @@ def cook(root, out, materials=False, influences=False):
     # RQ-188: track-only player clips (N3ST) share player-idle.bin's atlas,
     # skeleton and mesh; only a manifest that asks for them gets them.
     player_tracks = player_clips.mode(manifest)
-    detail_influences = render_detail_magic(manifest, root) in DETAIL_INFLUENCE_MAGICS
+    detail_tables = detail_influences(manifest, root)
     front_end_influences = front_end and front_end_version(manifest, root) == FRONT_END_TABLES_VERSION
     compatibility = 30 if templated_npc or "attachments" in manifest or front_end else 29 if reference_npc else 28 if "skills" in manifest else 26 if "consumables" in manifest else 25 if 'upper_nodes' in manifest.get('combat_animation',{}) else 24 if 'combat_animation' in manifest else 23 if 'rest' in manifest else 22 if 'appearance' in manifest else 21 if item_drops else 20 if coins else 19 if party_loot else 18 if party_rewards else 17 if "party" in manifest else 16 if "friends" in manifest else 15 if "storage_auth" in manifest else 14 if "storage" in manifest else 13 if "wear" in manifest else 12 if "stats" in manifest else 11 if "equipment" in manifest else 10 if "repair" in manifest else 9 if "commerce" in manifest else 8 if "inventory" in manifest else 7 if "exploration" in manifest else 6 if "editing" in manifest else (5 if manifest["engine_version"] >= 10 else 4) if "progression" in manifest else 3 if "life" in manifest else 2 if "movement" in manifest["gameplay"] else 1
     engine_needed = max(
@@ -375,11 +385,11 @@ def cook(root, out, materials=False, influences=False):
         if engine_needed < 38:
             raise ValueError("N3ST player clips need an engine 38+ package")
         engine_needed = max(engine_needed, player_clips.ENGINE)
-    if detail_influences:
-        # RQ-164: N3DI / N3DJ render detail is engine 44, in a package that
-        # is already engine 38+ (so wire 30).
+    if detail_tables:
+        # RQ-164: N3DI / N3DJ render detail (or N3DH with tables, RQ-207) is
+        # engine 44, in a package that is already engine 38+ (so wire 30).
         if engine_needed < 38:
-            raise ValueError("N3DI / N3DJ render detail needs an engine 38+ package")
+            raise ValueError("render detail with influence tables (N3DI / N3DJ, or N3DH with them) needs an engine 38+ package")
         engine_needed = max(engine_needed, DETAIL_INFLUENCES_ENGINE)
     if front_end_influences:
         # RQ-165: N3FE version 36 (model records with influence tables) is
@@ -507,7 +517,12 @@ def cook(root, out, materials=False, influences=False):
         data=read(safe(root,manifest["render_detail"]),128*1024*1024)
         # N3D3 (PQ-348, D-191): N3D2 with a render state per appearance entry;
         # N3DI / N3DJ (RQ-164, engine 44): N3D2 / N3D3 with influence tables.
-        if data[:4] not in ((b"N3D2",b"N3D3")+DETAIL_INFLUENCE_MAGICS if "appearance" in manifest else (b"N3D1",)):raise ValueError("render detail magic")
+        # N3DH (RQ-207): N3D2 / N3D3 / N3DI / N3DJ's layout, as its flags
+        # after the projection say, whose appearance entries name the keys
+        # they hide.
+        if data[:4] not in ((b"N3D2",b"N3D3",DETAIL_HIDE_MAGIC)+DETAIL_INFLUENCE_MAGICS if "appearance" in manifest else (b"N3D1",)):raise ValueError("render detail magic")
+        if data[:4]==DETAIL_HIDE_MAGIC and render_detail.layout(data[:render_detail.HEAD_BYTES]) not in range(render_detail.HIDE_KEYS,2*render_detail.HIDE_KEYS):
+            raise ValueError("render detail layout flags")
         extras["render-detail.bin"]=data
         deps[manifest["render_detail"]]=digest(data).hex()
     if "rest" in manifest:

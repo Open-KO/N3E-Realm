@@ -545,9 +545,10 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         # RQ-163: a player race past four joint influences cooks N3SI player
         # clips, engine 43; the package's own race (the Tuarek) does not.
         manifest['engine_version']=max(manifest['engine_version'],main.PLAYER_INFLUENCES_ENGINE)
-    if main.render_detail_magic(manifest, root) in main.DETAIL_INFLUENCE_MAGICS:
+    if main.detail_influences(manifest, root):
         # RQ-164: render detail past four joint influences (the Arch Tuarek's
-        # lower part) is N3DI / N3DJ, engine 44; the Tuarek's is not.
+        # lower part) is N3DI / N3DJ (or N3DH with tables, RQ-207), engine 44;
+        # the Tuarek's is not.
         manifest['engine_version']=max(manifest['engine_version'],main.DETAIL_INFLUENCES_ENGINE)
     if main.front_end_version(manifest, root) == main.FRONT_END_TABLES_VERSION:
         # RQ-165: a front end whose create, select or intro models are past

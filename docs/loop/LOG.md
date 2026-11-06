@@ -181,3 +181,4 @@ found with `git log --grep RQ-NNN`.
 | 2026-11-06 17:20 | RQ-210 | inbox | - | Maintainer playtest feedback (in session): opening the inventory stops a click-to-move walk; KO walks on; filed at the top of the queue. |
 | 2026-11-06 17:20 | RQ-209 | inbox | - | Maintainer playtest feedback (in session): inventory paperdoll lacks the weapon effects the world draws; filed at the top of the queue. |
 | 2026-11-06 17:20 | RQ-208 | inbox | - | Maintainer playtest feedback (in session): paperdoll idle animation seems to pop at the loop end; filed at the top of the queue. |
+| 2026-11-06 17:26 | RQ-212 | inbox | - | Maintainer request (in session): an ops-only Discord command that maxes a named character (level cap, class build, skills, best PvP gear) for testers; per character, not for every new character; not GMs (Role::Ops). Filed after the playtest notes, deps RQ-211. |

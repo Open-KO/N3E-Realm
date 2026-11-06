@@ -1,7 +1,7 @@
 # The realm loop
 
 An agent session works `queue.jsonl` one item at a time in this checkout, commits each
-gated item to `master`, and pushes once a day. Started by the maintainer with
+gated item to `master`, and pushes and deploys once a day. Started by the maintainer with
 `/loop /realm-loop` in a Claude session at the repository root; the procedure is
 [`.claude/skills/realm-loop/SKILL.md`](../../.claude/skills/realm-loop/SKILL.md). This
 page is the policy it follows; AGENTS.md "Agent loop" is the standing authorization.
@@ -29,6 +29,15 @@ page is the policy it follows; AGENTS.md "Agent loop" is the standing authorizat
    naming the failed step or suite and the commits it blames; the next daily run
    waits until they are done. A red CI run on the previously pushed head becomes a
    `fix` item at the top of the queue.
+   **Daily deploy.** Each push is deployed (the maintainer asked, 2026-11-05), before
+   the next item so `master` is still the pushed head: wait for CI on that head; red
+   means no deploy (the `fix` item above). Green: check no player is online, back up
+   the realm's database on the host (the dump must end complete), then the hosted
+   release by `deploy/HOST.md` Releases with CI's Windows client and launcher. Players
+   online: check again every 15 min for up to 2 h, then skip the day's deploy (LOG it;
+   the next push deploys). The realm not coming back healthy (server, edge, the release
+   manifest naming the new release) stops the loop. LOG row `deploy`, naming the commit,
+   the CI run, the backup and whether the package hash changed (a new realm, Q63).
 3. **Pick** `tools/loop/queue.py next`. `LOOP_QUEUE_EMPTY` ends the loop.
 4. **Work.** The worker gets the item and, on a retry, the item's `note`.
 5. **Review.** Blocking findings go back to the worker; at most two review rounds.

@@ -64,6 +64,7 @@ firewall, publish a release by hand (except the hosted release below), rewrite h
 else edits this checkout; `docs/loop/INBOX.md` is the maintainer's channel to it.
 Until CI publishes releases (RQ-030), the loop may build and copy the hosted release
 by `deploy/HOST.md`'s Releases steps (the maintainer allowed it, 2026-11-01), under the same deploy conditions.
+Each daily push whose CI passes is deployed that way (the maintainer asked, 2026-11-05).
 
 ## Verification evidence
 

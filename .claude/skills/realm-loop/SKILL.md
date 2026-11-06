@@ -54,6 +54,25 @@ queue and LOG (`loop: daily gate`). Check the previous push's CI
 (`gh run list --branch master --limit 3`); a failed run on a loop-pushed head becomes a
 `fix` item via `queue.py add --top`.
 
+### Daily deploy
+
+After a push, before picking an item (so `master` is still the pushed head), deploy it
+(LOOP.md "Daily deploy"):
+
+1. Wait for CI on the pushed head (`gh run watch <id> --exit-status` in the
+   background). Red: no deploy; the `fix` item above.
+2. No player online on the realm host (connections to the realm port). Online: check
+   again every 15 min for up to 2 h, then skip: LOG row `deploy` `skipped`, next item.
+3. Back up the realm's database on the host (`pg_dump` into the host's backup
+   directory); the dump must end `dump complete`, or no deploy.
+4. `deploy/HOST.md` Releases, with CI's `client-windows-x86_64` artifact and
+   `realm-launcher.exe` from that run.
+5. Healthy: server and edge up, `https://releases.openko.net/manifest.json` naming the
+   new release. Not healthy: stop the loop and report.
+6. `date +%s > build/loop/deployed-at`; LOG row `deploy` (commit, CI run, backup, the
+   release, and "new realm" when the package hash changed); commit the LOG
+   (`loop: deploy`).
+
 ## 3. Pick
 
 `python3 tools/loop/queue.py next --json`. `LOOP_QUEUE_EMPTY`: stop the loop.

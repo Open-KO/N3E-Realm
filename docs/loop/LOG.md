@@ -182,3 +182,6 @@ found with `git log --grep RQ-NNN`.
 | 2026-11-06 17:20 | RQ-209 | inbox | - | Maintainer playtest feedback (in session): inventory paperdoll lacks the weapon effects the world draws; filed at the top of the queue. |
 | 2026-11-06 17:20 | RQ-208 | inbox | - | Maintainer playtest feedback (in session): paperdoll idle animation seems to pop at the loop end; filed at the top of the queue. |
 | 2026-11-06 17:26 | RQ-212 | inbox | - | Maintainer request (in session): an ops-only Discord command that maxes a named character (level cap, class build, skills, best PvP gear) for testers; per character, not for every new character; not GMs (Role::Ops). Filed after the playtest notes, deps RQ-211. |
+| 2026-11-06 17:33 | RQ-212 | inbox | - | Maintainer (in session): GMs may use the tester kit too (they will hold the give command anyway); RQ-212 now Role::Mod and the mod and ops tokens. |
+| 2026-11-06 17:33 | RQ-214 | inbox | - | Maintainer request (in session): bring all of KO items into the realm; filed after RQ-212. |
+| 2026-11-06 17:33 | RQ-213 | inbox | - | Maintainer request (in session): the in-game GM slash commands KO supports (give item and the rest); filed after RQ-214. |

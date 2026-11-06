@@ -188,3 +188,4 @@ found with `git log --grep RQ-NNN`.
 | 2026-11-06 17:55 | RQ-217 | inbox | - | Maintainer pre-announcement requirement 1 (in session): a README for casual players. |
 | 2026-11-06 17:55 | RQ-216 | inbox | - | Maintainer pre-announcement requirement 2 (in session): GitHub Pages docs on what we learned about KO, with screenshots. |
 | 2026-11-06 17:55 | RQ-215 | inbox | - | Maintainer pre-announcement requirement 3 (in session): power users coding agents succeed at common mods (quests, NPCs, models, monsters, drops, items); spike first. Filed after RQ-213 in the order written. |
+| 2026-11-06 18:00 | RQ-214 | inbox | - | Maintainer (in session): full item support can wait; moved after the pre-announcement items (RQ-215). |

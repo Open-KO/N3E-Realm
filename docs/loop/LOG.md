@@ -185,3 +185,6 @@ found with `git log --grep RQ-NNN`.
 | 2026-11-06 17:33 | RQ-212 | inbox | - | Maintainer (in session): GMs may use the tester kit too (they will hold the give command anyway); RQ-212 now Role::Mod and the mod and ops tokens. |
 | 2026-11-06 17:33 | RQ-214 | inbox | - | Maintainer request (in session): bring all of KO items into the realm; filed after RQ-212. |
 | 2026-11-06 17:33 | RQ-213 | inbox | - | Maintainer request (in session): the in-game GM slash commands KO supports (give item and the rest); filed after RQ-214. |
+| 2026-11-06 17:55 | RQ-217 | inbox | - | Maintainer pre-announcement requirement 1 (in session): a README for casual players. |
+| 2026-11-06 17:55 | RQ-216 | inbox | - | Maintainer pre-announcement requirement 2 (in session): GitHub Pages docs on what we learned about KO, with screenshots. |
+| 2026-11-06 17:55 | RQ-215 | inbox | - | Maintainer pre-announcement requirement 3 (in session): power users coding agents succeed at common mods (quests, NPCs, models, monsters, drops, items); spike first. Filed after RQ-213 in the order written. |

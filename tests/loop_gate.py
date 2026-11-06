@@ -221,8 +221,14 @@ finally:
     gate.game_clients = saved_clients
 assert failure is None and playing == {"make-test-fast": [4242]}, (failure, playing)
 assert (log_dir / "playing.txt").read_text() == "make-test-fast\t4242\n"
-playing = {}
-gate.check_step("make-test-fast", [sys.executable, "-c", "print('PASS')"], {}, log_dir, [], [], playing)
+# Stubbed too: a player's real client on the machine running the test (RQ-202) is not
+# a client this step saw in the test's world.
+gate.game_clients = lambda: []
+try:
+    playing = {}
+    gate.check_step("make-test-fast", [sys.executable, "-c", "print('PASS')"], {}, log_dir, [], [], playing)
+finally:
+    gate.game_clients = saved_clients
 assert playing == {}, playing
 shutil.rmtree(log_dir)
 import contextlib, io  # noqa: E402,E401

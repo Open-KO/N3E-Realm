@@ -84,6 +84,22 @@ make live                      # every disposable live/database suite
 make live-ko                   # the KO-content suites (need assets/ko)
 ```
 
+Recommended if a browser runs on the same machine: each test container's host-side
+veth otherwise gets an IPv6 link-local address that the kernel announces and then
+removes, and Chromium treats every one of those as a network change, so page loads
+fail with `ERR_NETWORK_CHANGED` while the suites run (D-230, D-246). Stop the kernel
+giving interfaces created from now on a link-local address:
+
+```bash
+echo 'net.ipv6.conf.default.addr_gen_mode = 1' | sudo tee /etc/sysctl.d/90-no-veth-linklocal.conf
+sudo sysctl --system
+cat /proc/sys/net/ipv6/conf/default/addr_gen_mode   # 1
+```
+
+Interfaces that already exist keep their addresses, and NetworkManager still gives
+the devices it manages their own. Other bridges and veths created from then on,
+other Docker stacks' included, get no automatic link-local address.
+
 ### Local KO live suites
 
 With only `assets/ko`, `make live-ko` runs 14 of its 25 suites and ends

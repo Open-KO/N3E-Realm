@@ -9285,6 +9285,7 @@ network-change path and measured it with a headless Chromium instance.
   exhaustively). No browser-side mitigation is known.
 - **Recorded in:** GAPS, STATUS, the
   evidence record.
+- **Closed:** by D-246 (2026-11-06). The user chose the host setting.
 
 ## D-231 — 2026-10-29 A skill cast ends at its release: after it, neither a move nor a hit cancels the cast, and its range is measured from where it was released
 
@@ -11081,3 +11082,62 @@ network-change path and measured it with a headless Chromium instance.
 - **Recorded in:** `content/skills.md`, CONTRACTS, GAPS ("Magic types"),
   FEATURES KOF-0011, PARITY, BINARY-INDEX, STATUS, the
   evidence record.
+
+## D-246 — 2026-11-06 The veth link-local churn is removed by a host setting the user applied; a full `make live` then gives the browser no network change (PQ-460 closed, RQ-218)
+
+- **Context:** D-230 left PQ-460 with the user: a full `make live` announced and
+  removed an IPv6 link-local address on each long-lived test container's
+  host-side veth, and Chromium on the same machine treated every one as a
+  network change and failed page loads with `ERR_NETWORK_CHANGED`. The user hit
+  it again on 2026-11-06.
+- **Choice (the user's):** D-230's host setting. The user put
+  `net.ipv6.conf.default.addr_gen_mode = 1` in
+  `/etc/sysctl.d/90-no-veth-linklocal.conf` and applied it (checked:
+  `/proc/sys/net/ipv6/conf/default/addr_gen_mode` is 1). The kernel then gives
+  no automatic link-local address to any interface created afterwards. The
+  repository does not change the host, and the test containers keep their
+  bridges, veths and containment (D-229), so route (a)'s mitigations are not
+  needed. The README's live-suite setup recommends the setting to anyone who
+  runs `make live` or `make live-ko` beside a browser.
+- **Measured (2026-11-06, master `1b5caf0`, Chromium 155):** PQ-458's probe
+  script was not carried into this repository, so it was rebuilt to the same
+  plan, and its request totals do not compare with D-230's one for one. It
+  ran from before the build to the end of the run. It watched netlink link and address events (`ip monitor link address`) and
+  ran a headless Chromium with a NetLog. The page kept 12 fetch loops on a
+  loopback endpoint that answers after 1 s, so 6 requests are on sockets
+  and 6 wait for one, about 5.8 requests a second. A full `make live` passed
+  (`LIVE_OK` 76/76, 755 s, jobs 4). Against D-230's numbers:
+  - announced veth link-locals: 0 (D-230: 139), with 388 veth devices
+    created;
+  - address events of any kind on any interface: 0;
+  - Chromium `NETWORK_IP_ADDRESSES_CHANGED`: 0 (D-230: 277), and no
+    `NETWORK_CHANGED` or `NETWORK_CONNECTIVITY_CHANGED` either;
+  - probe requests failed: 0 of 6240 (D-230: 433 of 2220), spread evenly
+    over the 18 minutes.
+
+  The page's own counters arrived only at the end, because their beacons
+  waited in the same socket pool, so the NetLog's request records are the
+  count used.
+- **Control:** the same probe with the setting in place detects a change.
+  Five Docker networks created and removed (an IPv4 address on each new
+  bridge) gave 10 `NETWORK_IP_ADDRESSES_CHANGED` and failed 60 of 288
+  requests with `ERR_NETWORK_CHANGED`. A single container on docker0 gave no
+  address event in 5 s, which is longer than D-230's 1.6 s DAD.
+- **What remains:** link events (a veth up, down, enslaved, removed) still
+  reach the notifier. D-230 found that they count only through a
+  connection-type change, and the run produced no notification from them.
+  A Docker network created during a run still announces its bridge's IPv4
+  address. D-229's pool creates these once and keeps them, so a normal run
+  creates none.
+- **Costs of the setting (inferred, not measured):** on this machine the
+  setting only gives up automatic link-locals that nothing uses. Interfaces
+  that NetworkManager does not manage and that are created from then on get
+  no IPv6 link-local: Docker's bridges and veths, other stacks' included,
+  and unmanaged tunnels. An IPv6-enabled Docker network, or a tool that
+  relies on neighbour discovery over such an interface, would have to add
+  the address itself. Devices that NetworkManager manages keep its own
+  link-local (D-230).
+- **Not done:** the live runners do not check the setting. Whether they
+  should print a note when it is 0 is left as a proposal.
+- **Recorded in:** README ("Live suites"), GAPS, this
+  entry. STATUS was not carried into this repository (docs/history/README).

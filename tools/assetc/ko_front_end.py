@@ -1728,6 +1728,16 @@ MAX_EFFECT_COPIES, MAX_COPY_VERTICES, MAX_EFFECT_VERTICES = 4, 3072, 8192
 # model's tree's, as KO reads them from its own client.
 KEY_PLUG_DUST, KEY_PLUG_EFFECT_DUST = 4, 5
 DUST = ("Misc/Dust_Hard.dxt", "Misc/Dust_Soft.dxt")
+# RQ-204 (Q120): a hall part that draws its item's dust overlay, kind 1's
+# record (6) then the same two textures: AddChrPart (1298 005fc6f0, 1097
+# 0043d0f0) sets them on a worn part (the helmet's too) with the plugs' cuts
+# (1298 00412c30, drawn by 00412570 as the same second stage), and on the
+# looks lower under a robe by the lower's item. A reader before RQ-204
+# refuses the kind (a key kind above 5), so the file keeps version 35. The
+# recipe's select.part_dust: `draw` writes every part key as this kind,
+# `none` (the default) as kind 1.
+KEY_PART_DUST = 6
+PART_DUST = ("none", "draw")
 UPPER, LOWER = 0, 1
 
 
@@ -1778,7 +1788,8 @@ def plug_effect(assets, name):
 def hall_keys(appearance, config):
     """Version 35 (RQ-197): what each of the package's appearance keys draws
     in the select hall, in key order (appearance.bin's): None for nothing, a
-    part {kind, slot, robe, source} or a hand plug {kind, joint, source}.
+    part {kind, slot, robe, dust, source} or a hand plug {kind, joint,
+    source}; `dust` (RQ-204) where the recipe's `select.part_dust` is `draw`.
     `appearance` is {rows, race, positions}: games/<game>/appearance.json's
     rows as the package cooks them (ko_bake's mappings), the player race
     their art is for, and the KO part position of each of the player model's
@@ -1799,6 +1810,9 @@ def hall_keys(appearance, config):
     mode = config.get("item_plugs", "none")
     if type(mode) is not str or mode not in ITEM_PLUGS:
         raise ValueError("front-end select.item_plugs: one of %s" % ", ".join(ITEM_PLUGS))
+    dust = config.get("part_dust", "none")
+    if type(dust) is not str or dust not in PART_DUST:
+        raise ValueError("front-end select.part_dust: one of %s" % ", ".join(PART_DUST))
     if appearance is None:
         return []
     rows, positions = appearance["rows"], appearance["positions"]
@@ -1838,7 +1852,8 @@ def hall_keys(appearance, config):
                              % (what, ko_player.POSITIONS[slot]))
         if row.get("robe") and slot != UPPER:
             raise ValueError("front-end select equipment: %s: a robe is an upper part's" % what)
-        keys.append(dict(kind=KEY_PART, slot=slot, robe=bool(row.get("robe")), source=row["source"]))
+        keys.append(dict(kind=KEY_PART, slot=slot, robe=bool(row.get("robe")), dust=dust == "draw",
+                         source=row["source"]))
     return keys
 
 
@@ -1869,7 +1884,9 @@ def hall_equipment(assets, textures, tree, joint, animation, row, keys, record, 
     3 (RQ-200) a hand plug as 2 whose file has an FX mesh, then the geometry
     its weapon effect draws on (plug_effect); 4 and 5 (RQ-201) a hand plug as
     2 and 3, then its dust overlay's hard and soft textures (DUST), which the
-    cook writes for every hand plug, kinds 2 and 3 only in older files. Each
+    cook writes for every hand plug, kinds 2 and 3 only in older files; 6
+    (RQ-204) a part as 1, then its dust overlay's textures, for a part key
+    whose `dust` is set (hall_keys'). Each
     part is skinned on the model's nodes, joints and instance scale
     (`record`, model()'s) and read from the model's tree, as KO reads an
     item's files from its own client. Returns (bytes, report)."""
@@ -1892,19 +1909,21 @@ def hall_equipment(assets, textures, tree, joint, animation, row, keys, record, 
             raise ValueError("front-end select equipment: appearance key %d's %s is not in the select model's input"
                              % (key, art["source"]))
         if art["kind"] == KEY_PART:
-            out += u(KEY_PART) + u(art["slot"]) + u(1 if art["robe"] else 0) + create_part(
+            kind = KEY_PART_DUST if art["dust"] else KEY_PART
+            out += u(kind) + u(art["slot"]) + u(1 if art["robe"] else 0) + create_part(
                 tree, joint, animation, path, work.parent / ("%s-key-%d" % (work.name, key)), head, tail, tables)
-        else:
-            if not 0 <= art["joint"] < joints:
-                raise ValueError("front-end select equipment: appearance key %d's joint %d is not one of the select "
-                                 "model's %d joints" % (key, art["joint"], joints))
-            effect = plug_effect(assets, art["source"])
-            kind = KEY_PLUG_DUST if effect is None else KEY_PLUG_EFFECT_DUST
-            out += u(kind) + plug_record(assets, textures, art["source"], art["joint"]) + (effect or b"") + \
-                b"".join(u(textures.add(name, tree)) for name in DUST)
+            if art["dust"]:
+                out += b"".join(u(textures.add(name, tree)) for name in DUST)
             drawn.append(kind)
             continue
-        drawn.append(art["kind"])
+        if not 0 <= art["joint"] < joints:
+            raise ValueError("front-end select equipment: appearance key %d's joint %d is not one of the select "
+                             "model's %d joints" % (key, art["joint"], joints))
+        effect = plug_effect(assets, art["source"])
+        kind = KEY_PLUG_DUST if effect is None else KEY_PLUG_EFFECT_DUST
+        out += u(kind) + plug_record(assets, textures, art["source"], art["joint"]) + (effect or b"") + \
+            b"".join(u(textures.add(name, tree)) for name in DUST)
+        drawn.append(kind)
     return out, dict(looks=taken, keys=drawn)
 
 

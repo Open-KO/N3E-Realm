@@ -235,6 +235,20 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    the soft texture or none by those cuts; a kind 2 or 3 key draws none. The
    server sends, per key, the worn item's durability × 100 / its definition's
    maximum, rounded down, and 100 for an item without one (Q120).
+   RQ-204 (Q120; `specs/KO-FINDINGS.md` §8.6): a key may also be 6, a part as
+   1 followed by its dust overlay's two textures, hard then soft, as kinds 4
+   and 5's; a reader before RQ-204 refuses kind 6 (a key kind above 5), so the
+   file stays version 35. AddChrPart (1298 `005fc6f0`, 1097 `0043d0f0`) sets
+   the same dust by the same cuts on a worn part, the helmet's too
+   (`00412c30`), and on the looks lower under a robe by the lower item's
+   durability; the part draw (`00412570`) modulates the part as the plug draw
+   does. The cook writes every part key as 6 where the recipe's
+   `select.part_dust` is `draw` (with the select model tree's
+   `Misc/Dust_Hard.dxt` and `Misc/Dust_Soft.dxt`) and as 1 where it is
+   `none`, the default (anything else is refused). The client draws a slot's
+   key part, or under a robe the looks lower, with the hard or the soft
+   texture or none by the slot's key's percent (its first key's, 100 past the
+   list's) where that key is of kind 6.
 8. The create models (version 24, RQ-158): a count (1–32), then per race its
    race code (1–65535, each once) and its model and plugs (version 2):
    `CGameProcCharacterCreate`'s player (`InitChr`: the race's `UPC_DefaultLooks`
@@ -1211,7 +1225,10 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   (`Misc/Dust_Hard.dxt` below 31 %, `Misc/Dust_Soft.dxt` below 71 %, none at
   71 % and above) and sets on the plug (`00414470`; item 7, key kinds 4 and
   5); the maximum is the realm item's own, where KO's is `Item_Org`'s (Q120).
-  Not drawn: the same dust on the worn parts (`005fc6f0`). KO keeps the plug
+  RQ-204: `part_dust` is `draw`, so each worn part (the helmet's too) draws
+  the same dust by its item's percent, and the looks lower under a robe the
+  lower item's (`005fc6f0` → `00412c30`, drawn by `00412570`; item 7, key
+  kind 6). KO keeps the plug
   file's own joint for an item whose durability field is 0 (`005fce0b` is
   skipped), where the realm draws the row's joint (Q121). Its clips by role: front 1 (20–300 at 30 frames a
   second), start 2 (394–466 at 25) and rest 0 (180–220 at 25), each over its
@@ -1222,7 +1239,7 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   names no `characters` (every Tuarek draws the select model) and gives
   `class_names` from the pinned tree's own table (`00613ea0`, the same rows as
   1097's `0052e3e0`), with `class_name` "Unknown Class" (`006d8e08`);
-  `front-end.bin` is 64,447,563 bytes.
+  `front-end.bin` was 64,447,563 bytes then, and is 66,322,375 since RQ-204.
 - `front_clip` `loop` (`005fef90`): the front clip looping on the character in
   front at rest, the rest clip once on the others and on everyone while the
   camera turns; the spot widens to 0.5 by 0.02 a tick (`006a93b4`, `006a93bc`,
@@ -1639,7 +1656,10 @@ box and loading are 1264's.
   carries Moradon's armour (appearance key 5, `Item/2_4102_10_0.n3cpart`, KO
   part slot 0) and its looks upper apart, and the four hand plug keys draw
   nothing (`item_plugs` `none`: 1097's AddChr never reads the hand items,
-  `0043ba10`), the rogue's keys the same, and the file is 63,427,579 bytes; `class_names` the 1264 install's rows for KO's 24 class
+  `0043ba10`), the rogue's keys the same, and the file is 63,427,579 bytes;
+  `part_dust` is `none` (the default), so key 5 draws no dust, though 1097's
+  `0043d0f0` sets it on a worn part as 1298's does (RQ-204, KO-FINDINGS §8.6;
+  drawing it changes the hosted package, its own item); `class_names` the 1264 install's rows for KO's 24 class
   codes, 1097 `0052e3e0`, and `class_name` "Unknown Class", its default): 0 `pre_select` (hover), 1
   `selected` (start) and 2 `dummy` (rest, `pre_select`'s first frame). The
   hover and rest clips blend over their records' 0.3 s (`0043f280` names

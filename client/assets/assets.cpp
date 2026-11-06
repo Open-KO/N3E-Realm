@@ -3332,7 +3332,8 @@ FrontEnd load_front_end(const Release &release) {
   // jitter axis's origin and tip, the tail box's origin and edge ends and the
   // sort origin, each coordinate within 1000 (a UV within 1024), as N3E2's;
   // 4 and 5 (RQ-201) a hand plug as 2 and 3, then its dust overlay's textures,
-  // hard and soft (two of the file's textures; 1298 005fca40 -> 00414470).
+  // hard and soft (two of the file's textures; 1298 005fca40 -> 00414470);
+  // 6 (RQ-204) a part as 1, then the same (1298 005fc6f0 -> 00412c30).
   auto plug_effect = [&](FrontKey &key) {
     auto &e = key.effect.emplace();
     const auto point = [&] {
@@ -3379,8 +3380,15 @@ FrontEnd load_front_end(const Release &release) {
     for (uint32_t i = 0; i < keys; ++i) {
       FrontKey key;
       const auto kind = r.u();
-      need(kind <= 5, "front end select key kind");
-      key.kind = kind >= 2 ? FrontKey::Kind::plug : FrontKey::Kind(kind);
+      need(kind <= 6, "front end select key kind");
+      key.kind = kind == 6 ? FrontKey::Kind::part : kind >= 2 ? FrontKey::Kind::plug : FrontKey::Kind(kind);
+      const auto dust = [&] {
+        auto &textures = key.dust.emplace();
+        for (auto &t : textures) {
+          t = r.u();
+          need(t < fe.textures.size(), "front end select key dust texture");
+        }
+      };
       if (key.kind == FrontKey::Kind::part) {
         key.slot = r.u();
         need(key.slot <= 5 && key.slot != 2, "front end select key slot");
@@ -3388,18 +3396,13 @@ FrontEnd load_front_end(const Release &release) {
         need(robe <= 1 && (robe == 0 || key.slot == 0), "front end select key robe");
         key.robe = robe == 1;
         create_part(scene.model, key.part);
+        if (kind == 6) dust();
       } else if (key.kind == FrontKey::Kind::plug) {
         key.plug.joint = r.u();
         need(key.plug.joint < scene.model.joints.size(), "front end select key joint");
         key.plug.mesh = mesh();
         if (kind == 3 || kind == 5) plug_effect(key);
-        if (kind >= 4) {
-          auto &dust = key.dust.emplace();
-          for (auto &t : dust) {
-            t = r.u();
-            need(t < fe.textures.size(), "front end select key dust texture");
-          }
-        }
+        if (kind >= 4) dust();
       }
       scene.keys.push_back(std::move(key));
     }

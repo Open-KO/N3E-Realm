@@ -1085,7 +1085,8 @@ int main(int argc, char **argv) {
       // release has keys; select-worn NAME: what the select model's parts and
       // plugs are for three sets of worn keys (hall_worn), each plug with its
       // durability (RQ-201: the list's, 100 past it) and dust (h hard, s soft,
-      // n none; hall_dust).
+      // n none; hall_dust), then (RQ-204) each part slot with a dust key,
+      // <slot>:<key>@<durability><dust> (`-` none).
       if (!release.appearance.empty()) {
         std::cout << "select-equipment " << release.root.filename().string() << ":";
         auto print = [](const n3e::FrontScene &scene) {
@@ -1112,7 +1113,7 @@ int main(int argc, char **argv) {
         using Worn = std::pair<std::vector<uint32_t>, std::vector<uint32_t>>;
         for (const auto &[keys, durability] : {Worn{{2, 5, 3, 4, 4, 9, 0}, {0, 0, 0, 30, 31, 0, 0}},
                                                Worn{{5, 1}, {}}, Worn{{}, {}}, Worn{{4}, {70}}, Worn{{4}, {71}},
-                                               Worn{{4}, {500}}}) {
+                                               Worn{{4}, {500}}, Worn{{3, 5}, {50, 71}}}) {
           const auto worn = n3e::front::hall_worn(fe.select, keys, durability);
           std::cout << " ";
           for (size_t s = 0; s < worn.part.size(); ++s) std::cout << (s ? "," : "") << worn.part[s];
@@ -1123,6 +1124,16 @@ int main(int argc, char **argv) {
             std::cout << (k ? "+" : "") << worn.plugs[k] << "@" << worn.plug_durability[k]
                       << (dust == 0 ? "h" : dust == 1 ? "s" : "n");
           }
+          std::cout << "/";
+          bool any = false;
+          for (size_t s = 0; s < worn.dust.size(); ++s) {
+            if (worn.dust[s] < 0) continue;
+            const int dust = n3e::front::hall_dust(worn.part_durability[s]);
+            std::cout << (any ? "+" : "") << s << ":" << worn.dust[s] << "@" << worn.part_durability[s]
+                      << (dust == 0 ? "h" : dust == 1 ? "s" : "n");
+            any = true;
+          }
+          if (!any) std::cout << "-";
         }
         std::cout << "\n";
       }

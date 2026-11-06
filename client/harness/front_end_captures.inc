@@ -218,10 +218,13 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
   // from its keys and from the looks parts apart (a bit per slot) and the
   // keys' hand plugs drawn; RQ-200: per slot, the hand plugs drawn with
   // their weapon effect, and the tail links the frame drew; RQ-201: the
-  // priest's key 1 item at 20 % of its durability (key 5's at 100), and per
-  // slot the hand plugs drawn with the hard and with the soft dust overlay:
+  // priest's key 1 item at 20 % of its durability, and per slot the hand
+  // plugs drawn with the hard and with the soft dust overlay; RQ-204: its
+  // key 5 item at 50 %, and per slot the KO part slots drawn with the hard
+  // and with the soft dust (a bit per slot):
   //   FRONT_HALL models=M0,M1,M2 plugs=P0,P1,P2 classes=C0|C1|C2 looks=F0/H0,F1/H1,F2/H2
   //     worn=E0/O0/K0,E1/O1/K1,E2/O2/K2 fx=X0,X1,X2 tails=T dust=D0/S0,D1/S1,D2/S2
+  //     part_dust=A0/B0,A1/B1,A2/B2
   // and per effect drawn (engine space): its slot, key and copies, the
   // centre of its first copy, its plug's joint origin and its plug mesh's box:
   //   FRONT_HALL_FX slot=S key=K copies=C centre=x,y,z joint=x,y,z box=x0,y0,z0,x1,y1,z1
@@ -230,7 +233,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     list.Clear();
     struct Made { uint32_t race, specialty, face, hair; std::vector<uint32_t> appearance, durability; };
     const std::array<Made, 3> made{
-        {{2, 104, 1, 2, {5, 1}, {100, 20}}, {2, 102, 3, 1, {}, {}}, {0, 0, 0, 5, {5, 9}, {}}}};
+        {{2, 104, 1, 2, {5, 1}, {50, 20}}, {2, 102, 3, 1, {}, {}}, {0, 0, 0, 5, {5, 9}, {}}}};
     for (size_t i = 0; i < made.size(); ++i) {
       auto *c = list.add_characters();
       c->set_id(i + 1);
@@ -247,7 +250,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     const n3e::front::Context context{"Local Realm", "", release.version, &list, 0};
     front->draw(width, height, 1.0, context);
     front->draw(width, height, 1.0, context);
-    std::string models, plugs, classes, looks, worn, fx, dust;
+    std::string models, plugs, classes, looks, worn, fx, dust, part_dust;
     for (const auto &d : front->drawn())
       if (d.which == 1) {
         models += (models.empty() ? "" : ",") + std::to_string(d.select);
@@ -257,6 +260,8 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
                 std::to_string(d.equipped_plugs);
         fx += (fx.empty() ? "" : ",") + std::to_string(d.effects);
         dust += (dust.empty() ? "" : ",") + std::to_string(d.dust[0]) + "/" + std::to_string(d.dust[1]);
+        part_dust += (part_dust.empty() ? "" : ",") + std::to_string(d.part_dust[0]) + "/" +
+                     std::to_string(d.part_dust[1]);
       }
     for (int i = 0; i < list.characters_size(); ++i) {
       auto text = front->character_class(list.characters(i));
@@ -265,7 +270,7 @@ if (const char *prefix = std::getenv("N3E_TEST_FRONT_END")) {
     }
     std::cout << "FRONT_HALL models=" << models << " plugs=" << plugs << " classes=" << classes << " looks=" << looks
               << " worn=" << worn << " fx=" << fx << " tails=" << front->hall_effect_tails() << " dust=" << dust
-              << std::endl;
+              << " part_dust=" << part_dust << std::endl;
     // RQ-200: that frame, for the eye (the priest's blade and its effect).
     std::cout << capture_shot("select-worn", A::char_info) << std::endl;
     for (const auto &e : front->hall_effects()) {

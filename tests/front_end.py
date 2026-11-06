@@ -1376,7 +1376,8 @@ def equipment_raw(looks=(), keys=(), count=None):
     with the demo mesh or (RQ-200) ("effect", joint, geometry): a plug with
     its weapon effect's geometry (plug_effect_raw); RQ-201: ("dust", joint,
     hard, soft) a plug with its dust overlay's textures, ("effect-dust",
-    joint, geometry, hard, soft) both."""
+    joint, geometry, hard, soft) both; RQ-204: ("part-dust", slot, robe,
+    part, hard, soft) a part with its dust overlay's textures."""
     out = u(len(looks)) + b"".join(u(slot) + part for slot, part in looks)
     out += u(len(keys) if count is None else count)
     for key in keys:
@@ -1384,6 +1385,8 @@ def equipment_raw(looks=(), keys=(), count=None):
             out += u(fe.KEY_NONE)
         elif key[0] == "part":
             out += u(fe.KEY_PART) + u(key[1]) + u(key[2]) + key[3]
+        elif key[0] == "part-dust":
+            out += u(fe.KEY_PART_DUST) + u(key[1]) + u(key[2]) + key[3] + u(key[4]) + u(key[5])
         elif key[0] == "effect":
             out += u(fe.KEY_PLUG_EFFECT) + u(key[1]) + MESH + key[2]
         elif key[0] == "dust":
@@ -1937,20 +1940,28 @@ HALL_ROWS = [dict(item="t:blade", slot=0, source="I/b.n3cplug", joint=12),
              dict(item="t:old", slot=0, source="I/o.n3cpart", parts=[1], part_2145="x"),
              dict(item="t:boots", slot=7, source="I/f.n3cpart", parts=[4], robe=False)]
 HALL_APPEARANCE = dict(rows=HALL_ROWS, race=2, positions=HALL_POSITIONS)
-upper = dict(kind=fe.KEY_PART, slot=0, robe=True, source="I/u.n3cpart")
-helmet = dict(kind=fe.KEY_PART, slot=5, robe=False, source="I/h.n3cpart")
-boots = dict(kind=fe.KEY_PART, slot=4, robe=False, source="I/f.n3cpart")
+upper = dict(kind=fe.KEY_PART, slot=0, robe=True, dust=False, source="I/u.n3cpart")
+helmet = dict(kind=fe.KEY_PART, slot=5, robe=False, dust=False, source="I/h.n3cpart")
+boots = dict(kind=fe.KEY_PART, slot=4, robe=False, dust=False, source="I/f.n3cpart")
 assert fe.hall_keys(HALL_APPEARANCE, {}) == fe.hall_keys(HALL_APPEARANCE, {"item_plugs": "none"}) == \
-    [None, upper, helmet, None, boots]
+    fe.hall_keys(HALL_APPEARANCE, {"part_dust": "none"}) == [None, upper, helmet, None, boots]
 assert fe.hall_keys(HALL_APPEARANCE, {"item_plugs": "draw"}) == \
     [dict(kind=fe.KEY_PLUG, joint=12, source="I/b.n3cplug"), upper, helmet, None, boots]
 assert fe.hall_keys(None, {"item_plugs": "draw"}) == []
+# RQ-204 (Q120): the recipe's select.part_dust draw marks every part key's
+# dust (1298's 005fc6f0 and 1097's 0043d0f0 set it on a worn part), a plug
+# key's unchanged.
+assert fe.hall_keys(HALL_APPEARANCE, {"item_plugs": "draw", "part_dust": "draw"}) == \
+    [dict(kind=fe.KEY_PLUG, joint=12, source="I/b.n3cplug"), dict(upper, dust=True), dict(helmet, dust=True), None,
+     dict(boots, dust=True)]
 assert fe.hall_taken([None, upper, helmet, None, boots, dict(kind=fe.KEY_PLUG, joint=12, source="x")]) == [0, 4]
 assert fe.hall_taken([]) == []
 assert fe.select_parts(LOOKS_ROWS, 2, without=[0, 4]) == ["lo.n3cpart", "ha.n3cpart"]
 hall_problems = [
     ({"item_plugs": "all"}, HALL_ROWS),
     ({"item_plugs": 1}, HALL_ROWS),
+    ({"part_dust": "all"}, HALL_ROWS),
+    ({"part_dust": True}, HALL_ROWS),
     ({}, [dict(HALL_ROWS[1], robe=1)]),
     ({}, [dict(HALL_ROWS[0], robe=True)]),
     ({}, [dict(HALL_ROWS[3], robe=True)]),
@@ -1978,7 +1989,7 @@ assert fe.hall_equipment(LOOKS_ROWS, None, LOOKS_ROWS, "j", "a", fe.looks(LOOKS_
     (u(0) + u(3) + u(fe.KEY_NONE) * 3, dict(looks=[], keys=[0, 0, 0]))
 OTHER = Fixture({"I/b.n3cplug": b""})
 for keys in ([dict(kind=fe.KEY_PLUG, joint=0, source="I/b.n3cplug")],
-             [dict(kind=fe.KEY_PART, slot=5, robe=False, source="I/b.n3cplug")]):
+             [dict(kind=fe.KEY_PART, slot=5, robe=False, dust=False, source="I/b.n3cplug")]):
     try:
         fe.hall_equipment(fe.Inputs([LOOKS_ROWS, OTHER], [None, "o"]), None, OTHER, "j", "a", fe.looks(LOOKS_ROWS, 4),
                           keys,
@@ -2081,6 +2092,28 @@ assert dusted.added == [(name, LOOKS_ROWS) for name in fe.DUST * 2], dusted.adde
 assert fe.DUST == ("Misc/Dust_Hard.dxt", "Misc/Dust_Soft.dxt")
 print("PASS front-end select plug dust cook (RQ-201): each hall hand plug with its dust overlay's hard and soft "
       "textures from the select model's tree, kind 4 without and 5 with its weapon effect")
+
+# RQ-204 (Q120): a part key whose dust is drawn (select.part_dust draw) is
+# kind 6, a part as kind 1's then the same two textures from the select
+# model's tree (1298's 005fc6f0 -> 00412c30); one whose dust is not, kind 1.
+# The parts are stubbed (their own tests are above).
+saved = fe.create_part
+try:
+    fe.create_part = lambda *args: b"C"
+    dusted = DustTextures()
+    raw, report = fe.hall_equipment(LOOKS_ROWS, dusted, LOOKS_ROWS, "j", "a", fe.looks(LOOKS_ROWS, 2),
+                                    [dict(upper, dust=True), helmet, dict(boots, dust=True)],
+                                    SELECT_RECORD, pathlib.Path("/nonexistent/select"))
+finally:
+    fe.create_part = saved
+assert raw == (u(2) + u(0) + b"C" + u(4) + b"C" + u(3) +
+               u(fe.KEY_PART_DUST) + u(0) + u(1) + b"C" + u(8) + u(9) +
+               u(fe.KEY_PART) + u(5) + u(0) + b"C" +
+               u(fe.KEY_PART_DUST) + u(4) + u(0) + b"C" + u(10) + u(11)), raw
+assert report == dict(looks=[0, 4], keys=[fe.KEY_PART_DUST, fe.KEY_PART, fe.KEY_PART_DUST]), report
+assert dusted.added == [(name, LOOKS_ROWS) for name in fe.DUST * 2], dusted.added
+print("PASS front-end select part dust cook (RQ-204): a hall part key with its dust overlay's hard and soft "
+      "textures from the select model's tree where its dust is drawn (kind 6), kind 1 where not")
 
 
 # --- create's description text (version 28, RQ-175) ------------------------------
@@ -3304,7 +3337,7 @@ EQUIPMENT_CASES = {
     "bad-select-looks-parts-5": blob(select_equipment=equipment_raw([(0, PART), (1, PART), (3, PART), (4, PART),
                                                                       (4, PART)])),
     "bad-select-looks-part-skeleton": blob(select_equipment=equipment_raw([(0, BENT_PART)])),
-    "bad#1-select-key-kind-6": blob(select_equipment=u(0) + u(1) + u(6)),
+    "bad#1-select-key-kind-7": blob(select_equipment=u(0) + u(1) + u(7)),
     # RQ-201: plug keys with their dust overlay's textures (kinds 4 and 5).
     "ok#2-select-key-dust": blob(select_equipment=equipment_raw(keys=[("dust", 0, 0, 0),
                                                                      ("effect-dust", 0, plug_effect_raw(), 0, 0)]),
@@ -3314,6 +3347,15 @@ EQUIPMENT_CASES = {
     "bad#1-select-key-effect-dust-texture": blob(select_equipment=equipment_raw(keys=[
         ("effect-dust", 0, plug_effect_raw(), 9999, 0)])),
     "bad#1-select-key-dust-truncated": blob(select_equipment=equipment_raw(keys=[("dust", 0, 0, 0)])[:-1]),
+    # RQ-204: part keys with their dust overlay's textures (kind 6).
+    "ok#2-select-key-part-dust": blob(select_equipment=equipment_raw([(0, PART)], [("part-dust", 0, 1, PART, 0, 0),
+                                                                                  ("part", 5, 0, PART)]),
+                                      selects=u(1) + select_entry(2, [102], equipment=equipment_raw(keys=[
+                                          (), ("part-dust", 1, 0, PART, 0, 0)]))),
+    "bad#1-select-key-part-dust-texture": blob(select_equipment=equipment_raw(keys=[
+        ("part-dust", 0, 0, PART, 0, 9999)])),
+    "bad#1-select-key-part-dust-truncated": blob(select_equipment=equipment_raw(keys=[
+        ("part-dust", 0, 0, PART, 0, 0)])[:-1]),
     # RQ-200: a plug key with its weapon effect's geometry (kind 3).
     "ok#2-select-key-effect": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw()), ("plug", 0)]),
                                    selects=u(1) + select_entry(2, [102], equipment=equipment_raw(keys=[
@@ -3358,7 +3400,8 @@ EQUIPMENT_REASONS = {
     "bad-select-looks-part-twice": "front end select looks part slot",
     "bad-select-looks-parts-5": "count",
     "bad-select-looks-part-skeleton": "front end create part skeleton",
-    "bad#1-select-key-kind-6": "front end select key kind",
+    "bad#1-select-key-kind-7": "front end select key kind",
+    "bad#1-select-key-part-dust-texture": "front end select key dust texture",
     "bad#1-select-key-dust-texture": "front end select key dust texture",
     "bad#1-select-key-effect-dust-texture": "front end select key dust texture",
     "bad#1-select-key-effect-copies-0": "count", "bad#1-select-key-effect-copies-5": "count",
@@ -3625,7 +3668,8 @@ try:
                        "ok#5-select-equipment": "2/102/3/-/0+0 4/104/3/-/0+0",
                        "ok#2-select-equipment-nothing": "2/102/3/-/0+0",
                        "ok#2-select-key-effect": "2/102/3/-/0+0",
-                       "ok#2-select-key-dust": "2/102/3/-/0+0"}, selects
+                       "ok#2-select-key-dust": "2/102/3/-/0+0",
+                       "ok#2-select-key-part-dust": "2/102/3/-/0+0"}, selects
     names = {l.split(":")[0][len("class-names "):]: l.split(": ", 1)[1]
              for l in run.stdout.splitlines() if l.startswith("class-names ")}
     assert names == {"ok-select-models": "102=Rogue 104=Priest 112=Shadow Knight    ",
@@ -3653,7 +3697,8 @@ try:
     for name, reason in EQUIPMENT_REASONS.items():
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
-    for name in ("bad#1-select-key-truncated", "bad#1-select-key-effect-truncated", "bad#1-select-key-dust-truncated"):
+    for name in ("bad#1-select-key-truncated", "bad#1-select-key-effect-truncated", "bad#1-select-key-dust-truncated",
+                 "bad#1-select-key-part-dust-truncated"):
         assert any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
     equipped = {l.split(":")[0][len("select-equipment "):]: l.split(": ", 1)[1]
                 for l in run.stdout.splitlines() if l.startswith("select-equipment ")}
@@ -3661,15 +3706,19 @@ try:
                         "ok#2-select-equipment-nothing": "-/-,- -/-,-",
                         "ok#2-select-key-effect": "-/j0f3,j0 -/-,j0f1",
                         "ok#2-select-key-dust": "-/j0d0+0,j0f3d0+0 -/j0d0+0,-",
+                        "ok#2-select-key-part-dust": "0/p0rd0+0,p5 -/-,p1d0+0",
                         "ok#128-select-equipment-128": "-/" + ",".join(["-"] * 128)}, equipped
     worn = {l.split(":")[0][len("select-worn "):]: l.split(": ", 1)[1]
             for l in run.stdout.splitlines() if l.startswith("select-worn ")}
     # RQ-201 (Q120): each plug with its first key's durability (100 past the
     # list's, never above 100) and the dust 1298's 005fca40 picks by it: hard
-    # below 31, soft below 71, none at 71 and above.
+    # below 31, soft below 71, none at 71 and above. RQ-204 (Q120): each part
+    # slot's dust key and durability the same (005fc6f0), the slot's first
+    # key's, the lower's key still under a robe (its dust on the looks lower).
     none = "-1,-1,-1,-1,-1,-1"
-    assert worn["ok#5-select-equipment"] == ("1,-1,-1,-1,-1,2/3@30h -1,4,-1,-1,-1,-1/- %s/- %s/3@70s %s/3@71n "
-                                             "%s/3@100n" % ((none,) * 4)), worn
+    assert worn["ok#5-select-equipment"] == ("1,-1,-1,-1,-1,2/3@30h/0:1@0h+1:4@0h+5:2@0h -1,4,-1,-1,-1,-1/-/1:4@100n "
+                                             "%s/-/- %s/3@70s/- %s/3@71n/- %s/3@100n/- "
+                                             "-1,4,-1,-1,-1,2/-/1:4@71n+5:2@50s" % ((none,) * 4)), worn
     print("PASS front-end loader: each select model's equipment (version 35), what a listed character wears, "
           "%d refusals checked for their reasons" % (len(EQUIPMENT_REASONS) + 2))
     # RQ-194: each mesh vertex float the cook refuses, refused by the loader as a cooked float.

@@ -1010,7 +1010,9 @@ struct FrontKey {
   std::optional<FrontPlugEffect> effect;  // RQ-200: a plug's weapon effect geometry
   // RQ-201 (Q120, key kinds 4 and 5): a plug's dust overlay textures (the
   // file's), hard and soft, as 1298's 005fca40 picks by the item's
-  // durability (00414470); none for a plug of kind 2 or 3.
+  // durability (00414470); none for a plug of kind 2 or 3. RQ-204 (key kind
+  // 6): a part's, as AddChrPart (1298 005fc6f0 -> 00412c30) picks them; none
+  // for a part of kind 1.
   std::optional<std::array<uint32_t, 2>> dust;
 };
 // Version 8 (RQ-095): one mesh of the zone the select hall draws (1298's

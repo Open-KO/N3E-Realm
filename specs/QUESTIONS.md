@@ -2117,6 +2117,15 @@ parts (`005fc6f0`) and the world's (`0045d5f0`, which would need `Entity` to car
 too) need no further list change; both are follow-up items, not drawn yet
 (`specs/KO-FINDINGS.md` §8.6).
 
+**Update (RQ-204):** the hall's dust on worn parts is drawn on the 1298 recipe: a part
+key carries the two dust textures where the recipe's `select.part_dust` is `draw`
+(`front-end.bin` key kind 6, version 35 kept), and a worn part (the helmet's too)
+draws its item's dust by the same cuts, the looks lower under a robe the lower item's,
+as 1298's `005fc6f0` sets it (`specs/KO-FINDINGS.md` §8.6). The maximum is the realm
+item's, as for plugs. 1097's `0043d0f0` draws the same dust, but the 1097 choice keeps
+`part_dust` `none` (the default) so the hosted package and its look are unchanged;
+turning it on is its own item.
+
 ### Q121 — A 1298 hand plug's joint when the item's durability field is 0
 
 RQ-197: 1298's `005fca40` writes the hand's joint (12 right, 7 left, 5 a class-60

@@ -185,13 +185,13 @@ class View {
       for (const auto &dress : scene_at(k).dresses)
         for (const auto &plug : dress.plugs) use[plug.mesh.texture] = 2;
       // RQ-197 (version 35): a select model's equipment keys' hand plugs;
-      // RQ-201: and their dust overlays, sampled as the plug is.
-      for (const auto &key : scene_at(k).keys)
-        if (key.kind == FrontKey::Kind::plug) {
-          use[key.plug.mesh.texture] = 2;
-          if (key.dust)
-            for (const auto t : *key.dust) use[t] = 2;
-        }
+      // RQ-201: and their dust overlays, sampled as the plug is (RQ-204:
+      // a part key's too).
+      for (const auto &key : scene_at(k).keys) {
+        if (key.kind == FrontKey::Kind::plug) use[key.plug.mesh.texture] = 2;
+        if (key.dust)
+          for (const auto t : *key.dust) use[t] = 2;
+      }
     }
     for (size_t i = 0; i < textures.size(); ++i) {
       glBindTexture(GL_TEXTURE_2D, textures[i]);
@@ -678,6 +678,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // hall (RQ-201): the keys' hand plugs drawn with the hard and with the
     // soft dust overlay.
     std::array<int, 2> dust{};
+    // hall (RQ-204): the KO part slots drawn with the hard and with the soft
+    // dust overlay (bit per slot).
+    std::array<uint32_t, 2> part_dust{};
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   // RQ-200 (Q120): the package's equipped-item effects (effects.bin) and the
@@ -1698,9 +1701,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // One skinned scene posed by `pose` (a character, or RQ-174's face or hair
   // part on its model's nodes): its vertices grow `box` (normalised device
   // coordinates), then it draws by its render runs (N3SM) or as one opaque
-  // draw.
+  // draw. RQ-204 (Q120): `overlay`, one of the file's textures (-1 none), is
+  // a hall part's dust, drawn as 1298's part draw does (00412570): a second
+  // stage modulating the part's lit, textured colour by the overlay's on the
+  // part's own UVs (the source's CN3IMesh::BuildVertexListTwoUV copies them
+  // into the second set), alpha left the part's, as draw_mesh draws a plug's.
   void draw_skinned(const Scene &s, GLuint tex, const std::vector<Node> &pose, const detail::Mat &vp,
-                    const detail::Mat &model, const detail::Mat &mvp, std::array<float, 4> &box) {
+                    const detail::Mat &model, const detail::Mat &mvp, std::array<float, 4> &box, int overlay = -1) {
     static const GLenum factors[] = {GL_ZERO, GL_ONE, GL_SRC_COLOR, GL_ONE_MINUS_SRC_COLOR, GL_SRC_ALPHA,
                                      GL_ONE_MINUS_SRC_ALPHA, GL_DST_ALPHA, GL_ONE_MINUS_DST_ALPHA,
                                      GL_DST_COLOR, GL_ONE_MINUS_DST_COLOR};
@@ -1722,6 +1729,12 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     }
     glDisableVertexAttribArray(3);
     transform(vp, model);
+    if (overlay >= 0) {
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, textures[size_t(overlay)]);
+      glActiveTexture(GL_TEXTURE0);
+      glUniform1f(glGetUniformLocation(lit, "overlaid"), 1.f);
+    }
     glBindTexture(GL_TEXTURE_2D, tex);
     const V white{1, 1, 1};
     if (s.runs.empty()) {
@@ -1741,6 +1754,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       glDrawArrays(GL_TRIANGLES, GLint(run.first), GLsizei(run.count));
     }
     glDisable(GL_BLEND);
+    if (overlay >= 0) glUniform1f(glGetUniformLocation(lit, "overlaid"), 0.f);
   }
   // A posed character: skinned on the CPU (Scene::skin), drawn by its render
   // runs (N3SM) or as one opaque draw; KO's parts keep alpha test on. RQ-174
@@ -1781,16 +1795,28 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     const auto &on = dressed.part;
     const auto &plugged = dressed.plugs;
     uint32_t equipped = 0, own = 0;
+    // RQ-204 (Q120): a slot's part with its item's dust overlay, by its
+    // durability (1298 005fc6f0 -> 00412c30), where the item's key carries
+    // one: the key's own part, or under a robe the looks lower.
+    std::array<uint32_t, 2> part_dust{};
+    const auto dust_of = [&](size_t slot) {
+      const int at = dressed.dust[slot];
+      if (at < 0 || !scene.keys[size_t(at)].dust) return -1;
+      const int dust = hall_dust(dressed.part_durability[slot]);
+      if (dust < 0) return -1;
+      part_dust[size_t(dust)] |= 1u << slot;
+      return int((*scene.keys[size_t(at)].dust)[size_t(dust)]);
+    };
     for (size_t i = 0; i < scene.looks_parts.size(); ++i) {
       const auto &l = scene.looks_parts[i];
       if (on[l.slot] >= 0) continue;
-      draw_skinned(l.part, looks[3][i], pose, vp, model, mvp, box);
+      draw_skinned(l.part, looks[3][i], pose, vp, model, mvp, box, dust_of(l.slot));
       own |= 1u << l.slot;
     }
     for (size_t slot = 0; slot < on.size(); ++slot)
       if (on[slot] >= 0) {
         const auto at = size_t(on[slot]);
-        draw_skinned(scene.keys[at].part, looks[4][at], pose, vp, model, mvp, box);
+        draw_skinned(scene.keys[at].part, looks[4][at], pose, vp, model, mvp, box, dust_of(slot));
         equipped |= 1u << slot;
       }
     // The face and hair numbers: create's choice, a hall character's own
@@ -1807,7 +1833,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
                            face_drawn ? int(face) : -1, hair_drawn ? int(hair) : -1,
                            dress ? dress->specialty : 0u, dress && !dress->body ? int(dress->parts.size()) : -1,
                            dress ? int(dress->plugs.size()) : 0, select_model_of(which), int(scene.plugs.size()),
-                           equipped, own, int(plugged.size()), 0, {}});
+                           equipped, own, int(plugged.size()), 0, {}, part_dust});
     const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : which == 2 ? create_plugs
                                                                                        : race_plugs[which - 3];
     auto attach = [&](const FrontPlug &plug, const Buffer &buffer, int overlay = -1) {

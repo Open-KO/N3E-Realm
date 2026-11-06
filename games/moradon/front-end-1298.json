@@ -173,6 +173,7 @@
     "back": "realms",
     "arrows": "draw",
     "item_plugs": "draw",
+    "part_dust": "draw",
     "create": "hall",
     "zone": 10001,
     "fog": true,

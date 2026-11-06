@@ -44,6 +44,7 @@
 #include <SDL3/SDL.h>
 #include "native_textures.h"
 #include "terrain_overlay.h"
+#include "world_dust.h"
 #if N3E_HARNESS
 #include "texture_bank_check.h"
 #endif
@@ -452,6 +453,20 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     std::set<std::pair<uint64_t,uint32_t>> part_state_seen;
     struct PartCorners{uint64_t entity;bool self;uint32_t key;std::vector<std::array<float,2>> corners;};
     std::vector<PartCorners> part_corners;
+    // RQ-203: N3E_TEST_WORLD_DUST=1 reports each drawn key's dust (hard, soft
+    // or none) when it first draws and whenever it changes, and with each glow
+    // capture the screen box of each range drawn with dust; =ignore reports
+    // the same but draws no dust (a comparison capture for the suites, never a
+    // package switch).
+    const char*dust_test=std::getenv("N3E_TEST_WORLD_DUST");
+    std::map<std::pair<uint64_t,uint32_t>,int> dust_seen;
+    std::vector<GlowBox> dust_boxes;
+#endif
+    // RQ-203: whether the world's dust is drawn (always, but for the harness's
+    // comparison captures).
+    bool dust_drawn=true;
+#if N3E_HARNESS
+    if(dust_test&&std::string(dust_test)=="ignore")dust_drawn=false;
 #endif
     if(detail&&release.effects&&!release.effects->glow.empty()){
       if(client_options.equipment_glow)equipment_glow.build(*release.effects);
@@ -727,7 +742,7 @@ uniform vec2 camera;uniform float offset;uniform float aspect;out vec2 texcoord;
 uniform float farplane;uniform float nearplane;uniform float projection;uniform vec2 foglimits;out float fogamount;uniform float gameplay;uniform float gui;uniform vec3 eye;uniform vec3 rightward;uniform vec3 upward;uniform vec3 backward;
 void main(){vec3 p=pos+vec3(offset,0,0)-vec3(camera,0);gl_Position=vec4(p.x/(2.1*aspect),(p.y-.7-p.z*.25)/2.1,-p.z*.1,1);if(gameplay>0.5){vec3 d=pos-eye;float z=dot(d,backward);gl_Position=vec4(dot(d,rightward)*projection/aspect,dot(d,upward)*projection,-(farplane+nearplane)/(farplane-nearplane)*z-(2*nearplane*farplane)/(farplane-nearplane),-z);}if(gui>0.5)gl_Position=vec4(pos.xy,gui>1.5?pos.z:0,1);texcoord=uv;texcoord2=uv2;cells=slots;n=normal;worldpos=pos;fogamount=foglimits.y>0?clamp((length(pos-eye)-foglimits.x)/(foglimits.y-foglimits.x),0,1):0;})";
     const char *fs = R"(#version 330 core
-in float fogamount;uniform vec3 fogcolor;uniform float nofog;in vec2 texcoord;in vec2 texcoord2;flat in vec2 cells;in vec3 n;in vec3 worldpos;uniform sampler2D chart;uniform sampler2DArray worldchart;uniform sampler2DArray native0,native1,native2,native3,native4,native5,native6,native7;uniform float marker;uniform float native_detail;uniform float light;uniform float gui;uniform float world;uniform vec4 grid;uniform vec4 partstate;uniform vec4 glow;uniform float wearer;uniform vec2 sequence;out vec4 color;
+in float fogamount;uniform vec3 fogcolor;uniform float nofog;in vec2 texcoord;in vec2 texcoord2;flat in vec2 cells;in vec3 n;in vec3 worldpos;uniform sampler2D chart;uniform sampler2DArray worldchart;uniform sampler2DArray native0,native1,native2,native3,native4,native5,native6,native7;uniform float marker;uniform float native_detail;uniform float light;uniform float gui;uniform float world;uniform vec4 grid;uniform vec4 partstate;uniform vec4 glow;uniform float wearer;uniform vec2 sequence;uniform float dust;uniform sampler2D dustmap;out vec4 color;
 uniform float overlay;uniform sampler2DArray overlaymaps;uniform vec4 overlaygrid;uniform vec4 overlaycell;uniform vec2 overlaypatch;uniform int overlaylayers[16];
 vec4 cellsample(vec2 uv,float slot){
  // Texture IDs are categorical: the flat varying must not be interpolated.
@@ -785,7 +800,12 @@ if(world>0.5){vec4 a=cellsample(texcoord,sequence.x>.5?sequence.y:cells.x);bool 
  // unlit, as 0043dd80 turns lighting off for it (partstate w).
  if(partstate.w>0.5||single)shade=vec3(1);
  if(glow.w>0.)shade=min(vec3(1),shade+glow.rgb)*glow.w;
- color=vec4(lit*shade,partstate.x>0.5&&partstate.z>0.5?a.a:1.);color.rgb=mix(color.rgb,fogcolor,fogamount*(1.0-nofog));return;}
+ color=vec4(lit*shade,partstate.x>0.5&&partstate.z>0.5?a.a:1.);
+ // RQ-203 (Q120): a worn key's dust, as 1298's part and plug draws (00412570,
+ // 004137d0) take it: a second stage modulating the lit colour by the
+ // overlay's on the key's own UVs, the alpha left the key's.
+ if(dust>0.5)color.rgb*=texture(dustmap,texcoord).rgb;
+ color.rgb=mix(color.rgb,fogcolor,fogamount*(1.0-nofog));return;}
 // An N3MM looks run (PQ-265): x set, y the alpha reference (drawn only where
 // the 8-bit texture alpha is above it, as KO's GREATER alpha test), z unlit
 // (the texture's own colour); the alpha goes to the blend.
@@ -825,6 +845,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     glUseProgram(p);
     glUniform1i(glGetUniformLocation(p, "worldchart"), 1);
     glUniform1i(glGetUniformLocation(p, "overlaymaps"), 9);
+    glUniform1i(glGetUniformLocation(p, "dustmap"), 10);  // RQ-203
     GLuint vao, vbo, texture;
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
@@ -1067,6 +1088,24 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     auto sound=[&](const std::string&key){if(release.audio)audio.mixer.play(*release.audio,key,SDL_GetTicks()/1000.);};
     EffectsView effect_view;
     if(release.effects){effect_view.upload(*release.effects);glBindVertexArray(vao);glBindBuffer(GL_ARRAY_BUFFER,vbo);glUseProgram(p);}
+    // RQ-203 (Q120): the world's dust overlay (N3E6), hard and soft, each
+    // repeating with its own mip chain, drawn on texture unit 10 with a worn
+    // key whose item is below 71 % of its durability.
+    const n3e::AppearanceDust*world_dust=detail&&release.effects&&release.effects->dust?&*release.effects->dust:nullptr;
+    std::array<GLuint,2> dust_textures{};
+    if(world_dust){
+      glGenTextures(2,dust_textures.data());
+      for(int i=0;i<2;++i){
+        const auto&t=release.effects->textures.at(i?world_dust->soft:world_dust->hard);
+        glBindTexture(GL_TEXTURE_2D,dust_textures[i]);glPixelStorei(GL_UNPACK_ALIGNMENT,1);
+        glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA8,GLsizei(t.width),GLsizei(t.height),0,GL_RGBA,GL_UNSIGNED_BYTE,t.pixels.data());
+        glGenerateMipmap(GL_TEXTURE_2D);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR_MIPMAP_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_REPEAT);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_REPEAT);
+      }
+      glBindTexture(GL_TEXTURE_2D,0);
+      std::cout<<"world dust: "<<world_dust->keys.size()<<" key(s) (N3E6)"<<std::endl;
+    }
     // PQ-316 (D-185): the 2233 client's screen bloom and tone map
     // (postprocess.bin), a 2233/2145 addition the 1298 client does not have;
     // off unless Option.ini [Addition2233] HDR=1. Without it, or when the
@@ -3102,10 +3141,11 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
       std::vector<float> detail_vertices;
       // PQ-315: detail vertex ranges drawn with a glow (first vertex, count, shade).
       // PQ-348: and ranges drawn with an N3D3 key's render state (either or both).
-      struct GlowRange{size_t first,count;std::optional<n3e::EquipmentGlow::Shade> shade;const n3e::AppearanceState*state=nullptr;};
+      // RQ-203: and ranges drawn with a worn key's dust (0 hard, 1 soft).
+      struct GlowRange{size_t first,count;std::optional<n3e::EquipmentGlow::Shade> shade;const n3e::AppearanceState*state=nullptr;int dust=-1;};
       std::vector<GlowRange> detail_glow;
 #if N3E_HARNESS
-      glow_boxes.clear();part_corners.clear();
+      glow_boxes.clear();part_corners.clear();dust_boxes.clear();
       part_states=part_states_default&&part_state_follow.left!=2;
 #endif
       std::vector<n3e::targeting::PickVolume> pick_volumes;  // PQ-146: this frame's drawn actors
@@ -3537,7 +3577,36 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
                     // PQ-348 (D-191): the key's N3D3 render state, if it has one.
                     const n3e::AppearanceState*declared=key&&detail->appearances[key-1].state?&*detail->appearances[key-1].state:nullptr;
                     const n3e::AppearanceState*state=part_states?declared:nullptr;
-                    if(state)detail_glow.push_back({first,detail_vertices.size()/12-first,std::nullopt,state});
+                    // This key's range of the frame's draw list, for its state, dust and glow.
+                    auto range=[&]()->GlowRange&{const size_t count=detail_vertices.size()/12-first;
+                      if(detail_glow.empty()||detail_glow.back().first!=first||detail_glow.back().count!=count)
+                        detail_glow.push_back({first,count,std::nullopt,nullptr});
+                      return detail_glow.back();};
+                    if(state)range().state=state;
+                    // RQ-203 (Q120): the key's dust by its worn item's durability.
+                    const int dust=world_dust&&key?n3e::worn_dust(*world_dust,entity.appearance(),entity.appearance_durability(),key):-1;
+                    if(dust>=0&&dust_drawn)range().dust=dust;
+#if N3E_HARNESS
+                    if(key&&world_dust&&dust_test){
+                      auto [seen,first_seen]=dust_seen.try_emplace({entity.id(),key},dust);
+                      if(first_seen||seen->second!=dust){
+                        seen->second=dust;
+                        int at=0;uint32_t percent=100;
+                        for(auto worn:entity.appearance()){if(worn==key){if(at<entity.appearance_durability_size())percent=entity.appearance_durability(at);break;}++at;}
+                        std::cout<<"WORLD_DUST entity="<<entity.id()<<" self="<<(entity.id()==world.world.self())<<" key="<<key
+                                 <<" percent="<<percent<<" dust="<<(dust==0?"hard":dust==1?"soft":"none")<<std::endl;
+                      }
+                      if(dust>=0){
+                        GlowBox box{entity.id(),entity.id()==world.world.self(),key,1e9f,1e9f,-1e9f,-1e9f};
+                        for(size_t v=first;v<detail_vertices.size()/12;++v){
+                          auto at=orbit.project({detail_vertices[v*12],detail_vertices[v*12+1],detail_vertices[v*12+2]},width,height);
+                          if(at[2]<=0)continue;
+                          box.x0=std::min(box.x0,at[0]);box.y0=std::min(box.y0,at[1]);box.x1=std::max(box.x1,at[0]);box.y1=std::max(box.y1,at[1]);
+                        }
+                        if(box.x0<=box.x1)dust_boxes.push_back(box);
+                      }
+                    }
+#endif
 #if N3E_HARNESS
                     if(key&&std::getenv("N3E_TEST_ATTACHMENTS")){
                       GlowBox box{entity.id(),entity.id()==world.world.self(),key,1e9f,1e9f,-1e9f,-1e9f};
@@ -3567,8 +3636,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
                     if(!key||equipment_glow.records.empty())return;
                     bool started=false;
                     if(auto shade=equipment_glow.shade(entity.id(),key,now,&started)){
-                      if(state)detail_glow.back().shade=*shade;
-                      else detail_glow.push_back({first,detail_vertices.size()/12-first,*shade});
+                      range().shade=*shade;
 #if N3E_HARNESS
                       // N3E_TEST_EQUIPMENT_GLOW=1: each glow when first drawn, then
                       // its clock and intensity twice a second.
@@ -4298,6 +4366,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
         // against its reference (0043ade0's GREATER); the glow, when it has
         // one, in the same draw (2233 0042cf30 sets both).
         const GLint glow_uniform=glGetUniformLocation(p,"glow"),partstate=glGetUniformLocation(p,"partstate");size_t drawn=0;
+        const GLint dust_uniform=glGetUniformLocation(p,"dust");
         const GLboolean was_blending=glIsEnabled(GL_BLEND),was_culling=glIsEnabled(GL_CULL_FACE);
         GLint blend_state[4];
         glGetIntegerv(GL_BLEND_SRC_RGB,&blend_state[0]);glGetIntegerv(GL_BLEND_DST_RGB,&blend_state[1]);
@@ -4306,6 +4375,9 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
         for(const auto&range:detail_glow){
           if(range.first>drawn)glDrawArrays(GL_TRIANGLES,GLint(drawn),GLsizei(range.first-drawn));
           if(range.shade)glUniform4f(glow_uniform,range.shade->emissive[0],range.shade->emissive[1],range.shade->emissive[2],range.shade->modulate);
+          // RQ-203: the key's dust on unit 10.
+          if(range.dust>=0){glActiveTexture(GL_TEXTURE10);glBindTexture(GL_TEXTURE_2D,dust_textures[size_t(range.dust)]);
+            glActiveTexture(GL_TEXTURE0);glUniform1f(dust_uniform,1);}
           if(const auto*st=range.state){
             glUniform4f(partstate,1,st->alpha_reference,(st->flags&n3e::MaterialRun::BLEND)?1.f:0.f,0);
             if(st->flags&n3e::MaterialRun::DOUBLE_SIDED)glDisable(GL_CULL_FACE);else glEnable(GL_CULL_FACE);
@@ -4314,6 +4386,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           }
           glDrawArrays(GL_TRIANGLES,GLint(range.first),GLsizei(range.count));
           glUniform4f(glow_uniform,0,0,0,0);drawn=range.first+range.count;
+          if(range.dust>=0)glUniform1f(dust_uniform,0);
           if(range.state){
             glUniform4f(partstate,0,0,0,0);
             if(was_culling)glEnable(GL_CULL_FACE);else glDisable(GL_CULL_FACE);
@@ -5317,6 +5390,10 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             std::cout<<std::endl;
           }
           if(part_state_compare)part_state_follow={name.str(),glow_capture_at.back(),2};
+          // RQ-203: each range drawn with dust (or, =ignore, that would be).
+          for(const auto&box:dust_boxes)
+            std::cout<<"WORLD_DUST_BOX at="<<glow_capture_at.back()<<" entity="<<box.entity<<" self="<<box.self<<" key="<<box.key
+                     <<" box="<<int(std::floor(box.x0))<<","<<int(std::floor(box.y0))<<","<<int(std::ceil(box.x1))<<","<<int(std::ceil(box.y1))<<std::endl;
           glow_capture_at.pop_back();
         }
       }

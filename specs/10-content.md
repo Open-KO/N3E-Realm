@@ -46,7 +46,7 @@ a package-defined default and bounds.
 ```
 games/moradon/
   package.json, *.json          # references, tables, rules (existing)
-  realm-config.json             # the realm owner's choices: front_end, the KO client the front end follows (RQ-078)
+  realm-config.json             # the realm owner's choices: front_end, the KO client the front end follows (RQ-078); world_dust (RQ-203)
   front-ends.json               # the front ends the package cooks: per client, its recipe and input trees
   assets/<name>/                # contributed assets: .gltf, .bin, .png, ≤ 8 MB/file
   events.json                   # event presets (new, below)

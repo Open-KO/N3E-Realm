@@ -284,7 +284,7 @@ Audio load_audio(const std::filesystem::path& path) {
   r.end();return result;
 }
 Effects load_effects(const std::filesystem::path& path) {
-  Reader r(path);auto magic=r.raw(4);need(magic=="N3EF"||magic=="N3E2"||magic=="N3E3"||magic=="N3E4"||magic=="N3E5","cooked magic/version");Effects effects;
+  Reader r(path);auto magic=r.raw(4);need(magic=="N3EF"||magic=="N3E2"||magic=="N3E3"||magic=="N3E4"||magic=="N3E5"||magic=="N3E6","cooked magic/version");Effects effects;
   auto textures=r.count(256);size_t pixels=0,records=0;
   for(unsigned i=0;i<textures;++i){
     EffectTexture t{r.count(512),r.count(512),{}};
@@ -336,6 +336,7 @@ Effects load_effects(const std::filesystem::path& path) {
   // N3E3 (PQ-315) is N3E2 with 0..16 effects, then the glow section below.
   // N3E4 (PQ-342) is N3E3 with 0..16 glows, then the particle distance rules.
   // N3E5 (PQ-376, D-200) is N3E4 with 0..64 rules, then the sort records.
+  // N3E6 (RQ-203) is N3E5 with 0..16 sort records, then the dust overlay.
   if(magic!="N3EF"){
     auto n=r.count(16,magic=="N3E2"?1:0);std::set<uint32_t> keys;size_t vertices=0;
     auto point=[&]{auto p=r.floats<3>();for(float x:p)need(std::abs(x)<=1000,"appearance effect position");return V{p[0],p[1],p[2]};};
@@ -369,7 +370,7 @@ Effects load_effects(const std::filesystem::path& path) {
   }
   // N3E3 (PQ-315): an emissive glow on equipped appearance keys' geometry.
   // The key is checked against N3V1 by load_release.
-  if(magic=="N3E3"||magic=="N3E4"||magic=="N3E5"){
+  if(magic=="N3E3"||magic=="N3E4"||magic=="N3E5"||magic=="N3E6"){
     auto n=r.count(16,magic=="N3E3"?1:0);std::set<uint32_t> keys;
     for(unsigned i=0;i<n;++i){
       AppearanceGlow g;g.key=r.count(128);need(keys.insert(g.key).second,"duplicate appearance glow");
@@ -385,7 +386,7 @@ Effects load_effects(const std::filesystem::path& path) {
   // as tools/assetc/appearance_effects.py writes them. Only an appearance
   // tail link carries the state the rule needs, so no binding may play the
   // clip; each candidate is known by its birth sample alone.
-  if(magic=="N3E4"||magic=="N3E5"){
+  if(magic=="N3E4"||magic=="N3E5"||magic=="N3E6"){
     auto n=r.count(64,magic=="N3E4"?1:0);std::set<std::pair<std::string,std::array<uint32_t,4>>> seen;
     for(unsigned i=0;i<n;++i){
       auto name=r.str();ParticleThinning t;
@@ -416,8 +417,8 @@ Effects load_effects(const std::filesystem::path& path) {
   // N3E5 (PQ-376, D-200): 1298's alpha-list keys (00415910, 004840b0) on
   // appearance effects, as tools/assetc/appearance_effects.py writes them: a
   // sort origin rigid to the effect's joint and the copies' bias.
-  if(magic=="N3E5"){
-    auto n=r.count(16);std::set<uint32_t> keys;
+  if(magic=="N3E5"||magic=="N3E6"){
+    auto n=r.count(16,magic=="N3E5"?1:0);std::set<uint32_t> keys;
     for(unsigned i=0;i<n;++i){
       auto key=r.count(128);need(keys.insert(key).second,"duplicate appearance effect sort");
       auto e=std::find_if(effects.appearance.begin(),effects.appearance.end(),[&](const auto&a){return a.key==key;});
@@ -426,6 +427,16 @@ Effects load_effects(const std::filesystem::path& path) {
       float bias=r.f();need(std::isfinite(bias)&&bias>=0&&bias<=1000,"appearance effect sort bias");
       e->sorted=true;e->sort_origin={p[0],p[1],p[2]};e->sort_bias=bias;
     }
+  }
+  // N3E6 (RQ-203): the dust overlay's two textures, hard then soft (any of
+  // the file's), and the 1-16 appearance keys that draw it, each once. The
+  // keys are checked against N3V1 by load_release.
+  if(magic=="N3E6"){
+    AppearanceDust dust;dust.hard=r.u();dust.soft=r.u();
+    need(dust.hard<textures&&dust.soft<textures,"appearance dust texture");
+    auto n=r.count(16);std::set<uint32_t> keys;
+    for(unsigned i=0;i<n;++i){auto key=r.count(128);need(keys.insert(key).second,"duplicate appearance dust key");dust.keys.push_back(key);}
+    effects.dust=std::move(dust);
   }
   r.end();return effects;
 }
@@ -1443,6 +1454,8 @@ Release load_release(const std::filesystem::path &root) {
   if(result.effects)for(const auto&e:result.effects->appearance)need(e.key<=result.appearance.size(),"appearance effect key");
   // N3E3 appearance glows name N3V1 keys too (PQ-315).
   if(result.effects)for(const auto&g:result.effects->glow)need(g.key<=result.appearance.size(),"appearance glow key");
+  // N3E6 dust keys too (RQ-203).
+  if(result.effects&&result.effects->dust)for(auto key:result.effects->dust->keys)need(key<=result.appearance.size(),"appearance dust key");
   bool has_storage=files.erase("storage.bin")!=0;need((engine>=23||has_storage==(engine>=21))&&(!has_storage||has_wear),"storage compatibility");
   if(has_storage){
     Reader r(root/"storage.bin");r.magic("N3B1");StoragePolicy p{r.u(),r.u(),{}};auto n=r.u();

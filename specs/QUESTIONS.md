@@ -2131,6 +2131,28 @@ choice's `select.part_dust` is `draw`, so the hosted hall draws the dust on worn
 as 1097's `0043d0f0` does; the hosted `front-end.bin` and package hash change, so the
 next deploy is a new realm (Q63).
 
+**Update (RQ-203):** the world draws the dust where the package carries it.
+`Entity.appearance_durability` (field 34, additive, no wire version change) carries
+each in-view player's per-key percent, the character list's rule, and
+`effects.bin` `N3E6` the two textures and the keys that draw them; the client draws
+the hard dust below 31 % and the soft below 71 % on itself and every other player,
+as 1298's `0045d5f0` and 1097's `004535a0` set them (`specs/KO-FINDINGS.md` §8.6;
+`content/appearance.md`, "Durability dust"). The maximum stays the realm item's
+(KO's world divides by `Item_Org` + `Item_Ext`). The cook writes it only where the
+realm owner sets `world_dust` `draw` in `realm-config.json`.
+
+Raised: should the hosted Moradon package draw it?
+- (a) `none`: the hosted world looks as before; the hall alone shows worn
+  items' dust.
+- (b) `draw`, as both 1097's and 1298's worlds do (and as the hosted hall
+  already does since RQ-205); the hosted package hash changes, so the next
+  deploy is a new realm (Q63).
+
+**Default taken:** (a), the look change being the maintainer's to decide (one
+line in `games/moradon/realm-config.json` and the three Moradon feature pins).
+Also not drawn: the dust of the glow cook's 2145 additions (2233's `005756b0`
+unread) and on the inventory preview.
+
 ### Q121 — A 1298 hand plug's joint when the item's durability field is 0
 
 RQ-197: 1298's `005fca40` writes the hand's joint (12 right, 7 left, 5 a class-60

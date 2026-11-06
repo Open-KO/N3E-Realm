@@ -60,6 +60,7 @@ test-fast:
 	python tests/ko_fx.py
 	python tests/ko_weapon_fx.py
 	python tests/ko_glow_2233.py
+	python tests/world_dust.py
 	python tests/ko_chrplug_2145.py
 	python tests/ko_armour_2145.py
 	python tests/ko_hdr_2233.py

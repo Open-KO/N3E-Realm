@@ -9,7 +9,9 @@ Engine29 chooses progression capabilities from N3P1–N3P5, independently of cos
 Earlier engine/wire pairs retain their previous compatibility rules.
 
 Entity field20 carries equipped keys from the server's committed bag snapshot.
-It carries no bag contents, instance serials, balances or durability. Clients
+It carries no bag contents, instance serials or balances; since RQ-203 field 34
+carries each key's worn item's durability as a whole percent of its definition's
+maximum (below, "Durability dust"), never the durability itself. Clients
 cannot set it. Client validation rejects unknown keys, duplicate equipment slots,
 more than16 keys, or keys on NPCs. Unmapped equipment keeps the default artwork.
 
@@ -310,6 +312,52 @@ light only. `render_detail.serialize` refuses any vertex normal the client's
 detail reader refuses (a component not finite or past the cooked float bound
 10⁶, or a single-precision length at most 10⁻¹⁰; RQ-191), so such a normal
 fails the cook rather than `n3e-asset-check` (`tests/render_detail.py`).
+
+## Durability dust (N3E6, RQ-203)
+
+KO's world dusts a worn item as it wears. The durability setter (1298
+`0045d5f0`, 1097 `004535a0`, a virtual method of the player classes; the
+source's `CPlayerBase::DurabilitySet`, which the source calls for the local
+player on equip, repair and each durability change, and for another player
+when it comes into view or changes its look, with the durability the server
+sends: `PlayerOther.cpp`, `GameProcMain.cpp`, `UIInventory.cpp`) takes the
+item's durability × 100 / its maximum (`Item_Org` + `Item_Ext`) and sets, on a
+hand's plug (slots 6 and 8) or an armour slot's part (helmet, upper, lower,
+gloves, shoes), `Misc\Dust_Hard.dxt` below 31, `Misc\Dust_Soft.dxt` below 71
+and no overlay from 71. The part and plug draws (1298 `00412570`, `004137d0`)
+then modulate the lit, textured colour by the overlay on the mesh's own UVs,
+the alpha left the mesh's (`specs/KO-FINDINGS.md` §8.6).
+
+In n3e the server sends, per appearance key of every player in view, its worn
+item's durability percent (`Entity.appearance_durability`, the character
+list's rule: × 100 / the item definition's durability, rounded down, 100 for an
+item without one), from committed equipment as the keys are; a wear commit or
+a repair changes it at the next view. The textures and the keys that draw them
+are package data: `effects.bin` `N3E6`
+([presentation events](presentation-events.md#durability-dust-n3e6)), two of
+its textures and up to 16 keys. The client draws a listed key below 31 % with
+the hard texture and below 71 % with the soft, for itself and every other
+player, as a second texture stage on the key's own UVs; an unlisted key, a key
+at 71 % or more, an NPC and a server's empty list (drawn as 100) draw none. The
+engine knows no KO paths or slots.
+
+The KO adapter writes it where the realm owner chose it: `world_dust` `draw` in
+`games/<game>/realm-config.json` (default `none`; any other value is refused
+before the cook). `ko_fx_bake` then adds `Misc/Dust_Hard.dxt` and
+`Misc/Dust_Soft.dxt` from the client tree (256 × 256) to the effects' textures
+and lists every `appearance.json` row whose artwork is a KO hand plug or armour
+part (`ko_fx_bake.dust_keys`); the glow cook's 2145 additions (skeletal plugs
+and 2145 armour) take none, since 2233's own dust (`005756b0`) is unread.
+Moradon keeps `none`, so its package is unchanged; the hosted look is the
+maintainer's to choose (Q120).
+
+The maximum is the realm item's single one, where KO's world divides by
+`Item_Org`'s plus `Item_Ext`'s (Q120). Not drawn: the dust on the inventory
+preview (whether KO's preview character, drawn by `00457420`, carries it was
+not read; PQ-352), and 1298's early return from a hand's dust while the
+player's byte `+0x4a8` is set and `+0x4ac` is not −1 (1097 has no such test;
+what the state is was not read).
+Evidence: `tests/world_dust.py`, `tests/world_dust_live.py`.
 
 ## Attached characters (N3AT, PQ-328)
 

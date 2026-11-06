@@ -218,7 +218,10 @@ mod tests {
             id: 1000 + i,
             name: "p".repeat(24),
             x: i as f32,
-            appearance: vec![123456; 16],
+            // The most keys a player wears, each at N3V1's largest key (128),
+            // and RQ-203's durability percent for each.
+            appearance: vec![128; 16],
+            appearance_durability: vec![100; 16],
             health: 9999,
             behavior: "idle".into(),
             ..Default::default()

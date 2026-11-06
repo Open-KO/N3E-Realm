@@ -2,6 +2,7 @@
 #include "render/appearance_effects.h"
 #include "render/options.h"
 #include "render/equipment_glow.h"
+#include "render/world_dust.h"
 #include "render/attached_characters.h"
 #include "render/animation.h"
 #include <cmath>
@@ -591,8 +592,31 @@ void flights(){
              "(pitch included; the facing turn when level, about y by pi when opposite); it ends where the ray enters the target's box, "
              "else at the launch distance, once, and is gone after\n";
 }
+// RQ-203 (Q120): the world's dust (1298 0045d5f0, 1097 004535a0): the hard
+// texture below 31 % of the item's durability, the soft below 71 %, none from
+// 71 %; on a key the package's N3E6 lists, by the durability of the key's first
+// listing in the entity's keys, 100 past a list a server before RQ-203 leaves
+// empty, never above 100.
+void world_dust(){
+  std::vector<int> cuts;for(uint32_t p:{0u,30u,31u,70u,71u,100u})cuts.push_back(n3e::world_dust(p));
+  need(cuts==std::vector<int>{0,0,1,1,-1,-1});
+  n3e::AppearanceDust dust{3,4,{1,2}};
+  std::vector<uint32_t> keys{2,1,5},durability{50,20,10};
+  need(n3e::worn_dust(dust,keys,durability,1)==0&&n3e::worn_dust(dust,keys,durability,2)==1);
+  need(n3e::worn_dust(dust,keys,durability,5)==-1);              // not a dust key
+  need(n3e::worn_dust(dust,keys,durability,3)==-1);              // not worn
+  need(n3e::worn_dust(dust,keys,std::vector<uint32_t>{},1)==-1); // no list: 100
+  need(n3e::worn_dust(dust,keys,std::vector<uint32_t>{90},2)==-1&&n3e::worn_dust(dust,keys,std::vector<uint32_t>{90},1)==-1);
+  need(n3e::worn_dust(dust,keys,std::vector<uint32_t>{70,500},1)==-1);  // capped at 100
+  need(n3e::worn_dust(dust,std::vector<uint32_t>{1,1},std::vector<uint32_t>{90,5},1)==-1);  // the first listing decides
+  std::cout<<"PASS RQ-203 world dust: hard below 31 %, soft below 71 %, none from 71 %; only on the package's dust keys, "
+             "by the first listing's percent, 100 past an empty list and never above 100\n";
+}
 int main(int argc,char**argv){try{
-  if(argc==2){auto effects=n3e::load_effects(argv[1]);std::cout<<"PASS effects clips="<<effects.clips.size()<<" textures="<<effects.textures.size()<<"\n";return 0;}
+  if(argc==2){auto effects=n3e::load_effects(argv[1]);std::cout<<"PASS effects clips="<<effects.clips.size()<<" textures="<<effects.textures.size();
+    if(effects.dust){std::cout<<" dust="<<effects.dust->hard<<","<<effects.dust->soft<<" dust_keys=";
+      for(size_t i=0;i<effects.dust->keys.size();++i)std::cout<<(i?",":"")<<effects.dust->keys[i];}
+    std::cout<<"\n";return 0;}
   if(argc>=4&&std::string(argv[2])=="--thin")return thin_run(argc,argv);
   n3e::Effects effects;
   n3e::EffectBatch quad{1,0,5,6,199,{0,1,0,2,2,0,1,1,1,1,0}};
@@ -625,4 +649,5 @@ int main(int argc,char**argv){try{
   thinning();
   cast_turn();
   flights();
+  world_dust();
 }catch(const std::exception&e){std::cerr<<e.what()<<'\n';return 1;}}

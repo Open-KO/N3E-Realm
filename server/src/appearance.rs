@@ -70,7 +70,7 @@ impl Policy {
     }
     /// RQ-201 (Q120): per projected key, in its order, the worn item's
     /// durability as a whole percent of its definition's maximum (the
-    /// character list's `appearance_durability`).
+    /// character list's `appearance_durability` and, RQ-203, Entity's).
     pub fn durability(&self, bag: Option<&wire::BagState>) -> Vec<u32> {
         self.worn(bag).map(|(_, percent)| percent).collect()
     }

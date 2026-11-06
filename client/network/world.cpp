@@ -433,6 +433,11 @@ void WorldClient::run(std::stop_token stop) {
           check(!actor.strike_sequence()||(!actor.npc()&&actor.strike_tick()),"strike request identity");
           check(!actor.sitting()||(release.rest&&!actor.npc()&&actor.health()),"invalid rest state");
           check(actor.appearance_size()<=16&&(!actor.npc()||actor.appearance_size()==0),"appearance count");
+          // RQ-203 (Q120): one durability percent per key (0-100), or none
+          // (a server before it, drawn as 100).
+          check((actor.appearance_durability_size()==0||actor.appearance_durability_size()==actor.appearance_size())
+                &&std::all_of(actor.appearance_durability().begin(),actor.appearance_durability().end(),[](uint32_t p){return p<=100;}),
+                "appearance durability");
           // PQ-272 (D-179): only a templated NPC (one with a looks key) carries
           // a drawn scale, in percent; 0 means 100.
           check(!actor.scale()||(actor.npc()&&!actor.looks().empty()&&actor.scale()<=1000),"npc scale");

@@ -14,7 +14,7 @@ Strikes emit once per authoritative strike tick, including misses for swing audi
 A newly connected client establishes the current cursor without replaying history;
 subsequent snapshots deduplicate by sequence. Disconnect clears playback.
 
-N3EF (or N3E2, N3E3 or N3E4, below) and N3AU are optional hashed package files, available from engine33. They
+N3EF (or N3E2 to N3E6, below) and N3AU are optional hashed package files, available from engine33. They
 use little-endian u32/f32 and length-prefixed UTF-8 strings. Readers reject trailing
 bytes, nonfinite numbers, invalid references and excessive counts. Imported bytes
 remain ignored local outputs, never a normal build dependency.
@@ -116,6 +116,21 @@ writes 1298's alpha-list keys (`00415910`, `004840b0`, sorted by `0043dd80`):
 the plug origin and the FX mesh's y extent in mesh units, for every 1298
 weapon effect and none of the 2233 ones
 ([appearance](appearance.md#equipped-item-effects-n3e2-pq-211)).
+
+### Durability dust (N3E6)
+
+N3E6 (RQ-203) is N3E5 whose sort list may be empty (0..16), followed by a dust
+section: a hard and a soft texture (two of the file's, or one twice) and 1–16
+N3V1 keys, each at most once. The client draws a listed key worn below 31 % of
+its item's durability (`Entity.appearance_durability`) with the hard texture,
+below 71 % with the soft, as a second stage modulating the key's lit colour by
+the texture on the key's own UVs (repeating, with its own mip chain), alpha
+left the key's, for every player it draws with render detail. Readers reject
+a texture past the file, a key past N3V1, a duplicate key, bad counts and
+trailing bytes. The KO adapter writes the world durability setter's
+`Misc\Dust_Hard.dxt` and `Misc\Dust_Soft.dxt` on the package's hand plug and
+armour part keys where the realm owner chose it
+([appearance](appearance.md#durability-dust-n3e6-rq-203)).
 
 ### Screen post-process (N3PF)
 

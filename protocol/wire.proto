@@ -60,7 +60,13 @@ message Move { uint64 session = 1; uint64 seq = 2; float x = 3; float z = 4; uin
 // key and maximum health; both are absent for every other entity and package.
 // PQ-272: such an NPC also carries its template's drawn scale in percent (1-1000)
 // when it is not 100; 0 (absent) means 100. Output-only; no wire version change.
-message Entity { uint64 id = 1; string name = 2; float x = 3; float y = 4; float z = 5; uint64 ack = 6; uint32 health = 7; uint32 resource = 8; bool npc = 9; uint64 strike_tick = 10; uint64 respawn_tick = 11; string behavior = 12; uint32 movement_mode = 13; string strike_result = 14; uint32 strike_damage = 15; LifeState life_state = 16; uint64 corpse_until_tick = 17; uint64 definition_revision = 18; bool turbo = 19; repeated uint32 appearance = 20; bool sitting = 21; uint32 combat_style = 22; uint32 strike_style = 23; bool strike_moving = 24; uint64 strike_target = 25; string cast_skill = 26; uint64 cast_start = 27; uint64 cast_end = 28; uint64 cast_target = 29; uint64 strike_sequence = 30; string looks = 31; uint32 max_health = 32; uint32 scale = 33; }
+// RQ-203 (Q120): `appearance_durability`, one per `appearance` key in its order,
+// the worn item's durability as a whole percent of its definition's maximum, as
+// Character.appearance_durability carries it (100 for an item whose definition
+// has none); empty for an NPC and from a server before it, which a client draws
+// as 100. The world's dust overlay reads it (content/appearance.md). Additive:
+// no wire version change.
+message Entity { uint64 id = 1; string name = 2; float x = 3; float y = 4; float z = 5; uint64 ack = 6; uint32 health = 7; uint32 resource = 8; bool npc = 9; uint64 strike_tick = 10; uint64 respawn_tick = 11; string behavior = 12; uint32 movement_mode = 13; string strike_result = 14; uint32 strike_damage = 15; LifeState life_state = 16; uint64 corpse_until_tick = 17; uint64 definition_revision = 18; bool turbo = 19; repeated uint32 appearance = 20; bool sitting = 21; uint32 combat_style = 22; uint32 strike_style = 23; bool strike_moving = 24; uint64 strike_target = 25; string cast_skill = 26; uint64 cast_start = 27; uint64 cast_end = 28; uint64 cast_target = 29; uint64 strike_sequence = 30; string looks = 31; uint32 max_health = 32; uint32 scale = 33; repeated uint32 appearance_durability = 34; }
 // Every view is an atomic complete interest baseline. Missing IDs despawn;
 // present IDs spawn before position application. Coalescing cannot lose lifecycle.
 // Entity IDs come from a noncycling Postgres sequence, unique across reconnects

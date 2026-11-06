@@ -26,8 +26,14 @@ CONFIG = "realm-config.json"
 CATALOGUE = "front-ends.json"
 # The realm-config.json keys this cook knows; any other is refused (a typo
 # would otherwise cook the default without a word). RQ-002: `create`, the
-# character-create choices (tools/assetc/ko_create.py).
-CONFIG_KEYS = {"front_end", "create"}
+# character-create choices (tools/assetc/ko_create.py). RQ-203: `world_dust`,
+# whether the world draws worn items' dust overlays (world_dust below).
+CONFIG_KEYS = {"front_end", "create", "world_dust"}
+# RQ-203 (Q120): `world_dust`'s values. KO's world puts a dust texture on a worn
+# hand plug or armour part by its durability (1298 0045d5f0, 1097 004535a0);
+# `draw` cooks it into effects.bin (N3E6), `none` (the default) leaves the
+# world as before.
+WORLD_DUST = ("none", "draw")
 ENTRY_KEYS = {"recipe", "inputs"}
 INPUT_KEYS = {"tree", "get"}
 # RQ-084: the name a recipe path's prefix gives the input (required after the first).
@@ -127,6 +133,7 @@ def choose(game, root="."):
     unknown = sorted(set(config) - CONFIG_KEYS)
     if unknown:
         raise Refused("%s: unknown key %s (it knows %s)" % (path, ", ".join(unknown), ", ".join(sorted(CONFIG_KEYS))))
+    dust_choice(config, path)
     offered = catalogue(game)
     client = config.get("front_end")
     if type(client) is not str:
@@ -139,6 +146,21 @@ def choose(game, root="."):
     import ko_create
     chosen = ko_create.plan(game, client, config.get("create", {}))
     return dict(resolve(game, client, root, offered), create=chosen)
+
+
+def dust_choice(config, path):
+    """`world_dust` of a read realm-config.json, checked: True for `draw`."""
+    value = config.get("world_dust", "none")
+    if type(value) is not str or value not in WORLD_DUST:
+        raise Refused("%s: world_dust must be one of %s, not %r" % (path, ", ".join(WORLD_DUST), value))
+    return value == "draw"
+
+
+def world_dust(game):
+    """Whether the realm owner chose the world's dust overlay (RQ-203):
+    realm-config.json's `world_dust` is `draw` (default `none`)."""
+    path = pathlib.Path(game) / CONFIG
+    return dust_choice(read(path, "the realm's choices; content/appearance.md, \"Durability dust\""), path)
 
 
 def split(path):

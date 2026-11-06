@@ -1113,8 +1113,10 @@ and plays whatever the file says. Two files in the package source hold it:
 - `games/<game>/realm-config.json`, the realm owner's choices:
   `{"front_end": "<client>"}`, and optionally `create`, the character-create
   choices (RQ-002: `table`, `races`, `reserved`; RQ-154: `start`, `items`;
-  `content/character-create.md`, "The realm's create"). It takes no other key (a misspelt one is refused, not
-  ignored). Moradon's is `"1097"` (Q71), with no `create`.
+  `content/character-create.md`, "The realm's create") and, RQ-203, `world_dust`
+  (`none`, the default, or `draw`: the world's dust on worn items,
+  `content/appearance.md`, "Durability dust"). It takes no other key (a misspelt one is refused, not
+  ignored). Moradon's is `"1097"` (Q71), with no `create` or `world_dust`.
 - `games/<game>/front-ends.json`, the clients the package can cook, by id
   (lower-case letters, digits and `-`, up to 32): each a `recipe`, the
   `ko_front_end` input beside it (the files, bindings and placements of that

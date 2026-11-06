@@ -309,11 +309,34 @@ def appearance_effect(assets, texture, spec, index):
     return entry, key, clip
 
 
-def cook(assets, definition, out, appearance=(), keys=0, glow=()):
+# RQ-203 (Q120): the dust overlay KO's world durability setter puts on a worn
+# hand plug or armour part (1298 0045d5f0, 1097 004535a0; the source's
+# CPlayerBase::DurabilitySet): Misc\Dust_Hard.dxt below 31 % of the item's
+# durability, Misc\Dust_Soft.dxt below 71 %, none from 71 %. The percent cuts
+# are the client's (client/render/world_dust.h); these are the two textures.
+DUST = ('Misc/Dust_Hard.dxt', 'Misc/Dust_Soft.dxt')
+
+
+def dust_keys(rows):
+    """RQ-203: the appearance keys (1-based, appearance.bin's order) of `rows`
+    whose artwork is a KO hand plug (.n3cplug) or armour part (.n3cpart, with
+    its `parts`), the two kinds KO's world durability setter dusts; a row of
+    any other artwork draws none."""
+    keys = []
+    for key, row in enumerate(rows, 1):
+        source = str(row.get('source', '')).casefold()
+        if source.endswith('.n3cplug') or (source.endswith('.n3cpart') and row.get('parts')):
+            keys.append(key)
+    return keys
+
+
+def cook(assets, definition, out, appearance=(), keys=0, glow=(), dust=()):
     """effects.bin: N3EF, N3E2 with `appearance` effects (PQ-211), N3E3 when
     `glow` records are given (PQ-315, ko_glow_2233), N3E4 when a 2233 tail
-    carries camera-distance particle rules (PQ-342, ko_fx_tail_2233), or N3E5
-    when a 1298 effect carries its alpha-list sort record (PQ-376)."""
+    carries camera-distance particle rules (PQ-342, ko_fx_tail_2233), N3E5
+    when a 1298 effect carries its alpha-list sort record (PQ-376), or N3E6
+    when `dust` names the appearance keys that draw the world's dust overlay
+    (RQ-203: DUST's two textures from this client's tree)."""
     rows = {int(r[0]):r for r in csv.reader(io.StringIO(assets.get('Data/fx.tbl.csv').decode('utf-8-sig'))) if r and r[0].isdigit()}
     textures, texture_ids = [], {}
     def texture(name, source=None):
@@ -386,6 +409,8 @@ def cook(assets, definition, out, appearance=(), keys=0, glow=()):
                                   tail_scale=spec['geometry']['tail_scale'],
                                   **({'sort': sort} if sort else {}),
                                   **({'tail_2233': tail_2233} if tail_2233 else {})))
+    # RQ-203: the dust overlay's two textures, after every effect's.
+    hard, soft = (texture(name) for name in DUST) if dust else (None, None)
     data = b'N3EF'+u(len(textures))+b''.join(textures)+u(len(clips))+b''.join(clips)
     bindings=definition['bindings']
     data+=u(len(bindings))
@@ -393,7 +418,13 @@ def cook(assets, definition, out, appearance=(), keys=0, glow=()):
         if b['kind'] not in (1,2,3) or b['selector'] not in range(5) or b['anchor'] not in range(130) or not 1<=len(b['clips'])<=8 or any(c not in definition['clips'] for c in b['clips']):
             raise ValueError('effect binding')
         data+=u(b['kind'])+string(b['key'])+u(b['selector'])+u(b['anchor'])+u(len(b['clips']))+b''.join(string(c) for c in b['clips'])
-    if sorts:
+    dust_report = None
+    if dust:
+        # RQ-203: the world's dust overlay (N3E6) on the keys `dust` names.
+        data = appearance_effects.n3e6(data, entries, list(glow), thinning, sorts,
+                                       dict(hard=hard, soft=soft, keys=list(dust)), keys)
+        dust_report = dict(textures=list(DUST), keys=list(dust))
+    elif sorts:
         # PQ-376 (D-200): the 1298 effects' alpha-list keys (N3E5).
         data = appearance_effects.n3e5(data, entries, list(glow), thinning, sorts, keys)
     elif thinning:
@@ -407,4 +438,4 @@ def cook(assets, definition, out, appearance=(), keys=0, glow=()):
         raise ValueError('FX package byte bound')
     out.write_bytes(data)
     return dict(clips=report,textures=len(textures),bytes=len(data),sha256=hashlib.sha256(data).hexdigest(),sources=assets.sources.copy(),sampling_hz=RATE,
-                appearance=effect_report)
+                appearance=effect_report,**({'dust': dust_report} if dust_report else {}))

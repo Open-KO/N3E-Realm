@@ -2627,10 +2627,13 @@ pub async fn run(
                     continue;
                 }
                 let viewer = &p.s.entity;
+                // Wire22: each player's public keys from its committed bag; RQ-203
+                // (Q120): with each key's worn item's durability percent, as the
+                // character list carries it, for the world's dust overlay.
                 let mut seen: Vec<wire::Entity> = players
                     .values()
                     .filter(|q| near(viewer, &q.s.entity, cell))
-                    .map(|q| { let mut e=q.s.entity.clone(); e.appearance=r.appearance.project(q.bag.as_ref()); e.combat_style=r.rules.combat_animation.as_ref().map_or(0,|policy|policy.select(q.bag.as_ref())); e })
+                    .map(|q| { let mut e=q.s.entity.clone(); e.appearance=r.appearance.project(q.bag.as_ref()); e.appearance_durability=r.appearance.durability(q.bag.as_ref()); e.combat_style=r.rules.combat_animation.as_ref().map_or(0,|policy|policy.select(q.bag.as_ref())); e })
                     .collect();
                 conceal(viewer, p.turbo.inspecting(), &hidden, &mut seen);
                 // The nine cells around the viewer, in the simulation's NPC order.

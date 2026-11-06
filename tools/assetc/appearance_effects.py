@@ -65,6 +65,20 @@ everything in the effect pass is drawn far to near
 vertex centroid and each tail link at its newest point. The KO adapter fills it
 from 1298's alpha list keys (00415910, 004840b0) with the plug origin and the
 FX mesh's y extent (ko_fx_bake.py); the engine knows no KO IDs or values.
+
+N3E6 (RQ-203) is N3E5 whose sort section may be empty (0..16), followed by a
+dust section:
+  u32 hard, soft: two of the file's textures (the same one may serve both)
+  u32 count (1..16), then u32 keys (1..128, N3V1 appearance keys, each once)
+The client draws a listed key, worn at under 31 % of its item's durability
+(Entity.appearance_durability), with the hard texture and, under 71 %, with
+the soft one: a second stage modulating the key's lit colour by the
+texture's on the key's own UVs, its alpha left the key's
+(client/render/world_dust.h). The KO adapter fills it from the world's
+durability setter (1298 0045d5f0, 1097 004535a0: Misc\\Dust_Hard.dxt and
+Misc\\Dust_Soft.dxt on hand plugs and armour parts; ko_fx_bake.py) where the
+realm's realm-config.json `world_dust` is `draw`; the engine knows no KO
+paths or slots.
 """
 import math
 import struct
@@ -215,10 +229,10 @@ def thinning_section(rules, scan, entries, least=1):
     return data
 
 
-def sort_section(sorts, entries):
+def sort_section(sorts, entries, least=1):
     """Serialize the N3E5 sort records (dicts: key, origin, bias) on the
-    effect `entries`."""
-    count(len(sorts), 16)
+    effect `entries`; N3E6 allows none (`least` 0)."""
+    count(len(sorts), 16, least)
     effects = {e['key'] for e in entries}
     data, seen = u(len(sorts)), set()
     for r in sorts:
@@ -234,6 +248,31 @@ def sort_section(sorts, entries):
             raise ValueError('appearance effect sort bias')
         data += u(r['key']) + f(*origin) + f(bias)
     return data
+
+
+def dust_section(dust, textures, keys):
+    """Serialize the N3E6 dust overlay (a dict: hard, soft, keys) against the
+    file's `textures` count and the `keys` appearance key count."""
+    for t in (dust['hard'], dust['soft']):
+        if type(t) is not int or not 0 <= t < textures:
+            raise ValueError('appearance dust texture')
+    worn = list(dust['keys'])
+    count(len(worn), 16)
+    if any(type(k) is not int or not 1 <= k <= keys for k in worn) or len(set(worn)) != len(worn):
+        raise ValueError('appearance dust key')
+    return u(dust['hard']) + u(dust['soft']) + u(len(worn)) + b''.join(u(k) for k in worn)
+
+
+def n3e6(n3ef, entries, glows, rules, sorts, dust, keys):
+    """An N3EF file's bytes as N3E6: `entries` (0..16 effects), `glows`
+    (0..16), particle distance `rules` (0..64), sort records `sorts` (0..16)
+    and the `dust` overlay (RQ-203)."""
+    if n3ef[:4] != b'N3EF':
+        raise ValueError('N3EF required')
+    scan = _scan(n3ef, detail=True)
+    return (b'N3E6' + n3ef[4:] + section(entries, scan['textures'], set(scan['clips']), keys)
+            + glow_section(glows, keys, 0) + thinning_section(rules, scan, entries, 0)
+            + sort_section(sorts, entries, 0) + dust_section(dust, scan['textures'], keys))
 
 
 def n3e5(n3ef, entries, glows, rules, sorts, keys):

@@ -205,13 +205,22 @@ struct AppearanceGlow {
   uint32_t wave = STEADY;
   float rise = 0, hold = 0, fall = 0, period = 0; // seconds; all 0 when steady
 };
+// N3E6 (RQ-203): the dust overlay a worn item draws by its durability: two of
+// the file's textures (hard, below 31 %; soft, below 71 %) and the appearance
+// keys that draw it, each modulating the key's lit colour on its own UVs.
+struct AppearanceDust {
+  uint32_t hard = 0, soft = 0;
+  std::vector<uint32_t> keys;  // N3V1 keys, each once
+  bool covers(uint32_t key) const { return std::find(keys.begin(), keys.end(), key) != keys.end(); }
+};
 struct Effects {
   struct Binding {uint32_t kind;std::string key;uint32_t selector,anchor;std::vector<std::string> clips;};
   std::vector<EffectTexture> textures;
   std::map<std::string,EffectClip> clips;
   std::vector<Binding> bindings;
-  std::vector<AppearanceEffect> appearance; // N3E2 to N3E5
-  std::vector<AppearanceGlow> glow;         // N3E3 to N3E5
+  std::vector<AppearanceEffect> appearance; // N3E2 to N3E6
+  std::vector<AppearanceGlow> glow;         // N3E3 to N3E6
+  std::optional<AppearanceDust> dust;       // N3E6
 };
 Effects load_effects(const std::filesystem::path& path);
 struct SoundClip {uint32_t maximum;std::vector<float> samples;};

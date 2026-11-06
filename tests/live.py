@@ -361,6 +361,11 @@ SUITES = [
     # faces, with and without the glow, on the local and the other player.
     suite("appearance_states_live", "python", "tests/appearance_states_live.py",
           graphical="PASS graphical client draws the equipped part with its render state on the local and the other player"),
+    # RQ-203: the world's dust overlay on worn items (N3E6) on the PQ-315
+    # package, native server: each player's durability percent to every viewer,
+    # the hard dust on the local player and the soft on the other.
+    suite("world_dust_live", "python", "tests/world_dust_live.py",
+          graphical="PASS graphical client draws the dust on the local and the other player"),
     # PQ-328: the 2233 attached characters (N3AT) on the PQ-272 package with two
     # cospre slots, native server: the server's slot authority, the wing on both
     # players on the wearer's joint, the pulse, the shared clock, the option off.

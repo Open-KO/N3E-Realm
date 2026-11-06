@@ -434,7 +434,10 @@ decompile of `005fb1c0` and RQ-095's of `0043dd80`. RQ-201 (2026-11-05) read `00
 `build/ghidra/rq201/`, not committed), with RQ-086's decompile of `005fc6f0`. RQ-204
 (2026-11-06) read `00412c30` and `00412570` there (output under `build/ghidra/rq204/`,
 not committed), with RQ-086's decompile of `005fc6f0`, RQ-066's of `005fb4f0` and
-RQ-197's of 1097's `0043d0f0`.
+RQ-197's of 1097's `0043d0f0`. RQ-203 (2026-11-06) recovered and decompiled
+`0045d5f0` there and, in the 1097 project, found the dust names' references and
+recovered `004535a0` (output under `build/ghidra/rq203/`, not committed), with the
+later source's `DurabilitySet` and its callers.
 
 | Observation | Where | Label |
 |---|---|---|
@@ -450,6 +453,8 @@ RQ-197's of 1097's `0043d0f0`.
 | **Which parts, and when (RQ-204).** AddChr (`005fb4f0`) calls `005fc6f0` for parts 0, 1, 3 and 4 with each item's id and durability (`+0x28`/`+0x2c`, `+0x30`/`+0x34`, `+0x48`/`+0x4c`, `+0x50`/`+0x54`) and for part 5 with the helmet's (`+0x38`/`+0x3c`) when its `Item_Org` row exists with art (the row's `+0x30` resource not 0, the map node's `+0x40`); a helmet without art sets the hair by number with no dust. `005fc6f0` sets the dust after the part (`0041b6d0`) only when the part was set, the item's `Item_Org` row was found (an id of 0 finds none) and its max (`+0x4e`, signed 16-bit) is above 0: the durability × 100 / the max (signed, toward 0), hard below 31, soft below 71, else the empty name, which clears it. For the lower under a robe it sets the looks row's lower and then the lower item's dust on it (the row is the lower item's, not the upper's). The overlay setter (`00412c30`, the source's `CN3CPart::TexOverlapSet`) keeps the texture at the part's `+0xf0` when the name matches (`lstrcmpiA`), else releases it and loads the named one (`00409650`) | 1298 `005fb4f0`, `005fc6f0`, `00412c30`; `GameProcCharacterSelect.cpp` `AddChrPart` | binary; source |
 | **1298's part draw with an overlay (RQ-204).** The part's draw (`00412570`, the source's `CN3CPart::Render`) sets stage 0 to texture × diffuse (colour op 4, arguments texture and diffuse) with the part's texture (`+0xf8`, else `+0xec`); when the overlay (`+0xf0`) holds a texture it sets stage 1 to current × texture (op 4, arguments 1 current and 2 texture; alpha op left disabled) with the overlay and draws the skin with its two-UV flag (`00440730`'s third argument; the source's `CN3IMesh::BuildVertexListTwoUV` copies the UVs into the second set), then disables stage 1 and clears its texture. A part with no texture draws the diffuse alone and no overlay. While the weapon-effect option (`006e268e`) is on, a part whose render flags (`+0x7c`) hold `0x800` takes another path that sets no overlay (not read further) | 1298 `00412570`; `N3Chr.cpp` `CN3CPart::Render`, `N3IMesh.cpp` | binary; source |
 | **1097's hall dust on parts (RQ-204).** 1097's part setter (`0043d0f0`) does the same: after the part (`00447a70`) it sets `Misc\Dust_Hard.dxt` below 31, `Misc\Dust_Soft.dxt` below 71, else the empty name (`004415c0`), by the durability × 100 / its `Item_Org` max (`+0x46` in 1097's layout), for a found row with a max above 0, the lower under a robe its looks part with the lower item's dust | 1097 `0043d0f0` | binary |
+| **1298's world dust, re-read (RQ-203).** `0045d5f0` (`this`, slot, durability): for a hand (6 right, 8 left) it returns at once while the player's byte `+0x4a8` is set and `+0x4ac` is not −1 (not read further), and when the hand has no `Item_Org` (`+0x2c8`) or `Item_Ext` (`+0x2d8`) row, their maxima (`+0x4e` + `+0x3e`, signed 16-bit) sum below 1, or the character has no plug there (the plug vector `+0x1e0`); else the durability × 100 / the sum (signed, toward 0) picks `Misc\Dust_Hard.dxt` below 31, `Misc\Dust_Soft.dxt` below 71, else the empty name, set on the plug (`00414470`). For slots 4, 10, 12, 13 and 1 (upper, lower, gloves, shoes, helmet: part slots 0, 1, 3, 4, 5) it returns when the character has no part there (`+0x1d0`); a part whose item lacks either row gets the empty name; else the same cuts against the same sum on the part (`00412c30`). It is reached only through the player vtables (`006a4098`, `006a4160`, `006a41cc`, `006a423c`); the source calls it for the local player on equip, repair and the durability-change packet, and for another player on its look and on coming into view, with the server's durability | 1298 `0045d5f0`; `PlayerBase.cpp` `DurabilitySet`, `PlayerOther.cpp`, `GameProcMain.cpp` `MsgRecv_DurabilityChange`, `UIInventory.cpp`, `ItemRepairMgr.cpp` | binary; source |
+| **1097's world dust (RQ-203).** 1097 sets the same dust in its world: `004535a0`, a method in four vtables (from `0058cfac`, `0058d05c`, `0058d0b8`, `0058d114`, each its entry `+0x30`), the only user of `Misc\Dust_Hard.dxt` (`005a23e8`) and `Misc\Dust_Soft.dxt` (`005a23d4`) besides the hall's `0043d0f0`. For a hand (6, 8) with both rows (`+0x294`, `+0x2a4`) it divides the durability × 100 by `Item_Org` `+0x46` + `Item_Ext` `+0x32` (1097's layout; returns below 1) and sets hard below 31, soft below 71, else the empty name on the hand's plug (`00442460`); for slots 4, 10, 12, 13 and 1 (part slots 0, 1, 3, 4, 5) on the part (`004415c0`), the empty name for a part whose item lacks either row. It has no `+0x4a8` test | 1097 `004535a0` (recovered; the strings' references) | binary |
 | **1298's weapon effect in the hall (RQ-200).** `005fca40` picks the effect id as the world's plug setter does (`0045ccc0`, else Item_Ext `+0x28`), finds the main and tail bundles (id, id + 1, `00463b30`), picks the trace colour by element and sets them on the plug (`00415370`). The hall's Render (`005fb1c0`) draws each character with `004196a0`, which draws each plug on a valid joint through its vtable (`+0x1c`: for a plug `004158d0`, the vtable at `006a3b34` that `004149f0` and `00414b00` store), and `004158d0` draws the FX (`00415910`) while `006e268e` (Option.ini `WeaponEffect.EffectVisible`) is set; Render then flushes the alpha list (`0043dd80`) after the windows, as the world's frame does | 1298 `005fca40`, `005fb1c0`, `004196a0`, `004158d0` | binary |
 
 **Decides (RQ-197):** `front-end.bin` version 35 carries, per select model, the looks
@@ -494,6 +499,20 @@ item's, as for plugs (Q120). Not drawn yet: the world's dust (`0045d5f0`).
 recipe's `select.part_dust` is `draw` (the maintainer's choice, 2026-11-06), so its part
 keys are kind 6 and the hosted `front-end.bin` (63,427,579 → 63,951,899 bytes) and
 package hash change; the maximum is the realm item's where 1097's is `Item_Org` `+0x46`
+(Q120).
+
+**Decides (RQ-203):** the world draws the dust where the package carries it.
+`Entity.appearance_durability` (field 34, additive) carries, per appearance key
+of every player in view, its worn item's durability percent of the realm item's
+maximum, as the character list does; `effects.bin` `N3E6` carries the two dust
+textures and the keys that draw them, and the client draws a listed key below
+31 % with the hard texture and below 71 % with the soft, as a second stage
+modulating its lit colour on its own UVs, on itself and on every other player.
+The KO cook writes it where `realm-config.json`'s `world_dust` is `draw`, on every
+`appearance.json` hand plug and armour part row; both clients' worlds do it
+(1298 `0045d5f0`, 1097 `004535a0`), but Moradon keeps `none` (the default), so
+the hosted package is unchanged until the maintainer chooses (Q120). The
+maximum is the realm item's, where KO's world sums `Item_Org` and `Item_Ext`
 (Q120).
 
 ## 9. The front end per client (RQ-078, 2026-11-02)

@@ -3,7 +3,8 @@
 // Scripted movement input before prediction: --world-smoke walk, N3E_TEST_COMBAT,
 // N3E_TEST_ANIMATION=actor and the --movement-smoke walk/run/backward/reconnect.
 // N3E_TEST_EQUIPMENT_GLOW=1 (PQ-315), N3E_TEST_ATTACHMENTS=1 (PQ-328),
-// N3E_TEST_PART_STATES (PQ-356) and N3E_TEST_STAND_STILL (PQ-357) stand still,
+// N3E_TEST_PART_STATES (PQ-356) and N3E_TEST_STAND_STILL (PQ-357; RQ-203's dust
+// captures) stand still,
 // so glow, attachment, part-state and effect captures of separate clients
 // compare (the walk's phase at a capture follows the login's wall time, so a
 // walking player stands somewhere else each run). N3E_TEST_APPEARANCE_EFFECTS

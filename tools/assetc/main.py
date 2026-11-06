@@ -716,7 +716,7 @@ def cook(root, out, materials=False, influences=False):
                 radius=struct.unpack('<f',data[4:])[0]
                 if not math.isfinite(radius) or not 0<radius<=100:raise ValueError('loot open radius')
                 extras[name]=data;deps[source]=digest(data).hex();continue
-            if data[:4] not in ((b"N3H1", b"N3H2", b"N3H3", b"N3H4", b"N3H5", b"N3H6", b"N3H7", b"N3H8", b"N3H9", b"N3HA", b"N3HB", b"N3HC", b"N3HD", b"N3HE") if name == "hud.bin" else (b"N3TM",) if name == "target-marker.bin" else (b"N3EF", b"N3E2", b"N3E3", b"N3E4", b"N3E5") if name == "effects.bin" else (b"N3AU", b"N3A2") if name == "audio.bin" else (b"N3FE",) if name == "front-end.bin" else (b"N3S1", b"N3SI") if name.startswith("player-") else (b"N3S1",)):
+            if data[:4] not in ((b"N3H1", b"N3H2", b"N3H3", b"N3H4", b"N3H5", b"N3H6", b"N3H7", b"N3H8", b"N3H9", b"N3HA", b"N3HB", b"N3HC", b"N3HD", b"N3HE") if name == "hud.bin" else (b"N3TM",) if name == "target-marker.bin" else (b"N3EF", b"N3E2", b"N3E3", b"N3E4", b"N3E5", b"N3E6") if name == "effects.bin" else (b"N3AU", b"N3A2") if name == "audio.bin" else (b"N3FE",) if name == "front-end.bin" else (b"N3S1", b"N3SI") if name.startswith("player-") else (b"N3S1",)):
                 raise ValueError("presentation magic")
             extras[name] = player_clip(data) if name.startswith("player-") and name != player_clips.BASE else data
             deps[source] = digest(data).hex()

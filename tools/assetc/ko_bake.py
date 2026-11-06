@@ -152,6 +152,7 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         # PQ-224 (D-172): only the 1097 Moradon takes its features from another install.
         raise ValueError("--features needs the map's own client data for the player")
     front = None
+    world_dust = False
     if features:
         # RQ-078, RQ-084: the front end the realm chose (games/moradon/realm-config.json
         # `front_end`, one of front-ends.json's), refused, before anything is
@@ -160,6 +161,9 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         # recipe's paths name an input the choice lacks.
         import front_end_choice
         front = front_end_choice.choose(FRONT_END_GAME)
+        # RQ-203: whether the realm draws the world's dust overlay (realm-config.json
+        # `world_dust`), checked by choose above.
+        world_dust = front_end_choice.world_dust(FRONT_END_GAME)
     headerless = zone.get("headerless", False)
     references = None
     if zone.get("layout") == "1097" or zone.get("stem") is not None:
@@ -245,6 +249,12 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
     lod = world["lod"]
     del world
     mappings=json.loads(pathlib.Path('games/moradon/appearance.json').read_text()) if features else []
+    # RQ-203: the keys whose worn item draws the world's dust overlay, where the
+    # realm chose it: the package's own hand plug and armour part rows (KO's
+    # durability setter covers hands and armour parts, 1298 0045d5f0, 1097
+    # 004535a0), never the glow cook's 2145 additions below, whose 2233 dust
+    # (005756b0) is unread.
+    dust_rows=list(mappings) if world_dust else []
     if glow:
         # PQ-320: the glow package draws a row's glow_2233_source in place of its
         # source (Durandal on the two-hander); the default cooks never read it.
@@ -439,7 +449,8 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         if set(extra_clips)&set(effects['clips']):raise ValueError('a cast effect clip key is taken: %r'%sorted(extra_clips))
         effects['clips'].update(extra_clips)
         report['effects']=ko_fx_bake.cook(source_assets,effects,root/'effects.bin',
-                                          appearance=weapon_effects,keys=len(mappings),glow=glow_records)
+                                          appearance=weapon_effects,keys=len(mappings),glow=glow_records,
+                                          dust=ko_fx_bake.dust_keys(dust_rows))
         manifest['presentation']['effects.bin']='effects.bin'
         import csv, io
         # PQ-224: a map from another install takes the name rules of the client

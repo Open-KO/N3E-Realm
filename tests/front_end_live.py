@@ -182,12 +182,26 @@ FIXED = RULES["fixed"]
 # and 2, the rogue's 3 and 1, race 0's 0 and 5, past the select model's 3
 # hairs: none), as AddChr's "%s%s%.2d%s" sets them.
 LOOKS = "looks=1/2,3/1,0/-1"
-HALL_1097 = "models=-1,0,-1 plugs=1,2,1 classes=Priest|Rogue|Unknown_Class " + LOOKS
+# RQ-197: the priest in appearance keys 5 (Moradon's armour, upper part
+# slot 0) and 1 (a blade, a hand plug 1097's AddChr never draws), so its
+# upper is the key's and no looks upper; the rogue in none, its looks upper
+# apart; race 0 in key 5 and key 9, past Moradon's five (nothing).
+WORN_1097 = "worn=1/0/0,0/1/0,1/0/0"
+HALL_1097 = "models=-1,0,-1 plugs=1,2,1 classes=Priest|Rogue|Unknown_Class " + LOOKS + " " + WORN_1097
 
 # RQ-078: every front end games/moradon offers (front-ends.json) cooks twice to
 # the same bytes and the client loader takes it; the one realm-config.json
 # chooses is the package's own.
 chosen_front = front_end_choice.choose("games/moradon")
+# RQ-197: the select hall's appearance keys as ko_bake cooks the package's
+# (210 --features: games/moradon/appearance.json's rows, each part row's KO
+# part slot by the player's looks model on the pinned tree).
+import ko_character  # noqa: E402
+HALL_APPEARANCE = ko_front_end.hall_appearance(json.loads(Path("games/moradon/appearance.json").read_text()),
+                                               ko_character.Assets(Path("assets/ko")))
+# The checker's `ok#N`: the release's appearance key count, which each select
+# model's equipment carries (tests/front_end.cpp).
+KEYS_OK = "ok#%d" % len(HALL_APPEARANCE["rows"])
 chosen = chosen_front["client"]
 for client in sorted(front_end_choice.catalogue("games/moradon")):
     front = front_end_choice.resolve("games/moradon", client)
@@ -197,7 +211,8 @@ for client in sorted(front_end_choice.catalogue("games/moradon")):
     cooked = []
     for i in range(2):
         out = Path(tempfile.mkdtemp(prefix="front-end-%s-" % client, dir=B))
-        report = ko_front_end.cook(ko_front_end.inputs(front), out, front["recipe"], out / "work", create_plan)
+        report = ko_front_end.cook(ko_front_end.inputs(front), out, front["recipe"], out / "work", create_plan,
+                                   HALL_APPEARANCE)
         cooked.append((out / "front-end.bin").read_bytes())
     assert cooked[0] == cooked[1], "the %s front-end cook is not deterministic" % client
     if client == chosen:
@@ -229,7 +244,7 @@ for client in sorted(front_end_choice.catalogue("games/moradon")):
         assert {"ui_us/el_messagebox_us.uif", "ui_us/ui_message_us.dxt", "ui_us/co_loading_us.uif"} <= names, names
     # The checker exits 1 unless it also saw a refusal (tests/front_end.py
     # passes both kinds); one `ok` package loaded is its own PASS line.
-    loaded = subprocess.run(["build/client/n3e-front-end-check", "ok", str(out)], capture_output=True, text=True)
+    loaded = subprocess.run(["build/client/n3e-front-end-check", KEYS_OK, str(out)], capture_output=True, text=True)
     assert "PASS front-end loader: 1 loaded, 0 refused" in loaded.stdout, \
         "the client loader refuses the %s front end: %s%s" % (client, loaded.stdout, loaded.stderr)
     if client == chosen:
@@ -254,7 +269,7 @@ for i in range(2):
     # RQ-176 (version 29): dressed from 1298's own table, as character-create.json
     # names it for the 1298 front end (Q106).
     report = ko_front_end.cook(pinned, out, Path("games/moradon/front-end-1298.json"), out / "work",
-                               ko_create.plan("games/moradon", "1298", {}))
+                               ko_create.plan("games/moradon", "1298", {}), HALL_APPEARANCE)
     cooked.append((out / "front-end.bin").read_bytes())
 # RQ-130 (KO-FINDINGS 9.15): the recipe words create's two refusals with
 # 1298's rows (00600750: code 7 row 1908, code 9 row 1904, each under 1901),
@@ -308,7 +323,7 @@ assert {zone[k].replace("\\", "/") for k in ("terrain", "colour_map", "objects")
 assert 0 < zone["blended_meshes"] < zone["meshes"] <= ko_front_end.MAX_ZONE_MESHES, zone
 assert any(s.startswith("Object/") and s.lower().endswith(".n3pmesh") for s in sources), sorted(sources)
 assert len(cooked[0]) <= ko_front_end.MAX_FILE == 256 << 20, len(cooked[0])
-loaded = subprocess.run(["build/client/n3e-front-end-check", "ok", str(out)], capture_output=True, text=True)
+loaded = subprocess.run(["build/client/n3e-front-end-check", KEYS_OK, str(out)], capture_output=True, text=True)
 assert "PASS front-end loader: 1 loaded, 0 refused" in loaded.stdout, \
     "the client loader refuses the 1298 recipe's front end: %s%s" % (loaded.stdout, loaded.stderr)
 # RQ-126 (KO-FINDINGS 9.15): 1298's create slide on the pinned layout's rects,
@@ -1185,9 +1200,12 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     # every character draws the select model, with no plug (005fca40 plugs
     # only items); its classes from 00613ea0's rows of its own table; RQ-198:
     # each character's own face and hair (005fb4f0's record +0x1c and +0x20).
+    # RQ-197 (KO-FINDINGS 8.6): the priest's key 1 blade drawn as its hand
+    # plug (select.item_plugs draw, 005fca40), as 1097's is not; the parts as
+    # on the 1097 choice.
     hall = re.search(r"^FRONT_HALL (.*)$", run.stdout, re.M)
-    assert hall and hall.group(1) == "models=-1,-1,-1 plugs=0,0,0 classes=Priest|Rogue|Unknown_Class " + LOOKS, \
-        (size, hall and hall.group(1))
+    assert hall and hall.group(1) == ("models=-1,-1,-1 plugs=0,0,0 classes=Priest|Rogue|Unknown_Class " + LOOKS +
+                                      " worn=1/0/1,0/1/0,1/0/0"), (size, hall and hall.group(1))
     # The bar's art is drawn there: its three backdrop images span it.
     art = region(shots["select-1"][0], (x0, y0 + 2, x0 + bar_w, y0 + bar_h - 2))
     assert len(set(art)) > 50 and sum(p == b"\0\0\0" for p in art) < len(art) // 20, (size, len(set(art)))

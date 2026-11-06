@@ -941,9 +941,15 @@ int main(int argc, char **argv) {
   for (int i = 1; i + 1 < argc; i += 2) {
     // `ok` or `bad`, then optionally `@<engine>` (RQ-165: version 30 is read
     // from engine 45); the release's engine is otherwise 45, the newest.
+    // RQ-197: then optionally `#<keys>`, the release's appearance key count
+    // (appearance.bin's), which each select model's equipment carries.
     std::string want = argv[i];
     n3e::Release release;
     release.engine = 45;
+    if (const auto at = want.find('#'); at != std::string::npos) {
+      release.appearance.assign(std::stoul(want.substr(at + 1)), n3e::AppearanceRule{"test:item", 0});
+      want.resize(at);
+    }
     if (const auto at = want.find('@'); at != std::string::npos) {
       release.engine = uint32_t(std::stoul(want.substr(at + 1)));
       want.resize(at);
@@ -1045,6 +1051,14 @@ int main(int argc, char **argv) {
         for (const auto &m : fe.select_models)
           for (const auto *parts : {&m.scene.faces, &m.scene.hairs})
             for (const auto &part : *parts) skin(part, m.scene.model.sample(0.5f));
+        // RQ-197: then each select model's looks parts and keys' parts.
+        std::vector<const n3e::FrontScene *> halls{&fe.select};
+        for (const auto &m : fe.select_models) halls.push_back(&m.scene);
+        for (const auto *hall : halls) {
+          for (const auto &l : hall->looks_parts) skin(l.part, hall->model.sample(0.5f));
+          for (const auto &key : hall->keys)
+            if (key.kind == n3e::FrontKey::Kind::part) skin(key.part, hall->model.sample(0.5f));
+        }
         std::cout << "\n";
       }
       // RQ-005 (version 31): select-models NAME: each select character's
@@ -1060,6 +1074,40 @@ int main(int argc, char **argv) {
           if (m.scene.plugs.empty()) std::cout << "-";
           for (size_t i = 0; i < m.scene.plugs.size(); ++i) std::cout << (i ? "+" : "") << m.scene.plugs[i].joint;
           std::cout << "/" << m.scene.faces.size() << "+" << m.scene.hairs.size();
+        }
+        std::cout << "\n";
+      }
+      // RQ-197 (version 35): select-equipment NAME: per select model (item
+      // 7's, then each item 17's), its looks part slots (+-joined, `-` none)
+      // and each key (`-` nothing, p<slot> a part, `r` a robe, j<joint> a
+      // plug), when the release has keys; select-worn NAME: what the select
+      // model's parts and plugs are for three sets of worn keys (hall_worn).
+      if (!release.appearance.empty()) {
+        std::cout << "select-equipment " << release.root.filename().string() << ":";
+        auto print = [](const n3e::FrontScene &scene) {
+          std::cout << " ";
+          if (scene.looks_parts.empty()) std::cout << "-";
+          for (size_t i = 0; i < scene.looks_parts.size(); ++i) std::cout << (i ? "+" : "") << scene.looks_parts[i].slot;
+          std::cout << "/";
+          for (size_t i = 0; i < scene.keys.size(); ++i) {
+            const auto &key = scene.keys[i];
+            std::cout << (i ? "," : "");
+            if (key.kind == n3e::FrontKey::Kind::none) std::cout << "-";
+            if (key.kind == n3e::FrontKey::Kind::part) std::cout << "p" << key.slot << (key.robe ? "r" : "");
+            if (key.kind == n3e::FrontKey::Kind::plug) std::cout << "j" << key.plug.joint;
+          }
+        };
+        print(fe.select);
+        for (const auto &m : fe.select_models) print(m.scene);
+        std::cout << "\n";
+        std::cout << "select-worn " << release.root.filename().string() << ":";
+        for (const std::vector<uint32_t> keys : {std::vector<uint32_t>{2, 5, 3, 4, 4, 9, 0}, {5, 1}, {}}) {
+          const auto worn = n3e::front::hall_worn(fe.select, keys);
+          std::cout << " ";
+          for (size_t s = 0; s < worn.part.size(); ++s) std::cout << (s ? "," : "") << worn.part[s];
+          std::cout << "/";
+          if (worn.plugs.empty()) std::cout << "-";
+          for (size_t k = 0; k < worn.plugs.size(); ++k) std::cout << (k ? "+" : "") << worn.plugs[k];
         }
         std::cout << "\n";
       }

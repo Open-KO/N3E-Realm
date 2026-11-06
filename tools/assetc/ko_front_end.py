@@ -55,7 +55,13 @@ and class, as KO's AddChr chooses joint, animation and plugs, and each
 specialty's class name for the select's info (RQ-005), and (version 33; 34
 with influence tables) the select model's and each select character's face
 and hair parts by number, as the create models carry theirs, so the hall
-draws each character's own face and hair (RQ-198).
+draws each character's own face and hair (RQ-198), and (version 35; 36 with
+influence tables) each select model's visible equipment: the package's
+appearance keys as AddChr dresses a listed character in its items, each a
+part in its KO part slot (the race's own looks part for that slot carried
+apart, so a key can take its place; a robe's lower drawn as the looks
+lower; a helmet in the hair's place) or, for a front end whose hall draws
+item plugs (1298's), a hand plug on its joint (RQ-197).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -87,14 +93,15 @@ import ko_nameplates
 import ko_scene
 import world_chunks
 
-VERSION = 33
+VERSION = 35
 # RQ-165: the version of a file whose model records or parts hold D-176's
 # influence table (N3SI from N3S1, N3SJ from N3SM; content/front-end.md),
 # written only then, so a file without one keeps the base version and its
 # bytes (29 and 30 before RQ-005's select characters, 31 and 32 before
-# RQ-198's select faces and hairs, 33 and 34 since).
+# RQ-198's select faces and hairs, 33 and 34 before RQ-197's select
+# equipment, 35 and 36 since).
 # A package with it is engine 45 (main.FRONT_END_INFLUENCES_ENGINE).
-TABLES_VERSION = 34
+TABLES_VERSION = 36
 # A model record's scene magics (version 4: N3S1 or N3SM; RQ-165: N3SI and
 # N3SJ, the same with an influence table) and the ones with a table.
 MODEL_MAGICS = (b"N3S1", b"N3SM", b"N3SI", b"N3SJ")
@@ -789,10 +796,12 @@ def mesh_file(assets, name):
     return ko.import_mesh(pathlib.Path(name.replace("\\", "/")), 1.0, data=assets.get(name))
 
 
-def plug_record(assets, textures, name):
+def plug_record(assets, textures, name, joint=None):
     """A plug in its joint's space (CN3CPlugBase::ReCalcMatrix: scale,
     rotation, position x scale; Render: plug x joint x character), engine
-    space, after its joint index. Its mesh and texture are its tree's."""
+    space, after its joint index: its file's own, or (RQ-197, an equipment
+    key's hand plug) `joint`, which the caller checks. Its mesh and texture
+    are its tree's."""
     assets, name = split(assets, name)
     plug = ko_appearance.read_plug(assets, name)
     if min(plug["scale"]) <= 0 or plug["material"][20] != 0:
@@ -803,7 +812,7 @@ def plug_record(assets, textures, name):
     vertices = [move(v[:3], True) + move(v[3:6], False) + list(v[6:8]) for v in mesh["vertices"]]
     tex = textures.add(plug["texture"], assets)
     material = plug["material"]
-    return u(count(plug["stored_joint"], 63, 0)) + mesh_record(
+    return u(count(plug["stored_joint"], 63, 0) if joint is None else joint) + mesh_record(
         vertices, mesh["indices"], tex, ALPHA_TEST if textures.masked(tex) else 0, material[:3], material[4:7])
 
 
@@ -819,7 +828,7 @@ def model(assets, source, definition, clips, work, own_blends=None, tables=None)
     RQ-165: a model whose drawn vertices have more than four joint influences
     keeps every one, as KO's skinning sums them (00419f00, D-176): its scene
     is N3SI or N3SJ, N3S1 or N3SM with D-176's influence table, and its
-    magic is appended to `tables` (the file is then the tables version, 34)."""
+    magic is appended to `tables` (the file is then the tables version, 36)."""
     table = character.animations(assets.get(definition["animation"]), unused_word=True)
     blends = []
     for at, clip in enumerate(clips):
@@ -1669,14 +1678,183 @@ def looks(assets, race):
     return row
 
 
-def select_parts(assets, race):
+def select_parts(assets, race, without=()):
     """The race's default looks (UPC_DefaultLooks) but the face and the hair:
-    what a select model holds, since the wire carries no equipment. Version 33
-    (RQ-198): its faces and hairs follow it by number (numbered_parts), as
-    AddChr sets the character's own (1097 0043ba10, 1298 005fb4f0)."""
+    what a select model holds. Version 33 (RQ-198): its faces and hairs
+    follow it by number (numbered_parts), as AddChr sets the character's own
+    (1097 0043ba10, 1298 005fb4f0). Version 35 (RQ-197): but the part slots
+    in `without` too, the looks parts an equipment key may take, which
+    follow it apart (hall_equipment)."""
     import ko_player
     return [n for i, n in enumerate(looks(assets, race)[LOOKS_PARTS:LOOKS_PARTS + 6])
-            if n and i not in (ko_player.FACE, ko_player.HAIR)]
+            if n and i not in (ko_player.FACE, ko_player.HAIR) and i not in without]
+
+
+# Version 35 (RQ-197): the select hall's visible equipment. KO's list (1298
+# 005ff2a0, the source's MsgRecv_AllCharacterInfo) carries each character's
+# helmet, upper, cloak, right and left hand, lower, gloves and shoes; AddChr
+# sets the upper, lower, hands and feet items as part slots 0, 1, 3 and 4
+# and a helmet with art as the hair's, 5, and never draws the cloak (1097
+# 0043ba10, 1298 005fb4f0).
+HALL_PART_SLOTS = (0, 1, 3, 4, 5)
+# The looks parts a key may take (the hair is drawn by number, item 7).
+HALL_LOOKS_SLOTS = (0, 1, 3, 4)
+# The hands' items: 1097's AddChr never reads them (+0x58, +0x60), drawing
+# its class plugs alone (`none`); 1298's draws each hand's item as a plug
+# (005fca40) and no class plug (`draw`). The recipe's select.item_plugs.
+ITEM_PLUGS = ("none", "draw")
+# appearance.bin's bound (N3V1), and what a key draws in the hall.
+MAX_KEYS = 128
+KEY_NONE, KEY_PART, KEY_PLUG = 0, 1, 2
+UPPER, LOWER = 0, 1
+
+
+def hall_keys(appearance, config):
+    """Version 35 (RQ-197): what each of the package's appearance keys draws
+    in the select hall, in key order (appearance.bin's): None for nothing, a
+    part {kind, slot, robe, source} or a hand plug {kind, joint, source}.
+    `appearance` is {rows, race, positions}: games/<game>/appearance.json's
+    rows as the package cooks them (ko_bake's mappings), the player race
+    their art is for, and the KO part position of each of the player model's
+    body parts (ko_player.looks), which a part row's `parts` index.
+
+    A part row draws in the one KO part slot its parts are, one AddChr sets
+    from an item (upper, lower, hands, feet, or the helmet in the hair's);
+    `robe` (an upper's alone) draws the lower as its looks part while worn,
+    as KO's AddChrPart names no file for the lower under a robe and so sets
+    the looks row's (1097 0043d0f0, 1298 005fc6f0). A hand plug row draws on
+    its row's joint where the recipe's `select.item_plugs` is `draw` (1298's
+    005fca40 puts an item's plug on joint 12, 7 or, for a shield, 5, the
+    joints the realm's rows name), nothing where it is `none` (1097's AddChr
+    never reads the hand items). A row of another client's files (a 2145
+    part or skeletal plug, PQ-317, PQ-319) draws nothing: the hall's own
+    client names no such file."""
+    import ko_player
+    mode = config.get("item_plugs", "none")
+    if type(mode) is not str or mode not in ITEM_PLUGS:
+        raise ValueError("front-end select.item_plugs: one of %s" % ", ".join(ITEM_PLUGS))
+    if appearance is None:
+        return []
+    rows, positions = appearance["rows"], appearance["positions"]
+    if type(rows) is not list or len(rows) > MAX_KEYS:
+        raise ValueError("front-end select equipment: at most %d appearance keys" % MAX_KEYS)
+    keys = []
+    for key, row in enumerate(rows, 1):
+        what = "appearance key %d (%s, slot %s)" % (key, row.get("item"), row.get("slot"))
+        if "robe" in row and type(row["robe"]) is not bool:
+            raise ValueError("front-end select equipment: %s robe: true or false" % what)
+        if "chrplug_2145" in row or "part_2145" in row:
+            if row.get("robe"):
+                raise ValueError("front-end select equipment: %s: a robe is an upper part's" % what)
+            keys.append(None)
+            continue
+        if type(row.get("source")) is not str:
+            raise ValueError("front-end select equipment: %s has no source" % what)
+        if "joint" in row:
+            if row.get("robe"):
+                raise ValueError("front-end select equipment: %s: a robe is an upper part's" % what)
+            joint = row["joint"]
+            if type(joint) is not int:
+                raise ValueError("front-end select equipment: %s joint" % what)
+            keys.append(dict(kind=KEY_PLUG, joint=joint, source=row["source"]) if mode == "draw" else None)
+            continue
+        parts = row.get("parts")
+        if type(parts) is not list or not parts or any(type(i) is not int or not 0 <= i < len(positions)
+                                                       for i in parts):
+            raise ValueError("front-end select equipment: %s parts: the player model's body parts" % what)
+        named = {positions[i] for i in parts}
+        if len(named) != 1:
+            raise ValueError("front-end select equipment: %s hides %s: AddChr sets an item in one part slot"
+                             % (what, ", ".join(sorted(named))))
+        slot = ko_player.POSITIONS.index(named.pop())
+        if slot not in HALL_PART_SLOTS:
+            raise ValueError("front-end select equipment: %s is the %s, which AddChr sets from no item"
+                             % (what, ko_player.POSITIONS[slot]))
+        if row.get("robe") and slot != UPPER:
+            raise ValueError("front-end select equipment: %s: a robe is an upper part's" % what)
+        keys.append(dict(kind=KEY_PART, slot=slot, robe=bool(row.get("robe")), source=row["source"]))
+    return keys
+
+
+def hall_appearance(rows, characters):
+    """Version 35 (RQ-197): hall_keys' `appearance` from the package's
+    appearance rows (appearance.bin's order) and the player's KO tree (an
+    Assets): the package's player race and the KO part position of each of
+    its looks model's body parts, which a part row's `parts` index."""
+    import ko_player
+    race = ko_player.race()
+    return dict(rows=rows, race=race["race"], positions=ko_player.looks(characters, race)["positions"])
+
+
+def hall_taken(keys):
+    """Version 35 (RQ-197): the looks part slots the equipment `keys`
+    (hall_keys') may take, which the model leaves out and carries apart."""
+    return sorted({k["slot"] for k in keys if k and k["kind"] == KEY_PART and k["slot"] in HALL_LOOKS_SLOTS})
+
+
+def hall_equipment(assets, textures, tree, joint, animation, row, keys, record, work, tables=None):
+    """Version 35 (RQ-197): a select model's equipment, after its faces and
+    hairs: its looks parts a key may take (a count, then each its part slot
+    and a part as a face is, for each slot hall_taken names that the looks
+    `row` has a part for), then a key count (hall_keys', the package's
+    appearance keys) and per key what it draws: 0 nothing; 1 a part (its
+    part slot, robe 0 or 1, a part as a face is); 2 a hand plug (its joint,
+    one of the model's, and a mesh in that joint's space, as plug_record's).
+    Each part is skinned on the model's nodes, joints and instance scale
+    (`record`, model()'s) and read from the model's tree, as KO reads an
+    item's files from its own client. Returns (bytes, report)."""
+    head, _, tail = scene_tracks(record[4:4 + struct.unpack_from("<I", record)[0]])
+    joints = scene_joints(head)
+    taken = [slot for slot in hall_taken(keys) if row[LOOKS_PARTS + slot]]
+    out = u(len(taken))
+    for slot in taken:
+        out += u(slot) + create_part(tree, joint, animation, row[LOOKS_PARTS + slot],
+                                     work.parent / ("%s-looks-%d" % (work.name, slot)), head, tail, tables)
+    out += u(len(keys))
+    drawn = []
+    for key, art in enumerate(keys, 1):
+        if art is None:
+            out += u(KEY_NONE)
+            drawn.append(KEY_NONE)
+            continue
+        source, path = split(assets, art["source"])
+        if source is not tree:
+            raise ValueError("front-end select equipment: appearance key %d's %s is not in the select model's input"
+                             % (key, art["source"]))
+        if art["kind"] == KEY_PART:
+            out += u(KEY_PART) + u(art["slot"]) + u(1 if art["robe"] else 0) + create_part(
+                tree, joint, animation, path, work.parent / ("%s-key-%d" % (work.name, key)), head, tail, tables)
+        else:
+            if not 0 <= art["joint"] < joints:
+                raise ValueError("front-end select equipment: appearance key %d's joint %d is not one of the select "
+                                 "model's %d joints" % (key, art["joint"], joints))
+            out += u(KEY_PLUG) + plug_record(assets, textures, art["source"], art["joint"])
+        drawn.append(art["kind"])
+    return out, dict(looks=taken, keys=drawn)
+
+
+def hall_model(assets, textures, look, race, clips, plugs, start_blend, work, tables, faces, hairs, keys):
+    """A select model (item 7's) or select character (item 17's) record: its
+    model (the race's looks parts but the face, the hair and, version 35,
+    RQ-197, the slots an equipment key may take), its plugs, its faces and
+    hairs by number (version 33, RQ-198) and its equipment (version 35,
+    hall_equipment; `keys` hall_keys', drawn on the race their art is for
+    alone, nothing on any other). Returns (bytes, report)."""
+    tree, joint = character_tree(assets, look)
+    _, animation = split(assets, look["animation"])
+    without = hall_taken(keys)
+    parts = select_parts(tree, race, without)
+    if not parts:
+        raise ValueError("front-end select race %d: equipment keys take every looks part, so the model holds none"
+                         % race)
+    definition = dict(joint=joint, animation=animation, parts=parts)
+    record = model(tree, joint, definition, clips, work, own_blends={START_CLIP: start_blend}, tables=tables)
+    out = record + u(len(plugs)) + b"".join(plug_record(assets, textures, p) for p in plugs)
+    row = looks(tree, race)
+    numbered, counts = numbered_parts(tree, joint, animation, row, faces, hairs, record, work, tables)
+    equipment, report = hall_equipment(assets, textures, tree, joint, animation, row, keys, record, work, tables)
+    report.update(faces=counts[0], hairs=counts[1], bytes=len(record) + len(numbered) + len(equipment))
+    return out + numbered + equipment, report
 
 
 def numbered_parts(assets, joint, animation, row, faces, hairs, record, work, tables=None):
@@ -1862,7 +2040,7 @@ def turn_paths(assets, config, slots):
     return u(len(paths)) + out, rest
 
 
-def select_scene(assets, textures, config, work, report=None, tables=None, faces=1, hairs=1):
+def select_scene(assets, textures, config, work, report=None, tables=None, faces=1, hairs=1, keys=()):
     """CGameProcCharacterSelect (Karus): the camera, the hall lights, the
     slots (position, yaw, the eye where the camera's turn to the slot ends
     and its spot light), the spot's growth rate, the front-clip mode, what
@@ -1872,8 +2050,10 @@ def select_scene(assets, textures, config, work, report=None, tables=None, faces
     (version 8), the character with its clips and plugs, and (version 33,
     RQ-198) its `faces` face and `hairs` hair parts by number
     (numbered_parts: create.bin's counts with the package's rules, the face
-    and hair 0 alone without), as AddChr sets each character's own. `report`
-    receives the zone's provenance."""
+    and hair 0 alone without), as AddChr sets each character's own, and
+    (version 35, RQ-197) its equipment, `keys` (hall_keys', for the
+    character's race alone; hall_model). `report` receives the zone's
+    provenance and (RQ-197) `select_equipment`, the model's equipment."""
     camera = config["camera"]
     if config.get("zone") is not None and config.get("hall") is not None:
         raise ValueError("front-end select: a hall or a zone, not both")
@@ -1934,9 +2114,6 @@ def select_scene(assets, textures, config, work, report=None, tables=None, faces
     # sets clip 1 with 0.6 s, `push 0x3f19999a` at 0043ea77; 1298: 005fe7c0
     # sets clip 2 the same way), not the record's; the front and rest clips
     # keep their records' (0043f280 and 005fef90 name FLT_MIN).
-    tree, joint = character_tree(assets, look)
-    _, animation = split(assets, look["animation"])
-    definition = dict(joint=joint, animation=animation, parts=select_parts(tree, look["race"]))
     out = (camera_record(camera) + lights(assets, config["lights"], config.get("light_manager")) +
            f(vector(config["ambient"], 3)))
     out += u(count(len(config["slots"]), 3)) + slots + f([step * TICKS_PER_SECOND]) + u(FRONT_CLIP[mode])
@@ -1948,12 +2125,11 @@ def select_scene(assets, textures, config, work, report=None, tables=None, faces
     # camera's fog.
     out += zone(assets, textures, config.get("zone"), report if report is not None else {})
     out += path_fog(assets, config)
-    record = model(tree, joint, definition, look["clips"], work / "select",
-                   own_blends={START_CLIP: config["start_blend"]}, tables=tables)
-    out += record + u(len(look["plugs"])) + b"".join(plug_record(assets, textures, p) for p in look["plugs"])
-    numbered, _ = numbered_parts(tree, joint, animation, looks(tree, look["race"]), faces, hairs, record,
-                                 work / "select", tables)
-    return out + numbered
+    character_record, equipment = hall_model(assets, textures, look, look["race"], look["clips"], look["plugs"],
+                                             config["start_blend"], work / "select", tables, faces, hairs, keys)
+    if report is not None:
+        report["select_equipment"] = dict(looks=equipment["looks"], keys=equipment["keys"])
+    return out + character_record
 
 
 # Version 31 (RQ-005): at most this many select characters, each drawing at
@@ -1965,7 +2141,8 @@ MAX_CLASS_NAMES = 64
 SELECT_CHARACTER_KEYS = {"race", "specialties", "joint", "animation", "plugs", "clips"}
 
 
-def select_characters(assets, textures, config, work, rules=None, tables=None, faces=1, hairs=1):
+def select_characters(assets, textures, config, work, rules=None, tables=None, faces=1, hairs=1, keys=(),
+                      key_race=None):
     """Item 17's first part (version 31, RQ-005): the select characters, as
     KO's AddChr chooses its joint, animation and plugs by race and class
     (source GameProcCharacterSelect.cpp's switch; 1097 0043ba10, 1298
@@ -1974,7 +2151,9 @@ def select_characters(assets, textures, config, work, rules=None, tables=None, f
     animation and plugs (`clips` the select character's unless named), cooked
     as the select model is (the race's looks parts but the face and the hair;
     the start clip's blend the select's own; version 33, RQ-198: then its
-    `faces` face and `hairs` hair parts by number, numbered_parts). A
+    `faces` face and `hairs` hair parts by number, numbered_parts; version
+    35, RQ-197: then its equipment, `keys` for an entry of `key_race`, the
+    race their art is for, none for any other, hall_model). A
     character no entry draws (its race and specialty) draws the select
     character (item 7). With the
     package's create rules, every specialty of each `content` race is drawn
@@ -2016,17 +2195,11 @@ def select_characters(assets, textures, config, work, rules=None, tables=None, f
                                      % (race, specialty))
     out, report = u(len(checked)), []
     for at, entry, race, specialties, plugs, clips in checked:
-        tree, joint = character_tree(assets, entry)
-        _, animation = split(assets, entry["animation"])
-        definition = dict(joint=joint, animation=animation, parts=select_parts(tree, race))
-        record = model(tree, joint, definition, clips, work / ("select-%d" % at),
-                       own_blends={START_CLIP: config["start_blend"]}, tables=tables)
-        numbered, counts = numbered_parts(tree, joint, animation, looks(tree, race), faces, hairs, record,
-                                          work / ("select-%d" % at), tables)
+        worn = list(keys) if race == key_race else [None] * len(keys)
+        record, drawn = hall_model(assets, textures, entry, race, clips, plugs, config["start_blend"],
+                                   work / ("select-%d" % at), tables, faces, hairs, worn)
         out += u(race) + u(len(specialties)) + b"".join(u(s) for s in specialties) + record
-        out += u(len(plugs)) + b"".join(plug_record(assets, textures, p) for p in plugs) + numbered
-        report.append(dict(race=race, specialties=specialties, joint=entry["joint"], faces=counts[0],
-                           hairs=counts[1], bytes=len(record) + len(numbered)))
+        report.append(dict(race=race, specialties=specialties, joint=entry["joint"], **drawn))
     return out, report
 
 
@@ -2769,7 +2942,7 @@ def create_buttons(choice, rules):
                 raise ValueError("front-end classes: race %d takes two specialties of one class button" % race)
 
 
-def cook(assets, out, config_path, work, create=None):
+def cook(assets, out, config_path, work, create=None, appearance=None):
     """Writes front-end.bin into the directory `out`; returns its provenance.
     `assets` is the choice's `Inputs`, or one tree. The package's create rules
     (character-create.json beside the recipe, ko_create) name the races whose
@@ -2777,7 +2950,10 @@ def cook(assets, out, config_path, work, create=None):
     create choice (ko_create.plan for this front end, front_end_choice's
     `create`): its table's dress (RQ-159) dresses each create model (version
     29, RQ-176, Q106: the dress follows create.table); without it, or for a
-    table without item columns, the models wear their looks parts."""
+    table without item columns, the models wear their looks parts.
+    `appearance` (version 35, RQ-197) is the package's appearance keys for
+    the select hall's equipment (hall_keys: {rows, race, positions}), or
+    None for a package without them (no key drawn)."""
     import ko_create
     config = load(pathlib.Path(config_path))
     rules = ko_create.rules(pathlib.Path(config_path).parent)
@@ -2788,14 +2964,14 @@ def cook(assets, out, config_path, work, create=None):
         shared.append((tree, tree.sources))
         tree.sources = {}
     try:
-        return write(assets, out, config, work, rules, create)
+        return write(assets, out, config, work, rules, create, appearance)
     finally:
         for tree, earlier in shared:
             cooked, tree.sources = tree.sources, earlier
             earlier.update(cooked)
 
 
-def write(assets, out, config, work, rules=None, create=None):
+def write(assets, out, config, work, rules=None, create=None, appearance=None):
     assets = assets if isinstance(assets, Inputs) else Inputs([assets])
     if create is not None and create["rules"] != rules:
         raise ValueError("front-end create choice: not the recipe's package's create rules")
@@ -2832,7 +3008,7 @@ def write(assets, out, config, work, rules=None, create=None):
             raise ValueError("front-end string length")
         table += u(len(data)) + data
     # RQ-165: the model records and parts with an influence table; any makes
-    # the file the tables version (34).
+    # the file the tables version (36).
     tables = []
     scenes = intro_scene(assets, textures, config["intro"], pathlib.Path(work), tables)
     zone_report = {}
@@ -2840,7 +3016,13 @@ def write(assets, out, config, work, rules=None, create=None):
     # create models' (create.bin's counts; the face and hair 0 alone without
     # rules), since a listed character was created with one of them.
     numbers = (rules["faces"], rules["hairs"]) if rules is not None else (1, 1)
-    scenes += select_scene(assets, textures, config["select"], pathlib.Path(work), zone_report, tables, *numbers)
+    # Version 35 (RQ-197): what each appearance key draws in the hall, on the
+    # race its art is for.
+    keys = hall_keys(appearance, config["select"])
+    key_race = appearance["race"] if appearance is not None else None
+    select_race = config["select"]["character"]["race"]
+    scenes += select_scene(assets, textures, config["select"], pathlib.Path(work), zone_report, tables, *numbers,
+                           keys=keys if select_race == key_race else [None] * len(keys))
     # Version 24 (RQ-158): a create model per race of models.create.
     races = create_races(config["select"]["character"]["race"], rules)
     # Version 27 (RQ-174): each with its faces and hairs (create.bin's counts);
@@ -2861,7 +3043,7 @@ def write(assets, out, config, work, rules=None, create=None):
     # Version 31 (RQ-005): the select characters per race and class, and the
     # class names, last (item 17).
     select_models, select_report = select_characters(assets, textures, config["select"], pathlib.Path(work), rules,
-                                                     tables, *numbers)
+                                                     tables, *numbers, keys=keys, key_race=key_race)
     names_section, names_report = class_names(assets, config["select"])
     data = b"N3FE" + u(TABLES_VERSION if tables else VERSION) + u(count(config["character_slots"], 3)) + u(CANVAS[0]) + u(CANVAS[1])
     data += u(len(textures.list)) + b"".join(u(w) + u(h) + rgba for w, h, rgba in textures.list)

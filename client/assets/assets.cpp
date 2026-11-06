@@ -594,7 +594,7 @@ Release load_release(const std::filesystem::path &root) {
   // add client presentation only and keep wire 30; so do 41 (PQ-272),
   // 42 (spec 11: front-end.bin), 43 (RQ-163: N3SI player clips), 44
   // (RQ-164: N3DI / N3DJ render detail with influence tables), 45
-  // (RQ-165: N3FE version 34 since RQ-198, front-end models with influence tables) and
+  // (RQ-165: N3FE version 36 since RQ-197, front-end models with influence tables) and
   // 46 (RQ-188: N3ST track-only player clips).
   need(engine >= 1 && engine <= 46 &&
            (engine >= 38 ? protocol == 30
@@ -2918,9 +2918,11 @@ FrontEnd load_front_end(const Release &release) {
   // the select characters per race and class and the class names (item 17).
   // RQ-198: version 33 (34 with tables) adds the select model's and each
   // select character's face and hair parts by number (items 7 and 17).
+  // RQ-197: version 35 (36 with tables) adds their equipment: the looks
+  // parts a key may take and what each appearance key draws (items 7, 17).
   const auto version = r.u();
-  need(version == 33 || (version == 34 && release.engine >= 45), "front end version");
-  const bool tables = version == 34;
+  need(version == 35 || (version == 36 && release.engine >= 45), "front end version");
+  const bool tables = version == 36;
   // A model record's or part's scene: N3S1 or N3SM, or with tables N3SI or N3SJ.
   auto scene_magic = [&](const std::string &magic, Scene &s, const char *what) {
     need(magic == "N3S1" || magic == "N3SM" || (tables && (magic == "N3SI" || magic == "N3SJ")), what);
@@ -3297,20 +3299,63 @@ FrontEnd load_front_end(const Release &release) {
   // version: or N3SI or N3SJ) with no tracks, its nodes, joints and instance
   // scale the model's, so the model's pose skins it. Version 33 (RQ-198):
   // the select model's and each select character's too.
+  auto create_part = [&](const Scene &body, Scene &part) {
+    const auto bytes = r.u();
+    const auto start = r.p;
+    const auto magic = r.raw(4);
+    const bool influences = scene_magic(magic, part, "front end create part magic");
+    read_scene_head(r, part, 2048);
+    read_scene_tracks(r, part, part.tracks);
+    read_scene_tail(r, part, influences);
+    need(r.p - start == bytes, "front end create part length");
+    need(part.tracks.empty() && part.nodes == body.nodes && part.joints == body.joints && part.scale == body.scale,
+         "front end create part skeleton");
+  };
   auto create_parts = [&](const Scene &body, std::vector<Scene> &out, uint32_t most = 32) {
     const auto count = r.count(most, 0);
-    for (uint32_t i = 0; i < count; ++i) {
-      const auto bytes = r.u();
-      const auto start = r.p;
-      const auto magic = r.raw(4);
-      auto &part = out.emplace_back();
-      const bool influences = scene_magic(magic, part, "front end create part magic");
-      read_scene_head(r, part, 2048);
-      read_scene_tracks(r, part, part.tracks);
-      read_scene_tail(r, part, influences);
-      need(r.p - start == bytes, "front end create part length");
-      need(part.tracks.empty() && part.nodes == body.nodes && part.joints == body.joints && part.scale == body.scale,
-           "front end create part skeleton");
+    for (uint32_t i = 0; i < count; ++i) create_part(body, out.emplace_back());
+  };
+  // Version 35 (RQ-197): a select model's equipment, after its faces and
+  // hairs: its looks parts a key may take (0-4, each its KO part slot, 0, 1,
+  // 3 or 4 in increasing order, and a part as a face is), then one entry per
+  // appearance key of the package (appearance.bin's count), each what the
+  // key draws on a listed character wearing it, as KO's AddChr dresses it
+  // (1097 0043ba10, 1298 005fb4f0): 0 nothing; 1 a part, its KO part slot
+  // (0, 1, 3, 4, or 5, a helmet in the hair's place), robe (0 or 1, an
+  // upper's alone: the lower then draws its looks part, 1097 0043d0f0,
+  // 1298 005fc6f0) and the part; 2 a hand plug (1298 005fca40), a joint of
+  // the model and a mesh in its space.
+  auto equipment = [&](FrontScene &scene) {
+    const auto looks = r.count(4, 0);
+    for (uint32_t i = 0; i < looks; ++i) {
+      FrontLooksPart part;
+      part.slot = r.u();
+      need((part.slot == 0 || part.slot == 1 || part.slot == 3 || part.slot == 4) &&
+               (scene.looks_parts.empty() || scene.looks_parts.back().slot < part.slot),
+           "front end select looks part slot");
+      create_part(scene.model, part.part);
+      scene.looks_parts.push_back(std::move(part));
+    }
+    const auto keys = r.count(128, 0);
+    need(keys == release.appearance.size(), "front end select keys");
+    for (uint32_t i = 0; i < keys; ++i) {
+      FrontKey key;
+      const auto kind = r.u();
+      need(kind <= 2, "front end select key kind");
+      key.kind = FrontKey::Kind(kind);
+      if (key.kind == FrontKey::Kind::part) {
+        key.slot = r.u();
+        need(key.slot <= 5 && key.slot != 2, "front end select key slot");
+        const auto robe = r.u();
+        need(robe <= 1 && (robe == 0 || key.slot == 0), "front end select key robe");
+        key.robe = robe == 1;
+        create_part(scene.model, key.part);
+      } else if (key.kind == FrontKey::Kind::plug) {
+        key.plug.joint = r.u();
+        need(key.plug.joint < scene.model.joints.size(), "front end select key joint");
+        key.plug.mesh = mesh();
+      }
+      scene.keys.push_back(std::move(key));
     }
   };
   model(fe.select);
@@ -3321,6 +3366,8 @@ FrontEnd load_front_end(const Release &release) {
   // AddChr sets each character's own (1097 0043ba10, 1298 005fb4f0).
   create_parts(fe.select.model, fe.select.faces);
   create_parts(fe.select.model, fe.select.hairs);
+  // Version 35 (RQ-197): then its equipment.
+  equipment(fe.select);
   // Version 24 (RQ-158): a create model per race (1-32, each race 1-65535
   // once); the first is the one create draws, the others are kept for the
   // create screen per race (RQ-004); each with its faces and hairs (version
@@ -3719,6 +3766,8 @@ FrontEnd load_front_end(const Release &release) {
     // Version 33 (RQ-198): its faces and hairs by number, as item 7's.
     create_parts(m.scene.model, m.scene.faces);
     create_parts(m.scene.model, m.scene.hairs);
+    // Version 35 (RQ-197): its equipment, as item 7's.
+    equipment(m.scene);
     fe.select_models.push_back(std::move(m));
   }
   // Then the class names (1097 0052e3e0, 1298 00613ea0: KO's text for a

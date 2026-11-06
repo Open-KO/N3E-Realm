@@ -82,10 +82,10 @@ characters (N3SM with render runs for the intro, N3S1 for the select hall), and
 
 ### Package file `front-end.bin` (normative)
 
-An optional presentation file, N3FE version 33, engine 42 (so wire 30), or
-version 34, engine 45, when its models carry influence tables (RQ-165; 29 and 30
+An optional presentation file, N3FE version 35, engine 42 (so wire 30), or
+version 36, engine 45, when its models carry influence tables (RQ-165; 29 and 30
 before RQ-005's select characters, 31 and 32 before RQ-198's select faces and
-hairs), at most
+hairs, 33 and 34 before RQ-197's select equipment), at most
 256 MiB (RQ-183: the cook, the client and the server each refuse a larger one).
 Its layout, bounds and the action set are in `content/front-end.md`. The client
 treats it as optional: **a package without it gets today's panels**, which is how
@@ -147,7 +147,12 @@ replace the panels when the client has a Discord realm config.
   shows the `class_name` string. Since N3FE version 33 (RQ-198) the select model
   and each select character carry their faces and hairs by number, as a create
   model does, and the hall draws each character's own face and hair
-  (`Character.face`, `hair`), as AddChr sets them.
+  (`Character.face`, `hair`), as AddChr sets them. Since N3FE version 35
+  (RQ-197) they carry what each of the package's appearance keys draws on
+  them (a part in a KO part slot, a robe, a helmet, or a hand plug where the
+  recipe's `select.item_plugs` is `draw`), and the hall draws each
+  character's visible equipment (`Character.appearance`) as AddChr dresses
+  it in the list's items.
 - **Music** (N3FE version 3, RQ-018; version 5, RQ-083). Up to 4 tracks, each MPEG-1
   or MPEG-2 Layer III frames (every frame checked at load) or, since version 5,
   16-bit PCM samples (KO 1097's WAVs), each ≤ 16 MiB, looping or not, with an
@@ -374,8 +379,8 @@ carries KO's create packet's fields; both, the refusals and the package's create
 rules (`create.bin`) are `content/character-create.md`, "The realm's create". The
 select hall draws each character with the package's select character for its race
 and specialty and shows its class's name (RQ-005, N3FE version 31), with its own
-face and hair (RQ-198, N3FE version 33); its visible equipment is not drawn there
-yet (RQ-197).
+face and hair (RQ-198, N3FE version 33) and its visible equipment (RQ-197, N3FE
+version 35).
 
 ### Server
 
@@ -629,6 +634,30 @@ CPU (`make test`):
    race 0 character with face 0 and hair 5 as `looks=1/2,3/1,0/-1` (hair 5 past
    the select model's three: none) (`FRONT_HALL`, `tests/front_end_live.py`,
    local-asset).
+   RQ-197 superseded these versions again: the plain version is 35 and the tables
+   version 36 (33 and 34 are refused with every older version); the loader refuses
+   36 below engine 45, 37, and a table in 35; the cook takes 36 at engine 45 only
+   and 35 at 42; the server refuses 36 at engine 44 and 33, 34 and 37 at 45
+   (`tests/front_end_influences.py`, `server/src/content.rs`).
+   RQ-197 (version 35, select equipment): the loader takes a synthetic file's
+   select model's and select characters' looks parts and keys and refuses more
+   than 4 looks parts, a looks slot other than 0, 1, 3 or 4 or out of order, a
+   key count other than the release's appearance count (or above 128), a key
+   kind above 2, a key part slot 2 or above 5, a robe above 1 or off slot 0, a
+   key part off its model's skeleton or scale, a plug joint outside the model's
+   joints and truncation; what a listed character wears is the first key per
+   slot, the looks lower under a robe, a helmet in the hair's place and each
+   plug once (`tests/front_end.py`); the cook maps each appearance row to its
+   KO part slot, draws hand plugs only where `select.item_plugs` is `draw`,
+   draws nothing for a 2145 row, leaves out the looks parts a key may take and
+   refuses a row over two slots or the face, a robe off an upper part row, an
+   unknown `item_plugs`, a key's file in another input and a plug joint past
+   the model's (`tests/front_end.py`); on the 1097 choice the hall draws a
+   priest in keys 5 and 1 with key 5's upper and no hand plug, a rogue in none
+   with its looks upper, and race 0 in keys 5 and 9 with key 5's upper, as
+   `worn=1/0/0,0/1/0,1/0/0`, and on the 1298 recipe the priest's key 1 blade
+   as its hand plug too, `worn=1/0/1,0/1/0,1/0/0` (`FRONT_HALL`,
+   `tests/front_end_live.py`, local-asset).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.
 4. **Wire.** `golden-characters` with `level` is identical from both languages.

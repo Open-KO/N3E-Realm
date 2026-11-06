@@ -485,9 +485,21 @@ character". The source's enum is in `GameProcCharacterCreate.h`.
 
 - **Fields.** Aujard's `LoadCharInfo` sends, per character, the name, race, class
   (u16), level, face, hair, zone and its eight visible slots' item id and durability
-  (source `DBAgent.cpp`). The 1298 parse of the list was not re-read (RQ-005).
+  (source `DBAgent.cpp`). 1298's parse (`005ff2a0`, binary, RQ-197) reads, after a
+  result byte of 1, three records (`+0x38`, `+0xa0`, `+0x108`): the name, race,
+  class (i16), level, face, hair and zone, then each item's u32 id and i16
+  durability in the order helmet, upper, cloak, right hand, left hand, lower,
+  gloves, shoes, as the source's `MsgRecv_AllCharacterInfo`; it calls AddChr
+  (`005fb4f0`) for each record with a name (`specs/KO-FINDINGS.md` §8.6).
 - **Default looks.** The select draws each character from `UPC_DefaultLooks` by race
-  and its visible items (source `GameProcCharacterSelect.cpp`, `AddChr`).
+  and its visible items (source `GameProcCharacterSelect.cpp`, `AddChr`; binary
+  1097 `0043ba10`, 1298 `005fb4f0`): the upper, lower, gloves and shoes in part
+  slots 0, 1, 3 and 4 (the looks row's part for a slot with no item; under a
+  robe upper the looks lower, 1097 `0043d0f0`, 1298 `005fc6f0`, where the source
+  sets none), a helmet with art in place of the hair, never the cloak; 1097 its
+  class plugs and no hand item, 1298 each hand's item as a plug and no class
+  plug (`005fca40`). The realm draws a character's appearance keys so
+  (`content/front-end.md` item 7, N3FE version 35, RQ-197).
 
 ## Version differences, and proposed realm-owner settings
 
@@ -980,7 +992,7 @@ parts take room too; RQ-183 raised the bound to 256 MiB). The package hash chang
 a new realm (Q63). RQ-169 adds the Arch Tuarek's dressed create model: the 1097
 choice's file grows to 61,065,488 bytes, the 1298 recipe's to 64,447,160
 (local-asset), both still version 29 then (31 since RQ-005, which grows them again: 62,338,435 and 64,447,563;
-33 since RQ-198: 62,918,171 and 64,736,507).
+33 since RQ-198: 62,918,171 and 64,736,507; 35 since RQ-197: 63,427,579 and 65,791,899).
 
 **The size of every race's create model (RQ-182; local-asset, the pinned tree).**
 Cooked as RQ-165 and RQ-170 would add them (`content/front-end.md`, the bound):
@@ -1054,7 +1066,10 @@ object files the pinned tree lacks (`Object/obj_war_duntree01_ip00`–`ip02`,
     (`select.class_names`; KO-FINDINGS §8.5).
   - Done in RQ-198: each character's own face and hair, by its numbers
     (content/front-end.md items 7 and 17, N3FE version 33; KO-FINDINGS §8.5).
-  - Not yet: visible equipment per character (RQ-197).
+  - Done in RQ-197: each character's visible equipment, its appearance keys as
+    AddChr sets the list's items (content/front-end.md items 7 and 17, N3FE
+    version 35; KO-FINDINGS §8.6). Not drawn: 1298's select weapon effects and
+    dust overlay (Q120).
 - **RQ-006 (nation).**
   - The login answer's nation 0 opens nation select. The question is 10420, with OK
     and Cancel; Back returns to the server list.
@@ -1075,7 +1090,7 @@ object files the pinned tree lacks (`Object/obj_war_duntree01_ip00`–`ip02`,
 | ~~The hover text's join order and separator~~: read in RQ-175, no join (above) | — |
 | 1097's nation-select click path | RQ-006 |
 | 1298's delete-last-character return | RQ-006/RQ-008 |
-| The 1298 list parse | RQ-005's equipment follow-up (RQ-005 drew race and class only) |
+| ~~The 1298 list parse~~: read in RQ-197, `005ff2a0` (above; KO-FINDINGS §8.6) | — |
 | The game-start stat recompute (HP, MP, SP) | RQ-007 |
 | Ebenezer's word-list loader | Q99 takes a realm-owner list instead |
 | Whether the 1298 binary's create sets `edit_name`'s length (the layout carries none, source) | RQ-004's later parts |

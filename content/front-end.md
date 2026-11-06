@@ -1,4 +1,4 @@
-# Front end (N3FE, engine 42; version 34 engine 45)
+# Front end (N3FE, engine 42; version 36 engine 45)
 
 `front-end.bin` is an optional presentation file (spec 11): KO's 1098 login scene,
 login and server list, the Karus character select hall, character create, loading
@@ -38,10 +38,13 @@ and the select characters per race and class, as KO's AddChr chooses their
 joint, animation and plugs, and each specialty's class name for the select's
 info (version 31, RQ-005), and the select model's and each select character's
 face and hair parts by number, so the hall draws each character's own face and
-hair as AddChr sets them (version 33, RQ-198).
+hair as AddChr sets them (version 33, RQ-198), and the select model's and
+each select character's visible equipment, what each of the package's
+appearance keys draws in the hall as KO's AddChr dresses a listed character
+in its items (version 35, RQ-197).
 Version 30 (RQ-165; "Influence tables", below) was version 29 whose model
 records and parts may carry D-176's influence table; RQ-005 made that
-version 32, and since RQ-198 it is version 34, version 33 with the tables. The
+version 32, RQ-198 34, and since RQ-197 it is version 36, version 35 with the tables. The
 cook writes it only for a file that has one, at engine 45.
 `tools/assetc/ko_front_end.py` cooks it from the choice's KO trees with the
 recipe of the front end the realm chose ("Choosing the client", below; for
@@ -50,17 +53,17 @@ Moradon's default, 1097, `games/moradon/front-end.json`); the client's
 opens. Both release loads hash it in 1 MiB blocks without holding it, and the server
 then reads only its first 12 bytes (magic, version and slot count) for the slot
 count (RQ-183). A package with it is engine 42, so wire 30 (as engines 38–41);
-with a file of the tables version (34; 30 before RQ-005, 32 before RQ-198), engine 45 (RQ-165). Its
+with a file of the tables version (36; 30 before RQ-005, 32 before RQ-198, 34 before RQ-197), engine 45 (RQ-165). Its
 bound is 256 MiB (RQ-183: `ko_front_end.MAX_FILE` and `FRONT_END_FILE` in the cook,
 `kFrontEndFile` in the client, `MAX_FRONT_END_ASSET` in the server; a file a byte
 past it is refused by each), since it holds
-the character models and the UI art (Moradon's 1097 choice: 62,918,171 bytes with
+the character models and the UI art (Moradon's 1097 choice with
 three create models, RQ-158, its race and class buttons, RQ-172, its stat
 arrows, RQ-173, its create models' four faces and three hairs, RQ-174, its
 description text, RQ-175, its create dress, RQ-176, the Arch Tuarek's
 create model, RQ-169, the Tuarek rogue's select character and the class
-names, RQ-005, and the select models' four faces and three hairs, RQ-198; the
-1298 recipe's 64,736,507).
+names, RQ-005, the select models' four faces and three hairs, RQ-198, and
+their equipment, RQ-197: 63,427,579 bytes; the 1298 recipe's 65,791,899).
 
 The bound against what is still to come (RQ-182; local-asset, the pinned trees:
 both recipes cooked with each section's bytes counted, KO's textures stored as
@@ -99,7 +102,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
 
 ## Layout
 
-1. `"N3FE"`, version 33 or (RQ-165) 34, character slots (1–3; the server's
+1. `"N3FE"`, version 35 or (RQ-165) 36, character slots (1–3; the server's
    character limit), canvas width 1024 and height 768.
 2. Textures: a count (≤256 since version 8, ≤64 before), each width and height
    (1–1024) then RGBA8 rows.
@@ -154,6 +157,42 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    AddChr sets them (1097 `0043ba10` and 1298 `005fb4f0` build the row's
    file name with the character's number, `"%s%s%.2d%s"`;
    `specs/KO-FINDINGS.md` §8.5).
+   Then (version 35, RQ-197; `specs/KO-FINDINGS.md` §8.6) its equipment: a
+   count (0–4) of looks parts, each a KO part slot (0 upper, 1 lower, 3
+   hands, 4 feet; strictly increasing) and a part as a face is, then a key
+   count, which is the package's appearance key count (`appearance.bin`'s,
+   0–128), and per key what it draws on this model: 0 nothing; 1 a part (its
+   KO part slot, 0, 1, 3, 4 or 5, the helmet in the hair's; a robe flag, 0 or
+   1, set only on slot 0; a part as a face is); 2 a hand plug (a joint of the
+   model, then a mesh in that joint's space as a plug's). The model leaves
+   out the looks parts of the slots a key part may take; they follow it as
+   the looks parts, so a slot no worn key fills still draws the race's
+   default. KO's AddChr dresses a listed character from the list's items
+   (1298's list parse `005ff2a0` reads the helmet, upper, cloak, both hands,
+   lower, gloves and shoes): it sets the upper, lower, gloves and shoes as
+   part slots 0, 1, 3 and 4 and a helmet with art in the hair's slot, the
+   looks row's part for a slot with no item, and never draws the cloak (1097
+   `0043ba10`, 1298 `005fb4f0`, `005fc6f0`). Under a robe upper its
+   AddChrPart names no lower file and so sets the looks row's lower (1097
+   `0043d0f0`, 1298 `005fc6f0`). 1097's AddChr never reads the hand items
+   and draws its class plugs alone; 1298's draws each hand's item as a plug
+   on joint 12, 7 or (a shield) 5 (`005fca40`) and no class plug. The cook
+   writes, from the package's appearance rows (`games/<game>/appearance.json`,
+   `content/appearance.md`) and the recipe's `select.item_plugs` (`none`,
+   the default, or `draw`): for a model of the package's player race (the
+   race the rows' art is for), a part row in the one KO part slot its
+   `parts` are (through the player model's looks positions; a row over two
+   slots, or the face, is refused), with `robe` (an upper row's alone,
+   default false) as the robe flag, and a hand plug row on its own joint
+   where `item_plugs` is `draw`, nothing where it is `none`; a 2145 row
+   (`part_2145`, `chrplug_2145`) and every key of a model of another race
+   draw nothing. Each part is skinned on the model's nodes, joints and
+   instance scale and read from the model's own tree (a key's file in another
+   input is refused). The client draws a listed character's keys (the wire's
+   `Character.appearance`): per KO part slot the first key that names it in
+   place of the looks part, under a robe upper the lower's looks part, a
+   helmet in place of the hair, and each plug key once on its joint after the
+   model's plugs; a key 0 or past the model's keys draws nothing.
 8. The create models (version 24, RQ-158): a count (1–32), then per race its
    race code (1–65535, each once) and its model and plugs (version 2):
    `CGameProcCharacterCreate`'s player (`InitChr`: the race's `UPC_DefaultLooks`
@@ -419,8 +458,9 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    race (1–65535), a specialty count (1–16) and the specialties (each
    1–65535; a race and specialty pair at most once in the file), then a model
    record and its plugs as item 7's (three clips by role, each clip's blend
-   time; the plugs a count ≤4, each a joint and a mesh) and (version 33,
-   RQ-198) its faces and hairs as item 7's; then a count (0–64)
+   time; the plugs a count ≤4, each a joint and a mesh), (version 33,
+   RQ-198) its faces and hairs as item 7's and (version 35, RQ-197) its
+   equipment as item 7's; then a count (0–64)
    of class names, each a specialty (1–65535, once) and its text (≤1024 ASCII
    bytes). KO's AddChr chooses a select character's joint, animation and
    plugs by its race and class (source `GameProcCharacterSelect.cpp`'s
@@ -438,7 +478,7 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    or with item 7's model when none does ("Actions"; KO's AddChr draws no
    character for a race and class outside its switch, Q118), each slot
    playing its own model's clips and drawing the character's own face and
-   hair parts by its numbers (RQ-198); the select's `{class}` and `char_class`
+   hair parts by its numbers (RQ-198) and its equipment (RQ-197); the select's `{class}` and `char_class`
    show the character's specialty's class name, or the `class_name` string
    for a specialty without one.
 
@@ -630,7 +670,7 @@ plug joint outside the model's joints (version 29; every version before 33 is
 refused since RQ-198), a create model count outside 1–32 or a create race
 outside 1–65535 or named twice (version 24), a face or hair count above 32 (a
 create model's, version 27, or a select model's, version 33), a part that is
-not N3S1 or N3SM (or, in version 34, N3SI or N3SJ), has tracks, or whose nodes, joints or instance scale are
+not N3S1 or N3SM (or, in version 36, N3SI or N3SJ), has tracks, or whose nodes, joints or instance scale are
 not its model's (version 27), an unknown action, a screen missing one of its required
 actions (login: `login`, `exit`, `login_group`, `realm_group`, `realm_list`,
 `realm_connect`; select: `select_prev`, `select_next`, `back`, `exit` and an
@@ -673,18 +713,23 @@ file does not have, a rule of another kind or outside its bounds, a keep rule
 with a or c not 0, moves that do not leave the canvas rects where the file puts
 them, a slide (version 20) of a node outside the create layout or named twice,
 an axis other than 0 or 1, a keep start rule, a lead of no extent on its axis
-or a step or scale outside its bounds, a version other than 33 or 34, version
-34 below engine 45, a model record or part of N3SI or N3SJ in version 33, an
+or a step or scale outside its bounds, a version other than 35 or 36, version
+36 below engine 45, a model record or part of N3SI or N3SJ in version 35, an
 influence table out of order, of a vertex or joint outside the scene, of a
 weight not above 0 or of a vertex whose weights do not sum to 1 (RQ-165), a
 select character (version 31) of race 0 or above 65535, with no specialty or
 more than 16, a specialty 0, above 65535 or named twice for one race in the
 file, a model without three clips or a plug off its joints, more than 32 select
 characters, a class name for specialty 0, above 65535 or named twice, more
-than 64 class names or a text that is not printable ASCII, and every
+than 64 class names or a text that is not printable ASCII, a select model's
+(version 35) looks part count above 4, a looks part slot other than 0, 1, 3
+or 4 or not after the last, a key count other than the release's appearance
+key count, a key kind above 2, a key part slot other than 0, 1, 3, 4 or 5, a
+robe flag above 1 or set on a slot other than 0, a key plug joint outside the
+model's joints (every version before 35 is refused since RQ-197), and every
 reference, count and bound above, truncation or trailing bytes.
 
-### Influence tables (version 34, engine 45; RQ-165, RQ-005, RQ-198)
+### Influence tables (version 36, engine 45; RQ-165, RQ-005, RQ-198, RQ-197)
 
 KO draws the front end's characters with the same class as the world's: the
 login's orc (`m_pChr`) and the select hall's characters (`m_pChrs`) are
@@ -700,7 +745,8 @@ male's (`upc_el_rm_lower.n3cskins`) 57 (local-asset, `tests/ko_player_races.py`)
 either in its looks parts needs them, as the player path does since RQ-163.
 
 - A model record's scene (the intro's, the select's, a create model's) and a
-  part's (a face or hair of a create or select model, a dress part) may be `N3SI` (from `N3S1`) or `N3SJ`
+  part's (a face or hair of a create or select model, a dress part, a select
+  model's looks or key part) may be `N3SI` (from `N3S1`) or `N3SJ`
   (from `N3SM`): the same scene with D-176's influence table between the
   vertices and the indices (`tools/assetc/gltf.py`; u32 count of vertices with
   further influences, then per vertex, in strictly increasing order, u32 vertex,
@@ -709,19 +755,19 @@ either in its looks parts needs them, as the player path does since RQ-163.
   `gltf.cook(..., materials=True)`, which writes the table for a vertex whose
   further sets carry weight; each record or part has its own magic, so an N3SI
   model may have N3S1 faces.
-- The file is the tables version, 34, when any record or part has a table,
-  version 33 otherwise (byte for byte as without RQ-165's tables; RQ-165 made
-  them 30 and 29, RQ-005 31 and 32, RQ-198 33 and 34). The cook's report gives the
+- The file is the tables version, 36, when any record or part has a table,
+  version 35 otherwise (byte for byte as without RQ-165's tables; RQ-165 made
+  them 30 and 29, RQ-005 31 and 32, RQ-198 33 and 34, RQ-197 35 and 36). The cook's report gives the
   version and how many scenes have tables, and each create model's report how
   many of its own do (`tables`).
-- A package with a version 34 file is engine 45 (wire 30; `main.py` reads the
+- A package with a version 36 file is engine 45 (wire 30; `main.py` reads the
   file's header, `FRONT_END_INFLUENCES_ENGINE`, against
-  `FRONT_END_TABLES_VERSION`); one with a version 33 file stays 42 (or the 43
-  and 44 of its player clips and render detail). The client loads version 34
-  only at engine 45 and reads a table only in version 34, checking it
+  `FRONT_END_TABLES_VERSION`); one with a version 35 file stays 42 (or the 43
+  and 44 of its player clips and render detail). The client loads version 36
+  only at engine 45 and reads a table only in version 36, checking it
   as a looks model's; `Scene::skin` adds each further influence after the four
   slots, in order, so the front end draws it as the world does. The server
-  reads only the header and takes version 34 only at engine 45.
+  reads only the header and takes version 36 only at engine 45.
 
 Moradon's front end needs none: its create races 2, 3 and 4 have no such
 vertex, and on both create tables each specialty's create dress replaces the
@@ -731,7 +777,7 @@ choice's records 2,342,872 and 1,644,968 bytes with their race codes, the 1298
 recipe's 2,341,276 and 4,678,215; the Arch Tuarek's N3SM on both tables, the
 El Morad male's N3S1 on 1264's and N3SM on 1298's, no influence table in any
 model or part; `tests/ko_player_races.py` asserts it for every shipped race).
-Moradon's `front-end.bin` stays version 33 (no tables). A create model in its looks lower part (a create table
+Moradon's `front-end.bin` stays version 35 (no tables). A create model in its looks lower part (a create table
 without item columns, or a dress that leaves that slot) does: undressed, the
 Arch Tuarek's and the El Morad male's are N3SI, 2,780,584 and 1,341,684 bytes
 with their race codes, four faces and three hairs (their parts N3S1).
@@ -1106,8 +1152,14 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   `upc_ka_tu.n3anim` (`005fb4f0`: race 2, a rogue or a priest), with the race's
   `UPC_DefaultLooks` parts, as `005fc6f0` takes them for a slot with no item,
   each character's own face and hair by its numbers (record `+0x1c` and
-  `+0x20`, RQ-198), and no plug, as `005fca40` adds none without an item (the
-  wire carries no equipment). Its clips by role: front 1 (20–300 at 30 frames a
+  `+0x20`, RQ-198), and no class plug: `005fca40` adds a hand's plug from
+  its item alone. RQ-197: the recipe's `item_plugs` is `draw`, so each worn
+  hand plug key draws on its row's joint (12 a right hand, 7 a left, 5 a
+  shield, as `005fca40` picks), and the worn part keys in their KO part
+  slots (`005fb4f0`, `005fc6f0`; item 7). Not drawn: the item's dust overlay
+  and weapon effect that `005fca40` adds (`0045ccc0`, `00415370`), and KO
+  keeps the plug file's own joint for an item whose durability field is 0
+  (`005fce0b` is skipped), where the realm draws the row's joint (Q121). Its clips by role: front 1 (20–300 at 30 frames a
   second), start 2 (394–466 at 25) and rest 0 (180–220 at 25), each over its
   record's 0.25 s but the start's, over 0.6 s (`005fe7c0`). Clip 2's last frames
   (458–466) are past the joint's 228 keys at 15 a second; KO leaves the joints
@@ -1529,7 +1581,11 @@ box and loading are 1264's.
   1,128,608 bytes with its plugs' meshes, so the 1097 choice's `front-end.bin`
   was 62,338,435 bytes; since RQ-198 each select model carries the Tuarek's
   four faces and three hairs by number, the rogue's record 1,419,400 bytes with
-  them, and the file is 62,918,171 bytes; `class_names` the 1264 install's rows for KO's 24 class
+  them, and the file was 62,918,171 bytes; since RQ-197 the select model
+  carries Moradon's armour (appearance key 5, `Item/2_4102_10_0.n3cpart`, KO
+  part slot 0) and its looks upper apart, and the four hand plug keys draw
+  nothing (`item_plugs` `none`: 1097's AddChr never reads the hand items,
+  `0043ba10`), the rogue's keys the same, and the file is 63,427,579 bytes; `class_names` the 1264 install's rows for KO's 24 class
   codes, 1097 `0052e3e0`, and `class_name` "Unknown Class", its default): 0 `pre_select` (hover), 1
   `selected` (start) and 2 `dummy` (rest, `pre_select`'s first frame). The
   hover and rest clips blend over their records' 0.3 s (`0043f280` names

@@ -31,6 +31,12 @@ ordinary blades, shield and torso armor. Equipped-plug progressive LOD, weapon
 trails, special materials, robes and other races/items remain fidelity gaps.
 Missing mappings fall back to the base body; a missing declared asset fails cook.
 
+RQ-197: the select hall draws the same keys (`content/front-end.md` item 7). A part
+row there takes the one KO part slot its `parts` map to, and an upper part row may
+say `"robe": true` (default false; refused on any other row), which draws the lower
+as the race's looks part while it is worn, as KO's AddChr does for a robe; the world
+does not read it yet.
+
 Binary grounding and verification.
 
 

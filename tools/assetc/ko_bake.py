@@ -485,7 +485,12 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         # Spec 11: KO's login scene, select hall, create, loading and message
         # box from the chosen front end's input trees; engine 42. RQ-176: the
         # create models wear the realm's create table's dress (Q106).
-        report['front_end']=ko_front_end.cook(front_inputs,root,front['recipe'],root.parent/(root.name+'-front-end'),front['create'])
+        # RQ-197: the select hall dresses each listed character in its
+        # appearance keys (the mappings above, appearance.bin's order), each
+        # part row's KO part slot by the player model's body parts.
+        hall_appearance=ko_front_end.hall_appearance(mappings,ko_character.Assets(characters))
+        report['front_end']=ko_front_end.cook(front_inputs,root,front['recipe'],root.parent/(root.name+'-front-end'),front['create'],
+                                              hall_appearance)
         report['front_end'].update(client=front['client'],recipe=str(front['recipe']),inputs=[str(t) for t in front['inputs']])
         if any(front['names'][1:]) or any(front['pins']):
             # RQ-084: recorded only for a choice of several trees or a reference

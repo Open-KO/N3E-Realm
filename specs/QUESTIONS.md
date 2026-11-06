@@ -2074,3 +2074,53 @@ Options:
 
 **Default taken:** (a). It is create's rule, and with the server's own check no
 character created under the current rules reaches it.
+
+### Q120 — 1298's select weapon effects and dust overlay
+
+RQ-197: 1298's select hall draws each hand item as a plug (`005fca40`, binary), and
+the same function adds the item's dust overlay and its weapon effect (`0045ccc0`,
+`00415370`; `specs/KO-FINDINGS.md` §8.6). The front end carries no effect or overlay
+(the world's weapon effects are `effects.bin`'s, PQ-211), so the hall draws the plug
+mesh alone.
+
+Options:
+- (a) Draw the plug alone until a front-end item reads the effects and the overlay.
+- (b) Carry the world's weapon effect records into `front-end.bin` now.
+
+**Default taken:** (a). The 1097 choice, Moradon's default, draws no hand item at
+all (`0043ba10`), and the 1298 recipe is not offered (RQ-088). Proposed as a
+follow-up item.
+
+### Q121 — A 1298 hand plug's joint when the item's durability field is 0
+
+RQ-197: 1298's `005fca40` writes the hand's joint (12 right, 7 left, 5 a class-60
+shield) into the plug only when the item's `Item_Org` max-durability field (`+0x4e`)
+is above 0; otherwise the branch at `005fcc73` skips the write (`005fce0b`) and the
+plug keeps the joint stored in its file (binary, 1298 `KnightOnLine.exe`). The
+realm's appearance rows carry the joint the world draws them on, and the hall reads
+no `Item_Org` row.
+
+Options:
+- (a) Draw each plug key on its row's joint.
+- (b) Read the item's `Item_Org` row at the cook and keep the plug file's joint for
+  a durability of 0.
+
+**Default taken:** (a). Every realm row names a weapon or shield with durability,
+and the world draws the row's joint too.
+
+### Q122 — Which select models wear the appearance keys, and what a robe is
+
+RQ-197: the appearance rows' art is cut for the package's player race (`ko_player`),
+and a part row names the player model's body parts (`parts`), not a KO part slot. KO
+names each race's own item file (`005fc6f0`), which the realm's rows do not carry. KO
+also treats an upper with `Item_Org`'s robe byte set (1298 `+0x41`, 1097 `+0x39`)
+as hiding the lower, which the realm's rows do not say.
+
+Options:
+- (a) Draw the keys on the select models of the player race only, every key of
+  another race nothing; a row's KO part slot is the one its `parts` map to through
+  the player model's looks positions; an optional `robe: true` on an upper row.
+- (b) Per-race art in each appearance row.
+
+**Default taken:** (a). The realm creates only the player race's characters with
+items today (Moradon: the Tuarek), and per-race rows are a content change of their own.

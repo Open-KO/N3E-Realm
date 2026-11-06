@@ -62,7 +62,7 @@ from both create tables (1298's from the pinned tree, 1264's from the 1264
 install, SKIP without it): each dress replaces the looks lower part, so the
 dressed model is N3S1 or N3SM and neither it nor its parts hold an influence
 table, and Moradon's front end stays the version without influence tables
-(N3FE 29 then, 31 since RQ-005, 33 since RQ-198).
+(N3FE 29 then, 31 since RQ-005, 33 since RQ-198, 35 since RQ-197).
 """
 import os
 import pathlib

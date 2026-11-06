@@ -504,7 +504,7 @@ struct Release {
   uint32_t protocol = 1;
   // The release's engine version; from 43 the player clips may be N3SI (RQ-163),
   // from 44 the render detail N3DI / N3DJ (RQ-164), from 45 the front end's
-  // models N3SI / N3SJ (RQ-165, N3FE version 34 since RQ-198) and from 46 the player clips
+  // models N3SI / N3SJ (RQ-165, N3FE version 36 since RQ-197) and from 46 the player clips
   // other than player-idle.bin N3ST, their tracks alone (RQ-188).
   uint32_t engine = 1;
   uint32_t npc_health = 1;
@@ -979,6 +979,23 @@ struct FrontDress {
   std::vector<uint32_t> hands;
   std::vector<FrontPlug> plugs;
 };
+// Version 35 (RQ-197): a select model's looks part a key may take, carried
+// apart from the model (its KO part slot: 0 upper, 1 lower, 3 hands, 4 feet).
+struct FrontLooksPart { uint32_t slot = 0; Scene part; };
+// Version 35 (RQ-197): what one appearance key draws on a listed character
+// in the hall, as KO's AddChr dresses it in its items (1097 0043ba10, 1298
+// 005fb4f0): nothing; a part in its KO part slot (0, 1, 3, 4, or 5, a
+// helmet in the hair's place), drawn in place of the looks part, `robe` (an
+// upper) drawing the lower as its looks part (1097 0043d0f0, 1298
+// 005fc6f0); or a hand plug on its joint (1298 005fca40).
+struct FrontKey {
+  enum class Kind : uint32_t { none, part, plug };
+  Kind kind = Kind::none;
+  uint32_t slot = 0;
+  bool robe = false;
+  Scene part;
+  FrontPlug plug;
+};
 // Version 8 (RQ-095): one mesh of the zone the select hall draws (1298's
 // karus_intro) and the point a BLEND mesh is sorted by (engine space).
 struct FrontZoneMesh { FrontMesh mesh; V sort{}; };
@@ -1005,6 +1022,11 @@ struct FrontScene {
   // none for a model without a dress (its own parts always draw).
   std::vector<Scene> dress_parts;
   std::vector<FrontDress> dresses;
+  // Version 35 (RQ-197): a select model's looks parts a key may take, and
+  // what each of the package's appearance keys draws on it (one per key,
+  // appearance.bin's order); none for the other scenes.
+  std::vector<FrontLooksPart> looks_parts;
+  std::vector<FrontKey> keys;
 };
 // create_yaw (version 19, RQ-125): the new character's turn at the slot when
 // create draws over the hall (1298: 005fd120), the slot's yaw otherwise.
@@ -1186,7 +1208,8 @@ struct FrontCreateDescriptions {
 // as KO's AddChr chooses the joint, animation and plugs by race and class
 // (source GameProcCharacterSelect.cpp; 1097 0043ba10, 1298 005fb4f0): the
 // race and the specialties it draws, and the model (the select model's
-// three clips by role, its plugs; version 33, RQ-198: its faces and hairs).
+// three clips by role, its plugs; version 33, RQ-198: its faces and hairs;
+// version 35, RQ-197: its equipment).
 struct FrontSelectModel {
   uint32_t race = 0;
   std::vector<uint32_t> specialties;

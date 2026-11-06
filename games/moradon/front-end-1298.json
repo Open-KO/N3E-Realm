@@ -172,6 +172,7 @@
     "escape": "none",
     "back": "realms",
     "arrows": "draw",
+    "item_plugs": "draw",
     "create": "hall",
     "zone": 10001,
     "fog": true,

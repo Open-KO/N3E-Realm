@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <vector>
 
 namespace n3e::front {
 
@@ -139,5 +140,36 @@ struct SelectHall {
   }
   void starting(int slot, float dt) { players.at(size_t(slot)).elapsed += dt; }
 };
+
+// RQ-197 (N3FE version 35, content/front-end.md items 7 and 17): what a
+// listed character wears in the hall, from its appearance keys (the wire's
+// Character.appearance) and the select model's keys, as KO's AddChr dresses
+// it in its items (1097 0043ba10, 1298 005fb4f0). `part[s]` is the key
+// (its index in the model's keys) whose part draws in KO part slot s, -1
+// for none: the first key per slot, as the world's draw_appearance takes the
+// first key per equipment slot; under a robe upper the lower is none, so it
+// draws its looks part (1097 0043d0f0, 1298 005fc6f0 name no lower file then
+// and set the looks row's); a part in slot 5 is a helmet, drawn in place of
+// the hair. `plugs` are the keys whose hand plugs draw (1298 005fca40), each
+// once. A key the model does not have (0, or past its keys) draws nothing.
+struct HallWorn {
+  std::array<int, 6> part{-1, -1, -1, -1, -1, -1};
+  std::vector<size_t> plugs;
+};
+template <class Keys>
+HallWorn hall_worn(const FrontScene &scene, const Keys &keys) {
+  HallWorn worn;
+  for (const uint32_t key : keys) {
+    if (key == 0 || key > scene.keys.size()) continue;
+    const auto at = size_t(key - 1);
+    const auto &k = scene.keys[at];
+    if (k.kind == FrontKey::Kind::part && k.slot < worn.part.size() && worn.part[k.slot] < 0)
+      worn.part[k.slot] = int(at);
+    if (k.kind == FrontKey::Kind::plug && std::find(worn.plugs.begin(), worn.plugs.end(), at) == worn.plugs.end())
+      worn.plugs.push_back(at);
+  }
+  if (worn.part[0] >= 0 && scene.keys[size_t(worn.part[0])].robe) worn.part[1] = -1;
+  return worn;
+}
 
 }  // namespace n3e::front

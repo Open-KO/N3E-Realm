@@ -1353,18 +1353,40 @@ def dress(specialty, body=1, parts=(), plugs=()):
             b"".join(u(hand) + u(joint) + MESH for hand, joint in plugs))
 
 
-def select_entry(race, specialties, clips=3, plug=None, scene=None, blends=None, faces=(), hairs=()):
+def select_entry(race, specialties, clips=3, plug=None, scene=None, blends=None, faces=(), hairs=(), equipment=None):
     """Version 31 (RQ-005): a select character: its race, the specialties it
     draws and a model record as the select model's (item 17); version 33
-    (RQ-198): then its face and hair parts."""
+    (RQ-198): then its face and hair parts; version 35 (RQ-197): then its
+    equipment (equipment_raw; none by default)."""
     return (u(race) + u(len(specialties)) + b"".join(u(x) for x in specialties) +
-            character(clips, blends=blends, plug=plug, scene=scene) + looks_parts(faces, hairs))
+            character(clips, blends=blends, plug=plug, scene=scene) + looks_parts(faces, hairs) +
+            (NO_EQUIPMENT if equipment is None else equipment))
 
 
 def looks_parts(faces=(), hairs=()):
     """Version 33 (RQ-198): a select model's face and hair parts (as a
     create model's, version 27)."""
     return u(len(faces)) + b"".join(faces) + u(len(hairs)) + b"".join(hairs)
+
+
+def equipment_raw(looks=(), keys=(), count=None):
+    """Version 35 (RQ-197): a select model's equipment: its looks parts a key
+    may take, each (slot, part), then a key count (`count`, else the keys')
+    and each key: () nothing, ("part", slot, robe, part) or ("plug", joint)
+    with the demo mesh."""
+    out = u(len(looks)) + b"".join(u(slot) + part for slot, part in looks)
+    out += u(len(keys) if count is None else count)
+    for key in keys:
+        if not key:
+            out += u(fe.KEY_NONE)
+        elif key[0] == "part":
+            out += u(fe.KEY_PART) + u(key[1]) + u(key[2]) + key[3]
+        else:
+            out += u(fe.KEY_PLUG) + u(key[1]) + MESH
+    return out
+
+
+NO_EQUIPMENT = u(0) + u(0)
 
 
 def class_names_raw(*entries, count=None):
@@ -1410,12 +1432,12 @@ FOG_OFF = u(0) + f([0] * 5)
 NO_PLACEMENT = u(0) + u(0) * 6
 
 
-def blob(version=33, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
+def blob(version=35, slots=1, screen_data=None, font_index=None, light=None, plug=None, extra=b"", slot_count=None,
          canvas=(1024, 768), magic=b"N3FE", strings=None, music=NO_MUSIC, select_clips=3, blends=None,
          spot_rate=0.6, front_clip=0, escape=0, back=0, arrows=0, create=0, create_yaws=None, turn=0, paths=None, hall=1,
          zone=u(0), fog=FOG_OFF, more_textures=0, logo=u(0), messages=u(0), placement=NO_PLACEMENT, slide=u(0),
          creates=None, choices=u(0) + u(0), stats=u(0) + u(0xFFFFFFFF) + u(0), descriptions=None, more_size=1,
-         scene=None, selects=u(0), names=u(0), select_looks=None):
+         scene=None, selects=u(0), names=u(0), select_looks=None, select_equipment=None):
     more = (more_size, more_size, bytes(more_size * more_size * 4))
     tex = [(w, h, rgba) for w, h, rgba in textures.list] + [more] * more_textures + [FONT]
     out = magic + u(version) + u(slots) + u(canvas[0]) + u(canvas[1])
@@ -1442,6 +1464,8 @@ def blob(version=33, slots=1, screen_data=None, font_index=None, light=None, plu
     out += character(select_clips, plug=plug, scene=scene)
     # Version 33 (RQ-198): the select model's face and hair parts.
     out += looks_parts() if select_looks is None else select_looks
+    # Version 35 (RQ-197): then its equipment.
+    out += NO_EQUIPMENT if select_equipment is None else select_equipment
     # Version 24 (RQ-158): the create models, each a race and a model record;
     # version 27 (RQ-174): each with its face and hair parts.
     out += u(1) + u(2) + create_model(plug=plug) if creates is None else creates
@@ -1882,6 +1906,78 @@ for faces, hairs in ((33, 0), (0, 33), (-1, 0)):
     raise AssertionError("front-end cook accepted %d faces and %d hairs" % (faces, hairs))
 print("PASS front-end select looks cook (RQ-198): a select model's looks parts but its face and hair, which follow "
       "by number, none for an empty part, 3 refusals")
+# RQ-197 (version 35): what each appearance key draws in the select hall: a
+# part row in the one KO part slot its body parts are (a robe an upper's
+# alone), a hand plug on its row's joint where the recipe draws item plugs
+# (1298) and nothing where it does not (1097), a 2145 row nothing; the model
+# leaves out the looks parts a key may take, which follow it apart.
+HALL_POSITIONS = ["upper", "lower", "face", "hands", "feet", "hair", "upper"]
+HALL_ROWS = [dict(item="t:blade", slot=0, source="I/b.n3cplug", joint=12),
+             dict(item="t:armor", slot=4, source="I/u.n3cpart", parts=[0, 6], robe=True),
+             dict(item="t:helmet", slot=5, source="I/h.n3cpart", parts=[5]),
+             dict(item="t:old", slot=0, source="I/o.n3cpart", parts=[1], part_2145="x"),
+             dict(item="t:boots", slot=7, source="I/f.n3cpart", parts=[4], robe=False)]
+HALL_APPEARANCE = dict(rows=HALL_ROWS, race=2, positions=HALL_POSITIONS)
+upper = dict(kind=fe.KEY_PART, slot=0, robe=True, source="I/u.n3cpart")
+helmet = dict(kind=fe.KEY_PART, slot=5, robe=False, source="I/h.n3cpart")
+boots = dict(kind=fe.KEY_PART, slot=4, robe=False, source="I/f.n3cpart")
+assert fe.hall_keys(HALL_APPEARANCE, {}) == fe.hall_keys(HALL_APPEARANCE, {"item_plugs": "none"}) == \
+    [None, upper, helmet, None, boots]
+assert fe.hall_keys(HALL_APPEARANCE, {"item_plugs": "draw"}) == \
+    [dict(kind=fe.KEY_PLUG, joint=12, source="I/b.n3cplug"), upper, helmet, None, boots]
+assert fe.hall_keys(None, {"item_plugs": "draw"}) == []
+assert fe.hall_taken([None, upper, helmet, None, boots, dict(kind=fe.KEY_PLUG, joint=12, source="x")]) == [0, 4]
+assert fe.hall_taken([]) == []
+assert fe.select_parts(LOOKS_ROWS, 2, without=[0, 4]) == ["lo.n3cpart", "ha.n3cpart"]
+hall_problems = [
+    ({"item_plugs": "all"}, HALL_ROWS),
+    ({"item_plugs": 1}, HALL_ROWS),
+    ({}, [dict(HALL_ROWS[1], robe=1)]),
+    ({}, [dict(HALL_ROWS[0], robe=True)]),
+    ({}, [dict(HALL_ROWS[3], robe=True)]),
+    ({}, [dict(HALL_ROWS[2], robe=True)]),
+    ({}, [dict(HALL_ROWS[1], parts=[0, 1])]),
+    ({}, [dict(HALL_ROWS[1], parts=[2])]),
+    ({}, [dict(HALL_ROWS[1], parts=[])]),
+    ({}, [dict(HALL_ROWS[1], parts=[7])]),
+    ({}, [dict(HALL_ROWS[1], source=None)]),
+    ({}, [dict(HALL_ROWS[0], joint="12")]),
+    ({}, [HALL_ROWS[2]] * 129),
+]
+for config, rows in hall_problems:
+    try:
+        fe.hall_keys(dict(HALL_APPEARANCE, rows=rows), config)
+    except ValueError:
+        continue
+    raise AssertionError("front-end cook accepted appearance rows %r under %r" % (rows[:1], config))
+assert len(fe.hall_keys(dict(HALL_APPEARANCE, rows=[HALL_ROWS[2]] * 128), {})) == 128
+# A model whose keys draw nothing carries no looks part apart, then a nothing
+# per key; a key's art from another input or a plug past the model's joints
+# is refused.
+assert fe.hall_equipment(LOOKS_ROWS, None, LOOKS_ROWS, "j", "a", fe.looks(LOOKS_ROWS, 2), [None] * 3,
+                         SELECT_RECORD, pathlib.Path("/nonexistent/select")) == \
+    (u(0) + u(3) + u(fe.KEY_NONE) * 3, dict(looks=[], keys=[0, 0, 0]))
+OTHER = Fixture({"I/b.n3cplug": b""})
+for keys in ([dict(kind=fe.KEY_PLUG, joint=0, source="I/b.n3cplug")],
+             [dict(kind=fe.KEY_PART, slot=5, robe=False, source="I/b.n3cplug")]):
+    try:
+        fe.hall_equipment(fe.Inputs([LOOKS_ROWS, OTHER], [None, "o"]), None, OTHER, "j", "a", fe.looks(LOOKS_ROWS, 4),
+                          keys,
+                          SELECT_RECORD, pathlib.Path("/nonexistent/select"))
+    except ValueError as error:
+        assert "not in the select model's input" in str(error), error
+        continue
+    raise AssertionError("front-end cook drew a key from another input")
+try:
+    fe.hall_equipment(LOOKS_ROWS, None, LOOKS_ROWS, "j", "a", fe.looks(LOOKS_ROWS, 4),
+                      [dict(kind=fe.KEY_PLUG, joint=999, source="I/b.n3cplug")], SELECT_RECORD,
+                      pathlib.Path("/nonexistent/select"))
+    raise AssertionError("front-end cook drew a plug past the select model's joints")
+except ValueError as error:
+    assert "joint 999 is not one of the select model's" in str(error), error
+print("PASS front-end select equipment cook (RQ-197): appearance keys as hall parts in their KO part slot, hand "
+      "plugs where the recipe draws item plugs, 2145 rows as nothing, the looks parts a key takes apart, %d "
+      "refusals" % (len(hall_problems) + 3))
 
 
 # --- create's description text (version 28, RQ-175) ------------------------------
@@ -2900,7 +2996,7 @@ DRESS_CASES = {
     "bad-create-dress-plug-joint": blob(creates=u(1) + u(2) + create_model(dresses=[dress(102, plugs=[(0, 999)])])),
     "bad-create-dress-truncated": blob(creates=u(1) + u(2) + character() + u(0) + u(0) + u(0) + u(1) + u(102)),
 }
-# RQ-165 (version 30, 34 since RQ-198; engine 45): model records and parts past four joint
+# RQ-165 (version 30, 36 since RQ-197; engine 45): model records and parts past four joint
 # influences, N3SI (from N3S1) or N3SJ (from N3SM) with D-176's influence
 # table. The demo character's joint-1 vertices weigh joint 1 at 0.5 in their
 # four slots and joint 0 at 0.5 in the table; the reference carries the same
@@ -2967,33 +3063,33 @@ def table_creates(scene, faces=(), hairs=(), dress_parts=()):
 TABLE_CASES = {
     # Every scene with a table: the intro's, the select's, the create model
     # and its face, hair and dress part (N3SI and N3SJ mixed).
-    "ok-influences": blob(version=34, scene=SI, creates=table_creates(
+    "ok-influences": blob(version=36, scene=SI, creates=table_creates(
         SI, [as_part(SI)], [as_part(SJ)], [as_part(SI)])),
-    "ok-influences-n3sj": blob(version=34, scene=SJ, creates=table_creates(
+    "ok-influences-n3sj": blob(version=36, scene=SJ, creates=table_creates(
         SJ, [as_part(SJ)], [as_part(SI)], [as_part(SJ)])),
     "ok-influences-reference": blob(scene=TABLE_REFERENCE, creates=table_creates(
         TABLE_REFERENCE, [as_part(TABLE_REFERENCE)], [as_part(TABLE_REFERENCE)], [as_part(TABLE_REFERENCE)])),
     "ok-influences-original": blob(creates=table_creates(model, [PART], [PART], [PART])),
-    # The tables version (34 since RQ-198) may hold N3S1 alone (the cook
+    # The tables version (36 since RQ-197) may hold N3S1 alone (the cook
     # writes it only with a table).
-    "ok-version-34-n3s1": blob(version=34),
-    "bad@44-version-34-engine-44": blob(version=34, scene=SI, creates=table_creates(SI)),
-    "bad@42-version-34-engine-42": blob(version=34),
-    "bad-version-35": blob(version=35),
-    "bad-influences-version-33": blob(scene=SI),
-    "bad-influences-n3sj-version-33": blob(creates=table_creates(SJ)),
-    "bad-influences-part-version-33": blob(creates=table_creates(model, [as_part(SI)])),
-    "bad-influences-sum": blob(version=34, scene=influenced(model, extra_weight=0.25)),
-    "bad-influences-part-skeleton": blob(version=34, creates=table_creates(SI, [BENT_PART])),
+    "ok-version-36-n3s1": blob(version=36),
+    "bad@44-version-36-engine-44": blob(version=36, scene=SI, creates=table_creates(SI)),
+    "bad@42-version-36-engine-42": blob(version=36),
+    "bad-version-37": blob(version=37),
+    "bad-influences-version-35": blob(scene=SI),
+    "bad-influences-n3sj-version-35": blob(creates=table_creates(SJ)),
+    "bad-influences-part-version-35": blob(creates=table_creates(model, [as_part(SI)])),
+    "bad-influences-sum": blob(version=36, scene=influenced(model, extra_weight=0.25)),
+    "bad-influences-part-skeleton": blob(version=36, creates=table_creates(SI, [BENT_PART])),
     # RQ-005: a select character with a table only in the tables version.
-    "ok-influences-select-character": blob(version=34, selects=u(1) + select_entry(2, [102], scene=SI)),
-    "bad-influences-select-character-version-33": blob(selects=u(1) + select_entry(2, [102], scene=SI)),
+    "ok-influences-select-character": blob(version=36, selects=u(1) + select_entry(2, [102], scene=SI)),
+    "bad-influences-select-character-version-35": blob(selects=u(1) + select_entry(2, [102], scene=SI)),
     # RQ-198: the select model's and a select character's face and hair
     # parts with a table only in the tables version.
-    "ok-influences-select-looks": blob(version=34, scene=SI, select_looks=looks_parts([as_part(SI)], [as_part(SJ)]),
+    "ok-influences-select-looks": blob(version=36, scene=SI, select_looks=looks_parts([as_part(SI)], [as_part(SJ)]),
                                        selects=u(1) + select_entry(2, [102], scene=SI, faces=[as_part(SJ)])),
-    "bad-influences-select-face-version-33": blob(select_looks=looks_parts([as_part(SI)])),
-    "bad-influences-select-character-hair-version-33": blob(
+    "bad-influences-select-face-version-35": blob(select_looks=looks_parts([as_part(SI)])),
+    "bad-influences-select-character-hair-version-35": blob(
         selects=u(1) + select_entry(2, [102], hairs=[as_part(SJ)])),
 }
 # RQ-005 (version 31): the select characters per race and class and the
@@ -3047,7 +3143,7 @@ LOOKS_CASES = {
     "bad-select-looks-missing": blob(select_looks=b""),
     "bad-select-character-faces-33": blob(selects=u(1) + select_entry(2, [102], faces=[PART] * 33)),
     "bad-select-character-hair-skeleton": blob(selects=u(1) + select_entry(2, [102], hairs=[BENT_PART])),
-    "bad-select-character-looks-missing": blob(selects=u(1) + select_entry(2, [102])[:-8]),
+    "bad-select-character-looks-missing": blob(selects=u(1) + select_entry(2, [102])[:-16]),
 }
 LOOKS_REASONS = {
     "bad-version-31": "front end version", "bad-version-32": "front end version",
@@ -3073,6 +3169,67 @@ SELECT_REASONS = {
     "bad-select-model-plug-joint": "front end plug joint",
     "bad-class-name-0": "front end class name", "bad-class-name-65536": "front end class name",
     "bad-class-name-twice": "front end class name", "bad-class-name-text": "front end text",
+}
+# RQ-197 (version 35): the select model's and each select character's
+# equipment after their faces and hairs (items 7 and 17): the looks parts a
+# key may take, then one entry per appearance key of the package (a case's
+# `#N` gives its release N keys, appearance.bin's count), each refusal for
+# its reason.
+WORN_LOOKS = [(0, PART), (1, PART), (4, PART)]
+WORN_KEYS = [(), ("part", 0, 1, PART), ("part", 5, 0, PART), ("plug", 0), ("part", 1, 0, PART)]
+EQUIPMENT_CASES = {
+    "bad-version-33": blob(version=33),
+    "bad-version-34": blob(version=34),
+    "ok#5-select-equipment": blob(
+        select_equipment=equipment_raw(WORN_LOOKS, WORN_KEYS),
+        selects=u(2) + select_entry(2, [102], equipment=equipment_raw([(3, PART)], [
+            ("part", 3, 0, PART), (), (), ("plug", 0), ()])) + select_entry(4, [104], equipment=equipment_raw(
+                keys=[()] * 5))),
+    "ok#2-select-equipment-nothing": blob(select_equipment=equipment_raw(keys=[(), ()]),
+                                          selects=u(1) + select_entry(2, [102], equipment=equipment_raw(keys=[(), ()]))),
+    "ok#128-select-equipment-128": blob(select_equipment=equipment_raw(keys=[()] * 128)),
+    "bad#129-select-equipment-129": blob(select_equipment=equipment_raw(keys=[()] * 129)),
+    "bad#2-select-keys-fewer": blob(select_equipment=equipment_raw(keys=[()])),
+    "bad#2-select-keys-more": blob(select_equipment=equipment_raw(keys=[()] * 3)),
+    "bad-select-keys-without-appearance": blob(select_equipment=equipment_raw(keys=[()])),
+    "bad#1-select-character-keys-fewer": blob(select_equipment=equipment_raw(keys=[()]),
+                                              selects=u(1) + select_entry(2, [102])),
+    "bad-select-looks-part-slot-2": blob(select_equipment=equipment_raw([(2, PART)])),
+    "bad-select-looks-part-slot-5": blob(select_equipment=equipment_raw([(5, PART)])),
+    "bad-select-looks-parts-order": blob(select_equipment=equipment_raw([(1, PART), (0, PART)])),
+    "bad-select-looks-part-twice": blob(select_equipment=equipment_raw([(0, PART), (0, PART)])),
+    "bad-select-looks-parts-5": blob(select_equipment=equipment_raw([(0, PART), (1, PART), (3, PART), (4, PART),
+                                                                      (4, PART)])),
+    "bad-select-looks-part-skeleton": blob(select_equipment=equipment_raw([(0, BENT_PART)])),
+    "bad#1-select-key-kind-3": blob(select_equipment=u(0) + u(1) + u(3)),
+    "bad#1-select-key-slot-2": blob(select_equipment=equipment_raw(keys=[("part", 2, 0, PART)])),
+    "bad#1-select-key-slot-6": blob(select_equipment=equipment_raw(keys=[("part", 6, 0, PART)])),
+    "bad#1-select-key-robe-lower": blob(select_equipment=equipment_raw(keys=[("part", 1, 1, PART)])),
+    "bad#1-select-key-robe-2": blob(select_equipment=equipment_raw(keys=[("part", 0, 2, PART)])),
+    "bad#1-select-key-part-scale": blob(select_equipment=equipment_raw(keys=[("part", 0, 0, SCALED_PART)])),
+    "bad#1-select-key-plug-joint": blob(select_equipment=equipment_raw(keys=[("plug", 999)])),
+    "bad#1-select-character-key-joint": blob(select_equipment=equipment_raw(keys=[()]), selects=u(1) + select_entry(
+        2, [102], equipment=equipment_raw(keys=[("plug", 999)]))),
+    "bad#1-select-key-truncated": blob(select_equipment=equipment_raw(keys=[("plug", 0)])[:-1]),
+}
+EQUIPMENT_REASONS = {
+    "bad-version-33": "front end version", "bad-version-34": "front end version",
+    "bad#129-select-equipment-129": "count",
+    "bad#2-select-keys-fewer": "front end select keys", "bad#2-select-keys-more": "front end select keys",
+    "bad-select-keys-without-appearance": "front end select keys",
+    "bad#1-select-character-keys-fewer": "front end select keys",
+    "bad-select-looks-part-slot-2": "front end select looks part slot",
+    "bad-select-looks-part-slot-5": "front end select looks part slot",
+    "bad-select-looks-parts-order": "front end select looks part slot",
+    "bad-select-looks-part-twice": "front end select looks part slot",
+    "bad-select-looks-parts-5": "count",
+    "bad-select-looks-part-skeleton": "front end create part skeleton",
+    "bad#1-select-key-kind-3": "front end select key kind",
+    "bad#1-select-key-slot-2": "front end select key slot", "bad#1-select-key-slot-6": "front end select key slot",
+    "bad#1-select-key-robe-lower": "front end select key robe", "bad#1-select-key-robe-2": "front end select key robe",
+    "bad#1-select-key-part-scale": "front end create part skeleton",
+    "bad#1-select-key-plug-joint": "front end select key joint",
+    "bad#1-select-character-key-joint": "front end select key joint",
 }
 # RQ-175 (version 28): create's description text (item 16).
 DESC_AREA, DESC_CLASS, DESC_RACE = desc_at["area_character"], desc_at["btn_class_priest"], desc_at["btn_race_ka_tu"]
@@ -3110,6 +3267,7 @@ cases = {
     **TABLE_CASES,
     **SELECT_CASES,
     **LOOKS_CASES,
+    **EQUIPMENT_CASES,
     **DESCRIPTION_CASES,
     **DRESS_CASES,
     "ok-no-notice": blob(screen_data=cook_screens(specs=plain)[0]),
@@ -3296,15 +3454,15 @@ try:
     # RQ-165: model records and parts with influence tables (version 34, engine
     # 45), each refusal for its reason; the client skins every table as the
     # reference's four slots (every influence summed), not as the unsplit model.
-    for name, reason in (("bad@44-version-34-engine-44", "front end version"),
-                         ("bad@42-version-34-engine-42", "front end version"),
-                         ("bad-version-35", "front end version"),
-                         ("bad-influences-version-33", "front end model magic"),
-                         ("bad-influences-n3sj-version-33", "front end model magic"),
-                         ("bad-influences-part-version-33", "front end create part magic"),
-                         ("bad-influences-select-character-version-33", "front end model magic"),
-                         ("bad-influences-select-face-version-33", "front end create part magic"),
-                         ("bad-influences-select-character-hair-version-33", "front end create part magic"),
+    for name, reason in (("bad@44-version-36-engine-44", "front end version"),
+                         ("bad@42-version-36-engine-42", "front end version"),
+                         ("bad-version-37", "front end version"),
+                         ("bad-influences-version-35", "front end model magic"),
+                         ("bad-influences-n3sj-version-35", "front end model magic"),
+                         ("bad-influences-part-version-35", "front end create part magic"),
+                         ("bad-influences-select-character-version-35", "front end model magic"),
+                         ("bad-influences-select-face-version-35", "front end create part magic"),
+                         ("bad-influences-select-character-hair-version-35", "front end create part magic"),
                          ("bad-influences-sum", "weight sum"),
                          ("bad-influences-part-skeleton", "front end create part skeleton")):
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
@@ -3320,7 +3478,9 @@ try:
                        "ok-select-models-same-specialty-other-race": "2/104/3/-/0+0 4/104/3/-/0+0",
                        "ok-select-looks": "2/102/3/0/2+1 4/104/3/-/1+0",
                        "ok-influences-select-character": "2/102/3/-/0+0",
-                       "ok-influences-select-looks": "2/102/3/-/1+0"}, selects
+                       "ok-influences-select-looks": "2/102/3/-/1+0",
+                       "ok#5-select-equipment": "2/102/3/-/0+0 4/104/3/-/0+0",
+                       "ok#2-select-equipment-nothing": "2/102/3/-/0+0"}, selects
     names = {l.split(":")[0][len("class-names "):]: l.split(": ", 1)[1]
              for l in run.stdout.splitlines() if l.startswith("class-names ")}
     assert names == {"ok-select-models": "102=Rogue 104=Priest 112=Shadow Knight    ",
@@ -3340,6 +3500,25 @@ try:
         looked
     print("PASS front-end loader: the select model's and each select character's faces and hairs (version 33), "
           "%d refusals checked for their reasons" % (len(LOOKS_REASONS) + 2))
+    # RQ-197 (version 35): the select model's and each select character's
+    # equipment as loaded, each refusal for its reason, and what a listed
+    # character wears (hall_worn): the first key per KO part slot, the lower
+    # its looks part under a robe (key 2's), a helmet (key 3's) in the
+    # hair's place, each plug key once, a key past the package's or 0 none.
+    for name, reason in EQUIPMENT_REASONS.items():
+        line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
+        assert reason in line, (name, line)
+    assert any(l.startswith("refused bad#1-select-key-truncated:") for l in run.stdout.splitlines())
+    equipped = {l.split(":")[0][len("select-equipment "):]: l.split(": ", 1)[1]
+                for l in run.stdout.splitlines() if l.startswith("select-equipment ")}
+    assert equipped == {"ok#5-select-equipment": "0+1+4/-,p0r,p5,j0,p1 3/p3,-,-,j0,- -/-,-,-,-,-",
+                        "ok#2-select-equipment-nothing": "-/-,- -/-,-",
+                        "ok#128-select-equipment-128": "-/" + ",".join(["-"] * 128)}, equipped
+    worn = {l.split(":")[0][len("select-worn "):]: l.split(": ", 1)[1]
+            for l in run.stdout.splitlines() if l.startswith("select-worn ")}
+    assert worn["ok#5-select-equipment"] == "1,-1,-1,-1,-1,2/3 -1,4,-1,-1,-1,-1/- -1,-1,-1,-1,-1,-1/-", worn
+    print("PASS front-end loader: each select model's equipment (version 35), what a listed character wears, "
+          "%d refusals checked for their reasons" % (len(EQUIPMENT_REASONS) + 1))
     # RQ-194: each mesh vertex float the cook refuses, refused by the loader as a cooked float.
     for k in PAST_VERTICES:
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-hall-mesh-vertex-%d:" % k))
@@ -3357,11 +3536,11 @@ try:
     apart = max(abs(a - b) for (_, a), (_, b) in zip(reference, original))
     assert apart > 0.01, (reference, original)
     for name in ("ok-influences", "ok-influences-n3sj", "ok-influences-reference", "ok-influences-original",
-                 "ok-version-34-n3s1", "ok-influences-select-character", "ok-influences-select-looks"):
+                 "ok-version-36-n3s1", "ok-influences-select-character", "ok-influences-select-looks"):
         assert not any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
-    print("PASS front-end loader influences (RQ-165): version 34 model records and parts of N3SI and N3SJ load at "
-          "engine 45 and skin as the four-slot reference (%.3f from the unsplit model); version 34 below engine 45, "
-          "version 35, a table in version 33, a table of another sum and a part off its skeleton refused" % apart)
+    print("PASS front-end loader influences (RQ-165): version 36 model records and parts of N3SI and N3SJ load at "
+          "engine 45 and skin as the four-slot reference (%.3f from the unsplit model); version 36 below engine 45, "
+          "version 37, a table in version 35, a table of another sum and a part off its skeleton refused" % apart)
     # RQ-095: the zone's refusals, each for its own reason.
     for name, reason in (("bad-zone-totals", "front end zone totals"),
                          ("bad-zone-vertex-totals", "front end zone totals"), ("bad-zone-meshes", "count"),

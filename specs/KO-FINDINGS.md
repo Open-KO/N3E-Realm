@@ -419,6 +419,33 @@ The hall draws each listed character's own face and hair by its numbers, as 1097
 character from before the package's rules, or a row without that part, as the
 Wrinkle Tuarek's hair). A helmet in the hair's slot is RQ-197's (visible equipment).
 
+### 8.6 Each select character's visible equipment (RQ-197, 2026-11-05)
+
+Read in the 1298 binary (`KnightOnLine.exe`, sha256 `828ab0db…43a5e5`, n3e's
+`audit-2026-09-19` project; output under `build/ghidra/rq197/`, not committed) and the
+1097 image (`ko1097-unpacked.exe`, sha256 `82abb582…febaf`, RQ-074's project), with
+RQ-086's decompiles of `005fc6f0` and `005fca40`, RQ-066's of `005fb4f0` and RQ-198's
+of `0043ba10`, and the later source's `MsgRecv_AllCharacterInfo` and `AddChr`.
+
+| Observation | Where | Label |
+|---|---|---|
+| **1298's list parse.** A result byte; 1 goes on. Three records, at `this+0x38`, `+0xa0` and `+0x108`, each 0x68 bytes, read in order: the name (i16 length, then the bytes), race (u8, `+0x10`), class (i16, `+0x14`), level (u8, `+0x18`), face (u8, `+0x1c`), hair (u8, `+0x20`), zone (u8, `+0x24`), then per item a u32 id and an i16 durability: helmet (`+0x38`/`+0x3c`), upper (`+0x28`/`+0x2c`), cloak (`+0x40`/`+0x44`), right hand (`+0x58`/`+0x5c`), left hand (`+0x60`/`+0x64`), lower (`+0x30`/`+0x34`), gloves (`+0x48`/`+0x4c`), shoes (`+0x50`/`+0x54`). AddChr (`005fb4f0`) is called for slots 0, 1 and 2 when the record's name pointer (`+0x8`) is set. The order is the source's | 1298 `005ff2a0`; `GameProcCharacterSelect.cpp` `MsgRecv_AllCharacterInfo` | binary; source |
+| **The parts.** AddChr sets the upper, lower, gloves and shoes as part slots 0, 1, 3 and 4 from the record's items (1097 through `0043d0f0` with `+0x28`, `+0x30`, `+0x48`, `+0x50`; 1298 through `005fc6f0`), the looks row's part for a slot with no item; the helmet (`+0x38`) is set in slot 5 when its item resource has art (1097 `0043f990`'s lookup; 1298 the row's `+0x30` resource), else the hair by number. No function reads the cloak (`+0x40`) | 1097 `0043ba10`, `0043d0f0`; 1298 `005fb4f0`, `005fc6f0` | binary |
+| **A robe.** For the lower (part 1) when the upper's `Item_Org` robe byte is set (1298 `+0x41`, 1097 `+0x39`), AddChrPart names no file (`""`); with a name of length 0 it sets the looks row's own part (row `+0x34` + part × 0x10). So a robe draws the looks lower, not a bare one. 1298 exempts the El Morad races 11, 12 and 13 with an upper of kind 266 (upper / 10⁶); 1097 has no exemption (`0043d200`–`0043d277`). The source sets the lower to `""` and no part, unlike both binaries | 1298 `005fc6f0`; 1097 `0043d0f0`; `GameProcCharacterSelect.cpp` `AddChr` | binary; source |
+| **1097's plugs.** AddChr sets its class plugs from `ChrSelect` files (`00447b30(0)`, `(1)`) and never reads the hand items (`+0x58`, `+0x60`) | 1097 `0043ba10` | binary |
+| **1298's plugs.** AddChr sets no class plug; `005fca40` adds a hand's item as a plug when its `Item_Org` and `Item_Ext` rows exist (else returns), naming the file with `006157b0` and setting it with `0041b790` (`PlugSet`, no height scale): joint 12 for the right hand; for the left, 5 when the item's `Item_Org` class (`+0x40`) is 60 (a shield), else 7. The joint is written into the plug (`+0x34`, at `005fce0b`) only when the `Item_Org` max-durability field (`+0x4e`) is above 0; otherwise the branch at `005fcc73` jumps past it to `005fce0e` and the plug file's own joint stays. It also adds the item's dust overlay and weapon effect (`0045ccc0`, `00415370`) | 1298 `005fca40` | binary |
+
+**Decides (RQ-197):** `front-end.bin` version 35 carries, per select model, the looks
+parts a key may take and what each of the package's appearance keys draws (item 7):
+a part in its KO part slot (0, 1, 3, 4, or 5 for a helmet in the hair's place), with a
+robe flag on an upper that makes the lower draw its looks part, or a hand plug on its
+row's joint. The recipe's `select.item_plugs` is `none` for the 1097 choice (its AddChr
+draws class plugs and no hand item) and `draw` for the 1298 recipe. The client draws a
+listed character's `Character.appearance` keys: the first key per slot, the robe's
+looks lower, a helmet in place of the hair, each plug key once. Keys draw on the player
+race's select models only (Q122). Not drawn: 1298's dust overlay and weapon effect
+(Q120); a plug with durability 0 keeps the row's joint (Q121).
+
 ## 9. The front end per client (RQ-078, 2026-11-02)
 
 Which KO client a realm's front end looks and behaves like is the realm owner's

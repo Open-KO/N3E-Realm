@@ -183,6 +183,9 @@ class View {
       // RQ-176 (version 29): a create dress's hand plugs.
       for (const auto &dress : scene_at(k).dresses)
         for (const auto &plug : dress.plugs) use[plug.mesh.texture] = 2;
+      // RQ-197 (version 35): a select model's equipment keys' hand plugs.
+      for (const auto &key : scene_at(k).keys)
+        if (key.kind == FrontKey::Kind::plug) use[key.plug.mesh.texture] = 2;
     }
     for (size_t i = 0; i < textures.size(); ++i) {
       glBindTexture(GL_TEXTURE_2D, textures[i]);
@@ -211,6 +214,16 @@ class View {
         for (const auto &part : *set)
           out.push_back(texture(part.width, part.height, part.texture.data(), part.channels == 3));
       }
+      // RQ-197 (version 35): a select model's looks parts a key may take
+      // (set 3), then each key's part, by key (set 4; 0 for a key without one).
+      auto &own = looks.emplace_back();
+      for (const auto &l : scene.looks_parts)
+        own.push_back(texture(l.part.width, l.part.height, l.part.texture.data(), l.part.channels == 3));
+      auto &worn = looks.emplace_back();
+      for (const auto &key : scene.keys)
+        worn.push_back(key.kind == FrontKey::Kind::part ? texture(key.part.width, key.part.height,
+                                                                  key.part.texture.data(), key.part.channels == 3)
+                                                        : 0);
     }
     lit = program(R"(#version 330 core
 layout(location=0) in vec3 p;layout(location=1) in vec3 n;layout(location=2) in vec2 t;
@@ -260,6 +273,13 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
         auto &set = scene.emplace_back();
         for (const auto &plug : dress.plugs) set.push_back(upload(plug.mesh));
       }
+    }
+    // RQ-197 (version 35): each scene's equipment keys' hand plugs, by key
+    // (an empty buffer for a key without one).
+    for (size_t k = 0; k < scene_count(); ++k) {
+      auto &set = key_plugs.emplace_back();
+      for (const auto &key : scene_at(k).keys)
+        set.push_back(key.kind == FrontKey::Kind::plug ? upload(key.plug.mesh) : Buffer{});
     }
     // A further clip poses the model's own nodes (load_front_end checked them).
     for (size_t k = 0; k < scene_count(); ++k) {
@@ -324,6 +344,15 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     for (auto &model : fe.select_models)
       for (auto *set : {&model.scene.faces, &model.scene.hairs})
         for (auto &part : *set) part.texture.clear();
+    // RQ-197 (version 35): the select models' looks parts and key parts.
+    for (auto *scene : {&fe.select}) {
+      for (auto &l : scene->looks_parts) l.part.texture.clear();
+      for (auto &key : scene->keys) key.part.texture.clear();
+    }
+    for (auto &model : fe.select_models) {
+      for (auto &l : model.scene.looks_parts) l.part.texture.clear();
+      for (auto &key : model.scene.keys) key.part.texture.clear();
+    }
     for (auto *set : {&fe.create.faces, &fe.create.hairs, &fe.create.dress_parts})
       for (auto &part : *set) part.texture.clear();
     for (auto &model : fe.create_models)
@@ -339,6 +368,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     for (auto &set : race_plugs) sets.push_back(&set);
     for (auto &scene : dress_plugs)
       for (auto &set : scene) sets.push_back(&set);
+    for (auto &set : key_plugs) sets.push_back(&set);
     for (auto *set : sets)
       for (auto &m : *set) {
         glDeleteBuffers(1, &m.vbo);
@@ -626,6 +656,11 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // hall (RQ-005): the select character drawn (its index in the file's,
     // -1 the select model) and the plugs its model carries.
     int select = -1, plugs = 0;
+    // hall (RQ-197): the KO part slots drawn from the character's equipment
+    // keys (bit per slot), the looks parts drawn apart from the model (bit
+    // per slot) and the keys' hand plugs drawn.
+    uint32_t equipped = 0, own = 0;
+    int equipped_plugs = 0;
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) {
@@ -859,6 +894,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   std::vector<std::vector<Buffer>> race_plugs;
   // RQ-176 (version 29): per scene, per dress, its hand plugs' buffers.
   std::vector<std::vector<std::vector<Buffer>>> dress_plugs;
+  // RQ-197 (version 35): per scene, per equipment key, its hand plug's buffer.
+  std::vector<std::vector<Buffer>> key_plugs;
   std::vector<std::vector<Scene>> clips;  // per scene: each clip's poses
   Screen state = Screen::login;
   struct Message {
@@ -1587,7 +1624,14 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // hair), each skinned with the model's pose. RQ-198 (version 33): a hall
   // model draws the listed character `who`'s own face and hair by its
   // numbers, as AddChr sets them (1097 0043ba10, 1298 005fb4f0), none past
-  // its parts.
+  // its parts. RQ-197 (version 35): and dresses it in its equipment keys
+  // (the wire's Character.appearance) as AddChr dresses it in its items: a
+  // key's part in its KO part slot in place of the looks part (the first
+  // key per slot, as draw_appearance takes the first per equipment slot),
+  // the lower its looks part under a robe (1097 0043d0f0, 1298 005fc6f0),
+  // a helmet in place of the hair; each key's hand plug on its joint (1298
+  // 005fca40; a 1097 hall's keys carry none). A key the package does not
+  // have draws nothing.
   //
   // RQ-176 (version 29): a create model wears the dress of the specialty
   // whose row the last build took (dress_at): its own parts, or the
@@ -1607,10 +1651,28 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     if (dress && !dress->body)
       for (auto part : dress->parts)
         draw_skinned(scene.dress_parts[part], looks[2][part], pose, vp, model, mvp, box);
-    // The face and hair numbers: create's choice, a hall character's own.
+    // RQ-197: the keys the character wears, by KO part slot, and its plugs.
+    const auto dressed = who ? hall_worn(scene, who->appearance()) : HallWorn{};
+    const auto &on = dressed.part;
+    const auto &plugged = dressed.plugs;
+    uint32_t equipped = 0, own = 0;
+    for (size_t i = 0; i < scene.looks_parts.size(); ++i) {
+      const auto &l = scene.looks_parts[i];
+      if (on[l.slot] >= 0) continue;
+      draw_skinned(l.part, looks[3][i], pose, vp, model, mvp, box);
+      own |= 1u << l.slot;
+    }
+    for (size_t slot = 0; slot < on.size(); ++slot)
+      if (on[slot] >= 0) {
+        const auto at = size_t(on[slot]);
+        draw_skinned(scene.keys[at].part, looks[4][at], pose, vp, model, mvp, box);
+        equipped |= 1u << slot;
+      }
+    // The face and hair numbers: create's choice, a hall character's own
+    // (no hair under a helmet).
     constexpr uint64_t none = ~uint64_t(0);
     const uint64_t face = create ? choice.face : who ? who->face() : none;
-    const uint64_t hair = create ? choice.hair : who ? who->hair() : none;
+    const uint64_t hair = create ? choice.hair : who && on[5] < 0 ? who->hair() : none;
     const bool face_drawn = face < scene.faces.size(), hair_drawn = hair < scene.hairs.size();
     if (face_drawn) draw_skinned(scene.faces[face], looks[0][face], pose, vp, model, mvp, box);
     if (hair_drawn) draw_skinned(scene.hairs[hair], looks[1][hair], pose, vp, model, mvp, box);
@@ -1619,7 +1681,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     drawn_boxes.push_back({which == 0 ? 0u : create ? 2u : 1u, box, viewport, create ? scene_race(which) : 0,
                            face_drawn ? int(face) : -1, hair_drawn ? int(hair) : -1,
                            dress ? dress->specialty : 0u, dress && !dress->body ? int(dress->parts.size()) : -1,
-                           dress ? int(dress->plugs.size()) : 0, select_model_of(which), int(scene.plugs.size())});
+                           dress ? int(dress->plugs.size()) : 0, select_model_of(which), int(scene.plugs.size()),
+                           equipped, own, int(plugged.size())});
     const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : which == 2 ? create_plugs
                                                                                        : race_plugs[which - 3];
     auto attach = [&](const FrontPlug &plug, const Buffer &buffer) {
@@ -1629,6 +1692,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       draw_mesh(buffer, plug.mesh, vp, detail::mul(model, j));
     };
     for (size_t i = 0; i < plugs.size(); ++i) attach(scene.plugs[i], plugs[i]);
+    for (const auto at : plugged) attach(scene.keys[at].plug, key_plugs[which][at]);
     if (dress)
       for (size_t i = 0; i < dress->plugs.size(); ++i) attach(dress->plugs[i], dress_plugs[which][size_t(worn)][i]);
   }

@@ -2256,3 +2256,23 @@ reported the rogue's priest skills as the fault (2026-11-06 playtest); (c) remov
 class the create screen draws. A character with no specialty exists only in a
 package without create rules (every Moradon create has one, Q100), where the policy
 has no specialties either. The rogue's own skills are proposed as their own items.
+
+### Q126 — The weapon effect on the inventory preview
+
+RQ-209: the maintainer's 2026-11-06 playtest of the hosted 1097 realm found that the
+inventory paperdoll does not draw the weapon effect the character draws in the world
+(the fire on the Moradon blade, N3E2). KO's does not either: in 1097 and in 1298 the
+local player's plug setter gives the inventory model's plug no effect bundles, and a
+plug without them draws no effect; the dust is set on the world model alone
+(`specs/KO-FINDINGS.md` §10.12).
+
+Options:
+- (a) As KO: the paperdoll draws the worn keys' meshes, no weapon effect and no dust.
+- (b) Draw the world's effect (copies and tail) and dust on the paperdoll too, as a
+  realm-owner switch (a look no KO client has).
+
+**Default taken:** (a): KO's screens stay as KO draws them (Q61), and both readings
+agree. (b) is the maintainer's to choose; it would be its own item.
+
+**Decided (maintainer, 2026-11-06), RQ-209:** (a), "Keep KO's look": the paperdoll draws
+no weapon effect and no dust, as KO 1097 and 1298.

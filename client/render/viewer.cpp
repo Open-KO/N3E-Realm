@@ -5139,6 +5139,8 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
                   keys.assign(e.appearance().begin(),e.appearance().end());looks={e.face(),e.hair()};}
                 // RQ-221: the player's own face and hair, as KO's MyInfo sets
                 // them on the inventory model too (source PlayerMySelf.cpp).
+                // RQ-209: no weapon effect and no dust here, as KO's inventory
+                // model has neither (KO-FINDINGS §10.12).
                 n3e::draw_appearance(*detail,release.appearance,keys,0,[&](const n3e::DetailMesh&mesh,std::span<const uint32_t> indices){
                   auto posed=mesh.scene.skin(pose,indices);
                   for(size_t i=0;i<indices.size();++i){vertices.insert(vertices.end(),posed.begin()+i*8,posed.begin()+i*8+8);

@@ -1903,6 +1903,30 @@ the world (`client/render/navigation.h` `pointer_walk`). An item drag no longer
 stops the walk; it still takes the keys. A held pointer outside the client window
 still stops the walk (n3e policy, not read in KO).
 
+### 10.12 The inventory model draws no weapon effect and no dust (RQ-209, 2026-11-06)
+
+Read statically in the 1097 project of §8.1 (`build/ghidra/rq074/proj`,
+`ko1097-unpacked.exe`, `-readOnly -noanalysis`; the player and plug vtables read as
+words, `recover 00459ad0 00452b60 00443130 00447b30 00442de0 0044dc00 0045b490
+00443680 004436b0`) and in n3e's 1298 project (`audit-2026-09-19`, `KnightOnLine.exe`,
+`recover 00467b30`, `decompile 0045c6e0 00415370 00415910 00457150 0041b790`), with
+RQ-200's `004158d0` and RQ-203's `004535a0` and `0045d5f0`; output under
+`build/ghidra/rq209/`, not committed. Not run.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The player owns two characters.** The world's `CN3Chr` is at `+0x50`, the inventory model (the source's `m_ChrInv`) at `+0x718` in 1097 and `+0x8c0` in 1298; each holds its own plug objects (1097 `00447b30`, the source's `CN3Chr::PlugSet`, reloads the plug in its own vector `+0x188` through the plug's vtable `+8`; 1298 `0041b790`, vector `+0x190`) | 1097 `00459ad0`, `00447b30`; 1298 `00467b30`, `0041b790` | binary |
+| **The local player's plug setter sets the inventory plug without an effect.** 1097's (`00459ad0`, the local vtable `0058d088` entry `+0x2c`; the base `0058cf7c` holds `00452b60` there) sets the hand item's plug on `+0x718` (`00459bb3`–`00459bbb`), scales it and sets its joint, then calls the base setter `00452b60`. That one sets the same plug on the world model (`ECX = this + 0x50`, `00452c6b`–`00452c72`) and, when the item names one, its main and tail bundles with InitFX (`00443130`, trace colour `0xffffff00`) on that returned plug (`00452f23`–`00452f28`). 1298 is the same: `00467b30` (`006a4198` entry `+0x30`) on `+0x8c0`, then `0045c6e0`, whose InitFX (`00415370`, `0045cbe1`) takes the world plug (`0045c759`–`0045c768`) | 1097 `00459ad0`, `00452b60`; 1298 `00467b30`, `0045c6e0` | binary |
+| **Nothing else gives a plug its bundles.** 1097's InitFX has three callers: the plug load (`00442de0`, the `Temp_Plug_%d.N3PMesh` reader, with empty names, which clears them), the knights plug (`0044dc00`, `Item\ClanAddOn_%.3d_%d.n3cplug`, on the plug its virtual plug set returns, the world's) and `00452b60`. 1298's `00415370` has four: `00415020` (load), `00457150` (knights), `0045c6e0` and the hall's `005fca40` (§8.6) | 1097 `00443130` refs; 1298 `00415370` refs | binary |
+| **A plug draws its effect only with a main bundle.** 1097's plug Render (`00443680`, at `0058cec0` in the vtable that holds the plug load `00442de0`) draws the mesh (`00441dc0`) and calls `004436b0`, which returns unless the main bundle (`+0x1a0`) and its first part (`+0x1b0`) are set; 1097 has no `WeaponEffect` gate there. 1298's `00415910` returns the same way (`+0x1a4`, `+0x1b4`) | 1097 `00443680`, `004436b0`; 1298 `004158d0`, `00415910` | binary |
+| **The dust is set on the world model alone.** 1097's `004535a0` (not overridden in the local vtable, entry `+0x30`) reads the plugs at `+0x1d8` and the parts at `+0x1c8`, the world model's vectors (`+0x50` + `0x188`, + `0x178`); 1298's `0045d5f0` the same at `+0x1e0` and `+0x1d0` | 1097 `004535a0`; 1298 `0045d5f0` | binary |
+| **The source agrees.** `CPlayerMySelf::PlugSet` sets `m_ChrInv`'s plug, then returns `CPlayerBase::PlugSet`, which calls `InitFX` on `m_Chr`'s; `CN3CPlug::RenderFX` returns without `m_pFXMainBundle`; `InventoryChrRender` draws `m_ChrInv` with `RenderChrInRect` | source `PlayerMySelf.cpp`, `PlayerBase.cpp`, `N3Base/N3Chr.cpp` | source |
+
+**Decides (RQ-209):** the inventory preview draws the worn keys' meshes and nothing
+of the weapon effect (no FX-mesh copies, no tail) or the durability dust, in 1097 and
+in 1298, so the realm's paperdoll, which draws neither, already matches KO and stays
+as it is. Drawing them there would be a look KO does not have (Q126).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

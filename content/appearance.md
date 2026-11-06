@@ -461,9 +461,10 @@ Moradon draws it (RQ-206, the maintainer's choice, as 1097's world does), on
 all five of its keys (Q120).
 
 The maximum is the realm item's single one, where KO's world divides by
-`Item_Org`'s plus `Item_Ext`'s (Q120). Not drawn: the dust on the inventory
-preview (whether KO's preview character, drawn by `00457420`, carries it was
-not read; PQ-352), and 1298's early return from a hand's dust while the
+`Item_Org`'s plus `Item_Ext`'s (Q120). The inventory preview draws no dust, as
+KO's does not: the setter dusts the world model's plugs and parts alone (1097
+`004535a0`, 1298 `0045d5f0`; `specs/KO-FINDINGS.md` §10.12, RQ-209). Not
+drawn: 1298's early return from a hand's dust while the
 player's byte `+0x4a8` is set and `+0x4ac` is not −1 (1097 has no such test;
 what the state is was not read).
 Evidence: `tests/world_dust.py`, `tests/world_dust_live.py`.
@@ -738,6 +739,12 @@ bytes is refused until PQ-335 draws them. Nothing new is drawn and no package
 changes. Evidence.
 
 Not drawn yet: the coloured swing trail the trace colour is for (`00419060`),
-the hit spark (fx.tbl id + 2), the inventory preview's effect, and the unique,
-bow and Viper effects, whose bundles n3e's FX reader refuses (queue items after
-PQ-211).
+the hit spark (fx.tbl id + 2), and the unique, bow and Viper effects, whose
+bundles n3e's FX reader refuses (queue items after PQ-211).
+
+The inventory preview draws no weapon effect, as KO's does not (RQ-209): the
+local player's plug setter (1097 `00459ad0`, 1298 `00467b30`) sets the hand
+plug on the inventory model without the effect bundles, which only the world
+model's plug receives (1097 `00452b60`, 1298 `0045c6e0`), and a plug without
+them draws no effect (1097 `004436b0`, 1298 `00415910`;
+`specs/KO-FINDINGS.md` §10.12, Q126).

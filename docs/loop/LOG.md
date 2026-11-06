@@ -190,3 +190,4 @@ found with `git log --grep RQ-NNN`.
 | 2026-11-06 17:55 | RQ-215 | inbox | - | Maintainer pre-announcement requirement 3 (in session): power users coding agents succeed at common mods (quests, NPCs, models, monsters, drops, items); spike first. Filed after RQ-213 in the order written. |
 | 2026-11-06 18:00 | RQ-214 | inbox | - | Maintainer (in session): full item support can wait; moved after the pre-announcement items (RQ-215). |
 | 2026-11-06 18:13 | RQ-218 | inbox | - | Maintainer feedback (in session): the live suites Docker interface churn breaks page loads in Chromium on this machine; filed at the top (it disrupts the maintainer now). |
+| 2026-11-06 18:14 | RQ-218 | inbox | - | Maintainer (in session, from their host agent): the cause is D-230/PQ-460 (veth IPv6 link-locals); route chosen: the host setting net.ipv6.conf.default.addr_gen_mode=1, applied by the maintainer; RQ-218 now measures it and records D-230 closed. |

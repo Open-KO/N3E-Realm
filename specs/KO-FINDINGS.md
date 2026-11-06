@@ -515,6 +515,16 @@ the hosted package is unchanged until the maintainer chooses (Q120). The
 maximum is the realm item's, where KO's world sums `Item_Org` and `Item_Ext`
 (Q120).
 
+**Decides (RQ-206):** Moradon draws it (the maintainer's choice, 2026-11-06, as
+1097's `004535a0` does): its `realm-config.json` sets `world_dust` `draw`, so the
+hosted `effects.bin` is `N3E6` and the package hash changes. The cook's keys follow
+the setter's reach: a hand plug is a plug row on one of the player race's looks row
+hand joints (columns 18-20, the joints the plug set gives the right and left hands'
+plugs, source `PlugSet`; the setter dusts only those two plugs, never
+`PLUG_POS_BACK` or `PLUG_POS_KNIGHTS_GRADE`), an armour part a part row whose part
+positions are all part slots 0, 1, 3, 4 or 5 (the face, 2, is no item's). Every
+Moradon row qualifies.
+
 ## 9. The front end per client (RQ-078, 2026-11-02)
 
 Which KO client a realm's front end looks and behaves like is the realm owner's

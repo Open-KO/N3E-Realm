@@ -345,11 +345,15 @@ The KO adapter writes it where the realm owner chose it: `world_dust` `draw` in
 `games/<game>/realm-config.json` (default `none`; any other value is refused
 before the cook). `ko_fx_bake` then adds `Misc/Dust_Hard.dxt` and
 `Misc/Dust_Soft.dxt` from the client tree (256 × 256) to the effects' textures
-and lists every `appearance.json` row whose artwork is a KO hand plug or armour
-part (`ko_fx_bake.dust_keys`); the glow cook's 2145 additions (skeletal plugs
+and lists the `appearance.json` rows KO's setter dusts (`ko_fx_bake.dust_keys`,
+RQ-206): a `.n3cplug` row on one of the player race's hand joints (the
+`UPC_DefaultLooks` row's right, left and shield joints, columns 18-20; KO dusts
+the hands' plugs alone, never a back or knight's plug) and a `.n3cpart` row
+whose `parts` are all in the armour slots' part positions (upper, lower, hands,
+feet, helmet; never the face). The glow cook's 2145 additions (skeletal plugs
 and 2145 armour) take none, since 2233's own dust (`005756b0`) is unread.
-Moradon keeps `none`, so its package is unchanged; the hosted look is the
-maintainer's to choose (Q120).
+Moradon draws it (RQ-206, the maintainer's choice, as 1097's world does), on
+all five of its keys (Q120).
 
 The maximum is the realm item's single one, where KO's world divides by
 `Item_Org`'s plus `Item_Ext`'s (Q120). Not drawn: the dust on the inventory

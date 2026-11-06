@@ -2153,6 +2153,16 @@ line in `games/moradon/realm-config.json` and the three Moradon feature pins).
 Also not drawn: the dust of the glow cook's 2145 additions (2233's `005756b0`
 unread) and on the inventory preview.
 
+**Update (RQ-206):** the maintainer decided (2026-11-06, "Draw it, as 1097"): (b).
+`games/moradon/realm-config.json` sets `world_dust` `draw`, so the hosted world dusts
+worn items as 1097's `004535a0` does; `effects.bin` is `N3E6` and the three Moradon
+`--features` pins and the package hash change, so the next deploy is a new realm
+(Q63). The cook's keys are now what KO's setter dusts: a plug on the player race's
+hand joints (the looks row's right, left and shield joints; KO dusts the hands'
+plugs, never a back or knight's plug) and a part whose part positions are all the
+armour slots' (upper, lower, hands, feet, helmet; never the face). All five
+Moradon keys qualify.
+
 ### Q121 — A 1298 hand plug's joint when the item's durability field is 0
 
 RQ-197: 1298's `005fca40` writes the hand's joint (12 right, 7 left, 5 a class-60

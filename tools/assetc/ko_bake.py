@@ -253,7 +253,8 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
     # realm chose it: the package's own hand plug and armour part rows (KO's
     # durability setter covers hands and armour parts, 1298 0045d5f0, 1097
     # 004535a0), never the glow cook's 2145 additions below, whose 2233 dust
-    # (005756b0) is unread.
+    # (005756b0) is unread. RQ-206: a plug on the player race's hand joints and
+    # a part in the armour slots' part positions alone (ko_fx_bake.dust_keys).
     dust_rows=list(mappings) if world_dust else []
     if glow:
         # PQ-320: the glow package draws a row's glow_2233_source in place of its
@@ -448,9 +449,15 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         effects=json.loads(effect_definition.read_text())
         if set(extra_clips)&set(effects['clips']):raise ValueError('a cast effect clip key is taken: %r'%sorted(extra_clips))
         effects['clips'].update(extra_clips)
+        dust_keys=[]
+        if dust_rows:
+            import ko_player
+            dust_looks=ko_player.looks(ko_character.Assets(characters),ko_player.race())
+            dust_keys=ko_fx_bake.dust_keys(dust_rows,ko_player.hand_joints(dust_looks['row']),
+                                           dust_looks['positions'])
         report['effects']=ko_fx_bake.cook(source_assets,effects,root/'effects.bin',
                                           appearance=weapon_effects,keys=len(mappings),glow=glow_records,
-                                          dust=ko_fx_bake.dust_keys(dust_rows))
+                                          dust=dust_keys)
         manifest['presentation']['effects.bin']='effects.bin'
         import csv, io
         # PQ-224: a map from another install takes the name rules of the client

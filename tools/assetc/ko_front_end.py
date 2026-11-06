@@ -2352,12 +2352,6 @@ MAX_CREATE_PARTS = 32
 # dress per specialty of the race (create.bin's bound, create.MAX_SPECIALTIES).
 MAX_DRESS_PARTS = 64
 MAX_DRESSES = 16
-# The looks row's joints the plug set (1298 00467b30) attaches a hand item to:
-# the right hand (+0x108), the left (+0x10c) and a left-hand shield (+0x110),
-# columns 18, 19 and 20 of UPC_DefaultLooks (00635be0 lays a row out with a
-# string at 16 bytes, so the row's u32 key and 16 strings end at +0x104,
-# column 17; source GameDef.h iJointRH, iJointLH, iJointLH2).
-HAND_JOINTS = (18, 19, 20)
 # Item_Org's class of a shield (1298 00467b30 compares +0x40 with 60).
 SHIELD = 60
 # A part slot's looks row column (UPC_DefaultLooks parts 0..9, columns 4..13).
@@ -2494,7 +2488,7 @@ def dress_sets(row, sets, joints):
     at or past the count (source N3Chr.cpp CN3Chr::Render, MatrixGet), and
     the loader refuses either (a u32 below the model's joints)."""
     import ko_player
-    at, columns = {}, dict(zip(("right", "left", "shield"), HAND_JOINTS))
+    at, columns = {}, dict(zip(("right", "left", "shield"), ko_player.HAND_JOINTS))
     for hand, column in columns.items():
         try:
             at[hand] = int(row[column])

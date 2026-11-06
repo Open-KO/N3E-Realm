@@ -317,16 +317,35 @@ def appearance_effect(assets, texture, spec, index):
 DUST = ('Misc/Dust_Hard.dxt', 'Misc/Dust_Soft.dxt')
 
 
-def dust_keys(rows):
+# RQ-206: the KO part positions (ko_player.POSITIONS) the durability setter
+# dusts, the part slots of its armour item slots: upper, lower, gloves, shoes
+# and helmet (part slots 0, 1, 3, 4 and 5; 1298 0045d5f0, 1097 004535a0, the
+# source's DurabilitySet). The face (2) is never an item's.
+DUST_PARTS = ('upper', 'lower', 'hands', 'feet', 'hair')
+
+
+def dust_keys(rows, hands, positions):
     """RQ-203: the appearance keys (1-based, appearance.bin's order) of `rows`
-    whose artwork is a KO hand plug (.n3cplug) or armour part (.n3cpart, with
-    its `parts`), the two kinds KO's world durability setter dusts; a row of
-    any other artwork draws none."""
-    keys = []
+    that KO's world durability setter dusts. RQ-206: a hand plug, a .n3cplug
+    row on one of `hands` (the player looks row's hand joints,
+    ko_player.hand_joints: KO dusts the right and left hand's plug, never a
+    back or knight's plug), and an armour part, a .n3cpart row whose `parts`
+    (indices into `positions`, the KO part position of each of the player
+    model's body parts, ko_player.looks) all lie in DUST_PARTS. A row of any
+    other artwork or place draws none; a part index past `positions` is
+    refused."""
+    hands, keys = set(hands), []
     for key, row in enumerate(rows, 1):
         source = str(row.get('source', '')).casefold()
-        if source.endswith('.n3cplug') or (source.endswith('.n3cpart') and row.get('parts')):
-            keys.append(key)
+        if source.endswith('.n3cplug'):
+            if row.get('joint') in hands:
+                keys.append(key)
+        elif source.endswith('.n3cpart') and row.get('parts'):
+            parts = row['parts']
+            if any(type(i) is not int or not 0 <= i < len(positions) for i in parts):
+                raise ValueError('appearance key %d parts: the player model has %d body parts' % (key, len(positions)))
+            if all(positions[i] in DUST_PARTS for i in parts):
+                keys.append(key)
     return keys
 
 

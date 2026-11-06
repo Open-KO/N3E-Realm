@@ -12,14 +12,18 @@ textures and clips), with no KO data:
   reader (build/client/n3e-effects-check) takes the file, reports its dust,
   and refuses malformed ones (truncation, trailing bytes, a texture past the
   file, a duplicate key, a count of 0 or 17, a dust section under N3E5).
-- ko_fx_bake.dust_keys takes the rows a KO durability setter dusts: hand plugs
-  and armour parts.
+- ko_fx_bake.dust_keys takes the rows a KO durability setter dusts (RQ-206):
+  plugs on the looks row's hand joints and parts whose KO part positions are
+  all the armour slots' (upper, lower, hands, feet, helmet), never the face;
+  a part index past the model's body parts is refused.
 - realm-config.json's `world_dust` is `none` (the default) or `draw`, any other
-  value refused by name; the Moradon package keeps `none`, so its package is
-  unchanged (the hosted look is the maintainer's choice).
+  value refused by name; the Moradon package draws it (RQ-206, the
+  maintainer's choice, as 1097's world does).
 
-With the pinned KO tree (assets/ko; SKIP without it) ko_fx_bake.cook writes
-the two textures from the tree into an N3E6 the client reads.
+With the pinned KO tree (assets/ko; SKIP without it) the player race's looks
+row names hand joints 12, 7 and 5, so every Moradon row dusts, and
+ko_fx_bake.cook writes the two textures from the tree into an N3E6 the client
+reads.
 """
 import json
 import pathlib
@@ -93,15 +97,29 @@ def main():
         assert p.returncode != 0 and reason in p.stderr, (i, reason, p.stdout, p.stderr)
     print(f"PASS the client reads N3E6's dust and refuses {len(malformed)} malformed files", flush=True)
 
+    # A synthetic looks model: hand joints 12, 7 and 5 (right, left, shield)
+    # and body parts in KO's part positions, one with no hands part.
+    hands, positions = [12, 7, 5], ["upper", "lower", "face", "feet", "hair"]
     rows = [dict(item="a", slot=0, source="Item/1_2011_00_0.n3cplug", joint=12),
             dict(item="b", slot=4, source="Item/2_4102_10_0.N3CPart", parts=[0]),
             dict(item="c", slot=5, source="Item/x.n3cpart"),
             dict(item="d", slot=1, chrplug_2145="Item/1_7025_00_0.n3chrplug"),
-            dict(item="e", slot=1, source="Item/1_7025_00_0.n3cplug", joint=5)]
-    assert ko_fx_bake.dust_keys(rows) == [1, 2, 5], ko_fx_bake.dust_keys(rows)
+            dict(item="e", slot=1, source="Item/1_7025_00_0.n3cplug", joint=5),
+            dict(item="f", slot=2, source="Item/back.n3cplug", joint=30),  # a back plug: none
+            dict(item="g", slot=3, source="Item/face.n3cpart", parts=[2]),  # the face: none
+            dict(item="h", slot=6, source="Item/mask.n3cpart", parts=[4, 2]),  # helmet and face: none
+            dict(item="i", slot=7, source="Item/legs.n3cpart", parts=[1, 3]),  # lower and feet
+            dict(item="j", slot=8, source="Item/helm.n3cpart", parts=[4]),  # the helmet (hair's slot)
+            dict(item="k", slot=1, source="Item/1_7025_00_0.n3cplug")]  # no joint: none
+    assert ko_fx_bake.dust_keys(rows, hands, positions) == [1, 2, 5, 9, 10], \
+        ko_fx_bake.dust_keys(rows, hands, positions)
+    refused(lambda: ko_fx_bake.dust_keys([dict(item="x", slot=0, source="a.n3cpart", parts=[5])], hands,
+                                         positions), "appearance key 1 parts: the player model has 5 body parts")
     moradon = json.loads((ROOT / "games/moradon/appearance.json").read_text())
-    assert ko_fx_bake.dust_keys(moradon) == list(range(1, len(moradon) + 1)), moradon
-    print("PASS dust keys: hand plug and armour part rows, the Moradon package's every row", flush=True)
+    assert ko_fx_bake.dust_keys(moradon, hands, ["upper", "lower", "face", "hands", "feet", "hair"]) == \
+        list(range(1, len(moradon) + 1)), moradon
+    print("PASS dust keys: plugs on the hand joints and parts in the armour slots' positions alone (not a back "
+          "plug, the face or a part that covers it); the Moradon package's every row", flush=True)
 
     assert "world_dust" in front_end_choice.CONFIG_KEYS
     with tempfile.TemporaryDirectory() as tmp:
@@ -125,8 +143,8 @@ def main():
                 assert "world_dust must be one of none, draw" in str(error), error
             else:
                 raise AssertionError(value)
-    assert front_end_choice.world_dust(ROOT / "games/moradon") is False
-    print("PASS realm-config.json world_dust: none (default) or draw, others refused; Moradon keeps none",
+    assert front_end_choice.world_dust(ROOT / "games/moradon") is True
+    print("PASS realm-config.json world_dust: none (default) or draw, others refused; Moradon draws it",
           flush=True)
 
     tree = ROOT / "assets/ko"
@@ -134,6 +152,12 @@ def main():
         print("SKIP the KO cook: no pinned client tree at assets/ko (make ko-assets)", flush=True)
         return
     import ko_character
+    import ko_player
+    looks = ko_player.looks(ko_character.Assets(tree), ko_player.race(game=ROOT / "games/moradon"))
+    assert ko_player.hand_joints(looks["row"]) == [12, 7, 5], looks["row"]
+    assert ko_fx_bake.dust_keys(moradon, ko_player.hand_joints(looks["row"]), looks["positions"]) == \
+        list(range(1, len(moradon) + 1)), looks["positions"]
+    print("PASS the pinned tree's player looks row: hand joints 12, 7, 5; every Moradon row dusts", flush=True)
     definition = json.loads((ROOT / "games/moradon/effects.json").read_text())
     first = next(iter(definition["clips"]))
     definition = dict(clips={first: definition["clips"][first]}, bindings=[])

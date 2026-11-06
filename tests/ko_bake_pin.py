@@ -600,9 +600,17 @@ CLIENT = Path("assets/ko")
 # follows. Default features af26373a... -> 207af49d...; classic 3e1834a0... ->
 # 4c384684...; 1097 ca772af6... -> 855dee58.... The plain cooks and the
 # homelands keep their pins.
+# RQ-206 changed them again: games/moradon/realm-config.json's world_dust is
+# `draw` (Q120, as 1097's world 004535a0 dusts worn items), so effects.bin is
+# N3E6 with Misc/Dust_Hard.dxt and Misc/Dust_Soft.dxt (textures 176 and 177 of
+# 178) and the dust keys 1-5 (the four plugs on the Tuarek's hand joints 12, 7
+# and 5 and the upper armour part; KO-FINDINGS 8.6); the release index follows.
+# Default features 207af49d... -> f5c41ae6...; classic 4c384684... ->
+# 4b9bea80...; 1097 855dee58... -> 2a02a176.... The plain cooks and the
+# homelands keep their pins.
 PINS = {
     "plain": ([], "7f4a3d194954284e26cb72685d66d0e061cd887fb87109b25536de3654908b82"),
-    "features": (["--features"], "207af49d9366f5f1e20ccc32b84ecfb29fe3c7437c569b08a4738b4a52c92f01"),
+    "features": (["--features"], "f5c41ae6cb310aca156626611029321eb6423570d443dd58441233a796d82acb"),
 }
 OUT = Path("build/ko-bake-pin")
 # PQ-051: key -> (ko_start.row_digest of the zone's START_POSITION row, release).
@@ -623,13 +631,13 @@ INSTALL_1097 = Path("build/ko-reference/installer-1097")
 # PQ-223: the classic Moradon (ko_bake.py 210 --layout=classic), pinned as Moradon's are.
 CLASSIC_PINS = {
     "plain": ([], "41f021ea24a1991b4928c94657e077e67a36017bea3fa49c66c5c1d1aa6c95d2"),
-    "features": (["--features"], "4c384684f84657960efc70880ddaef444d77c6546fdea4259100cff1d6440e54"),
+    "features": (["--features"], "4b9bea800eb1cc0789f218df2c877a5eb63dfedd22fd02f90cf3f183b38df72d"),
 }
 INSTALL_1264 = Path("build/ko-reference/installer-1264")
 # PQ-224: the 1097 Moradon (ko_bake.py 21 --client=1097), pinned as Moradon's are.
 MORADON_1097_PINS = {
     "plain": ([], "ef6a59243cd2b8b8d434de5e8c76a999019528ef07e98e01107c3dfc027ca1f3"),
-    "features": (["--features"], "855dee5883df228578e87ba5c1b8c0de015e713194f7e24bb4ef70779375ffa7"),
+    "features": (["--features"], "2a02a176586a1a1dbc568b82fc9150950f4b4a1ec9a9c78d46a1b247a2769a1d"),
 }
 
 

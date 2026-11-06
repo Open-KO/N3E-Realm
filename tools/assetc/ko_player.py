@@ -30,6 +30,12 @@ SOURCE = 'Data/UPC_DefaultLooks.tbl.csv'
 KEY, JOINT, ANIMATION, PARTS = 0, 2, 3, slice(4, 10)
 POSITIONS = ('upper', 'lower', 'face', 'hands', 'feet', 'hair')
 FACE, HAIR = POSITIONS.index('face'), POSITIONS.index('hair')
+# The looks row's joints the plug set (1298 00467b30) attaches a hand item to:
+# the right hand (+0x108), the left (+0x10c) and a left-hand shield (+0x110),
+# columns 18, 19 and 20 of UPC_DefaultLooks (00635be0 lays a row out with a
+# string at 16 bytes, so the row's u32 key and 16 strings end at +0x104,
+# column 17; source GameDef.h iJointRH, iJointLH, iJointLH2).
+HAND_JOINTS = (18, 19, 20)
 
 
 def clip_indices(locomotion=False, ready=False, rest=False, combat=False):
@@ -107,6 +113,19 @@ def looks(assets, entry, face=0, hair=0):
     definition = dict(name=entry['looks'], joint=row[JOINT], animation=row[ANIMATION], parts=parts,
                       collision=[], split=[-1]*4, extras=[])
     return dict(row=row, definition=definition, positions=positions)
+
+
+def hand_joints(row):
+    """The joints of a looks `row` (looks()' row) that KO attaches a hand
+    item's plug to (HAND_JOINTS: right, left, left-hand shield), as ints;
+    refuses a row without them."""
+    joints = []
+    for column in HAND_JOINTS:
+        try:
+            joints.append(int(row[column]))
+        except (IndexError, ValueError):
+            raise ValueError('%s row %s: no hand joint in column %d' % (SOURCE, row[KEY] if row else '?', column))
+    return joints
 
 
 def cook(root, out, locomotion=False, ready=False, rest=False, combat=False, race_code=None, game=GAME):

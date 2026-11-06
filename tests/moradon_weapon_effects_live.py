@@ -6,7 +6,10 @@ row 48, Burning +8), whose extension names fx.tbl effect 12001
 turns the blade plug's FX mesh into an N3E2 appearance effect (ko_weapon_fx.py),
 since PQ-376 (D-200) in N3E5 with 1298's alpha-list sort record: the plug
 origin and the FX mesh's y extent (00415910), each tail spark keyed on its own
-(004840b0). The fire effect blends with destination ONE on both draws, so its
+(004840b0). Since RQ-206 the realm draws the world's dust overlay
+(realm-config.json world_dust draw), so the file is N3E6 (N3E5 whose sort list
+may be empty, then the dust section; RQ-219): the blade's sort records must
+still be there. The fire effect blends with destination ONE on both draws, so its
 pixels do not depend on that order.
 
 Two fresh accounts equip the blade in the right hand over the wire. With
@@ -57,13 +60,19 @@ state = moradon_stack.state()
 package = (root / moradon_stack.PACKAGE).resolve()
 recipe = json.loads((package / 'recipe.json').read_text())['manifest']
 assert state['release'] == (package / 'release.sha256').read_text().strip()
-assert (package / 'effects.bin').read_bytes()[:4] == b'N3E5', 'cook the Moradon package with PQ-376'
+# N3E5 since PQ-376, N3E6 since RQ-206 where the realm draws the world's dust
+# overlay (RQ-219: moradon_stack.effects_magic checks the cook's dust record).
+cooked = json.loads(moradon_stack.PROVENANCE.read_text())['effects']
+magic = moradon_stack.effects_magic({'effects': cooked})
+assert (package / 'effects.bin').read_bytes()[:4] == magic, \
+    f'cook the Moradon package with PQ-376 and the realm\'s world_dust choice ({magic.decode()})'
 # PQ-376: each of the blade's effects sorts its copies at the plug origin plus
-# the Short Blade FX mesh's y extent (0.833 m, PQ-373 claim 14).
-effects = json.loads(moradon_stack.PROVENANCE.read_text())['effects']['appearance']
+# the Short Blade FX mesh's y extent (0.833 m, PQ-373 claim 14); N3E6's sort list
+# may be empty, so the records must still be cooked under the dust section.
+effects = cooked['appearance']
 assert effects and all(abs(e['sort']['bias'] - .833) < 1e-3 for e in effects), effects
-print(f"PASS Moradon package: effects.bin is N3E5; the blade's {len(effects)} weapon effects carry 1298's sort "
-      f"record, bias {effects[0]['sort']['bias']:.4f} (the FX mesh's y extent)", flush=True)
+print(f"PASS Moradon package: effects.bin is {magic.decode()}; the blade's {len(effects)} weapon effects carry "
+      f"1298's sort record, bias {effects[0]['sort']['bias']:.4f} (the FX mesh's y extent)", flush=True)
 # PQ-361 (D-196): the blade's 1298 tooltip head, the package's only one.
 UPGRADE, WHITE = 0xc87cc7, 0xffffff
 HEAD = [('(Upgrade Item)', UPGRADE), ('One-handed Sword', WHITE)]

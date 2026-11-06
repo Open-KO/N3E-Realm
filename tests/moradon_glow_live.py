@@ -71,11 +71,12 @@ state = moradon_stack.state()
 package = (moradon_stack.WORK / 'packages/moradon-glow2233').resolve()
 assert state['release'] == (package / 'release.sha256').read_text().strip(), 'the stack must serve the glow package'
 recipe = json.loads((package / 'recipe.json').read_text())['manifest']
-# N3E3, or since PQ-342 N3E4 (the Azagai tail's camera-distance particle rules),
-# or since PQ-376 N3E5 (the 1298 blade's alpha-list sort records).
-assert (package / 'effects.bin').read_bytes()[:4] in (b'N3E3', b'N3E4', b'N3E5'), \
-    'cook the Moradon package with --glow-2233'
 provenance = json.loads((moradon_stack.WORK / 'ko-moradon-glow2233/provenance.json').read_text())
+# N3E3, or since PQ-342 N3E4 (the Azagai tail's camera-distance particle rules),
+# or since PQ-376 N3E5 (the 1298 blade's alpha-list sort records), or since
+# RQ-206 N3E6 where the realm draws the world's dust overlay (RQ-219).
+assert (package / 'effects.bin').read_bytes()[:4] == moradon_stack.effects_magic(provenance), \
+    'cook the Moradon package with --glow-2233'
 glows = provenance['glow_2233']['glow']
 # The skeletal plug grades' glows (PQ-337) are moradon_skeletal_plug_live's,
 # the Krowaz Assassin parts' (PQ-319) moradon_armour_live's.

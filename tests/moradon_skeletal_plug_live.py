@@ -329,12 +329,15 @@ assert [(e['key'], e['fx_vertices'], e['fx_triangles'], e['tail_drawn']) for e i
 RULES = [(20, 40.0, 70.0), (20, 40.0, 70.0), (11, 20.0, 50.0), (11, 20.0, 50.0)]
 assert all([(r['count'], r['near'], r['far']) for r in a['tail_2233']['thinning']] == RULES
            for a in drawn.values()), drawn
-# N3E4 rules; since PQ-376 the file is N3E5 (the 1298 blade's sort records)
+# N3E4 rules; since PQ-376 the file is N3E5 (the 1298 blade's sort records),
+# since RQ-206 N3E6 where the realm draws the world's dust overlay (RQ-219),
 # and the 2233 effects carry no sort record.
-assert (package / 'effects.bin').read_bytes()[:4] == b'N3E5', 'cook the glow package with PQ-376'
+magic = moradon_stack.effects_magic(provenance)
+assert (package / 'effects.bin').read_bytes()[:4] == magic, 'cook the glow package with PQ-376'
 assert all('sort' not in a for a in drawn.values()), drawn
 print(f"PASS PQ-342: the Azagai tail's four particle parts carry 00592900's camera-distance rules {RULES} (pool, "
-      f"near, far) as N3E4 rules on its clip (N3E5 since PQ-376; no sort record on the 2233 effects)", flush=True)
+      f"near, far) as N3E4 rules on its clip ({magic.decode()} since PQ-376 and RQ-206; no sort record on the "
+      f"2233 effects)", flush=True)
 print("PASS the glow package carries the <selfname>'s Azagai on both upgrade paths: the normal +10 (1110432510: "
       "Item_Org 1110432000, column 40 = 1, Item_Ext_9 row 1510, attribute 4) without a glow record, and the reverse "
       "+1, +10 and +30 (1110532501, 1110532510, 1110532600: Item_Ext_33 rows 1501, 1510 and 1600, attribute 12, "

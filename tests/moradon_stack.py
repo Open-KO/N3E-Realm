@@ -12,6 +12,7 @@ build/live-ko/work so it never replaces the package a persistent stack mounts.
 """
 import json
 import os
+import sys
 from pathlib import Path
 
 STATE_PATH = Path(os.environ.get("N3E_MORADON_STATE", "build/moradon-demo/session.json"))
@@ -25,3 +26,23 @@ PROVENANCE = WORK / "ko-moradon/provenance.json"
 def state():
     """{'port', 'realm', 'release', 'zone'} of the stack under test."""
     return json.loads(STATE_PATH.read_text())
+
+
+def effects_magic(provenance):
+    """RQ-219: the magic of effects.bin in a Moradon feature package (default,
+    classic, 1097, glow2233) cooked under the realm's current choice: N3E5
+    since PQ-376 (1298's alpha-list sort records), N3E6 since RQ-206 where
+    games/moradon/realm-config.json sets `world_dust` draw (RQ-203: N3E5 whose
+    sort list may be empty, then the dust section). The cook's `provenance`
+    (its 'effects' record) must agree: a dust record with KO's two textures and
+    at least one key exactly when the file is N3E6."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools/assetc"))
+    import front_end_choice
+    import ko_fx_bake
+    dust = front_end_choice.world_dust(Path("games/moradon"))
+    record = provenance["effects"].get("dust")
+    if dust:
+        assert record and record["textures"] == list(ko_fx_bake.DUST) and record["keys"], record
+    else:
+        assert record is None, record
+    return b"N3E6" if dust else b"N3E5"

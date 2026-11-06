@@ -193,6 +193,32 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    place of the looks part, under a robe upper the lower's looks part, a
    helmet in place of the hair, and each plug key once on its joint after the
    model's plugs; a key 0 or past the model's keys draws nothing.
+   RQ-200 (Q120; `specs/KO-FINDINGS.md` §8.6): a key may also be 3, a hand
+   plug as 2 whose file has an FX mesh, followed by the geometry its item's
+   weapon effect draws on, every point in the plug's joint space and rigid to
+   it: a copy count (1–4), each copy its jitter weight (−1..1), frame offset
+   (0–63), vertex count (3–3072, a triangle list; 8192 in all) and vertices
+   (x, y, z, u, v), then the jitter axis's origin and tip, the tail box's
+   origin and x, y, z edge ends and the sort origin (each coordinate within
+   1000, a UV within 1024): an N3E2 record's geometry
+   (`content/presentation-events.md`). A reader before RQ-200 refuses kind 3
+   (a key kind above 2), so the file stays version 35. 1298's `005fca40`
+   sets the item's effect on the plug (`00415370`, its id as the world's
+   `0045ccc0` picks it); the hall's Render (`005fb1c0`) draws each character
+   (`004196a0`), whose plug draw (`004158d0`) puts the FX mesh copies and tail
+   sparks in the frame's alpha list while `Option.ini` `WeaponEffect.
+   EffectVisible` is on (`00415910`), and flushes that list after the windows
+   (`0043dd80`). The cook writes kind 3 for a hand plug key whose plug file
+   has an FX mesh: the world's rule (`ko_weapon_fx.placed`) on an identity
+   joint at 1.8 m, so with no height scale, as 1298's hall sets the plug
+   (`0041b790`) and as the plug's mesh is written; the sort origin is the
+   plug origin. The client draws, for each drawn plug key of kind 3 whose
+   key has an `effects.bin` appearance effect, that effect (its frames,
+   material, timing, jitter rate and tail) on the hall plug's geometry on
+   its joint (the copies only where the record has copies), its copies and
+   tail sparks in the alpha flush with the zone's alpha parts, far to near
+   (the world's effect pass, PQ-376); none without `effects.bin` or with the
+   switch off.
 8. The create models (version 24, RQ-158): a count (1–32), then per race its
    race code (1–65535, each once) and its model and plugs (version 2):
    `CGameProcCharacterCreate`'s player (`InitChr`: the race's `UPC_DefaultLooks`
@@ -724,9 +750,12 @@ characters, a class name for specialty 0, above 65535 or named twice, more
 than 64 class names or a text that is not printable ASCII, a select model's
 (version 35) looks part count above 4, a looks part slot other than 0, 1, 3
 or 4 or not after the last, a key count other than the release's appearance
-key count, a key kind above 2, a key part slot other than 0, 1, 3, 4 or 5, a
+key count, a key kind above 3 (RQ-200; above 2 before), a key part slot other than 0, 1, 3, 4 or 5, a
 robe flag above 1 or set on a slot other than 0, a key plug joint outside the
-model's joints (every version before 35 is refused since RQ-197), and every
+model's joints (every version before 35 is refused since RQ-197), a key
+effect's (RQ-200) copy count outside 1–4, jitter weight outside −1..1, frame
+offset above 63, copy not a triangle list of 3–3072 vertices or vertices
+past 8192 in all, coordinate past 1000 or UV past 1024, and every
 reference, count and bound above, truncation or trailing bytes.
 
 ### Influence tables (version 36, engine 45; RQ-165, RQ-005, RQ-198, RQ-197)
@@ -1156,10 +1185,18 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   its item alone. RQ-197: the recipe's `item_plugs` is `draw`, so each worn
   hand plug key draws on its row's joint (12 a right hand, 7 a left, 5 a
   shield, as `005fca40` picks), and the worn part keys in their KO part
-  slots (`005fb4f0`, `005fc6f0`; item 7). Not drawn: the item's dust overlay
-  and weapon effect that `005fca40` adds (`0045ccc0`, `00415370`), and KO
-  keeps the plug file's own joint for an item whose durability field is 0
-  (`005fce0b` is skipped), where the realm draws the row's joint (Q121). Its clips by role: front 1 (20–300 at 30 frames a
+  slots (`005fb4f0`, `005fc6f0`; item 7). RQ-200: a worn hand plug draws its
+  item's weapon effect, the package's `effects.bin` record for the key on the
+  hall plug's FX mesh (`005fca40` → `00415370`; item 7): the blade (key 1, the
+  Burning Short Blade +8's fire, content/appearance.md) and, where an effect
+  record names it, the two-hander (both plugs have an FX mesh; the shield's
+  has none). Not drawn: the item's dust overlay, which `005fca40` picks from
+  the item's durability against its `Item_Org` maximum (`Misc/Dust_Hard.dxt`
+  below 31 %, `Misc/Dust_Soft.dxt` below 71 %, none at 71 % and above) and
+  sets on the plug (`00414470`), since the realm's list carries no durability
+  (Q120); and KO keeps the plug file's own joint for an item whose durability
+  field is 0 (`005fce0b` is skipped), where the realm draws the row's joint
+  (Q121). Its clips by role: front 1 (20–300 at 30 frames a
   second), start 2 (394–466 at 25) and rest 0 (180–220 at 25), each over its
   record's 0.25 s but the start's, over 0.6 s (`005fe7c0`). Clip 2's last frames
   (458–466) are past the joint's 228 keys at 15 a second; KO leaves the joints

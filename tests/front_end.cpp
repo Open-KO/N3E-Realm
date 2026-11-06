@@ -1080,7 +1080,8 @@ int main(int argc, char **argv) {
       // RQ-197 (version 35): select-equipment NAME: per select model (item
       // 7's, then each item 17's), its looks part slots (+-joined, `-` none)
       // and each key (`-` nothing, p<slot> a part, `r` a robe, j<joint> a
-      // plug), when the release has keys; select-worn NAME: what the select
+      // plug, then RQ-200's f<copies> for its weapon effect's geometry),
+      // when the release has keys; select-worn NAME: what the select
       // model's parts and plugs are for three sets of worn keys (hall_worn).
       if (!release.appearance.empty()) {
         std::cout << "select-equipment " << release.root.filename().string() << ":";
@@ -1095,6 +1096,8 @@ int main(int argc, char **argv) {
             if (key.kind == n3e::FrontKey::Kind::none) std::cout << "-";
             if (key.kind == n3e::FrontKey::Kind::part) std::cout << "p" << key.slot << (key.robe ? "r" : "");
             if (key.kind == n3e::FrontKey::Kind::plug) std::cout << "j" << key.plug.joint;
+            // RQ-200: a plug's weapon effect geometry, f<copies>.
+            if (key.effect) std::cout << "f" << key.effect->copies.size();
           }
         };
         print(fe.select);

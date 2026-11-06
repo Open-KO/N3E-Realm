@@ -1068,8 +1068,11 @@ object files the pinned tree lacks (`Object/obj_war_duntree01_ip00`–`ip02`,
     (content/front-end.md items 7 and 17, N3FE version 33; KO-FINDINGS §8.5).
   - Done in RQ-197: each character's visible equipment, its appearance keys as
     AddChr sets the list's items (content/front-end.md items 7 and 17, N3FE
-    version 35; KO-FINDINGS §8.6). Not drawn: 1298's select weapon effects and
-    dust overlay (Q120).
+    version 35; KO-FINDINGS §8.6). Not drawn: 1298's select dust overlay
+    (Q120).
+  - Done in RQ-200: 1298's hall draws a worn hand plug's weapon effect, the
+    package's `effects.bin` record on the plug's own FX mesh (content/front-end.md
+    item 7, key kind 3; KO-FINDINGS §8.6).
 - **RQ-006 (nation).**
   - The login answer's nation 0 opens nation select. The question is 10420, with OK
     and Cancel; Back returns to the server list.

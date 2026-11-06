@@ -187,7 +187,10 @@ LOOKS = "looks=1/2,3/1,0/-1"
 # upper is the key's and no looks upper; the rogue in none, its looks upper
 # apart; race 0 in key 5 and key 9, past Moradon's five (nothing).
 WORN_1097 = "worn=1/0/0,0/1/0,1/0/0"
-HALL_1097 = "models=-1,0,-1 plugs=1,2,1 classes=Priest|Rogue|Unknown_Class " + LOOKS + " " + WORN_1097
+# RQ-200: no hand plug, so no weapon effect (fx per slot, the frame's tail
+# links).
+HALL_1097 = ("models=-1,0,-1 plugs=1,2,1 classes=Priest|Rogue|Unknown_Class " + LOOKS + " " + WORN_1097 +
+             " fx=0,0,0 tails=0")
 
 # RQ-078: every front end games/moradon offers (front-ends.json) cooks twice to
 # the same bytes and the client loader takes it; the one realm-config.json
@@ -732,7 +735,8 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     assert got == want, (size, {k: (got.get(k), v) for k, v in want.items() if got.get(k) != v})
     assert set(shots) == {"login", "login-waiting", "realms", "realms-unnamed", "select-1", "select-2", "select-3", "create",
                           "loading-start", "loading-world", "message", "message-titled", "message-exit", "logo-0",
-                          "logo-1", "logo-2", "logo-fade", "create-desc-open", "create-desc-hover"}, shots.keys()
+                          "logo-1", "logo-2", "logo-fade", "create-desc-open", "create-desc-hover",
+                          "select-worn"}, shots.keys()
 
     # RQ-005 (version 31): a Tuarek priest, a Tuarek rogue and a race 0
     # character in the hall, each drawn as AddChr picks by race and class
@@ -1202,10 +1206,20 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     # each character's own face and hair (005fb4f0's record +0x1c and +0x20).
     # RQ-197 (KO-FINDINGS 8.6): the priest's key 1 blade drawn as its hand
     # plug (select.item_plugs draw, 005fca40), as 1097's is not; the parts as
-    # on the 1097 choice.
+    # on the 1097 choice. RQ-200 (Q120): with its weapon effect (005fca40 ->
+    # 00415370, drawn by 004158d0 -> 00415910 in the alpha flush 0043dd80):
+    # the package's effects.bin record for key 1 (the Moradon blade's fire,
+    # three copies and two tail links) on the hall plug's own FX mesh, whose
+    # first copy's centre lies on the blade (within its mesh's box).
     hall = re.search(r"^FRONT_HALL (.*)$", run.stdout, re.M)
     assert hall and hall.group(1) == ("models=-1,-1,-1 plugs=0,0,0 classes=Priest|Rogue|Unknown_Class " + LOOKS +
-                                      " worn=1/0/1,0/1/0,1/0/0"), (size, hall and hall.group(1))
+                                      " worn=1/0/1,0/1/0,1/0/0 fx=1,0,0 tails=2"), (size, hall and hall.group(1))
+    fx = re.findall(r"^FRONT_HALL_FX slot=(\d+) key=(\d+) copies=(\d+) centre=(\S+) joint=(\S+) box=(\S+)$",
+                    run.stdout, re.M)
+    assert [f[:3] for f in fx] == [("0", "1", "3")], (size, fx)
+    centre, joint, box = ([float(x) for x in v.split(",")] for v in fx[0][3:])
+    assert all(box[k] - 0.02 <= centre[k] <= box[3 + k] + 0.02 for k in range(3)), (size, fx)
+    assert 0 < math.dist(centre, joint) < 1.5, (size, fx)
     # The bar's art is drawn there: its three backdrop images span it.
     art = region(shots["select-1"][0], (x0, y0 + 2, x0 + bar_w, y0 + bar_h - 2))
     assert len(set(art)) > 50 and sum(p == b"\0\0\0" for p in art) < len(art) // 20, (size, len(set(art)))

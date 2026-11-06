@@ -3324,7 +3324,43 @@ FrontEnd load_front_end(const Release &release) {
   // (0, 1, 3, 4, or 5, a helmet in the hair's place), robe (0 or 1, an
   // upper's alone: the lower then draws its looks part, 1097 0043d0f0,
   // 1298 005fc6f0) and the part; 2 a hand plug (1298 005fca40), a joint of
-  // the model and a mesh in its space.
+  // the model and a mesh in its space; 3 (RQ-200) a hand plug as 2, then the
+  // geometry its item's weapon effect draws on, in the joint's space (1298
+  // 005fca40 -> 00415370; 004158d0 -> 00415910): a copy count (1-4), each
+  // copy its jitter weight (-1..1), frame offset (0-63), vertex count (3-3072,
+  // a triangle list; 8192 in all) and vertices (x, y, z, u, v), then the
+  // jitter axis's origin and tip, the tail box's origin and edge ends and the
+  // sort origin, each coordinate within 1000 (a UV within 1024), as N3E2's.
+  auto plug_effect = [&](FrontKey &key) {
+    auto &e = key.effect.emplace();
+    const auto point = [&] {
+      const auto p = r.floats<3>();
+      for (const float x : p) need(std::isfinite(x) && std::abs(x) <= 1000, "front end select key effect position");
+      return V{p[0], p[1], p[2]};
+    };
+    const auto copies = r.count(4);
+    size_t vertices = 0;
+    for (uint32_t i = 0; i < copies; ++i) {
+      AppearanceEffect::Copy c;
+      c.jitter = r.f();
+      need(std::abs(c.jitter) <= 1, "front end select key effect jitter weight");
+      c.frame_offset = r.count(63, 0);
+      const auto n = r.count(3072, 3);
+      need(n % 3 == 0, "front end select key effect triangles");
+      vertices += n;
+      need(vertices <= 8192, "front end select key effect vertex budget");
+      for (uint32_t k = 0; k < n; ++k) {
+        const auto p = point();
+        const auto uv = r.floats<2>();
+        need(std::abs(uv[0]) <= 1024 && std::abs(uv[1]) <= 1024, "front end select key effect UV");
+        c.vertices.push_back({p[0], p[1], p[2], uv[0], uv[1]});
+      }
+      e.copies.push_back(std::move(c));
+    }
+    for (auto &p : e.jitter) p = point();
+    for (auto &p : e.tail_box) p = point();
+    e.sort_origin = point();
+  };
   auto equipment = [&](FrontScene &scene) {
     const auto looks = r.count(4, 0);
     for (uint32_t i = 0; i < looks; ++i) {
@@ -3341,8 +3377,8 @@ FrontEnd load_front_end(const Release &release) {
     for (uint32_t i = 0; i < keys; ++i) {
       FrontKey key;
       const auto kind = r.u();
-      need(kind <= 2, "front end select key kind");
-      key.kind = FrontKey::Kind(kind);
+      need(kind <= 3, "front end select key kind");
+      key.kind = kind == 3 ? FrontKey::Kind::plug : FrontKey::Kind(kind);
       if (key.kind == FrontKey::Kind::part) {
         key.slot = r.u();
         need(key.slot <= 5 && key.slot != 2, "front end select key slot");
@@ -3354,6 +3390,7 @@ FrontEnd load_front_end(const Release &release) {
         key.plug.joint = r.u();
         need(key.plug.joint < scene.model.joints.size(), "front end select key joint");
         key.plug.mesh = mesh();
+        if (kind == 3) plug_effect(key);
       }
       scene.keys.push_back(std::move(key));
     }

@@ -2091,6 +2091,18 @@ Options:
 all (`0043ba10`), and the 1298 recipe is not offered (RQ-088). Proposed as a
 follow-up item.
 
+**Update (RQ-200):** the weapon effect is drawn. A hall hand plug whose file has
+an FX mesh carries its effect's geometry in its joint's space (`front-end.bin` key
+kind 3, version 35 kept), and the hall draws the key's `effects.bin` record on it
+with the world's effect pass, so no effect data is copied into `front-end.bin`
+(neither option above as written: (b)'s records stay in `effects.bin`, only the
+plug's own geometry is new). The dust overlay is still not drawn: `005fca40` picks
+it from the hand item's durability against its `Item_Org` maximum
+(`specs/KO-FINDINGS.md` §8.6), and the realm's `Character` carries no durability.
+Default kept for it: (a), no overlay, until a wire change carries each worn hand
+item's durability ratio (proposed as a follow-up item; the world's plugs draw no
+dust either).
+
 ### Q121 — A 1298 hand plug's joint when the item's durability field is 0
 
 RQ-197: 1298's `005fca40` writes the hand's joint (12 right, 7 left, 5 a class-60

@@ -1372,8 +1372,9 @@ def looks_parts(faces=(), hairs=()):
 def equipment_raw(looks=(), keys=(), count=None):
     """Version 35 (RQ-197): a select model's equipment: its looks parts a key
     may take, each (slot, part), then a key count (`count`, else the keys')
-    and each key: () nothing, ("part", slot, robe, part) or ("plug", joint)
-    with the demo mesh."""
+    and each key: () nothing, ("part", slot, robe, part), ("plug", joint)
+    with the demo mesh or (RQ-200) ("effect", joint, geometry): a plug with
+    its weapon effect's geometry (plug_effect_raw)."""
     out = u(len(looks)) + b"".join(u(slot) + part for slot, part in looks)
     out += u(len(keys) if count is None else count)
     for key in keys:
@@ -1381,9 +1382,21 @@ def equipment_raw(looks=(), keys=(), count=None):
             out += u(fe.KEY_NONE)
         elif key[0] == "part":
             out += u(fe.KEY_PART) + u(key[1]) + u(key[2]) + key[3]
+        elif key[0] == "effect":
+            out += u(fe.KEY_PLUG_EFFECT) + u(key[1]) + MESH + key[2]
         else:
             out += u(fe.KEY_PLUG) + u(key[1]) + MESH
     return out
+
+
+def plug_effect_raw(copies=((0, 0, 3), (1, 1, 3), (-1, 2, 3)), at=(0.0, 0.5, 0.0), uv=(0.5, 0.5), count=None):
+    """RQ-200: a hall plug's weapon effect geometry (plug_effect): each copy
+    (jitter weight, frame offset, vertex count) with its vertices at `at`,
+    UV `uv`, then the jitter axis, tail box and sort origin."""
+    out = u(len(copies) if count is None else count)
+    for jitter, offset, n in copies:
+        out += f([jitter]) + u(offset) + u(n) + (f(list(at)) + f(list(uv))) * n
+    return out + f([0, 0, 0, 0, 1, 0]) + f([0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 1]) + f([0, 0, 0])
 
 
 NO_EQUIPMENT = u(0) + u(0)
@@ -1978,6 +1991,56 @@ except ValueError as error:
 print("PASS front-end select equipment cook (RQ-197): appearance keys as hall parts in their KO part slot, hand "
       "plugs where the recipe draws item plugs, 2145 rows as nothing, the looks parts a key takes apart, %d "
       "refusals" % (len(hall_problems) + 3))
+
+
+# RQ-200 (Q120): a hall hand plug whose file has an FX mesh carries the
+# geometry its item's weapon effect draws on, in the plug's joint space as its
+# mesh (no height scale): three copies of the FX mesh (jitter 0, 1, -1; frame
+# offsets 0, 1, 2), the jitter axis, the tail box and the sort origin, the
+# plug origin. An original plug: identity rotation and scale, at (0, 0.5, 0),
+# its FX mesh one triangle; one without an FX mesh carries none.
+def ko_name(text):
+    return struct.pack("<i", len(text)) + text.encode("ascii")
+
+
+def fx_plug(fx=True, far=False):
+    """An original 1298 .n3cplug (ko_appearance.read_plug's layout)."""
+    out = ko_name("") + struct.pack("<ii", 0, 12) + struct.pack("<3f", 0, 0.5, 0)
+    out += struct.pack("<16f", 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1) + struct.pack("<3f", 1, 1, 1)
+    out += struct.pack("<17f", *([1.0] * 4 + [0.0] * 13)) + struct.pack("<6I", 0, 0, 0, 0, 0, 0)
+    out += ko_name("I/b.n3pmesh") + ko_name("I/b.dxt") + struct.pack("<i", 0)
+    if not fx:
+        return out + struct.pack("<i", 0)
+    mesh = ko_name("") + struct.pack("<6i", 0, 0, 3, 3, 3, 3)
+    for x, y, z in ((0, 0, 0), (0.1, 0, 0), (0, 2000 if far else 0.2, 0)):
+        mesh += struct.pack("<8f", x, y, z, 0, 0, 1, 0.5, 0.25)
+    return out + struct.pack("<i", 1) + mesh + struct.pack("<3H", 0, 1, 2) + struct.pack("<i", 0)
+
+
+FX_PLUGS = Fixture({"I/fx.n3cplug": fx_plug(), "I/plain.n3cplug": fx_plug(fx=False),
+                    "I/far.n3cplug": fx_plug(far=True)})
+assert fe.plug_effect(FX_PLUGS, "I/plain.n3cplug") is None
+raw = fe.plug_effect(FX_PLUGS, "I/fx.n3cplug")
+at, copies = 4, []
+assert struct.unpack_from("<I", raw)[0] == 3, raw[:4]
+for _ in range(3):
+    jitter, offset, n = struct.unpack_from("<fII", raw, at)
+    at += 12
+    copies.append((jitter, offset, [struct.unpack_from("<5f", raw, at + 20 * k) for k in range(n)]))
+    at += 20 * n
+assert [(c[0], c[1], len(c[2])) for c in copies] == [(0, 0, 3), (1, 1, 3), (-1, 2, 3)], copies
+assert sorted(tuple(round(x, 5) for x in v) for v in copies[0][2]) == [(0, 0.5, 0, 0.5, 0.25), (0, 0.7, 0, 0.5, 0.25),
+                                                                       (0.1, 0.5, 0, 0.5, 0.25)], copies[0]
+points = struct.unpack_from("<21f", raw, at)
+assert len(raw) == at + 21 * 4, (len(raw), at)
+assert [round(x, 5) for x in points[0:3]] == [0, 0.5, 0] == [round(x, 5) for x in points[18:21]], points
+try:
+    fe.plug_effect(FX_PLUGS, "I/far.n3cplug")
+    raise AssertionError("front-end cook carried an effect vertex past 1000")
+except ValueError as error:
+    assert "out of bounds" in str(error), error
+print("PASS front-end select plug effect cook (RQ-200): a hall plug's FX mesh as its weapon effect's three copies, "
+      "jitter axis, tail box and sort origin in its joint's space, none without an FX mesh, 1 refusal")
 
 
 # --- create's description text (version 28, RQ-175) ------------------------------
@@ -3201,7 +3264,29 @@ EQUIPMENT_CASES = {
     "bad-select-looks-parts-5": blob(select_equipment=equipment_raw([(0, PART), (1, PART), (3, PART), (4, PART),
                                                                       (4, PART)])),
     "bad-select-looks-part-skeleton": blob(select_equipment=equipment_raw([(0, BENT_PART)])),
-    "bad#1-select-key-kind-3": blob(select_equipment=u(0) + u(1) + u(3)),
+    "bad#1-select-key-kind-4": blob(select_equipment=u(0) + u(1) + u(4)),
+    # RQ-200: a plug key with its weapon effect's geometry (kind 3).
+    "ok#2-select-key-effect": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw()), ("plug", 0)]),
+                                   selects=u(1) + select_entry(2, [102], equipment=equipment_raw(keys=[
+                                       (), ("effect", 0, plug_effect_raw(copies=((0, 0, 6),)))]))),
+    "bad#1-select-key-effect-copies-0": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw(
+        copies=()))])),
+    "bad#1-select-key-effect-copies-5": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw(
+        copies=((0, 0, 3),) * 5))])),
+    "bad#1-select-key-effect-jitter": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw(
+        copies=((2, 0, 3),)))])),
+    "bad#1-select-key-effect-offset": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw(
+        copies=((0, 64, 3),)))])),
+    "bad#1-select-key-effect-triangles": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw(
+        copies=((0, 0, 4),)))])),
+    "bad#1-select-key-effect-vertices": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw(
+        copies=((0, 0, 3072),) * 3))])),
+    "bad#1-select-key-effect-position": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw(
+        at=(0, 1001, 0)))])),
+    "bad#1-select-key-effect-uv": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw(
+        uv=(1025, 0)))])),
+    "bad#1-select-key-effect-truncated": blob(select_equipment=equipment_raw(keys=[("effect", 0,
+                                                                                    plug_effect_raw()[:-4])])),
     "bad#1-select-key-slot-2": blob(select_equipment=equipment_raw(keys=[("part", 2, 0, PART)])),
     "bad#1-select-key-slot-6": blob(select_equipment=equipment_raw(keys=[("part", 6, 0, PART)])),
     "bad#1-select-key-robe-lower": blob(select_equipment=equipment_raw(keys=[("part", 1, 1, PART)])),
@@ -3224,7 +3309,14 @@ EQUIPMENT_REASONS = {
     "bad-select-looks-part-twice": "front end select looks part slot",
     "bad-select-looks-parts-5": "count",
     "bad-select-looks-part-skeleton": "front end create part skeleton",
-    "bad#1-select-key-kind-3": "front end select key kind",
+    "bad#1-select-key-kind-4": "front end select key kind",
+    "bad#1-select-key-effect-copies-0": "count", "bad#1-select-key-effect-copies-5": "count",
+    "bad#1-select-key-effect-jitter": "front end select key effect jitter weight",
+    "bad#1-select-key-effect-offset": "count",
+    "bad#1-select-key-effect-triangles": "front end select key effect triangles",
+    "bad#1-select-key-effect-vertices": "front end select key effect vertex budget",
+    "bad#1-select-key-effect-position": "front end select key effect position",
+    "bad#1-select-key-effect-uv": "front end select key effect UV",
     "bad#1-select-key-slot-2": "front end select key slot", "bad#1-select-key-slot-6": "front end select key slot",
     "bad#1-select-key-robe-lower": "front end select key robe", "bad#1-select-key-robe-2": "front end select key robe",
     "bad#1-select-key-part-scale": "front end create part skeleton",
@@ -3480,7 +3572,8 @@ try:
                        "ok-influences-select-character": "2/102/3/-/0+0",
                        "ok-influences-select-looks": "2/102/3/-/1+0",
                        "ok#5-select-equipment": "2/102/3/-/0+0 4/104/3/-/0+0",
-                       "ok#2-select-equipment-nothing": "2/102/3/-/0+0"}, selects
+                       "ok#2-select-equipment-nothing": "2/102/3/-/0+0",
+                       "ok#2-select-key-effect": "2/102/3/-/0+0"}, selects
     names = {l.split(":")[0][len("class-names "):]: l.split(": ", 1)[1]
              for l in run.stdout.splitlines() if l.startswith("class-names ")}
     assert names == {"ok-select-models": "102=Rogue 104=Priest 112=Shadow Knight    ",
@@ -3508,17 +3601,19 @@ try:
     for name, reason in EQUIPMENT_REASONS.items():
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
-    assert any(l.startswith("refused bad#1-select-key-truncated:") for l in run.stdout.splitlines())
+    for name in ("bad#1-select-key-truncated", "bad#1-select-key-effect-truncated"):
+        assert any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
     equipped = {l.split(":")[0][len("select-equipment "):]: l.split(": ", 1)[1]
                 for l in run.stdout.splitlines() if l.startswith("select-equipment ")}
     assert equipped == {"ok#5-select-equipment": "0+1+4/-,p0r,p5,j0,p1 3/p3,-,-,j0,- -/-,-,-,-,-",
                         "ok#2-select-equipment-nothing": "-/-,- -/-,-",
+                        "ok#2-select-key-effect": "-/j0f3,j0 -/-,j0f1",
                         "ok#128-select-equipment-128": "-/" + ",".join(["-"] * 128)}, equipped
     worn = {l.split(":")[0][len("select-worn "):]: l.split(": ", 1)[1]
             for l in run.stdout.splitlines() if l.startswith("select-worn ")}
     assert worn["ok#5-select-equipment"] == "1,-1,-1,-1,-1,2/3 -1,4,-1,-1,-1,-1/- -1,-1,-1,-1,-1,-1/-", worn
     print("PASS front-end loader: each select model's equipment (version 35), what a listed character wears, "
-          "%d refusals checked for their reasons" % (len(EQUIPMENT_REASONS) + 1))
+          "%d refusals checked for their reasons" % (len(EQUIPMENT_REASONS) + 2))
     # RQ-194: each mesh vertex float the cook refuses, refused by the loader as a cooked float.
     for k in PAST_VERTICES:
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused bad-hall-mesh-vertex-%d:" % k))

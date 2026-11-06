@@ -12,6 +12,7 @@
 #include "platform/gl_load.h"
 #include "render/animation.h"
 #include "render/create_choice.h"
+#include "render/effects_gl.h"
 #include "render/front_logo.h"
 #include "render/front_login.h"
 #include "render/front_slide.h"
@@ -661,8 +662,57 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // per slot) and the keys' hand plugs drawn.
     uint32_t equipped = 0, own = 0;
     int equipped_plugs = 0;
+    // hall (RQ-200): the keys' hand plugs drawn with their weapon effect.
+    int effects = 0;
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
+  // RQ-200 (Q120): the package's equipped-item effects (effects.bin) and the
+  // effect pass the world draws them with, with which the hall draws each
+  // drawn hand plug's weapon effect as 1298's does: 005fca40 sets the item's
+  // effect on the plug (00415370, the id as the world's 0045c6e0 picks it);
+  // Render (005fb1c0) draws each character (004196a0), whose plugs' draw
+  // (004158d0) puts their FX mesh copies and tail sparks in the frame's alpha
+  // list while Option.ini WeaponEffect.EffectVisible is on (00415910), and
+  // flushes that list after the windows (0043dd80) with the zone's alpha
+  // parts. An effect is the key's effects.bin record drawn on the hall plug's
+  // own geometry (FrontPlugEffect); a key without a record draws none. Not
+  // called without effects.bin or with the option off.
+  void weapon_effects(const Effects &effects, EffectsView &pass) {
+    effect_pass = &pass;
+    hall_fx.assign(scene_count(), {});
+    hall_fx_data.clear();
+    for (size_t k = 0; k < scene_count(); ++k) {
+      const auto &scene = scene_at(k);
+      for (size_t i = 0; i < scene.keys.size(); ++i) {
+        const auto &key = scene.keys[i];
+        const auto record = std::find_if(effects.appearance.begin(), effects.appearance.end(),
+                                         [&](const AppearanceEffect &a) { return a.key == i + 1; });
+        if (!key.effect || record == effects.appearance.end()) continue;
+        auto &e = hall_fx_data.emplace_back(*record);
+        e.joint = key.plug.joint;
+        // The world's rule (ko_fx_bake): the copies draw only for an
+        // alpha-blended main part, which the record's own copies say.
+        if (!record->copies.empty()) e.copies = key.effect->copies;
+        e.jitter = key.effect->jitter;
+        e.tail_box = key.effect->tail_box;
+        e.sort_origin = key.effect->sort_origin;
+        hall_fx[k].add(e, e.tails ? &effects.clips.at(e.tail_clip) : nullptr, scene.model, true);
+      }
+    }
+  }
+  // RQ-200: what the last hall frame drew of the weapon effects: per effect
+  // its slot, key and copies, the centre of its first copy's vertices and
+  // its plug's joint origin and its plug mesh's box (low and high corners),
+  // all in engine space.
+  struct HallEffect {
+    int slot;
+    uint32_t key;
+    size_t copies;
+    V centre, joint;
+    std::array<V, 2> plug_box;
+  };
+  const std::vector<HallEffect> &hall_effects() const { return hall_fx_shown; }
+  size_t hall_effect_tails() const { return hall_tails.size(); }
   std::optional<std::array<float, 4>> action_rect(FrontAction action, int width, int height) {
     const auto screen = message_action(action) ? FrontScreen::message : layout();
     const auto &nodes = fe.screens[size_t(screen)];
@@ -806,6 +856,8 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     last_frame = now;
     drawn_boxes.clear();
     hall_camera.reset();
+    hall_meshes.clear();
+    hall_tails.clear();
     glViewport(0, 0, width, height);
     glClearColor(0, 0, 0, 1);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -874,8 +926,10 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // The zone's alpha parts after the UI, only while the select is the
     // screen (not on the frame the start clip's end turns it to loading), or
     // a create over it (1298: Render's alpha flush after every window).
-    if (hall_camera && (state == Screen::select || in_hall_create()))
-      zone_alpha(hall_camera->first, hall_camera->second);
+    if (hall_camera && (state == Screen::select || in_hall_create())) {
+      if (effect_pass && (!hall_meshes.empty() || !hall_tails.empty())) hall_alpha(width, height, now);
+      else zone_alpha(hall_camera->first, hall_camera->second);
+    }
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glDisable(GL_BLEND);
@@ -967,6 +1021,16 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
   // The select camera this frame drew the hall with, for the zone's BLEND
   // meshes after the UI (version 8); none on a frame without the hall.
   std::optional<std::pair<detail::Mat, V>> hall_camera;
+  FrontCamera hall_lens;  // RQ-200: that camera's at, up and lens
+  // RQ-200: the effect pass (viewer.cpp's), per scene the weapon effects its
+  // keys' plugs draw (their records, owned here), and this frame's copies,
+  // tail links and the effects drawn.
+  EffectsView *effect_pass = nullptr;
+  std::vector<AppearanceEffects> hall_fx;
+  std::deque<AppearanceEffect> hall_fx_data;
+  std::vector<EffectMesh> hall_meshes;
+  std::vector<const EffectInstance *> hall_tails;
+  std::vector<HallEffect> hall_fx_shown;
   // The select hall as CGameProcCharacterSelect keeps it (select_hall.h):
   // each slot's clip player, the spot's theta and whether it is on, the
   // slot whose info text shows, in the package's front-clip mode.
@@ -1556,6 +1620,40 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     glDisable(GL_BLEND);
     glBindVertexArray(0);
   }
+  // RQ-200: the alpha flush with the plugs' weapon effects (0043dd80: one
+  // list, far to near): the effect pass draws their copies and tail sparks
+  // and, at their places in its order, the zone's BLEND meshes, each keyed
+  // by the eye's distance to its sort point as zone_alpha orders them.
+  void hall_alpha(int width, int height, double now) {
+    using namespace detail;
+    const auto &[vp, eye] = *hall_camera;
+    const auto order = far_to_near(fe.zone, eye);
+    std::vector<float> keys;
+    for (const size_t i : order) {
+      const auto &p = fe.zone[i].sort;
+      keys.push_back(std::hypot(p[0] - eye[0], p[1] - eye[1], p[2] - eye[2]));
+    }
+    // The pass's camera is the hall's: look_at's axes, perspective's lens.
+    Orbit orbit;
+    const V f = unit(sub(hall_lens.at, eye)), s = unit(cross(f, hall_lens.up)), u = cross(s, f);
+    orbit.eye = eye, orbit.right = s, orbit.up = u, orbit.back = {-f[0], -f[1], -f[2]};
+    CameraConfig lens;
+    lens.fov = hall_lens.fov, lens.near_plane = hall_lens.near_plane, lens.far_plane = hall_lens.far_plane;
+    static const EffectPlayer none;
+    effect_pass->draw(none, now, orbit, lens, width / float(std::max(height, 1)), hall_tails, hall_meshes, keys,
+                      [&](size_t k) {
+                        glEnable(GL_DEPTH_TEST);
+                        glDepthMask(GL_TRUE);
+                        glEnable(GL_BLEND);
+                        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                        glUseProgram(lit);
+                        glUniform1i(glGetUniformLocation(lit, "tex"), 0);
+                        glActiveTexture(GL_TEXTURE0);
+                        draw_zone(order[k], vp);
+                        glDisable(GL_BLEND);
+                      });
+    glBindVertexArray(0);
+  }
   void transform(const detail::Mat &view_projection, const detail::Mat &model) {
     const auto mvp = detail::mul(view_projection, model);
     glUniformMatrix4fv(glGetUniformLocation(lit, "mvp"), 1, GL_FALSE, mvp.data());
@@ -1682,7 +1780,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
                            face_drawn ? int(face) : -1, hair_drawn ? int(hair) : -1,
                            dress ? dress->specialty : 0u, dress && !dress->body ? int(dress->parts.size()) : -1,
                            dress ? int(dress->plugs.size()) : 0, select_model_of(which), int(scene.plugs.size()),
-                           equipped, own, int(plugged.size())});
+                           equipped, own, int(plugged.size()), 0});
     const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : which == 2 ? create_plugs
                                                                                        : race_plugs[which - 3];
     auto attach = [&](const FrontPlug &plug, const Buffer &buffer) {
@@ -1695,6 +1793,44 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     for (const auto at : plugged) attach(scene.keys[at].plug, key_plugs[which][at]);
     if (dress)
       for (size_t i = 0; i < dress->plugs.size(); ++i) attach(dress->plugs[i], dress_plugs[which][size_t(worn)][i]);
+  }
+  // RQ-200: listed character `who`'s weapon effects in slot `i` (scene
+  // `scene`, posed `pose`, at `position` turned by `yaw`): one per hand plug
+  // its keys draw (hall_worn) whose key has an effect, its copies and tail
+  // links added to this frame's alpha flush.
+  void hall_weapon_effects(int i, size_t scene, const std::vector<Node> &pose, V position, float yaw, V eye,
+                           double now, const Character &who) {
+    auto &fx = hall_fx[scene];
+    std::vector<uint32_t> keys;
+    for (const auto at : hall_worn(scene_at(scene), who.appearance()).plugs)
+      if (fx.models.contains(uint32_t(at + 1))) keys.push_back(uint32_t(at + 1));
+    if (keys.empty()) return;
+    const float c = std::cos(yaw), s = std::sin(yaw);
+    auto world = [&](V p) {
+      return V{position[0] + p[0] * c + p[2] * s, position[1] + p[1], position[2] - p[0] * s + p[2] * c};
+    };
+    for (const auto key : keys) {
+      const size_t first = hall_meshes.size();
+      fx.draw_keys(who.id(), {key}, pose, position, yaw, now, eye, hall_meshes, hall_tails);
+      const auto &model = fx.models.at(key);
+      V centre{};
+      if (hall_meshes.size() > first) {
+        const auto &v = hall_meshes[first].vertices;
+        for (size_t k = 0; k + 8 < v.size(); k += 9)
+          for (int a = 0; a < 3; ++a) centre[a] += v[k + a] / float(v.size() / 9);
+      }
+      const auto j = scene_at(scene).model.joint_matrix(pose, model.data->joint);
+      std::array<V, 2> box{V{1e9f, 1e9f, 1e9f}, V{-1e9f, -1e9f, -1e9f}};
+      const auto &mesh = scene_at(scene).keys[key - 1].plug.mesh.vertices;
+      for (size_t k = 0; k + 7 < mesh.size(); k += 8) {
+        V p{};
+        for (int a = 0; a < 3; ++a) p[a] = j[a] * mesh[k] + j[4 + a] * mesh[k + 1] + j[8 + a] * mesh[k + 2] + j[12 + a];
+        p = world(p);
+        for (int a = 0; a < 3; ++a) box[0][a] = std::min(box[0][a], p[a]), box[1][a] = std::max(box[1][a], p[a]);
+      }
+      hall_fx_shown.push_back({i, key, hall_meshes.size() - first, centre, world({j[12], j[13], j[14]}), box});
+    }
+    drawn_boxes.back().effects = int(keys.size());
   }
   // RQ-176 (version 29): the dress create model `which` wears (an index into
   // its dresses, -1 none): the specialty whose row the last build took, or,
@@ -1907,6 +2043,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     // alpha parts after the UI (zone_alpha).
     fog(&fe.fog, eye);
     hall_camera.emplace(vp, eye);
+    hall_lens = c;
     for (size_t i = 0; i < fe.zone.size(); ++i)
       if (!(fe.zone[i].mesh.flags & FrontMesh::BLEND)) draw_zone(i, vp);
     for (size_t i = 0; i < statics.size(); ++i) draw_mesh(statics[i], fe.hall[i], vp, detail::identity());
@@ -1914,12 +2051,20 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     front_shown = {uint32_t(front.clip), seats.played(front), clip_length(slot_scene(focus), front.clip),
                    front.blend > 0 ? std::min(1.f, front.elapsed / front.blend) : 1.f, seats.theta, seats.spot_on,
                    seats.info_slot >= 0};
+    hall_meshes.clear();
+    hall_tails.clear();
+    hall_fx_shown.clear();
     for (int i = 0; i < characters_shown(); ++i) {
       const auto &slot = fe.slots[i];
       const auto scene = slot_scene(i);
-      draw_character(scene, posed(seats.players.at(size_t(i)), scene), vp,
-                     detail::translate_yaw(slot.position, slot.yaw), &list->characters(i));
+      const auto pose = posed(seats.players.at(size_t(i)), scene);
+      const auto &who = list->characters(i);
+      draw_character(scene, pose, vp, detail::translate_yaw(slot.position, slot.yaw), &who);
+      // RQ-200: each drawn hand plug's weapon effect, on the plug's joint.
+      if (scene < hall_fx.size() && !hall_fx[scene].models.empty())
+        hall_weapon_effects(i, scene, pose, slot.position, slot.yaw, eye, now, who);
     }
+    for (auto &fx : hall_fx) fx.retire();
     if (in_hall_create() && !turning() && choice.stands() && figure_scene() >= 0) {
       const auto &slot = fe.slots[size_t(choice.stands_at(focus))];
       const auto which = size_t(figure_scene());

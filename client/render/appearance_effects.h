@@ -40,6 +40,9 @@ struct AppearanceEffects {
     const EffectClip *tail = nullptr;
     Scene scene;          // every copy's vertices, then the seven reference points
     std::vector<uint32_t> indices;
+    // RQ-200: the points are in the joint's space, placed by its posed matrix
+    // (Scene::joint_matrix, as a plug is), not in bind space and skinned.
+    bool rigid = false;
   };
   struct State {
     double start = 0;
@@ -54,34 +57,39 @@ struct AppearanceEffects {
   void build(const Effects &effects, const Scene &skeleton) {
     models.clear();
     states.clear();
-    for (const auto &e : effects.appearance) {
-      Model m;
-      m.data = &e;
-      m.scene = skeleton;
-      m.scene.vertices.clear();
-      m.scene.indices.clear();
-      m.scene.influences.clear();
-      m.scene.tracks.clear();
-      m.scene.texture.clear();
-      m.scene.collision = {};
-      auto add = [&](V p, std::array<float, 2> uv) {
-        Vertex v{};
-        v.p = p;
-        v.n = {0, 1, 0};
-        v.uv = uv;
-        v.joints = {e.joint, 0, 0, 0};
-        v.weights = {1, 0, 0, 0};
-        m.indices.push_back(uint32_t(m.scene.vertices.size()));
-        m.scene.vertices.push_back(v);
-      };
-      for (const auto &c : e.copies)
-        for (const auto &v : c.vertices) add({v[0], v[1], v[2]}, {v[3], v[4]});
-      for (const auto &p : e.jitter) add(p, {0, 0});
-      for (const auto &p : e.tail_box) add(p, {0, 0});
-      add(e.sort_origin, {0, 0});
-      if (e.tails) m.tail = &effects.clips.at(e.tail_clip);
-      models.emplace(e.key, std::move(m));
-    }
+    for (const auto &e : effects.appearance) add(e, e.tails ? &effects.clips.at(e.tail_clip) : nullptr, skeleton);
+  }
+  // One effect on `skeleton`, its tail clip `tail` (none without tails); with
+  // `rigid` (RQ-200) its points are in its joint's space. `e` and `tail` must
+  // outlive this.
+  void add(const AppearanceEffect &e, const EffectClip *tail, const Scene &skeleton, bool rigid = false) {
+    Model m;
+    m.data = &e;
+    m.rigid = rigid;
+    m.scene = skeleton;
+    m.scene.vertices.clear();
+    m.scene.indices.clear();
+    m.scene.influences.clear();
+    m.scene.tracks.clear();
+    m.scene.texture.clear();
+    m.scene.collision = {};
+    auto add = [&](V p, std::array<float, 2> uv) {
+      Vertex v{};
+      v.p = p;
+      v.n = {0, 1, 0};
+      v.uv = uv;
+      v.joints = {e.joint, 0, 0, 0};
+      v.weights = {1, 0, 0, 0};
+      m.indices.push_back(uint32_t(m.scene.vertices.size()));
+      m.scene.vertices.push_back(v);
+    };
+    for (const auto &c : e.copies)
+      for (const auto &v : c.vertices) add({v[0], v[1], v[2]}, {v[3], v[4]});
+    for (const auto &p : e.jitter) add(p, {0, 0});
+    for (const auto &p : e.tail_box) add(p, {0, 0});
+    add(e.sort_origin, {0, 0});
+    m.tail = e.tails ? tail : nullptr;
+    models.insert_or_assign(e.key, std::move(m));
   }
   // The first key per equipment slot, as draw_appearance selects them.
   template <class Keys>
@@ -97,9 +105,16 @@ struct AppearanceEffects {
   std::vector<uint32_t> draw(uint64_t actor, const std::vector<AppearanceRule> &rules, const Keys &keys,
                              const std::vector<Node> &pose, V position, float heading, double now, V eye,
                              std::vector<EffectMesh> &meshes, std::vector<const EffectInstance *> &tails) {
+    return draw_keys(actor, selected(rules, keys), pose, position, heading, now, eye, meshes, tails);
+  }
+  // draw() for the keys given, each once, in order (RQ-200: the select hall's
+  // plug keys, each drawn plug's).
+  std::vector<uint32_t> draw_keys(uint64_t actor, const std::vector<uint32_t> &keys, const std::vector<Node> &pose,
+                                  V position, float heading, double now, V eye, std::vector<EffectMesh> &meshes,
+                                  std::vector<const EffectInstance *> &tails) {
     std::vector<uint32_t> started;
     float c = std::cos(heading), sn = std::sin(heading);
-    for (auto key : selected(rules, keys)) {
+    for (auto key : keys) {
       auto found = models.find(key);
       if (found == models.end()) continue;
       const auto &model = found->second;
@@ -114,7 +129,7 @@ struct AppearanceEffects {
         started.push_back(key);
       }
       state.seen = true;
-      auto skinned = model.scene.skin(pose, model.indices);
+      auto skinned = model.rigid ? placed(model, pose) : model.scene.skin(pose, model.indices);
       auto world = [&](size_t i) {
         const float *v = &skinned[i * 8];
         return V{position[0] + v[0] * c + v[2] * sn, position[1] + v[1], position[2] - v[0] * sn + v[2] * c};
@@ -179,6 +194,18 @@ struct AppearanceEffects {
       }
     }
     return started;
+  }
+  // A rigid model's points through its joint's posed matrix (RQ-200), as
+  // Scene::skin lays them out: position, normal, UV, 8 floats a point.
+  static std::vector<float> placed(const Model &model, const std::vector<Node> &pose) {
+    const M m = model.scene.joint_matrix(pose, model.data->joint);
+    std::vector<float> out;
+    out.reserve(model.scene.vertices.size() * 8);
+    for (const auto &v : model.scene.vertices) {
+      for (int a = 0; a < 3; ++a) out.push_back(m[a] * v.p[0] + m[4 + a] * v.p[1] + m[8 + a] * v.p[2] + m[12 + a]);
+      out.insert(out.end(), {v.n[0], v.n[1], v.n[2], v.uv[0], v.uv[1]});
+    }
+    return out;
   }
   // Drops every effect not drawn since the last call: its actor left the view,
   // or the key left its equipment. Returns them.

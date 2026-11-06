@@ -1196,6 +1196,10 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     if (release.front_end && discord_flow) {
       try {
         front = std::make_unique<n3e::front::View>(n3e::load_front_end(release), release.create);
+        // RQ-200 (Q120): the hall's hand plugs draw their items' weapon
+        // effects with the world's effect pass, under the same Option.ini
+        // switch (1298's plug draw 004158d0 reads 006e268e in the hall too).
+        if (release.effects && client_options.weapon_effects) front->weapon_effects(*release.effects, effect_view);
         // RQ-018: the screens' music needs the device even without audio.bin.
         if (front->has_music() && !release.audio && client_options.sound) audio.open();
       } catch (const std::exception &error) {

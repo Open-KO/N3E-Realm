@@ -87,6 +87,12 @@ blend with destination ONE); the Moradon blade is fire. The 2233 skeletal-plug
 effects keep n3e's order.
 Evidence.
 
+Since RQ-200 the 1298 select hall draws the same record on a listed
+character's hand plug (`front-end.bin` key kind 3, content/front-end.md item
+7): the record's frames, material, timing and tail on the hall plug's own FX
+mesh geometry in its joint's space, as 1298's `005fca40` sets the effect
+there (`00415370`), under the same `Option.ini` switch.
+
 ## Equipment glow (N3E3, PQ-315)
 
 A 2233/2145 addition: the 2233 client (PQ-314, a secondary reference) makes an

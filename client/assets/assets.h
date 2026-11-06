@@ -988,6 +988,18 @@ struct FrontLooksPart { uint32_t slot = 0; Scene part; };
 // helmet in the hair's place), drawn in place of the looks part, `robe` (an
 // upper) drawing the lower as its looks part (1097 0043d0f0, 1298
 // 005fc6f0); or a hand plug on its joint (1298 005fca40).
+// RQ-200 (Q120): a hand plug whose file has an FX mesh (key kind 3) also
+// carries the geometry its item's weapon effect draws on (1298 005fca40 ->
+// 00415370; the plug draw 004158d0 -> 00415910), every point in the plug's
+// joint space, rigid to it: the copies, the jitter axis, the tail box and the
+// sort origin, as an N3E2 record's (AppearanceEffect). The effect itself
+// (frames, material, timing, tail) is effects.bin's record for the key.
+struct FrontPlugEffect {
+  std::vector<AppearanceEffect::Copy> copies;
+  std::array<V, 2> jitter{};
+  std::array<V, 4> tail_box{};
+  V sort_origin{};
+};
 struct FrontKey {
   enum class Kind : uint32_t { none, part, plug };
   Kind kind = Kind::none;
@@ -995,6 +1007,7 @@ struct FrontKey {
   bool robe = false;
   Scene part;
   FrontPlug plug;
+  std::optional<FrontPlugEffect> effect;  // RQ-200: a plug's weapon effect geometry
 };
 // Version 8 (RQ-095): one mesh of the zone the select hall draws (1298's
 // karus_intro) and the point a BLEND mesh is sorted by (engine space).

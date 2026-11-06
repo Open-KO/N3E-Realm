@@ -61,7 +61,8 @@ appearance keys as AddChr dresses a listed character in its items, each a
 part in its KO part slot (the race's own looks part for that slot carried
 apart, so a key can take its place; a robe's lower drawn as the looks
 lower; a helmet in the hair's place) or, for a front end whose hall draws
-item plugs (1298's), a hand plug on its joint (RQ-197).
+item plugs (1298's), a hand plug on its joint (RQ-197), with the geometry
+its item's weapon effect draws on when the plug has an FX mesh (RQ-200).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -91,6 +92,7 @@ import ko_character as character
 import ko_hud
 import ko_nameplates
 import ko_scene
+import ko_weapon_fx
 import world_chunks
 
 VERSION = 35
@@ -1706,7 +1708,59 @@ ITEM_PLUGS = ("none", "draw")
 # appearance.bin's bound (N3V1), and what a key draws in the hall.
 MAX_KEYS = 128
 KEY_NONE, KEY_PART, KEY_PLUG = 0, 1, 2
+# RQ-200 (Q120): a hand plug whose file has an FX mesh carries the geometry
+# its item's weapon effect draws on (1298's 005fca40 sets the item's effect on
+# the plug, 00415370, and the plug draw 004158d0 draws it, 00415910). A reader
+# before RQ-200 refuses the kind (a key kind above 2), so the file keeps
+# version 35.
+KEY_PLUG_EFFECT = 3
+# N3E2's bounds (appearance_effects.py): copies and triangle-list vertices.
+MAX_EFFECT_COPIES, MAX_COPY_VERTICES, MAX_EFFECT_VERTICES = 4, 3072, 8192
 UPPER, LOWER = 0, 1
+
+
+def plug_effect(assets, name):
+    """RQ-200 (Q120): the geometry a weapon effect draws on a hall hand plug,
+    or None for a plug file without an FX mesh (00415910 then draws nothing):
+    a copy count, each copy (its jitter weight, frame offset, vertex count and
+    triangle-list vertices, x, y, z, u, v), the jitter axis's origin and tip,
+    the tail box's origin and x, y, z edge ends and the sort origin, all in
+    the plug's joint space as plug_record's mesh is (no height scale: 1298's
+    hall sets the plug with 0041b790). They are the world's N3E2 rule
+    (ko_weapon_fx.placed) on an identity joint at 1.8 m, so the hall's FX mesh
+    sits on its plug as the world's does on its own; the sort origin is the
+    plug origin (00415910, PQ-376). The effect's material, frames, timing and
+    tail are the package's effects.bin record for the key, which the client
+    draws it with; a key without one draws none."""
+    tree, path = split(assets, name)
+    plug = ko_appearance.read_plug(tree, path)
+    if plug["fx_data"] is None:
+        return None
+    identity = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]
+    g = ko_weapon_fx.placed(plug, ko.import_mesh(None, 1.0, data=plug["fx_data"]), identity, 1.8)
+    copies = g["copies"]
+    count(len(copies), MAX_EFFECT_COPIES)
+
+    def points(values, what):
+        for v in values:
+            if len(v) != 3 or any(not math.isfinite(x) or abs(x) > 1000 for x in v):
+                raise ValueError("front-end plug %s: effect %s out of bounds" % (name, what))
+        return b"".join(f(v) for v in values)
+    out, total = u(len(copies)), 0
+    for c in copies:
+        n = len(c["vertices"])
+        total += n
+        if not 3 <= n <= MAX_COPY_VERTICES or n % 3 or total > MAX_EFFECT_VERTICES:
+            raise ValueError("front-end plug %s: effect copy of %d vertices" % (name, n))
+        if not -1 <= c["jitter"] <= 1 or not 0 <= c["frame_offset"] < 64:
+            raise ValueError("front-end plug %s: effect copy" % name)
+        out += f([c["jitter"]]) + u(c["frame_offset"]) + u(n)
+        for v in c["vertices"]:
+            if any(not math.isfinite(x) for x in v) or any(abs(x) > 1024 for x in v[3:]):
+                raise ValueError("front-end plug %s: effect vertex out of bounds" % name)
+            out += points([v[:3]], "position") + f(v[3:5])
+    return out + points(g["jitter"], "jitter axis") + points(g["tail_box"], "tail box") + \
+        points([g["jitter"][0]], "sort origin")
 
 
 def hall_keys(appearance, config):
@@ -1799,8 +1853,9 @@ def hall_equipment(assets, textures, tree, joint, animation, row, keys, record, 
     `row` has a part for), then a key count (hall_keys', the package's
     appearance keys) and per key what it draws: 0 nothing; 1 a part (its
     part slot, robe 0 or 1, a part as a face is); 2 a hand plug (its joint,
-    one of the model's, and a mesh in that joint's space, as plug_record's).
-    Each part is skinned on the model's nodes, joints and instance scale
+    one of the model's, and a mesh in that joint's space, as plug_record's);
+    3 (RQ-200) a hand plug as 2 whose file has an FX mesh, then the geometry
+    its weapon effect draws on (plug_effect). Each part is skinned on the model's nodes, joints and instance scale
     (`record`, model()'s) and read from the model's tree, as KO reads an
     item's files from its own client. Returns (bytes, report)."""
     head, _, tail = scene_tracks(record[4:4 + struct.unpack_from("<I", record)[0]])
@@ -1828,7 +1883,11 @@ def hall_equipment(assets, textures, tree, joint, animation, row, keys, record, 
             if not 0 <= art["joint"] < joints:
                 raise ValueError("front-end select equipment: appearance key %d's joint %d is not one of the select "
                                  "model's %d joints" % (key, art["joint"], joints))
-            out += u(KEY_PLUG) + plug_record(assets, textures, art["source"], art["joint"])
+            effect = plug_effect(assets, art["source"])
+            out += u(KEY_PLUG if effect is None else KEY_PLUG_EFFECT) + plug_record(
+                assets, textures, art["source"], art["joint"]) + (effect or b"")
+            drawn.append(KEY_PLUG if effect is None else KEY_PLUG_EFFECT)
+            continue
         drawn.append(art["kind"])
     return out, dict(looks=taken, keys=drawn)
 

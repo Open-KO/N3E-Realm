@@ -152,7 +152,10 @@ replace the panels when the client has a Discord realm config.
   them (a part in a KO part slot, a robe, a helmet, or a hand plug where the
   recipe's `select.item_plugs` is `draw`), and the hall draws each
   character's visible equipment (`Character.appearance`) as AddChr dresses
-  it in the list's items.
+  it in the list's items. Since RQ-200 a hand plug whose file has an FX mesh
+  carries the geometry its item's weapon effect draws on (key kind 3, still
+  version 35), and the hall draws that key's `effects.bin` effect on it, as
+  1298's hall does, under the same `Option.ini` switch as the world.
 - **Music** (N3FE version 3, RQ-018; version 5, RQ-083). Up to 4 tracks, each MPEG-1
   or MPEG-2 Layer III frames (every frame checked at load) or, since version 5,
   16-bit PCM samples (KO 1097's WAVs), each ≤ 16 MiB, looping or not, with an
@@ -380,7 +383,7 @@ rules (`create.bin`) are `content/character-create.md`, "The realm's create". Th
 select hall draws each character with the package's select character for its race
 and specialty and shows its class's name (RQ-005, N3FE version 31), with its own
 face and hair (RQ-198, N3FE version 33) and its visible equipment (RQ-197, N3FE
-version 35).
+version 35), with the weapon effect of a hand item that has one (RQ-200).
 
 ### Server
 
@@ -643,7 +646,7 @@ CPU (`make test`):
    select model's and select characters' looks parts and keys and refuses more
    than 4 looks parts, a looks slot other than 0, 1, 3 or 4 or out of order, a
    key count other than the release's appearance count (or above 128), a key
-   kind above 2, a key part slot 2 or above 5, a robe above 1 or off slot 0, a
+   kind above 2 (3 since RQ-200), a key part slot 2 or above 5, a robe above 1 or off slot 0, a
    key part off its model's skeleton or scale, a plug joint outside the model's
    joints and truncation; what a listed character wears is the first key per
    slot, the looks lower under a robe, a helmet in the hair's place and each
@@ -657,6 +660,18 @@ CPU (`make test`):
    with its looks upper, and race 0 in keys 5 and 9 with key 5's upper, as
    `worn=1/0/0,0/1/0,1/0/0`, and on the 1298 recipe the priest's key 1 blade
    as its hand plug too, `worn=1/0/1,0/1/0,1/0/0` (`FRONT_HALL`,
+   `tests/front_end_live.py`, local-asset).
+   RQ-200 (select weapon effects): the loader takes a key of kind 3, a plug and
+   its weapon effect's geometry, and refuses a kind above 3, a copy count
+   outside 1-4, a jitter weight outside -1..1, a frame offset above 63, a copy
+   not a triangle list, more than 8192 vertices, a coordinate past 1000, a UV
+   past 1024 and truncation (`tests/front_end.py`); the cook writes a plug's
+   FX mesh as three copies, the jitter axis, the tail box and the sort origin
+   in its joint's space and none for a plug without one, and refuses a point
+   past 1000 (`tests/front_end.py`); on the 1097 choice no hall plug draws an
+   effect (`fx=0,0,0 tails=0`), and on the 1298 recipe the priest's blade draws
+   the package's key 1 effect, three copies and two tail links (`fx=1,0,0
+   tails=2`), its first copy on the blade (`FRONT_HALL`, `FRONT_HALL_FX`,
    `tests/front_end_live.py`, local-asset).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.

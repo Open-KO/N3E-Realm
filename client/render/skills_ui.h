@@ -1,14 +1,31 @@
 #pragma once
 #include "hotbar.h"
 
+// RQ-211: the specialty (KO class code) of the character this session plays:
+// the select list's entry with the self entity's name (unique in a realm); 0
+// when unknown (no create choice, or a server before RQ-002).
+inline uint32_t self_specialty(const n3e::WorldState&w){
+  for(const auto&e:w.world.entities())if(e.id()==w.world.self()){
+    for(const auto&c:w.characters.characters())if(c.name()==e.name())return c.specialty();
+    break;
+  }
+  return 0;
+}
+
 struct SkillsUI {
   unsigned selected=0;
   bool open=false;
   struct Drag {unsigned index;uint64_t self,session;};
   std::optional<Drag> drag, right_press;
   static int index(const std::string&key){return key.size()==7&&key.starts_with("skill:")&&key[6]>='0'&&key[6]<='5'?key[6]-'0':-1;}
+  // RQ-211: the skills the window lists, all of the policy's for a character
+  // of its class and none for another, as 1298's skill tree lists only the
+  // player's class's rows (source UISkillTreeDlg.cpp, class * 1000 + 1 on).
+  static size_t shown(const n3e::Release&r,const n3e::WorldState&w){
+    return r.skills&&r.skills->admits(self_specialty(w))?r.skills->entries.size():0;
+  }
   void update(FeatureUI&ui,const n3e::Release&r,const n3e::WorldState&w)const{
-    if(!r.skills)return;
+    if(!shown(r,w))return;
     for(unsigned i=0;i<r.skills->entries.size();++i){
       const auto&s=r.skills->entries[i];auto key="skill:"+std::to_string(i);
       ui.items[key]=s.id;ui.values["skill_name:"+std::to_string(i)]=s.label;

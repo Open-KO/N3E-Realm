@@ -2031,7 +2031,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             int pw,ph,lw,lh;SDL_GetWindowSizeInPixels(w,&pw,&ph);SDL_GetWindowSize(w,&lw,&lh);
             float x=(e.type==SDL_EVENT_MOUSE_MOTION?e.motion.x:e.button.x)*pw/std::max(1,lw),y=(e.type==SDL_EVENT_MOUSE_MOTION?e.motion.y:e.button.y)*ph/std::max(1,lh);
             hud->drag_key="skill:"+std::to_string(skills_ui.drag->index);hud->drag_panel=10;hud->drag_rect={x-22,y-22,x+22,y+22};
-            if(e.type==SDL_EVENT_MOUSE_BUTTON_UP){hotbar.bind_skill(hud->hit(x,y,pw,ph),release.skills->entries[skills_ui.drag->index],release,world.world.inventory().level());skills_ui.drag.reset();hud->drag_key.clear();}
+            if(e.type==SDL_EVENT_MOUSE_BUTTON_UP){if(skills_ui.drag->index<SkillsUI::shown(release,world))hotbar.bind_skill(hud->hit(x,y,pw,ph),release.skills->entries[skills_ui.drag->index],release,world.world.inventory().level());skills_ui.drag.reset();hud->drag_key.clear();}
             continue;
           }
           if(!skills_ui.open||!game_mouse||entry!=4||e.type==SDL_EVENT_WINDOW_MOUSE_LEAVE)skills_ui.right_press.reset();
@@ -2040,7 +2040,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             int index=SkillsUI::index(hud->hit(e.button.x*pw/std::max(1,lw),e.button.y*ph/std::max(1,lh),pw,ph));
             auto pressed=skills_ui.right_press;skills_ui.right_press.reset();
             if(e.type==SDL_EVENT_MOUSE_BUTTON_DOWN){if(index>=0)skills_ui.right_press=SkillsUI::Drag{unsigned(index),world.world.self(),world.world.session()};}
-            else if(pressed&&pressed->self==world.world.self()&&pressed->session==world.world.session()&&int(pressed->index)==index&&index>=0&&unsigned(index)<release.skills->entries.size()){hotbar.register_skill(release.skills->entries[index],release,world.world.inventory().level());continue;}
+            else if(pressed&&pressed->self==world.world.self()&&pressed->session==world.world.session()&&int(pressed->index)==index&&index>=0&&unsigned(index)<SkillsUI::shown(release,world)){hotbar.register_skill(release.skills->entries[index],release,world.world.inventory().level());continue;}
           }
           if(!game_mouse||entry!=4||orbit_drag||item_panel()!=1||
              e.type==SDL_EVENT_WINDOW_MOUSE_LEAVE)inventory_right_press.reset();
@@ -2139,7 +2139,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             }
             if(skills_ui.open&&release.skills){
               int index=SkillsUI::index(clicked);
-              if(index>=0&&unsigned(index)<release.skills->entries.size()){
+              if(index>=0&&unsigned(index)<SkillsUI::shown(release,world)){
                 skills_ui.selected=index;
                 if(e.button.clicks>=2)skill_use(release.skills->entries[index]);
                 else skills_ui.drag=SkillsUI::Drag{unsigned(index),world.world.self(),world.world.session()};
@@ -5052,7 +5052,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
             }
             if(hud->data.hotbar){
               for(const auto&e:world.world.entities())if(e.id()==world.world.self()){
-                hotbar.context(endpoint+"\n"+release.game+"\n"+account+"\n"+e.name(),e.id(),release);break;
+                hotbar.context(endpoint+"\n"+release.game+"\n"+account+"\n"+e.name(),e.id(),release,self_specialty(world));break;
               }
               // A notice is posted once (PQ-407: the message line keeps a log).
               if(!hotbar.notice.empty()){hud->post_notice(hotbar.notice);hotbar.notice.clear();}

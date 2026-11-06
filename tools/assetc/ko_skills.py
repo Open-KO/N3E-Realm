@@ -60,6 +60,10 @@ def cook(assets,root,manifest):
         if [int(x)for x in direct[1:]]!=[0,1,s['amount']*(1 if s['target']==1 else -1),0,0,0 if s['target']==1 else 4]:raise ValueError('starter direct spell mismatch')
         expected={4:s['animation'],14:2 if s['target']==1 else 7,15:s['level'],16:2040,17:s['cost'],18:0,19:9,20:0,21:s['cast_ms']//100,22:s['cooldown_ms']//100,25:s['survival'],26:3,27:0,28:int(s['range'])}
         if any(int(row[k])!=v for k,v in expected.items()):raise ValueError('starter skill table mismatch')
+        # RQ-211: 1298's usable check 0057f7f0 admits the row (NeedSkill +0x64,
+        # 2040) only for a class whose code is NeedSkill / 10 or another of
+        # its represent class's (the priest's 104, 111, 112, 204, 211, 212).
+        if int(row[16])//10 not in spec.get('specialties',()):raise ValueError('starter skill class not in the policy specialties')
         target=root/'skills'/str(index);clip=ko_character.convert(assets.root,'Data/UPC_DefaultLooks.tbl.csv',target,s['animation'],1.,definition=definition)
         main.cook(target,target/'cooked',influences=True);shutil.copyfile(target/'cooked/scene.bin',root/f'player-skill-{index}.bin')  # N3SI for a race past four influences (RQ-163)
         report.append(dict(source_id=source_id,animation=clip,table=row))

@@ -1097,6 +1097,17 @@ Moradon's lines are the player's 1298 texts 4003 (`wrong_class`), 3004
 and 4002 (`level_required`, and `target_dead` on an NPC) in `0xffff3b3b`.
 No engine, wire or schema version changes.
 
+RQ-211 adds N3K6: N3K5 with, after the refusal lines, a u32 count (1–64) of
+distinct u32 specialties (KO class codes 1–65535) whose characters may use the
+skills; N3K2–N3K5 stay valid and admit every character, and both readers bound
+the list. The server keeps each character's specialty from its create choice
+(`characters.specialty`, read when it enters the world) and refuses a skill
+`wrong_class` for a character whose specialty the policy does not list; a
+character with no specialty is admitted. The client lists the skills in its
+skill window and keeps or binds them on the hotbar only for a character the
+policy admits. Moradon's policy lists the priest's 104, 111, 112, 204, 211 and
+212. No engine, wire or schema version changes.
+
 D-244 (PQ-480) tests a skill's weapon only at the acceptance. Between the
 acceptance and the impact the server no longer refuses a cast whose weapon
 was unequipped: it lands and takes its cost, as in KO (1298 tests the need

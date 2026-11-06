@@ -2788,6 +2788,7 @@ mod tests {
                 life_revision: 0,
                 dead: false,
                 ready_ticks: 0,
+                specialty: None,
                 entity: wire::Entity::default(),
             },
             inventory: Default::default(),
@@ -3326,6 +3327,7 @@ pub(crate) fn test_player() -> Player {
             life_revision: 0,
             dead: false,
             ready_ticks: 0,
+            specialty: None,
             entity: wire::Entity {
                 health: 30,
                 ..Default::default()

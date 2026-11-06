@@ -60,18 +60,35 @@ def refusals(value):
         except ValueError:raise ValueError('skill refusal line') from None
     return out
 
+MAX_SPECIALTIES=64
+
+def specialties(value):
+    """RQ-211: the KO class codes (character-create.json's specialties) whose
+    characters may use the archetype's skills, as 1298's usable check
+    0057f7f0 admits a row only for the player's represent class (a priest's
+    row for 104, 111, 112, 204, 211 or 212, else text 0xfa3) and its skill
+    tree lists only the player's class's rows (source UISkillTreeDlg.cpp).
+    1-64 distinct codes, each 1-65535; a policy without them (N3K2-N3K5)
+    admits every character."""
+    if (type(value) is not list or not 1<=len(value)<=MAX_SPECIALTIES or len(set(value))!=len(value)
+            or any(type(v) is not int or not 1<=v<=65535 for v in value)):raise ValueError('skill specialties')
+    return u(len(value))+b''.join(u(v) for v in value)
+
 def cook(config):
     """N3K2; N3K3 (PQ-466) when the policy has a `notice` (after the reach);
     N3K4 (PQ-469) when it also has a `failed` line (after the notice); N3K5
-    (PQ-479) when it also has `refusals` (after the failed line)."""
-    if set(config)-{'notice','failed','refusals'}!={'archetype','label','reach','skills'} or not 1<=len(config['skills'])<=32:raise ValueError('skill policy')
+    (PQ-479) when it also has `refusals` (after the failed line); N3K6
+    (RQ-211) when it also has `specialties` (after the refusal lines)."""
+    if set(config)-{'notice','failed','refusals','specialties'}!={'archetype','label','reach','skills'} or not 1<=len(config['skills'])<=32:raise ValueError('skill policy')
     if 'failed' in config and 'notice' not in config:raise ValueError('skill failed line needs a notice')
     if 'refusals' in config and 'failed' not in config:raise ValueError('skill refusal lines need a failed line')
-    magic=b'N3K5' if 'refusals' in config else b'N3K4' if 'failed' in config else b'N3K3' if 'notice' in config else b'N3K2'
+    if 'specialties' in config and 'refusals' not in config:raise ValueError('skill specialties need refusal lines')
+    magic=b'N3K6' if 'specialties' in config else b'N3K5' if 'refusals' in config else b'N3K4' if 'failed' in config else b'N3K3' if 'notice' in config else b'N3K2'
     out=magic+identity(config['archetype'])+string(config['label'])+reach(config['reach'])
     if 'notice' in config:out+=notice(config['notice'])
     if 'failed' in config:out+=failed(config['failed'])
     if 'refusals' in config:out+=refusals(config['refusals'])
+    if 'specialties' in config:out+=specialties(config['specialties'])
     out+=u(len(config['skills']))
     seen=set()
     for s in config['skills']:

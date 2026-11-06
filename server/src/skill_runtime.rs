@@ -130,6 +130,7 @@ pub(crate) fn test_cancelled_commit(
             label: "Audit".into(),
             reach: Default::default(),
             radii: 0.,
+            specialties: vec![],
             skills: vec![skill.clone()],
         };
         match mode {
@@ -438,6 +439,7 @@ impl Runtime {
                         skill,
                         crate::skills::Range::Start,
                         p.inventory.level as u32,
+                        p.s.specialty,
                         &p.s.entity,
                         target,
                         p.bag.as_ref(),
@@ -615,6 +617,7 @@ impl Runtime {
                         &c.skill,
                         range,
                         p.inventory.level as u32,
+                        p.s.specialty,
                         actor,
                         t,
                         p.bag.as_ref(),
@@ -841,6 +844,7 @@ mod tests {
                     label: "Test".into(),
                     reach: Default::default(),
                     radii: 0.,
+                    specialties: vec![],
                     skills: vec![heal()],
                 },
                 me: p.s.entity.clone(),
@@ -1175,6 +1179,7 @@ mod tests {
             label: "Test".into(),
             reach: Default::default(),
             radii: 0.,
+            specialties: vec![],
             skills: vec![heal()],
         };
         let actor = wire::Entity { id: 1, health: 10, resource: 20, ..Default::default() };
@@ -1195,11 +1200,11 @@ mod tests {
             if weapon {
                 p.skills[0].weapons.push("demo:item/wand".into());
             }
-            let held = p.validate(&p.skills[0], crate::skills::Range::Hold, level, &a, &t, None);
+            let held = p.validate(&p.skills[0], crate::skills::Range::Hold, level, None, &a, &t, None);
             if weapon {
                 assert_eq!(held, Ok(()), "the hold does not test the weapon");
                 assert_eq!(
-                    p.validate(&p.skills[0], crate::skills::Range::Start, level, &a, &t, None),
+                    p.validate(&p.skills[0], crate::skills::Range::Start, level, None, &a, &t, None),
                     Err("weapon_required")
                 );
             } else {

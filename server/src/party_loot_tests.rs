@@ -28,6 +28,7 @@ pub(super) fn selected(c: &mut postgres::Client, id: i64) -> Selected {
         life_revision: row.get(2),
         dead: row.get(3),
         ready_ticks: 0,
+        specialty: None,
         entity: wire::Entity {
             id: id as u64,
             name: row.get(0),

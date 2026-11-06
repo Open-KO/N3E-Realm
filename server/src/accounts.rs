@@ -45,6 +45,10 @@ pub struct Selected {
     pub life_revision: i64,
     pub dead: bool,
     pub ready_ticks: u64,
+    /// RQ-211: the character's specialty (KO class code) from its create
+    /// choice, None for one created without the package's create rules; the
+    /// skill policy admits a class by it (`skills::Policy::admits`).
+    pub specialty: Option<u32>,
     pub entity: wire::Entity,
 }
 impl Database {
@@ -260,8 +264,8 @@ impl Database {
         self.call(move |c| {
             let mut t=c.transaction()?;
             persistence::fence(&mut t,&owner.realm,&owner.owner,owner.generation)?;
-            let row=t.query_opt("UPDATE characters SET session_generation=session_generation+1,realm_generation=$4,online=true,movement_seq=0 WHERE id=$1 AND account_id=$2 AND realm=$3 AND (NOT online OR realm_generation<>$4) RETURNING name,x,y,z,session_generation,nextval('entity_instances'),life_revision,dead,COALESCE(GREATEST(0,ceil(extract(epoch FROM (respawn_ready_at-clock_timestamp()))*1000/$5::bigint)),0)::bigint", &[&id,&account,&owner.realm,&owner.generation,&(crate::clock::tick_ms() as i64)])?.ok_or_else(||bad("character not owned or already online"))?;
-            let selected=Selected{id,generation:row.get(4),life_revision:row.get(6),dead:row.get(7),ready_ticks:row.get::<_,i64>(8) as u64,entity:wire::Entity{id:row.get::<_,i64>(5) as u64,name:row.get(0),x:row.get(1),y:row.get(2),z:row.get(3),ack:0,..Default::default()}};
+            let row=t.query_opt("UPDATE characters SET session_generation=session_generation+1,realm_generation=$4,online=true,movement_seq=0 WHERE id=$1 AND account_id=$2 AND realm=$3 AND (NOT online OR realm_generation<>$4) RETURNING name,x,y,z,session_generation,nextval('entity_instances'),life_revision,dead,COALESCE(GREATEST(0,ceil(extract(epoch FROM (respawn_ready_at-clock_timestamp()))*1000/$5::bigint)),0)::bigint,specialty", &[&id,&account,&owner.realm,&owner.generation,&(crate::clock::tick_ms() as i64)])?.ok_or_else(||bad("character not owned or already online"))?;
+            let selected=Selected{id,generation:row.get(4),life_revision:row.get(6),dead:row.get(7),ready_ticks:row.get::<_,i64>(8) as u64,specialty:row.get::<_,Option<i32>>(9).and_then(|v|u32::try_from(v).ok()),entity:wire::Entity{id:row.get::<_,i64>(5) as u64,name:row.get(0),x:row.get(1),y:row.get(2),z:row.get(3),ack:0,..Default::default()}};
             t.commit()?; Ok(selected)
         }).await
     }
@@ -552,6 +556,13 @@ mod database_tests {
             .map(|r| r.get(0))
             .collect();
         assert_eq!(stats, [Some(vec![20, 30, 45]), None, Some(vec![45, 30, 20])]);
+        // RQ-211: entering the world carries the character's specialty, the
+        // skill policy's class (None for one created without the rules).
+        for (name, want) in [("Chosen", Some(70)), ("Fixed", Some(71)), ("Named", None)] {
+            let id = listed.iter().find(|c| c.name == name).unwrap().id as i64;
+            let selected = runtime.block_on(db.select(accounts[0], id, owner.clone()))?;
+            assert_eq!(selected.specialty, want, "{name}");
+        }
         // The schema keeps a choice whole and a new name unique without regard
         // to case; a create that loses that race to the index is Taken, one
         // that loses the slot's is Failed.

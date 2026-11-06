@@ -1845,6 +1845,24 @@ recipe, since 1097, 1298 and the source agree. Before, the client sent the first
 slot the list left free and the hall seated the list in order, which differed only
 when the empty slot in focus was not the first.
 
+### 10.9 Whose skills a class may use (RQ-211, 2026-11-06)
+
+Read statically in n3e's 1298 project (`audit-2026-09-19`, `KnightOnLine.exe`,
+`-readOnly -noanalysis`, `decompile 0057f7f0`; output under `build/ghidra/rq211/`,
+not committed), with the source's skill tree and Moradon's local tables. Not run.
+
+| Observation | Where | Label |
+|---|---|---|
+| **1298's usable check admits a row only for the player's represent class.** With the row's need skill (`+0x64`) not 0, it takes the player's class group (`00615210` of the class at `+0x494`) and refuses, with text `0xfa3` in `0xffffff00` through `005d7250`, a row whose need skill / 10 is not one of the group's six codes: 0 warrior (101, 105, 106, 201, 205, 206), 1 rogue (102, 107, 108, 202, 207, 208), 2 mage (103, 109, 110, 203, 209, 210), 3 priest (104, 111, 112, 204, 211, 212). A Karus priest may so use an El Morad priest's row (Moradon's starter skills are rows 204001 and 204002, need skill 2040) | 1298 `0057f7f0` (text load `0057f8bc`, post `0057f8d0`) | binary |
+| **KO's skill tree lists only the player's class's rows.** `InitIconUpdate` takes the rows from class × 1000 + 1 to the next thousand, so a rogue's tree holds no priest row; the hotbar restore keeps a skill only if the tree holds it (1298 `004de6f0`, `004e2ca0`, D-245) | source `UISkillTreeDlg.cpp`; 1298 `004de6f0` | source; binary |
+| **A new rogue's skills are not type 3.** Moradon's `Skill_Magic_Main_us.tbl` gives the Karus rogue (need skill 1020) Sprint (102001, level 1, type 4), Archery (102003, level 3, type 2) and Stab (102005, level 5, type 1); the El Morad rogue's 202001-202005 are the same | `Data/Skill_Magic_Main_us.tbl` | local-asset |
+
+**Decides (RQ-211):** the skill policy names the specialties of its class
+(`skills.bin` N3K6, `content/skills.md`): Moradon's priest policy lists the
+priest group's six codes. The server refuses another class's character
+`wrong_class`, and the client shows such a character no skills in its window or on
+its hotbar. A rogue so has no skills until the realm runs types 1, 2 and 4 (Q125).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

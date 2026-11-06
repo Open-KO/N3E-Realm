@@ -278,7 +278,12 @@ struct SkillReach {float start=0,hold=0;bool planar=false;};
 // a player (1) or an NPC (2); one per status, never `out_of_range` (which has
 // the failed line); one `%s` takes the skill's label. N3K2-N3K4: none.
 struct SkillRefusal {std::string status;uint32_t target=0;std::string text;uint32_t color=0;};
-struct Skills {std::string archetype,label;SkillReach reach;std::string notice;std::vector<Skill> entries;std::string failed;uint32_t failed_color=0;std::vector<SkillRefusal> refusals;};
+// RQ-211: N3K6's specialties, the KO class codes whose characters may use the
+// skills (1298's usable check 0057f7f0 and its skill tree list only the
+// player's class's rows); empty (N3K2-N3K5) admits every character, as does a
+// character without a create choice (specialty 0).
+struct Skills {std::string archetype,label;SkillReach reach;std::string notice;std::vector<Skill> entries;std::string failed;uint32_t failed_color=0;std::vector<SkillRefusal> refusals;std::vector<uint32_t> specialties;
+  bool admits(uint32_t specialty)const{return specialties.empty()||!specialty||std::find(specialties.begin(),specialties.end(),specialty)!=specialties.end();}};
 // N3I1 package input binding (PQ-009, D-136): names from input_names.h.
 struct InputBinding {std::string action,key;uint32_t require=0,forbid=0,flags=0;};
 // N3I2 name display policy (PQ-014): the state at start and the actor classes

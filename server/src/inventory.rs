@@ -662,7 +662,7 @@ mod kit_tests {
             let (id, x, y, z): (i64, f32, f32, f32) = (row.get(0), row.get(1), row.get(2), row.get(3));
             assert_eq!([x, z], start, "{name} starts at the realm owner's start");
             assert_eq!(y, crate::movement::ground(&release.collision, x, z), "{name} stands on the ground");
-            let s = Selected { id, generation: 0, life_revision: 0, dead: false, ready_ticks: 0, entity: Default::default() };
+            let s = Selected { id, generation: 0, life_revision: 0, dead: false, ready_ticks: 0, specialty: None, entity: Default::default() };
             let mut t = c.transaction()?;
             let state = load(&mut t, &s, &o, bag, &rules.item)?;
             t.commit()?;

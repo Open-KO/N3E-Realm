@@ -30,11 +30,15 @@ struct Hotbar {
     if(r.skills)for(const auto&s:r.skills->entries)if(s.id==id)return &s;
     return nullptr;
   }
-  static bool known(const n3e::Release&r,const std::string&id){return policy(r,id)||skill(r,id);}
-  void context(const std::string&scope,uint64_t entity,const n3e::Release&r){
+  // RQ-211: a skill is known only to a character of the policy's class
+  // (`specialty`), as 1298's hotbar restore keeps only a skill its skill
+  // tree holds (004de6f0, 004e2ca0) and the tree holds only the class's.
+  uint32_t specialty=0;
+  bool known(const n3e::Release&r,const std::string&id)const{return policy(r,id)||(skill(r,id)&&r.skills->admits(specialty));}
+  void context(const std::string&scope,uint64_t entity,const n3e::Release&r,uint32_t class_code=0){
     if(self!=entity){timers.clear();drag.reset();self=entity;}
     if(identity==scope)return;
-    identity=scope;assignments={};page=0;file.clear();notice.clear();
+    identity=scope;assignments={};page=0;file.clear();notice.clear();specialty=class_code;
     const auto root=n3e::dirs::state();
     if(root.empty())return;
     unsigned char digest[SHA256_DIGEST_LENGTH];SHA256(reinterpret_cast<const unsigned char*>(scope.data()),scope.size(),digest);

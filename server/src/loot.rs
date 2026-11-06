@@ -439,6 +439,7 @@ mod tests {
             life_revision: 0,
             dead: false,
             ready_ticks: 0,
+            specialty: None,
             entity: wire::Entity {
                 id: 1,
                 health: 10,
@@ -499,6 +500,7 @@ mod tests {
             life_revision: 0,
             dead: false,
             ready_ticks: 0,
+            specialty: None,
             entity: wire::Entity {
                 id: 1,
                 health: 10,

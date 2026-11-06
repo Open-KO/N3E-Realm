@@ -217,7 +217,7 @@ std::optional<uint32_t> RepairPolicy::cost(uint32_t price,uint32_t current,uint3
   return uint32_t(std::trunc(double(uint32_t(std::trunc(value)))*double(multiplier)));
 }
 Skills load_skills(const std::filesystem::path&path){
-  Reader r(path);auto version=r.raw(4);need(version=="N3K2"||version=="N3K3"||version=="N3K4"||version=="N3K5","skill magic");Skills p{r.str(),r.str(),{},{},{},{},0,{}};
+  Reader r(path);auto version=r.raw(4);need(version=="N3K2"||version=="N3K3"||version=="N3K4"||version=="N3K5"||version=="N3K6","skill magic");Skills p{r.str(),r.str(),{},{},{},{},0,{}};
   p.reach.start=r.f();p.reach.hold=r.f();auto plane=r.count(1,0);p.reach.planar=plane==1;
   need(p.reach.start>=0&&p.reach.start<=50&&p.reach.hold>=0&&p.reach.hold<=50,"skill reach");
   // PQ-466 (D-234) notice; PQ-469 (D-235) the failed line, bounded the same way.
@@ -226,10 +226,10 @@ Skills load_skills(const std::filesystem::path&path){
          (format==std::string::npos||(text.compare(format,2,"%s")==0&&text.find('%',format+2)==std::string::npos)),what);
     return text;};
   if(version!="N3K2")p.notice=line("skill notice");
-  if(version=="N3K4"||version=="N3K5"){p.failed=line("skill failed line");p.failed_color=r.u();need(p.failed_color>>24,"skill failed colour");}
+  if(version=="N3K4"||version=="N3K5"||version=="N3K6"){p.failed=line("skill failed line");p.failed_color=r.u();need(p.failed_color>>24,"skill failed colour");}
   // PQ-479 (D-243): N3K5's acceptance refusal lines, bounded as the server
   // bounds them: 1-8, one per status ([a-z][a-z_]{0,31}, not out_of_range).
-  if(version=="N3K5"){
+  if(version=="N3K5"||version=="N3K6"){
     auto count=r.count(8);std::set<std::string> statuses;
     for(unsigned i=0;i<count;++i){
       SkillRefusal line_;line_.status=r.str();
@@ -239,6 +239,12 @@ Skills load_skills(const std::filesystem::path&path){
       line_.target=r.count(2,0);line_.text=line("skill refusal line");line_.color=r.u();need(line_.color>>24,"skill refusal colour");
       p.refusals.push_back(std::move(line_));
     }
+  }
+  // RQ-211: N3K6's specialties after the refusal lines, bounded as the
+  // server bounds them: 1-64 distinct codes, each 1-65535.
+  if(version=="N3K6"){
+    auto count=r.count(64);
+    for(unsigned i=0;i<count;++i){auto v=r.u();need(v>=1&&v<=65535&&std::find(p.specialties.begin(),p.specialties.end(),v)==p.specialties.end(),"skill specialty");p.specialties.push_back(v);}
   }
   auto count=r.count(32);std::set<std::string> seen;
   for(unsigned i=0;i<count;++i){

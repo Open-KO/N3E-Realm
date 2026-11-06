@@ -1,6 +1,7 @@
 {
   "archetype": "demo:class/priest",
   "label": "Priest",
+  "specialties": [104, 111, 112, 204, 211, 212],
   "reach": {"start": 2.0, "hold": 15.0, "plane": "xz"},
   "skills": [
     {"id":"demo:skill/tiny_healing","label":"Tiny Healing","class":"demo:class/priest","level":1,"cost":5,"cast_ms":1900,"cooldown_ms":0,"range":25,"target":1,"amount":15,"survival":80,"attribute":0,"resistance":0,"weapons":[],"source_skill":204001,"animation":17,"cast_effect":"heal-cast","cast_joints":[12,7],"target_effect":"heal-target","target_joint":-1},

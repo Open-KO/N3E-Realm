@@ -2229,3 +2229,30 @@ and a lower row cooks and draws no lower under the robe, for the player and for
 others (`content/appearance.md`, "Hidden keys"). Still refused beside a robe: a row
 over the lower and another part (n3e hides a whole key) and a 2145 lower part
 (2233's part set under a robe is unread). (b) stays unmodelled.
+
+### Q125 — A class the package has no skills for, and a character with no class
+
+RQ-211: the skill policy names the classes (KO specialties) whose characters may use
+its skills (`skills.bin` N3K6; `specialties`). Moradon's policy is the priest's
+starter heal and strike, listed for the priest group (104, 111, 112, 204, 211, 212), as
+1298's usable check `0057f7f0` admits a row only for the player's represent class
+(`specs/KO-FINDINGS.md` §10.9). The package offers the Tuarek rogue (102) too, whose KO
+skills are Sprint (type 4, level 1), Archery (type 2, level 3) and Stab (type 1, level
+5); the realm runs only type 3 (`docs/history/GAPS.md`, "Magic types").
+
+Options for the rogue:
+- (a) No skills until the realm runs KO's types 1, 2 and 4: an empty skill window and
+  hotbar, the server refusing `wrong_class`.
+- (b) Keep giving it the priest's skills until then (what the hosted realm did).
+- (c) Stop offering the rogue at create until its skills exist.
+
+Options for a character with no specialty (created without the package's create
+rules, or before RQ-002):
+- (a) Of every class: the policy's skills, as before.
+- (b) Of no class.
+
+**Default taken:** (a) and (a). KO refuses another class's row, and the maintainer
+reported the rogue's priest skills as the fault (2026-11-06 playtest); (c) removes a
+class the create screen draws. A character with no specialty exists only in a
+package without create rules (every Moradon create has one, Q100), where the policy
+has no specialties either. The rogue's own skills are proposed as their own items.

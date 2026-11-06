@@ -1089,6 +1089,11 @@ object files the pinned tree lacks (`Object/obj_war_duntree01_ip00`–`ip02`,
 - **RQ-007 (play).** Per race and class: the model in the world, class weapons,
   skills and the server's class stat rules. The stats sent at create are the
   character's base.
+  - Done in RQ-211: the skill policy names its classes (`skills.bin` N3K6,
+    `content/skills.md`): Moradon's priest skills only for the priest group, so
+    a rogue no longer gets them; the rogue's own skills (types 1, 2 and 4), each
+    class's kit and the face and hair in the world wait (Q125; KO-FINDINGS
+    §10.9).
 - **RQ-008 (delete).** Deleting the last character returns the account to nation
   select (source). Whether the realm resets the account's nation then is RQ-008's
   question with Q98's default.

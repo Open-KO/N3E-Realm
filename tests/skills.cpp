@@ -28,6 +28,11 @@ int main(int argc,char**argv){try{
   // which of the client's own skill actions the server refused out_of_range.
   {char color[16];std::snprintf(color,sizeof color,"%08x",p.failed_color);
    std::cout<<"failed='"<<p.failed<<"' color="<<color<<" failed_formatted='"<<n3e::skill_notice(p.failed,s.label)<<"'\n";}
+  // RQ-211: N3K6's specialties as loaded, and whom they admit.
+  std::cout<<"specialties=";for(auto v:p.specialties)std::cout<<v<<",";std::cout<<"\n";
+  check(p.admits(0),"a character without a create choice is of the class");
+  if(p.specialties.empty())check(p.admits(102)&&p.admits(104),"no specialties admit every class");
+  else for(uint32_t v:{1u,102u,104u,204u,65535u})check(p.admits(v)==(std::find(p.specialties.begin(),p.specialties.end(),v)!=p.specialties.end()),"specialties admit only their own");
   // PQ-479 (D-243): N3K5's refusal lines as loaded.
   for(const auto&l:p.refusals){char color[16];std::snprintf(color,sizeof color,"%08x",l.color);
    std::cout<<"refusal status="<<l.status<<" target="<<l.target<<" text='"<<l.text<<"' color="<<color<<"\n";}

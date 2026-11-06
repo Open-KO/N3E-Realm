@@ -266,6 +266,7 @@ mod tests {
             life_revision: 0,
             dead: false,
             ready_ticks: 0,
+            specialty: None,
             entity: wire::Entity {
                 health: 100,
                 ..Default::default()

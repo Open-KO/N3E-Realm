@@ -55,16 +55,20 @@ pub struct Policy {
     /// them), as the ranged attack's limit sums them (D-216); set when the
     /// package loads, not stored in `skills.bin`.
     pub radii: f32,
+    /// RQ-211: the specialties (KO class codes) whose characters may use the
+    /// skills (N3K6); empty admits every character (N3K2-N3K5).
+    pub specialties: Vec<u32>,
     pub skills: Vec<Skill>,
 }
 impl Policy {
     pub fn load(path: &Path) -> Result<Self> {
         let mut r = Reader::open(path)?;
-        let (notice, failed, refusals) = match r.take(4)? {
-            b"N3K2" => (false, false, false),
-            b"N3K3" => (true, false, false),
-            b"N3K4" => (true, true, false),
-            b"N3K5" => (true, true, true),
+        let (notice, failed, refusals, classes) = match r.take(4)? {
+            b"N3K2" => (false, false, false, false),
+            b"N3K3" => (true, false, false, false),
+            b"N3K4" => (true, true, false, false),
+            b"N3K5" => (true, true, true, false),
+            b"N3K6" => (true, true, true, true),
             _ => return Err(bad("skill magic")),
         };
         let archetype = r.string()?;
@@ -135,6 +139,23 @@ impl Policy {
                 if r.u()? >> 24 == 0 {
                     return Err(bad("skill refusal colour"));
                 }
+            }
+        }
+        // RQ-211: N3K6's specialties, the KO class codes whose characters
+        // may use the skills (1298's usable check 0057f7f0 admits a row only
+        // for the player's represent class): 1-64 distinct codes, 1-65535.
+        let mut specialties = Vec::new();
+        if classes {
+            let count = r.u()?;
+            if !(1..=64).contains(&count) {
+                return Err(bad("skill specialties"));
+            }
+            for _ in 0..count {
+                let v = r.u()?;
+                if !(1..=65535).contains(&v) || specialties.contains(&v) {
+                    return Err(bad("skill specialty"));
+                }
+                specialties.push(v);
             }
         }
         let count = r.u()?;
@@ -213,11 +234,19 @@ impl Policy {
             label,
             reach,
             radii: 0.,
+            specialties,
             skills,
         })
     }
     pub fn get(&self, id: &str) -> Option<&Skill> {
         self.skills.iter().find(|s| s.id == id)
+    }
+    /// RQ-211: whether a character of `specialty` is of the policy's class.
+    /// A policy without specialties admits every character; so does one
+    /// created without the package's create rules (no specialty), which the
+    /// rules do not cover.
+    pub fn admits(&self, specialty: Option<u32>) -> bool {
+        self.specialties.is_empty() || specialty.is_none_or(|s| self.specialties.contains(&s))
     }
     /// PQ-465 (D-232): whether `target` is within `skill`'s range for the
     /// check `range`. A cast on the caster itself passes (Ebenezer's
@@ -246,17 +275,28 @@ impl Policy {
     /// move while a cast runs (`0049f7c0`, `004a1aa4`). So a weapon removed
     /// after the acceptance does not refuse the cast; the impact reads the
     /// caster's attributes as they then are, never the removed weapon's.
+    ///
+    /// RQ-211: `specialty` is the actor's (its character's create choice);
+    /// one the policy does not admit is refused `wrong_class`, as 1298's
+    /// usable check refuses another class's row (0057f7f0, text 0xfa3).
+    #[allow(clippy::too_many_arguments)]
     pub fn validate(
         &self,
         skill: &Skill,
         range: Range,
         level: u32,
+        specialty: Option<u32>,
         actor: &wire::Entity,
         target: &wire::Entity,
         bag: Option<&wire::BagState>,
     ) -> std::result::Result<(), &'static str> {
+        let class = if self.admits(specialty) {
+            self.archetype.as_str()
+        } else {
+            ""
+        };
         skill.validate(
-            &self.archetype,
+            class,
             level,
             actor,
             target,
@@ -456,6 +496,7 @@ mod tests {
             label: "Test".into(),
             reach,
             radii,
+            specialties: vec![],
             skills: vec![skill.clone()],
         }
     }
@@ -477,18 +518,28 @@ mod tests {
             ..Default::default()
         };
         let check = |p: &Policy, s: &Skill, level, a: &wire::Entity, t: &wire::Entity| {
-            p.validate(s, Range::Start, level, a, t, None)
+            p.validate(s, Range::Start, level, None, a, t, None)
         };
         assert_eq!(check(&p, &s, 2, &actor, &target), Ok(()));
         let mut other = p.clone();
         other.archetype = "other".into();
         assert_eq!(check(&other, &s, 2, &actor, &target), Err("wrong_class"));
+        // RQ-211: N3K6's specialties admit only their characters' classes; a
+        // character without a create choice, and every character of a policy
+        // without specialties, is of the policy's class.
+        let mut priest = p.clone();
+        priest.specialties = vec![104, 204];
+        for (specialty, want) in [(Some(104), Ok(())), (Some(204), Ok(())), (Some(102), Err("wrong_class")), (None, Ok(()))] {
+            assert_eq!(priest.validate(&s, Range::Start, 2, specialty, &actor, &target, None), want, "{specialty:?}");
+            assert_eq!(p.validate(&s, Range::Start, 2, specialty, &actor, &target, None), Ok(()), "{specialty:?}");
+        }
+        assert_eq!(priest.validate(&s, Range::Hold, 2, Some(102), &actor, &target, None), Err("wrong_class"));
         assert_eq!(check(&p, &s, 1, &actor, &target), Err("level_required"));
         // With no margins the start limit is the range itself, inclusive, and
         // the hold (exclusive) refuses its boundary.
         target.x = 25.;
         assert_eq!(check(&p, &s, 2, &actor, &target), Err("out_of_range"));
-        assert_eq!(p.validate(&s, Range::Unchecked, 2, &actor, &target, None), Ok(()));
+        assert_eq!(p.validate(&s, Range::Unchecked, 2, None, &actor, &target, None), Ok(()));
         target.x = 0.;
         actor.resource = 4;
         assert_eq!(check(&p, &s, 2, &actor, &target), Err("insufficient_resource"));
@@ -507,18 +558,18 @@ mod tests {
         assert_eq!(check(&p, &s, 2, &actor, &target), Err("weapon_required"));
         // PQ-480 (D-244): only the acceptance tests the weapon.
         for range in [Range::Unchecked, Range::Hold] {
-            assert_eq!(p.validate(&s, range, 2, &actor, &target, None), Ok(()), "{range:?}");
+            assert_eq!(p.validate(&s, range, 2, None, &actor, &target, None), Ok(()), "{range:?}");
         }
         let bag = wire::BagState {
             equipment: vec![wire::ItemStack { instance: 1, item: "demo:item/wand".into(), ..Default::default() }],
             ..Default::default()
         };
-        assert_eq!(p.validate(&s, Range::Start, 2, &actor, &target, Some(&bag)), Ok(()));
+        assert_eq!(p.validate(&s, Range::Start, 2, None, &actor, &target, Some(&bag)), Ok(()));
         let unsaved = wire::BagState {
             equipment: vec![wire::ItemStack { instance: 0, item: "demo:item/wand".into(), ..Default::default() }],
             ..Default::default()
         };
-        assert_eq!(p.validate(&s, Range::Start, 2, &actor, &target, Some(&unsaved)), Err("weapon_required"));
+        assert_eq!(p.validate(&s, Range::Start, 2, None, &actor, &target, Some(&unsaved)), Err("weapon_required"));
     }
     /// PQ-465 (D-232): Moradon's rule (start 2, hold 15 on the ground plane,
     /// 1 m radii): a cast is accepted within 25 + 2 + 2 = 29 m in 3-D and holds
@@ -529,7 +580,7 @@ mod tests {
         let p = policy(&s, Reach { start: 2., hold: 15., planar: true }, 2.);
         let actor = wire::Entity { id: 1, health: 100, resource: 5, ..Default::default() };
         let at = |x: f32, y: f32, z: f32| wire::Entity { id: 2, npc: true, health: 40, x, y, z, ..Default::default() };
-        let ok = |range, t: &wire::Entity| p.validate(&s, range, 2, &actor, t, None);
+        let ok = |range, t: &wire::Entity| p.validate(&s, range, 2, None, &actor, t, None);
         // The start: 3-D, inclusive, the radii and the margin added.
         assert_eq!(ok(Range::Start, &at(29., 0., 0.)), Ok(()));
         assert_eq!(ok(Range::Start, &at(0., 0., 29.01)), Err("out_of_range"));
@@ -543,12 +594,12 @@ mod tests {
         // A 3-D hold measures the height too.
         let mut space = p.clone();
         space.reach.planar = false;
-        assert_eq!(space.validate(&s, Range::Hold, 2, &actor, &at(30., 30., 20.), None), Err("out_of_range"));
+        assert_eq!(space.validate(&s, Range::Hold, 2, None, &actor, &at(30., 30., 20.), None), Err("out_of_range"));
         // The start also requires the hold, so a hold below the start limit
         // bounds it.
         let mut short = p.clone();
         short.reach.hold = 0.;
-        assert_eq!(short.validate(&s, Range::Start, 2, &actor, &at(26., 0., 0.), None), Err("out_of_range"));
+        assert_eq!(short.validate(&s, Range::Start, 2, None, &actor, &at(26., 0., 0.), None), Err("out_of_range"));
         // A cast on the caster passes wherever it stands; a non-finite
         // position fails.
         let mut me = at(1000., 0., 0.);
@@ -691,6 +742,38 @@ mod tests {
         five.extend(0xffff3b3bu32.to_le_bytes());
         assert!(raw(b"N3K4", 2., 15., 1, &five).is_err(), "N3K4 has no refusal lines");
         assert!(raw(b"N3K5", 2., 15., 1, &five).is_ok());
+        // RQ-211: N3K6 carries, after the refusal lines, the specialties
+        // whose characters may use the skills: 1-64 distinct codes 1-65535.
+        let classes = |codes: &[u32], count: Option<u32>| {
+            let mut six = five.clone();
+            six.extend(count.unwrap_or(codes.len() as u32).to_le_bytes());
+            for v in codes {
+                six.extend(v.to_le_bytes());
+            }
+            raw(b"N3K6", 2., 15., 1, &six)
+        };
+        let p = classes(&[104, 111, 112, 204, 211, 212], None).unwrap();
+        assert_eq!(p.specialties, [104, 111, 112, 204, 211, 212]);
+        assert!(p.admits(Some(204)) && !p.admits(Some(102)) && p.admits(None));
+        assert!(raw(b"N3K5", 2., 15., 1, &five).unwrap().specialties.is_empty(), "N3K5 admits every class");
+        let all: Vec<u32> = (1..=64).collect();
+        assert!(classes(&all, None).is_ok(), "64 specialties");
+        let over: Vec<u32> = (1..=65).collect();
+        for (codes, count, why) in [
+            (&[][..], None, "none"),
+            (&over[..], None, "65"),
+            (&[0][..], None, "code 0"),
+            (&[65536][..], None, "code past 65535"),
+            (&[104, 104][..], None, "a code twice"),
+            (&[104][..], Some(2), "a count past the codes"),
+        ] {
+            assert!(classes(codes, count).is_err(), "{why}");
+        }
+        assert!(raw(b"N3K6", 2., 15., 1, &five).is_err(), "N3K6 needs its specialties");
+        let mut six = five.clone();
+        six.extend(1u32.to_le_bytes());
+        six.extend(104u32.to_le_bytes());
+        assert!(raw(b"N3K5", 2., 15., 1, &six).is_err(), "N3K5 has no specialties");
         std::fs::remove_dir_all(&dir).unwrap();
     }
     struct Roll(u32);
@@ -737,6 +820,7 @@ mod tests {
             life_revision: 0,
             dead: false,
             ready_ticks: 0,
+            specialty: None,
             entity: wire::Entity::default(),
         };
         let rt = tokio::runtime::Runtime::new()?;

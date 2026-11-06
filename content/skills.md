@@ -1,4 +1,4 @@
-# Bounded direct skills (N3K2, N3K3, N3K4, N3K5)
+# Bounded direct skills (N3K2, N3K3, N3K4, N3K5, N3K6)
 
 Engine34/wire27 requires `skills.bin`, referenced `player-skill-N.bin` scenes,
 and effects. Older engines reject these additions. Skill policy defines one
@@ -23,7 +23,10 @@ D-243) adds, after the failed line,
 `out_of_range`), a target kind (0 any, 1 a player, 2 an NPC), a text bounded
 as the notice is and its colour (alpha not 0); the manifest key is the
 optional `refusals` (a list of `status`, `target` `any`/`player`/`npc`,
-`text`, `color`), which needs a `failed` line. Each entry stores ID, label, class, level,
+`text`, `color`), which needs a `failed` line. N3K6 (RQ-211) adds, after the
+refusal lines, the specialties: a u32 count (1–64) of distinct u32 KO class
+codes (1–65535) whose characters may use the skills; the manifest key is the
+optional `specialties`, which needs `refusals`. Each entry stores ID, label, class, level,
 MP cost, cast milliseconds, cooldown milliseconds, target kind, amount,
 interruption-survival percentage, attribute index, resistance, animation index,
 range, allowed equipped-item IDs, cast/target effect keys, cast joints and target
@@ -35,7 +38,27 @@ reject duplicate skills/joints, nonfinite values, bad references and trailing da
 
 The authenticated Action channel selects the skill and target. The server checks
 session/sequence, class, level, alive state, target category, range, MP, equipment,
-cast occupancy and cooldown. Database work runs on the existing bounded worker.
+cast occupancy and cooldown.
+
+**Class (RQ-211).** A character is of the policy's class when the policy has no
+specialties (N3K2–N3K5), when its specialty (`characters.specialty`, its create
+choice) is one of them, or when it has none (created without the package's create
+rules; Q125). The server reads the specialty when the character enters the world
+(`accounts::Selected`) and refuses any other character's skill `wrong_class` at the
+acceptance and from the release on, as 1298's usable check `0057f7f0` refuses a row
+whose need skill (`+0x64`) / 10 is not one of the player's represent class's codes
+(class group `00615210`: the priest's 104, 111, 112, 204, 211 and 212; text `0xfa3`
+in `0xffffff00`; binary, `build/ghidra/rq211`). The client lists the policy's skills
+in the skill window, and keeps or binds them on the hotbar, only for a character of
+the class (its select list's entry for the self entity's name); for another class
+the window is empty and a saved hotbar drops them on load, as 1298's skill tree
+lists only the player's class's rows (source `UISkillTreeDlg.cpp`, class × 1000 + 1
+on) and its hotbar restore keeps only skills the tree holds (`004de6f0`,
+`004e2ca0`). Moradon's policy is the priest's (`games/moradon/skills.json`
+`specialties` 104, 111, 112, 204, 211, 212; `tools/assetc/ko_skills.py` checks each
+row's need skill / 10 is listed), so its Tuarek rogue (102) has no skills: KO's
+rogue starts with Sprint (102001, type 4) and gains Archery (102003, type 2) and
+Stab (102005, type 1), types the realm does not run (Q125). Database work runs on the existing bounded worker.
 Casting freezes the action/target, publishes start/end ticks and stops sitting.
 Movement, invalid target/session/life and incoming-attack interruption cancel it.
 Every completed attack packet can roll interruption, including a miss, matching

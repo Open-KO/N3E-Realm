@@ -62,7 +62,18 @@ int main(){try{
    check(!sb.register_skill(high,k,4)&&sb.assignments[2].empty());
    check(Hotbar::skill(k,sb.assignments[0])==&k.skills->entries[1]);
    for(unsigned i=2;i<8;++i)sb.assignments[i]="test:skill/low";
-   check(!sb.register_skill(low,k,1));}
+   check(!sb.register_skill(low,k,1));
+   // RQ-211: with specialties, a character of another class binds none of
+   // the skills and its saved hotbar drops them on load, as 1298's restore
+   // keeps only a skill its class's tree holds; the class keeps them.
+   k.skills->specialties={104,204};sb.save();
+   Hotbar rogue;rogue.context("skills character",8,k,102);
+   check(std::all_of(rogue.assignments.begin(),rogue.assignments.end(),[](const auto&a){return a.empty();}));
+   check(!rogue.bind_skill("hotbar:0",low,k,1)&&!rogue.register_skill(low,k,1)&&rogue.assignments[0].empty());
+   Hotbar priest;priest.context("skills character",9,k,204);
+   check(priest.assignments[0]=="test:skill/high"&&priest.bind_skill("hotbar:1",low,k,1));
+   Hotbar unchosen;unchosen.context("skills character",10,k,0);
+   check(unchosen.assignments[0]=="test:skill/high");}
   auto quarter=cooldown_polygon(.75f);check(std::abs(quarter[1][0]-1)<1e-5&&std::abs(quarter[1][1]-.5f)<1e-5);
   std::filesystem::remove_all(root);
   std::cout<<"PASS hotbar movable stacks, duplicate/page/empty bindings, character-scoped persistence, result identity/rejection/timeout, three-frame flash and radial quadrant geometry\n";

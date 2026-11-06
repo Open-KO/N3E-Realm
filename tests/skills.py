@@ -128,6 +128,31 @@ with tempfile.TemporaryDirectory(prefix='n3e-skills-')as root:
   native(b'N3K5'+four[4:cut]+block(items,count)+body,False)
  native(b'N3K5'+four[4:],False);native(b'N3K4'+five[4:],False)
  for at in (cut,cut+4,cut+8,len(five)-len(body)-1):native(five[:at],False)
+ # RQ-211: N3K6 adds, after the refusal lines, the specialties (KO class
+ # codes) whose characters may use the skills: 1-64 distinct codes 1-65535.
+ # A policy without them (N3K2-N3K5) admits every class.
+ assert 'specialties=\n' in native(five,True)
+ priests=json.loads(pathlib.Path('games/moradon/skills.json').read_text())['specialties']
+ assert priests==[104,111,112,204,211,212],priests
+ six=skills.cook(dict(config,notice='Too far',failed=failed_line,refusals=lines,specialties=priests))
+ classes=len(five)-len(body)
+ assert six[:4]==b'N3K6' and six[4:classes]==five[4:classes] and six[classes:classes+4+4*len(priests)]==u(len(priests))+b''.join(u(v) for v in priests)
+ assert 'specialties=104,111,112,204,211,212,\n' in native(six,True)
+ assert skills.cook(dict(config,notice='Too far',failed=failed_line,refusals=lines,specialties=list(range(1,65))))[:4]==b'N3K6'
+ for bad in ([],list(range(1,66)),[0],[65536],[104,104],[True],['104'],[104.0],104,None):
+  try:skills.cook(dict(config,notice='Too far',failed=failed_line,refusals=lines,specialties=bad))
+  except ValueError:pass
+  else:raise AssertionError(('bad skill specialties accepted',bad))
+ try:skills.cook(dict(config,notice='Too far',failed=failed_line,specialties=priests))
+ except ValueError:pass
+ else:raise AssertionError('specialties without refusal lines were accepted')
+ def classed(codes,count=None):return u(len(codes) if count is None else count)+b''.join(u(v) for v in codes)
+ body6=six[classes+4+4*len(priests):]
+ assert 'specialties=102,\n' in native(b'N3K6'+five[4:classes]+classed([102])+body6,True)
+ for codes,count in [([],None),(list(range(1,66)),None),([0],None),([65536],None),([104,104],None),([104],2)]:
+  native(b'N3K6'+five[4:classes]+classed(codes,count)+body6,False)
+ native(b'N3K6'+five[4:],False);native(b'N3K5'+six[4:],False)
+ for at in (classes,classes+4,len(six)-len(body6)-1):native(six[:at],False)
  # Both floats are the encoded range: reject nonfinite content at runtime too.
  native(valid.replace(struct.pack('<f',25),struct.pack('<f',float('nan'))),False)
  # Verify stereo unsigned PCM conversion and strict truncated WAV rejection.
@@ -169,4 +194,4 @@ with tempfile.TemporaryDirectory(prefix='n3e-skills-')as root:
   try:audio_spatial.cook(bad)
   except ValueError:pass
   else:raise AssertionError(('bad audio spatial accepted',bad))
-print('PASS skill cooker/C++ compatibility (N3K2, N3K3 notice, N3K4 failed line, N3K5 refusal lines), hostile bounds, audio PCM conversion/truncation and N3A2 positional policy')
+print('PASS skill cooker/C++ compatibility (N3K2, N3K3 notice, N3K4 failed line, N3K5 refusal lines, N3K6 specialties), hostile bounds, audio PCM conversion/truncation and N3A2 positional policy')

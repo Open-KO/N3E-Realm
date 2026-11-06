@@ -19,8 +19,30 @@ env={**os.environ,'N3E_IMAGE':moradon_stack.IMAGE,'N3E_PACKAGE_PATH':str(package
 account='skills'+secrets.token_hex(5);password=secrets.token_urlsafe(24)
 subprocess.run(['docker','compose','-p',moradon_stack.PROJECT,'exec','-T','server','n3e-server','account-create',account],input=password+'\n',env=env,text=True,capture_output=True,check=True)
 def connect():return Peer(state['port'],account,password,content=state['release'],game=m['game_id'],protocol=m['protocol_version'])
-p=connect();character=p.create('Skill'+secrets.token_hex(3));p.select(character);p.pump(.5)
 heal,strike=[s['id'] for s in m['skills']['skills']]
+# RQ-211: the policy is the priest group's (N3K6), as 1298's usable check
+# 0057f7f0 admits a row only for the player's represent class: a Tuarek rogue
+# (102) is refused wrong_class before anything else, the priest below casts.
+assert m['skills']['specialties']==[104,111,112,204,211,212],m['skills'].get('specialties')
+rogue_account='rogue'+secrets.token_hex(5)
+subprocess.run(['docker','compose','-p',moradon_stack.PROJECT,'exec','-T','server','n3e-server','account-create',rogue_account],input=password+'\n',env=env,text=True,capture_output=True,check=True)
+r=Peer(state['port'],rogue_account,password,content=state['release'],game=m['game_id'],protocol=m['protocol_version'])
+try:
+ rogue_name='Rogue'+secrets.token_hex(3);rogue=r.create(rogue_name)
+ def psql(query):return subprocess.run(['docker','compose','-p',moradon_stack.PROJECT,'exec','-T','postgres','psql','-U','n3e','-d','n3e','-qAt','-v','ON_ERROR_STOP=1','-c',query],env=env,text=True,capture_output=True,check=True).stdout.strip()
+ # The name-only create takes the package's fixed choice (the Tuarek priest,
+ # Q100); the rogue is the same race's other create class.
+ assert psql(f"UPDATE characters SET specialty=102 WHERE id={rogue} AND specialty=104 RETURNING race,specialty")=='2|102'
+ r.select(rogue);r.pump(.5)
+ def refused(skill):
+  # The join's cooldown recovery answers combat_pending until it returns.
+  end=time.monotonic()+5
+  while (status:=r.action(r.id,action=skill))=='combat_pending' and time.monotonic()<end:r.pump(.2)
+  return status
+ for skill in (heal,strike):assert refused(skill)=='wrong_class',skill
+ print('PASS RQ-211 a Tuarek rogue (102) is refused the priest policy\'s skills wrong_class',flush=True)
+finally:r.s.close()
+p=connect();character=p.create('Skill'+secrets.token_hex(3));p.select(character);p.pump(.5)
 def self():return p.entities[p.id]
 def final(seq,timeout=8):
  end=time.monotonic()+timeout;ping=0

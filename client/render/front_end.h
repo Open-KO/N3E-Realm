@@ -184,9 +184,14 @@ class View {
       // RQ-176 (version 29): a create dress's hand plugs.
       for (const auto &dress : scene_at(k).dresses)
         for (const auto &plug : dress.plugs) use[plug.mesh.texture] = 2;
-      // RQ-197 (version 35): a select model's equipment keys' hand plugs.
+      // RQ-197 (version 35): a select model's equipment keys' hand plugs;
+      // RQ-201: and their dust overlays, sampled as the plug is.
       for (const auto &key : scene_at(k).keys)
-        if (key.kind == FrontKey::Kind::plug) use[key.plug.mesh.texture] = 2;
+        if (key.kind == FrontKey::Kind::plug) {
+          use[key.plug.mesh.texture] = 2;
+          if (key.dust)
+            for (const auto t : *key.dust) use[t] = 2;
+        }
     }
     for (size_t i = 0; i < textures.size(); ++i) {
       glBindTexture(GL_TEXTURE_2D, textures[i]);
@@ -231,12 +236,13 @@ layout(location=0) in vec3 p;layout(location=1) in vec3 n;layout(location=2) in 
 uniform mat4 mvp,model;out vec3 wp,wn;out vec2 uv;
 void main(){vec4 w=model*vec4(p,1);wp=w.xyz;wn=mat3(model)*n;uv=t;gl_Position=mvp*vec4(p,1);})",
                   R"(#version 330 core
-in vec3 wp,wn;in vec2 uv;out vec4 o;uniform sampler2D tex;uniform int count;uniform int kind[9];
-uniform vec3 ld[9],la[9],lp[9],ldir[9],latt[9];uniform vec4 lr[9];uniform vec3 md,ma,ga;uniform float unlit,cut;
+in vec3 wp,wn;in vec2 uv;out vec4 o;uniform sampler2D tex,overlay;uniform int count;uniform int kind[9];
+uniform vec3 ld[9],la[9],lp[9],ldir[9],latt[9];uniform vec4 lr[9];uniform vec3 md,ma,ga;uniform float unlit,cut,overlaid;
 uniform vec3 fog,fogcolor,eye;
 vec4 fogged(vec4 c){if(fog.x<.5)return c;
 float f=clamp((fog.z-length(wp-eye))/(fog.z-fog.y),0.,1.);return vec4(mix(fogcolor,c.rgb,f),c.a);}
-void main(){vec4 c=texture(tex,uv);if(c.a<=cut)discard;if(unlit>.5){o=fogged(c);return;}
+void main(){vec4 c=texture(tex,uv);if(c.a<=cut)discard;if(overlaid>.5)c.rgb*=texture(overlay,uv).rgb;
+if(unlit>.5){o=fogged(c);return;}
 vec3 N=normalize(wn);vec3 col=ma*ga;
 for(int i=0;i<count;i++){vec3 L;float a=1.,s=1.;
 if(kind[i]==3)L=normalize(-ldir[i]);else{vec3 d=lp[i]-wp;float r=length(d);if(r>lr[i].x)continue;L=d/max(r,1e-5);
@@ -245,6 +251,11 @@ if(kind[i]==2){float rho=dot(normalize(ldir[i]),-L),ct=cos(lr[i].z*.5),cp=cos(lr
 if(rho<=cp)s=0.;else if(rho<ct)s=pow((rho-cp)/max(ct-cp,1e-5),lr[i].y);}}
 col+=a*s*(ma*la[i]+md*ld[i]*max(dot(N,L),0.));}
 o=fogged(vec4(c.rgb*clamp(col,0.,1.),c.a));})");
+    // RQ-201: a hall plug's dust overlay on texture unit 1 (drawn only while
+    // `overlaid` is set, draw_mesh).
+    glUseProgram(lit);
+    glUniform1i(glGetUniformLocation(lit, "overlay"), 1);
+    glUseProgram(0);
     flat = program(R"(#version 330 core
 layout(location=0) in vec2 p;layout(location=1) in vec2 t;layout(location=2) in vec4 c;uniform vec2 screen;
 out vec2 uv;out vec4 tint;void main(){uv=t;tint=c;gl_Position=vec4(p.x/screen.x*2.-1.,1.-p.y/screen.y*2.,0,1);})",
@@ -664,6 +675,9 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     int equipped_plugs = 0;
     // hall (RQ-200): the keys' hand plugs drawn with their weapon effect.
     int effects = 0;
+    // hall (RQ-201): the keys' hand plugs drawn with the hard and with the
+    // soft dust overlay.
+    std::array<int, 2> dust{};
   };
   const std::vector<Drawn> &drawn() const { return drawn_boxes; }
   // RQ-200 (Q120): the package's equipped-item effects (effects.bin) and the
@@ -1659,14 +1673,27 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
     glUniformMatrix4fv(glGetUniformLocation(lit, "mvp"), 1, GL_FALSE, mvp.data());
     glUniformMatrix4fv(glGetUniformLocation(lit, "model"), 1, GL_FALSE, model.data());
   }
-  void draw_mesh(const Buffer &b, const FrontMesh &m, const detail::Mat &vp, const detail::Mat &model) {
+  // RQ-201 (Q120): `overlay`, one of the file's textures (-1 none), is a hall
+  // hand plug's dust, drawn as 1298's plug draw does (004137d0): a second
+  // stage modulating the plug's lit, textured colour by the overlay's on the
+  // plug's own UVs (00441470 copies them into the second set), alpha left
+  // the plug's.
+  void draw_mesh(const Buffer &b, const FrontMesh &m, const detail::Mat &vp, const detail::Mat &model,
+                 int overlay = -1) {
     transform(vp, model);
     material(m.diffuse, m.ambient, false, (m.flags & FrontMesh::ALPHA_TEST) ? .5f : -1.f);
     if (m.flags & FrontMesh::DOUBLE_SIDED) glDisable(GL_CULL_FACE);
     else glEnable(GL_CULL_FACE);
+    if (overlay >= 0) {
+      glActiveTexture(GL_TEXTURE1);
+      glBindTexture(GL_TEXTURE_2D, textures[size_t(overlay)]);
+      glActiveTexture(GL_TEXTURE0);
+      glUniform1f(glGetUniformLocation(lit, "overlaid"), 1.f);
+    }
     glBindTexture(GL_TEXTURE_2D, textures[m.texture]);
     glBindVertexArray(b.vao);
     glDrawElements(GL_TRIANGLES, b.count, GL_UNSIGNED_INT, nullptr);
+    if (overlay >= 0) glUniform1f(glGetUniformLocation(lit, "overlaid"), 0.f);
   }
   // One skinned scene posed by `pose` (a character, or RQ-174's face or hair
   // part on its model's nodes): its vertices grow `box` (normalised device
@@ -1750,7 +1777,7 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
       for (auto part : dress->parts)
         draw_skinned(scene.dress_parts[part], looks[2][part], pose, vp, model, mvp, box);
     // RQ-197: the keys the character wears, by KO part slot, and its plugs.
-    const auto dressed = who ? hall_worn(scene, who->appearance()) : HallWorn{};
+    const auto dressed = who ? hall_worn(scene, who->appearance(), who->appearance_durability()) : HallWorn{};
     const auto &on = dressed.part;
     const auto &plugged = dressed.plugs;
     uint32_t equipped = 0, own = 0;
@@ -1780,17 +1807,24 @@ void main(){o=(solid>.5?vec4(1):texture(tex,uv))*tint;})");
                            face_drawn ? int(face) : -1, hair_drawn ? int(hair) : -1,
                            dress ? dress->specialty : 0u, dress && !dress->body ? int(dress->parts.size()) : -1,
                            dress ? int(dress->plugs.size()) : 0, select_model_of(which), int(scene.plugs.size()),
-                           equipped, own, int(plugged.size()), 0});
+                           equipped, own, int(plugged.size()), 0, {}});
     const auto &plugs = which == 0 ? intro_plugs : which == 1 ? select_plugs : which == 2 ? create_plugs
                                                                                        : race_plugs[which - 3];
-    auto attach = [&](const FrontPlug &plug, const Buffer &buffer) {
+    auto attach = [&](const FrontPlug &plug, const Buffer &buffer, int overlay = -1) {
       const auto joint = scene.model.joint_matrix(pose, plug.joint);
       detail::Mat j;
       std::copy(joint.begin(), joint.end(), j.begin());
-      draw_mesh(buffer, plug.mesh, vp, detail::mul(model, j));
+      draw_mesh(buffer, plug.mesh, vp, detail::mul(model, j), overlay);
     };
     for (size_t i = 0; i < plugs.size(); ++i) attach(scene.plugs[i], plugs[i]);
-    for (const auto at : plugged) attach(scene.keys[at].plug, key_plugs[which][at]);
+    // RQ-201 (Q120): a key's hand plug with its dust overlay, by its item's
+    // durability (1298 005fca40 -> 00414470), where the key carries one.
+    for (size_t p = 0; p < plugged.size(); ++p) {
+      const auto &key = scene.keys[plugged[p]];
+      const int dust = key.dust ? hall_dust(dressed.plug_durability[p]) : -1;
+      if (dust >= 0) ++drawn_boxes.back().dust[size_t(dust)];
+      attach(key.plug, key_plugs[which][plugged[p]], dust >= 0 ? int((*key.dust)[size_t(dust)]) : -1);
+    }
     if (dress)
       for (size_t i = 0; i < dress->plugs.size(); ++i) attach(dress->plugs[i], dress_plugs[which][size_t(worn)][i]);
   }

@@ -379,8 +379,9 @@ async fn main() -> Result<()> {
         std::fs::write(format!("{}-ping.bin",args[2]),ping.encode_to_vec())?;
         // Spec 11: the character list with levels; RQ-002: each character's
         // slot, nation, race, specialty, face, hair and visible equipment (the
-        // second, created without create rules, has none of them).
-        let characters=wire::Envelope{body:Some(wire::envelope::Body::Characters(wire::Characters{characters:vec![wire::Character{id:129,name:"Nelly".into(),level:30,slot:2,nation:2,race:13,specialty:204,face:3,hair:2,appearance:vec![1,300]},wire::Character{id:7,name:"Peer".into(),level:1,..Default::default()}]}))};
+        // second, created without create rules, has none of them); RQ-201:
+        // each key's item's durability percent.
+        let characters=wire::Envelope{body:Some(wire::envelope::Body::Characters(wire::Characters{characters:vec![wire::Character{id:129,name:"Nelly".into(),level:30,slot:2,nation:2,race:13,specialty:204,face:3,hair:2,appearance:vec![1,300],appearance_durability:vec![100,30]},wire::Character{id:7,name:"Peer".into(),level:1,..Default::default()}]}))};
         std::fs::write(format!("{}-characters.bin",args[2]),characters.encode_to_vec())?;
         // RQ-002: KO's create packet's fields, and a refused create's result.
         let create=wire::Envelope{body:Some(wire::envelope::Body::CreateCharacter(wire::CreateCharacter{name:"Nelly".into(),slot:2,race:13,specialty:204,face:3,hair:2,stats:vec![50,50,70,80,50]}))};

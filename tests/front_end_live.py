@@ -188,9 +188,10 @@ LOOKS = "looks=1/2,3/1,0/-1"
 # apart; race 0 in key 5 and key 9, past Moradon's five (nothing).
 WORN_1097 = "worn=1/0/0,0/1/0,1/0/0"
 # RQ-200: no hand plug, so no weapon effect (fx per slot, the frame's tail
-# links).
+# links); RQ-201: nor a dust overlay (per slot, the plugs drawn with the hard
+# and with the soft dust).
 HALL_1097 = ("models=-1,0,-1 plugs=1,2,1 classes=Priest|Rogue|Unknown_Class " + LOOKS + " " + WORN_1097 +
-             " fx=0,0,0 tails=0")
+             " fx=0,0,0 tails=0 dust=0/0,0/0,0/0")
 
 # RQ-078: every front end games/moradon offers (front-ends.json) cooks twice to
 # the same bytes and the client loader takes it; the one realm-config.json
@@ -1210,10 +1211,13 @@ for size in ("1024x768", "1280x1024", "1600x1200"):
     # 00415370, drawn by 004158d0 -> 00415910 in the alpha flush 0043dd80):
     # the package's effects.bin record for key 1 (the Moradon blade's fire,
     # three copies and two tail links) on the hall plug's own FX mesh, whose
-    # first copy's centre lies on the blade (within its mesh's box).
+    # first copy's centre lies on the blade (within its mesh's box). RQ-201
+    # (Q120): the blade, at 20 % of its durability, with the hard dust
+    # overlay (005fca40: below 31 %, Misc\Dust_Hard.dxt, 00414470).
     hall = re.search(r"^FRONT_HALL (.*)$", run.stdout, re.M)
-    assert hall and hall.group(1) == ("models=-1,-1,-1 plugs=0,0,0 classes=Priest|Rogue|Unknown_Class " + LOOKS +
-                                      " worn=1/0/1,0/1/0,1/0/0 fx=1,0,0 tails=2"), (size, hall and hall.group(1))
+    hall_1298 = ("models=-1,-1,-1 plugs=0,0,0 classes=Priest|Rogue|Unknown_Class " + LOOKS +
+                 " worn=1/0/1,0/1/0,1/0/0 fx=1,0,0 tails=2 dust=1/0,0/0,0/0")
+    assert hall and hall.group(1) == hall_1298, (size, hall and hall.group(1))
     fx = re.findall(r"^FRONT_HALL_FX slot=(\d+) key=(\d+) copies=(\d+) centre=(\S+) joint=(\S+) box=(\S+)$",
                     run.stdout, re.M)
     assert [f[:3] for f in fx] == [("0", "1", "3")], (size, fx)

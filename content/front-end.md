@@ -219,6 +219,22 @@ bytes. Engine space is KO's with z negated (KO is left-handed).
    tail sparks in the alpha flush with the zone's alpha parts, far to near
    (the world's effect pass, PQ-376); none without `effects.bin` or with the
    switch off.
+   RQ-201 (Q120; `specs/KO-FINDINGS.md` §8.6): a key may also be 4, a hand plug
+   as 2, or 5, one as 3, followed by its dust overlay's two textures, hard then
+   soft (each one of the file's); a reader before RQ-201 refuses kinds 4 and 5
+   (a key kind above 3), so the file stays version 35. 1298's `005fca40` sets on
+   the plug, by its item's durability percent (× 100 / the maximum, rounded
+   down), `Misc/Dust_Hard.dxt` below 31, `Misc/Dust_Soft.dxt` below 71 and none
+   at 71 and above (`00414470`), and the plug draw (`004137d0`) modulates the
+   plug's lit, textured colour by it in a second stage on the plug's own UVs,
+   leaving its alpha. The cook writes every hand plug key as 4 or 5, with
+   `Misc/Dust_Hard.dxt` and `Misc/Dust_Soft.dxt` from the select model's tree.
+   The client takes each drawn plug key's percent from the list
+   (`Character.appearance_durability`, its first key's; 100 when the list has
+   none, as from a server before RQ-201) and draws the plug with the hard or
+   the soft texture or none by those cuts; a kind 2 or 3 key draws none. The
+   server sends, per key, the worn item's durability × 100 / its definition's
+   maximum, rounded down, and 100 for an item without one (Q120).
 8. The create models (version 24, RQ-158): a count (1–32), then per race its
    race code (1–65535, each once) and its model and plugs (version 2):
    `CGameProcCharacterCreate`'s player (`InitChr`: the race's `UPC_DefaultLooks`
@@ -1190,13 +1206,14 @@ recipe's, as "Moradon" below says, or missing, and marked here:
   hall plug's FX mesh (`005fca40` → `00415370`; item 7): the blade (key 1, the
   Burning Short Blade +8's fire, content/appearance.md) and, where an effect
   record names it, the two-hander (both plugs have an FX mesh; the shield's
-  has none). Not drawn: the item's dust overlay, which `005fca40` picks from
-  the item's durability against its `Item_Org` maximum (`Misc/Dust_Hard.dxt`
-  below 31 %, `Misc/Dust_Soft.dxt` below 71 %, none at 71 % and above) and
-  sets on the plug (`00414470`), since the realm's list carries no durability
-  (Q120); and KO keeps the plug file's own joint for an item whose durability
-  field is 0 (`005fce0b` is skipped), where the realm draws the row's joint
-  (Q121). Its clips by role: front 1 (20–300 at 30 frames a
+  has none). RQ-201: each worn hand plug draws its item's dust overlay,
+  which `005fca40` picks from the item's durability against its maximum
+  (`Misc/Dust_Hard.dxt` below 31 %, `Misc/Dust_Soft.dxt` below 71 %, none at
+  71 % and above) and sets on the plug (`00414470`; item 7, key kinds 4 and
+  5); the maximum is the realm item's own, where KO's is `Item_Org`'s (Q120).
+  Not drawn: the same dust on the worn parts (`005fc6f0`). KO keeps the plug
+  file's own joint for an item whose durability field is 0 (`005fce0b` is
+  skipped), where the realm draws the row's joint (Q121). Its clips by role: front 1 (20–300 at 30 frames a
   second), start 2 (394–466 at 25) and rest 0 (180–220 at 25), each over its
   record's 0.25 s but the start's, over 0.6 s (`005fe7c0`). Clip 2's last frames
   (458–466) are past the joint's 228 keys at 15 a second; KO leaves the joints

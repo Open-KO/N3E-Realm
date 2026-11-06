@@ -62,7 +62,8 @@ part in its KO part slot (the race's own looks part for that slot carried
 apart, so a key can take its place; a robe's lower drawn as the looks
 lower; a helmet in the hair's place) or, for a front end whose hall draws
 item plugs (1298's), a hand plug on its joint (RQ-197), with the geometry
-its item's weapon effect draws on when the plug has an FX mesh (RQ-200).
+its item's weapon effect draws on when the plug has an FX mesh (RQ-200) and
+the textures of its item's dust overlay (RQ-201).
 games/moradon/front-end.json names every KO
 file, binding, override and placement; this module knows the KO formats and the
 reference client's placement and drawing rules, and no realm choice. Fonts are
@@ -1716,6 +1717,17 @@ KEY_NONE, KEY_PART, KEY_PLUG = 0, 1, 2
 KEY_PLUG_EFFECT = 3
 # N3E2's bounds (appearance_effects.py): copies and triangle-list vertices.
 MAX_EFFECT_COPIES, MAX_COPY_VERTICES, MAX_EFFECT_VERTICES = 4, 3072, 8192
+# RQ-201 (Q120): a hall hand plug that draws its item's dust overlay, kind 2's
+# (4) or kind 3's (5) record, then the overlay's two textures, hard and soft:
+# 1298's 005fca40 sets Misc\Dust_Hard.dxt on the plug below 31 % of the item's
+# durability, Misc\Dust_Soft.dxt below 71 %, none at 71 % and above (00414470,
+# drawn by 004137d0 as a second stage modulating the plug's colour on its own
+# UVs). A reader before RQ-201 refuses the kinds (a key kind above 3), so the
+# file keeps version 35. Every hand plug a hall that draws item plugs draws
+# (`select.item_plugs` `draw`) is of these kinds; the textures are the select
+# model's tree's, as KO reads them from its own client.
+KEY_PLUG_DUST, KEY_PLUG_EFFECT_DUST = 4, 5
+DUST = ("Misc/Dust_Hard.dxt", "Misc/Dust_Soft.dxt")
 UPPER, LOWER = 0, 1
 
 
@@ -1855,7 +1867,10 @@ def hall_equipment(assets, textures, tree, joint, animation, row, keys, record, 
     part slot, robe 0 or 1, a part as a face is); 2 a hand plug (its joint,
     one of the model's, and a mesh in that joint's space, as plug_record's);
     3 (RQ-200) a hand plug as 2 whose file has an FX mesh, then the geometry
-    its weapon effect draws on (plug_effect). Each part is skinned on the model's nodes, joints and instance scale
+    its weapon effect draws on (plug_effect); 4 and 5 (RQ-201) a hand plug as
+    2 and 3, then its dust overlay's hard and soft textures (DUST), which the
+    cook writes for every hand plug, kinds 2 and 3 only in older files. Each
+    part is skinned on the model's nodes, joints and instance scale
     (`record`, model()'s) and read from the model's tree, as KO reads an
     item's files from its own client. Returns (bytes, report)."""
     head, _, tail = scene_tracks(record[4:4 + struct.unpack_from("<I", record)[0]])
@@ -1884,9 +1899,10 @@ def hall_equipment(assets, textures, tree, joint, animation, row, keys, record, 
                 raise ValueError("front-end select equipment: appearance key %d's joint %d is not one of the select "
                                  "model's %d joints" % (key, art["joint"], joints))
             effect = plug_effect(assets, art["source"])
-            out += u(KEY_PLUG if effect is None else KEY_PLUG_EFFECT) + plug_record(
-                assets, textures, art["source"], art["joint"]) + (effect or b"")
-            drawn.append(KEY_PLUG if effect is None else KEY_PLUG_EFFECT)
+            kind = KEY_PLUG_DUST if effect is None else KEY_PLUG_EFFECT_DUST
+            out += u(kind) + plug_record(assets, textures, art["source"], art["joint"]) + (effect or b"") + \
+                b"".join(u(textures.add(name, tree)) for name in DUST)
+            drawn.append(kind)
             continue
         drawn.append(art["kind"])
     return out, dict(looks=taken, keys=drawn)

@@ -2103,6 +2103,20 @@ Default kept for it: (a), no overlay, until a wire change carries each worn hand
 item's durability ratio (proposed as a follow-up item; the world's plugs draw no
 dust either).
 
+**Update (RQ-201):** the dust overlay is drawn on hall hand plugs. The list carries,
+per appearance key, its worn item's durability as a whole percent of the maximum
+(`Character.appearance_durability`, additive, no wire version change), and every hall
+hand plug the cook writes carries the two dust textures (`front-end.bin` key kinds 4
+and 5, version 35 kept). The maximum is the realm item definition's durability, the
+only one the realm has: KO's hall divides by `Item_Org`'s field alone (`005fca40`), its
+world by `Item_Org`'s plus `Item_Ext`'s (`0045d5f0`), so for a KO item with extension
+durability the two differ; a realm item maps to no `Item_Org` row (Q121's default).
+An item whose definition has no durability is sent as 100 (no overlay), as KO sets
+none for a max of 0. The percent is carried for every key, so the hall's dust on worn
+parts (`005fc6f0`) and the world's (`0045d5f0`, which would need `Entity` to carry it
+too) need no further list change; both are follow-up items, not drawn yet
+(`specs/KO-FINDINGS.md` §8.6).
+
 ### Q121 — A 1298 hand plug's joint when the item's durability field is 0
 
 RQ-197: 1298's `005fca40` writes the hand's joint (12 right, 7 left, 5 a class-60

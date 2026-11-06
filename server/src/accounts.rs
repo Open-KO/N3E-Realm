@@ -113,7 +113,8 @@ impl Database {
     /// (rewards::inventory): the progression curve's level, else
     /// 1 + xp / level_xp; 1 before the first inventory read (spec 11). RQ-002:
     /// each with what its create chose and the public keys of its committed
-    /// equipment (`appearance`, as Entity.appearance projects them).
+    /// equipment (`appearance`, as Entity.appearance projects them); RQ-201:
+    /// each key's item's durability percent (`appearance_durability`).
     pub async fn list(
         &self,
         account: i64,
@@ -162,6 +163,8 @@ impl Database {
                     face: small(8),
                     hair: small(9),
                     appearance: appearance.project(bag.as_ref()),
+                    // RQ-201 (Q120): each key's item's durability percent.
+                    appearance_durability: appearance.durability(bag.as_ref()),
                 });
             }
             Ok(wire::Characters { characters })
@@ -583,7 +586,7 @@ mod database_tests {
         )?;
         let listed = runtime.block_on(db.list(accounts[0], realm.clone(), &rules, &Default::default()))?.characters;
         assert_eq!(listed.len(), 3);
-        assert!(listed.iter().all(|c| c.appearance.is_empty()), "{listed:?}");
+        assert!(listed.iter().all(|c| c.appearance.is_empty() && c.appearance_durability.is_empty()), "{listed:?}");
         c.execute("DELETE FROM character_bags WHERE character_id=$1", &[&chosen])?;
         c.execute("DELETE FROM characters WHERE realm=$1", &[&realm])?;
         c.execute("DELETE FROM accounts WHERE id=ANY($1)", &[&accounts])?;

@@ -1080,9 +1080,12 @@ int main(int argc, char **argv) {
       // RQ-197 (version 35): select-equipment NAME: per select model (item
       // 7's, then each item 17's), its looks part slots (+-joined, `-` none)
       // and each key (`-` nothing, p<slot> a part, `r` a robe, j<joint> a
-      // plug, then RQ-200's f<copies> for its weapon effect's geometry),
-      // when the release has keys; select-worn NAME: what the select
-      // model's parts and plugs are for three sets of worn keys (hall_worn).
+      // plug, then RQ-200's f<copies> for its weapon effect's geometry and
+      // RQ-201's d<hard>+<soft> for its dust overlay's textures), when the
+      // release has keys; select-worn NAME: what the select model's parts and
+      // plugs are for three sets of worn keys (hall_worn), each plug with its
+      // durability (RQ-201: the list's, 100 past it) and dust (h hard, s soft,
+      // n none; hall_dust).
       if (!release.appearance.empty()) {
         std::cout << "select-equipment " << release.root.filename().string() << ":";
         auto print = [](const n3e::FrontScene &scene) {
@@ -1098,19 +1101,28 @@ int main(int argc, char **argv) {
             if (key.kind == n3e::FrontKey::Kind::plug) std::cout << "j" << key.plug.joint;
             // RQ-200: a plug's weapon effect geometry, f<copies>.
             if (key.effect) std::cout << "f" << key.effect->copies.size();
+            // RQ-201: a plug's dust textures, d<hard>+<soft>.
+            if (key.dust) std::cout << "d" << (*key.dust)[0] << "+" << (*key.dust)[1];
           }
         };
         print(fe.select);
         for (const auto &m : fe.select_models) print(m.scene);
         std::cout << "\n";
         std::cout << "select-worn " << release.root.filename().string() << ":";
-        for (const std::vector<uint32_t> keys : {std::vector<uint32_t>{2, 5, 3, 4, 4, 9, 0}, {5, 1}, {}}) {
-          const auto worn = n3e::front::hall_worn(fe.select, keys);
+        using Worn = std::pair<std::vector<uint32_t>, std::vector<uint32_t>>;
+        for (const auto &[keys, durability] : {Worn{{2, 5, 3, 4, 4, 9, 0}, {0, 0, 0, 30, 31, 0, 0}},
+                                               Worn{{5, 1}, {}}, Worn{{}, {}}, Worn{{4}, {70}}, Worn{{4}, {71}},
+                                               Worn{{4}, {500}}}) {
+          const auto worn = n3e::front::hall_worn(fe.select, keys, durability);
           std::cout << " ";
           for (size_t s = 0; s < worn.part.size(); ++s) std::cout << (s ? "," : "") << worn.part[s];
           std::cout << "/";
           if (worn.plugs.empty()) std::cout << "-";
-          for (size_t k = 0; k < worn.plugs.size(); ++k) std::cout << (k ? "+" : "") << worn.plugs[k];
+          for (size_t k = 0; k < worn.plugs.size(); ++k) {
+            const int dust = n3e::front::hall_dust(worn.plug_durability[k]);
+            std::cout << (k ? "+" : "") << worn.plugs[k] << "@" << worn.plug_durability[k]
+                      << (dust == 0 ? "h" : dust == 1 ? "s" : "n");
+          }
         }
         std::cout << "\n";
       }

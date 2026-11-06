@@ -155,7 +155,11 @@ replace the panels when the client has a Discord realm config.
   it in the list's items. Since RQ-200 a hand plug whose file has an FX mesh
   carries the geometry its item's weapon effect draws on (key kind 3, still
   version 35), and the hall draws that key's `effects.bin` effect on it, as
-  1298's hall does, under the same `Option.ini` switch as the world.
+  1298's hall does, under the same `Option.ini` switch as the world. Since
+  RQ-201 every hand plug key carries its dust overlay's textures (key kinds 4
+  and 5, still version 35), and the hall draws the hard or soft dust on a plug
+  by its item's durability percent (`Character.appearance_durability`), as
+  1298's hall does.
 - **Music** (N3FE version 3, RQ-018; version 5, RQ-083). Up to 4 tracks, each MPEG-1
   or MPEG-2 Layer III frames (every frame checked at load) or, since version 5,
   16-bit PCM samples (KO 1097's WAVs), each ≤ 16 MiB, looping or not, with an
@@ -369,7 +373,7 @@ screens are the 1264 client's English ones from the pinned 1264 install
 ### Wire (`protocol/wire.proto`)
 
 ```proto
-message Character { uint64 id = 1; string name = 2; uint32 level = 3; uint32 slot = 4; uint32 nation = 5; uint32 race = 6; uint32 specialty = 7; uint32 face = 8; uint32 hair = 9; repeated uint32 appearance = 10; }
+message Character { uint64 id = 1; string name = 2; uint32 level = 3; uint32 slot = 4; uint32 nation = 5; uint32 race = 6; uint32 specialty = 7; uint32 face = 8; uint32 hair = 9; repeated uint32 appearance = 10; repeated uint32 appearance_durability = 11; }
 ```
 
 `level` is the character's level from `characters`/progression, as the HUD shows it.
@@ -383,7 +387,12 @@ rules (`create.bin`) are `content/character-create.md`, "The realm's create". Th
 select hall draws each character with the package's select character for its race
 and specialty and shows its class's name (RQ-005, N3FE version 31), with its own
 face and hair (RQ-198, N3FE version 33) and its visible equipment (RQ-197, N3FE
-version 35), with the weapon effect of a hand item that has one (RQ-200).
+version 35), with the weapon effect of a hand item that has one (RQ-200). RQ-201
+adds `appearance_durability`: per `appearance` key, in its order, the worn item's
+durability × 100 / its definition's maximum, rounded down (100 for an item without
+one); empty from an older server, which the client draws as 100. It is additive, so
+the wire version doesn't change; `golden-characters` carries it. The hall draws a
+hand plug's dust overlay by it (Q120).
 
 ### Server
 
@@ -646,7 +655,7 @@ CPU (`make test`):
    select model's and select characters' looks parts and keys and refuses more
    than 4 looks parts, a looks slot other than 0, 1, 3 or 4 or out of order, a
    key count other than the release's appearance count (or above 128), a key
-   kind above 2 (3 since RQ-200), a key part slot 2 or above 5, a robe above 1 or off slot 0, a
+   kind above 2 (3 since RQ-200, 5 since RQ-201), a key part slot 2 or above 5, a robe above 1 or off slot 0, a
    key part off its model's skeleton or scale, a plug joint outside the model's
    joints and truncation; what a listed character wears is the first key per
    slot, the looks lower under a robe, a helmet in the hair's place and each
@@ -672,6 +681,20 @@ CPU (`make test`):
    effect (`fx=0,0,0 tails=0`), and on the 1298 recipe the priest's blade draws
    the package's key 1 effect, three copies and two tail links (`fx=1,0,0
    tails=2`), its first copy on the blade (`FRONT_HALL`, `FRONT_HALL_FX`,
+   `tests/front_end_live.py`, local-asset).
+   RQ-201 (select dust): the server's list carries each key's item's durability
+   percent, rounded down, 100 for an item without durability, empty for a bag
+   that does not decode (`server/src/appearance.rs`, `server/src/accounts.rs`),
+   and both languages write `golden-characters` with it (`tests/check.py`); the
+   loader takes keys of kinds 4 and 5, a plug (with its effect's geometry for
+   5) and its two dust textures, and refuses a kind above 5, a dust texture
+   past the file's and truncation; a plug's durability is its first key's,
+   100 past the list's and never above 100, its dust hard below 31, soft below
+   71 and none from 71 (`tests/front_end.py`); the cook writes every hall hand
+   plug as kind 4 or 5 with `Misc/Dust_Hard.dxt` and `Misc/Dust_Soft.dxt` from
+   the select model's tree (`tests/front_end.py`); on the 1097 choice no plug
+   draws dust (`dust=0/0,0/0,0/0`), and on the 1298 recipe the priest's blade
+   at 20 % draws the hard dust (`dust=1/0,0/0,0/0`) (`FRONT_HALL`,
    `tests/front_end_live.py`, local-asset).
 3. **Fallback.** The demo package (no section) still draws the panels: the existing
    suites pass unchanged.

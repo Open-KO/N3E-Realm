@@ -607,7 +607,8 @@ stats=… nation=… fixed=… start=<x,z or none> items=<kits>`. A package with
   (the package's order): KO's packet's fields. The nation is the account's.
 - `Character` gains `slot`, `nation`, `race`, `specialty`, `face`, `hair` (0 for a
   character created without create rules) and `appearance`, the public keys of its
-  committed equipment as `Entity.appearance` projects them.
+  committed equipment as `Entity.appearance` projects them; RQ-201 adds
+  `appearance_durability`, each key's item's durability percent (spec 11, Q120).
 - A refused create is `Error` code 8 (CONFLICT), `request` 7, and `create_result`
   (`CreateCharacter.Result`: KO's 1 limit, 2 mismatch, 3 taken, 4 failed, 5 name,
   17 stats), its `detail` the package's text for that result (KO's row, cooked) or
@@ -1068,11 +1069,14 @@ object files the pinned tree lacks (`Object/obj_war_duntree01_ip00`–`ip02`,
     (content/front-end.md items 7 and 17, N3FE version 33; KO-FINDINGS §8.5).
   - Done in RQ-197: each character's visible equipment, its appearance keys as
     AddChr sets the list's items (content/front-end.md items 7 and 17, N3FE
-    version 35; KO-FINDINGS §8.6). Not drawn: 1298's select dust overlay
-    (Q120).
+    version 35; KO-FINDINGS §8.6). Not drawn: 1298's select dust overlay on
+    worn parts (Q120; on hand plugs since RQ-201).
   - Done in RQ-200: 1298's hall draws a worn hand plug's weapon effect, the
     package's `effects.bin` record on the plug's own FX mesh (content/front-end.md
     item 7, key kind 3; KO-FINDINGS §8.6).
+  - Done in RQ-201: 1298's hall draws a worn hand plug's dust overlay by its
+    item's durability, which the list carries (`Character.appearance_durability`;
+    content/front-end.md item 7, key kinds 4 and 5; KO-FINDINGS §8.6).
 - **RQ-006 (nation).**
   - The login answer's nation 0 opens nation select. The question is 10420, with OK
     and Cancel; Back returns to the server list.

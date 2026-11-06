@@ -1008,6 +1008,10 @@ struct FrontKey {
   Scene part;
   FrontPlug plug;
   std::optional<FrontPlugEffect> effect;  // RQ-200: a plug's weapon effect geometry
+  // RQ-201 (Q120, key kinds 4 and 5): a plug's dust overlay textures (the
+  // file's), hard and soft, as 1298's 005fca40 picks by the item's
+  // durability (00414470); none for a plug of kind 2 or 3.
+  std::optional<std::array<uint32_t, 2>> dust;
 };
 // Version 8 (RQ-095): one mesh of the zone the select hall draws (1298's
 // karus_intro) and the point a BLEND mesh is sorted by (engine space).

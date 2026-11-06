@@ -152,24 +152,39 @@ struct SelectHall {
 // and set the looks row's); a part in slot 5 is a helmet, drawn in place of
 // the hair. `plugs` are the keys whose hand plugs draw (1298 005fca40), each
 // once. A key the model does not have (0, or past its keys) draws nothing.
+// RQ-201 (Q120): `durability` is the list's Character.appearance_durability,
+// one per key in its order; `plug_durability` is each plug's, its first
+// key's (100 past the list's, as from a server before RQ-201, and never
+// above 100).
 struct HallWorn {
   std::array<int, 6> part{-1, -1, -1, -1, -1, -1};
   std::vector<size_t> plugs;
+  std::vector<uint32_t> plug_durability;
 };
-template <class Keys>
-HallWorn hall_worn(const FrontScene &scene, const Keys &keys) {
+template <class Keys, class Durability = std::array<uint32_t, 0>>
+HallWorn hall_worn(const FrontScene &scene, const Keys &keys, const Durability &durability = {}) {
   HallWorn worn;
+  size_t i = 0;
   for (const uint32_t key : keys) {
+    const size_t index = i++;
     if (key == 0 || key > scene.keys.size()) continue;
     const auto at = size_t(key - 1);
     const auto &k = scene.keys[at];
     if (k.kind == FrontKey::Kind::part && k.slot < worn.part.size() && worn.part[k.slot] < 0)
       worn.part[k.slot] = int(at);
-    if (k.kind == FrontKey::Kind::plug && std::find(worn.plugs.begin(), worn.plugs.end(), at) == worn.plugs.end())
+    if (k.kind == FrontKey::Kind::plug && std::find(worn.plugs.begin(), worn.plugs.end(), at) == worn.plugs.end()) {
       worn.plugs.push_back(at);
+      worn.plug_durability.push_back(
+          index < size_t(durability.size()) ? std::min<uint32_t>(durability[int(index)], 100) : 100);
+    }
   }
   if (worn.part[0] >= 0 && scene.keys[size_t(worn.part[0])].robe) worn.part[1] = -1;
   return worn;
 }
+// RQ-201 (Q120): the dust overlay 1298's select hall sets on a hand plug by
+// its item's durability percent (005fca40, the percent rounded down): 0 the
+// hard dust (Misc\Dust_Hard.dxt) below 31, 1 the soft (Misc\Dust_Soft.dxt)
+// below 71, -1 none at 71 and above.
+inline int hall_dust(uint32_t percent) { return percent < 31 ? 0 : percent < 71 ? 1 : -1; }
 
 }  // namespace n3e::front

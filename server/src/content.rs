@@ -721,7 +721,7 @@ pub fn load(root: &Path) -> Result<Release> {
     let rest=if has_rest {Some(crate::rest::Policy::load(&root.join("rest.bin"))?)} else {None};
     let has_appearance=files.remove("appearance.bin");
     if has_appearance != (engine>=29) || (has_appearance && (!equipment || !detail)) {return Err(bad("appearance compatibility"));}
-    let appearance=if has_appearance {crate::appearance::Policy::load(&root.join("appearance.bin"),inventory.as_ref().unwrap().equipment.as_ref().unwrap())?} else {crate::appearance::Policy::default()};
+    let appearance=if has_appearance {crate::appearance::Policy::load(&root.join("appearance.bin"),inventory.as_ref().unwrap().equipment.as_ref().unwrap(),inventory.as_ref().unwrap())?} else {crate::appearance::Policy::default()};
     // N3AT (PQ-328, D-186): attached characters on appearance keys, client
     // presentation in the looks model formats; checked so both readers accept
     // the same packages, otherwise ignored.

@@ -428,7 +428,10 @@ RQ-086's decompiles of `005fc6f0` and `005fca40`, RQ-066's of `005fb4f0` and RQ-
 of `0043ba10`, and the later source's `MsgRecv_AllCharacterInfo` and `AddChr`.
 RQ-200 (2026-11-05) read `004196a0`, `004158d0`, `00414470` and `00415370` in the same
 1298 project (output under `build/ghidra/rq200/`, not committed), with RQ-087's
-decompile of `005fb1c0` and RQ-095's of `0043dd80`.
+decompile of `005fb1c0` and RQ-095's of `0043dd80`. RQ-201 (2026-11-05) read `004137d0`,
+`00441470`, `00441bb0`, `00441ca0`, `0045c6e0`, `0045ccc0` and the unnamed `0045cd90` and
+`0045d5f0` there, and the references to the two dust names (output under
+`build/ghidra/rq201/`, not committed), with RQ-086's decompile of `005fc6f0`.
 
 | Observation | Where | Label |
 |---|---|---|
@@ -438,6 +441,9 @@ decompile of `005fb1c0` and RQ-095's of `0043dd80`.
 | **1097's plugs.** AddChr sets its class plugs from `ChrSelect` files (`00447b30(0)`, `(1)`) and never reads the hand items (`+0x58`, `+0x60`) | 1097 `0043ba10` | binary |
 | **1298's plugs.** AddChr sets no class plug; `005fca40` adds a hand's item as a plug when its `Item_Org` and `Item_Ext` rows exist (else returns), naming the file with `006157b0` and setting it with `0041b790` (`PlugSet`, no height scale): joint 12 for the right hand; for the left, 5 when the item's `Item_Org` class (`+0x40`) is 60 (a shield), else 7. The joint is written into the plug (`+0x34`, at `005fce0b`) only when the `Item_Org` max-durability field (`+0x4e`) is above 0; otherwise the branch at `005fcc73` jumps past it to `005fce0e` and the plug file's own joint stays. It also adds the item's dust overlay and weapon effect (`0045ccc0`, `00415370`) | 1298 `005fca40` | binary |
 | **1298's dust overlay (RQ-200).** In the same branch (max durability above 0), `005fca40` takes the record's durability (its fifth argument, `+0x5c` or `+0x64`, `005fb4f0`) × 100 / the max and sets the plug's overlay texture (`00414470`, the plug's `+0x120`): `Misc\Dust_Hard.dxt` below 31, `Misc\Dust_Soft.dxt` below 71, the empty name (none) otherwise | 1298 `005fca40`, `005fb4f0`, `00414470` | binary |
+| **1298's plug draw with an overlay (RQ-201).** The plug's mesh draw (`004137d0`, called from `004158d0`; the source's `CN3CPlugBase::Render`) sets stage 0 to texture × diffuse (D3D colour op 4, arguments texture and diffuse) with the plug's texture; when the overlay (`+0x120`) holds a texture it sets stage 1 to that texture × current (op 4, arguments texture and current; the alpha op left at stage 1's default, disabled, so alpha is stage 0's) and draws with `00441ca0`, FVF `0x212` (position, normal, two UV sets), whose vertices `00441470` builds with the second UV set a copy of the first; then stage 1's colour op goes back to disabled and its texture to none. Without an overlay it draws with `00441bb0`, FVF `0x112`. That path is the one for a plug whose render flags (`+0xa0`) lack `0x800`; the hall's plug files have render flags 0 (the cook refuses others) | 1298 `004137d0`, `00441470`, `00441bb0`, `00441ca0`; `N3Chr.cpp` `CN3CPlugBase::Render`, `N3PMeshInstance.cpp` `RenderTwoUV` | binary; source |
+| **The world's overlays (RQ-201).** The world's plug setter (`0045c6e0`, the one whose effect pick `005fca40` repeats) touches the overlay only to clear it, setting the empty name when the slot gets neither an `Item_Org` nor an `Item_Ext` row. The dust is set apart, by the durability setter (`0045d5f0`, a vtable method at `006a4098`, `006a4160`, `006a41cc`, `006a423c`; the source's `CPlayerBase::DurabilitySet`): for a hand (slots 6 and 8) its plug's overlay, for an armour slot its part's (`00412c30`), by the durability × 100 / (`Item_Org` `+0x4e` + `Item_Ext` `+0x3e`), the same cuts (hard below 31, soft below 71, else none); a hand whose item lacks either row, or whose sum is below 1, keeps its overlay, and a part whose item lacks either row gets none. The hall divides by the `Item_Org` field alone | 1298 `0045c6e0`, `0045d5f0`; `PlayerBase.cpp` `DurabilitySet` | binary; source |
+| **1298's hall dust on parts (RQ-201).** The hall's part setter (`005fc6f0`) puts the same dust on a worn part, by its item's durability against `Item_Org` `+0x4e` with the same cuts, through the part's overlay setter (`00412c30`); the strings' only other users are `005fca40` and `0045d5f0` | 1298 `005fc6f0`; the references to `006d42a0` and `006d428c` | binary |
 | **1298's weapon effect in the hall (RQ-200).** `005fca40` picks the effect id as the world's plug setter does (`0045ccc0`, else Item_Ext `+0x28`), finds the main and tail bundles (id, id + 1, `00463b30`), picks the trace colour by element and sets them on the plug (`00415370`). The hall's Render (`005fb1c0`) draws each character with `004196a0`, which draws each plug on a valid joint through its vtable (`+0x1c`: for a plug `004158d0`, the vtable at `006a3b34` that `004149f0` and `00414b00` store), and `004158d0` draws the FX (`00415910`) while `006e268e` (Option.ini `WeaponEffect.EffectVisible`) is set; Render then flushes the alpha list (`0043dd80`) after the windows, as the world's frame does | 1298 `005fca40`, `005fb1c0`, `004196a0`, `004158d0` | binary |
 
 **Decides (RQ-197):** `front-end.bin` version 35 carries, per select model, the looks
@@ -448,8 +454,8 @@ row's joint. The recipe's `select.item_plugs` is `none` for the 1097 choice (its
 draws class plugs and no hand item) and `draw` for the 1298 recipe. The client draws a
 listed character's `Character.appearance` keys: the first key per slot, the robe's
 looks lower, a helmet in place of the hair, each plug key once. Keys draw on the player
-race's select models only (Q122). Not drawn: 1298's dust overlay (Q120); a plug
-with durability 0 keeps the row's joint (Q121).
+race's select models only (Q122). Not drawn: 1298's dust overlay (Q120; drawn on
+hand plugs since RQ-201); a plug with durability 0 keeps the row's joint (Q121).
 
 **Decides (RQ-200):** a hall hand plug whose file has an FX mesh carries, in its
 joint's space, the geometry its item's weapon effect draws on (key kind 3, version 35
@@ -457,6 +463,17 @@ kept); the hall draws the key's `effects.bin` effect on it with the world's effe
 pass, in the alpha flush with the zone's alpha parts, behind the same Option.ini
 switch. The dust overlay waits for the list to carry each hand item's durability
 (Q120).
+
+**Decides (RQ-201):** the character list carries, per appearance key, its item's
+durability as a whole percent of the item definition's maximum
+(`Character.appearance_durability`; 100 for an item without one); every hall hand plug
+the cook writes carries the dust textures (`front-end.bin` key kinds 4 and 5, version
+35 kept), and the hall draws `Misc/Dust_Hard.dxt` on a plug whose item is below 31 %,
+`Misc/Dust_Soft.dxt` below 71 %, none otherwise, as a second stage modulating the
+plug's lit colour on its own UVs. The realm's item has one maximum, its definition's,
+where KO's hall divides by `Item_Org` alone and the world by `Item_Org` + `Item_Ext`
+(Q120). Not drawn yet: the hall's dust on worn parts (`005fc6f0`) and the world's
+(`0045d5f0`).
 
 ## 9. The front end per client (RQ-078, 2026-11-02)
 

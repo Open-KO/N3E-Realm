@@ -3330,7 +3330,9 @@ FrontEnd load_front_end(const Release &release) {
   // copy its jitter weight (-1..1), frame offset (0-63), vertex count (3-3072,
   // a triangle list; 8192 in all) and vertices (x, y, z, u, v), then the
   // jitter axis's origin and tip, the tail box's origin and edge ends and the
-  // sort origin, each coordinate within 1000 (a UV within 1024), as N3E2's.
+  // sort origin, each coordinate within 1000 (a UV within 1024), as N3E2's;
+  // 4 and 5 (RQ-201) a hand plug as 2 and 3, then its dust overlay's textures,
+  // hard and soft (two of the file's textures; 1298 005fca40 -> 00414470).
   auto plug_effect = [&](FrontKey &key) {
     auto &e = key.effect.emplace();
     const auto point = [&] {
@@ -3377,8 +3379,8 @@ FrontEnd load_front_end(const Release &release) {
     for (uint32_t i = 0; i < keys; ++i) {
       FrontKey key;
       const auto kind = r.u();
-      need(kind <= 3, "front end select key kind");
-      key.kind = kind == 3 ? FrontKey::Kind::plug : FrontKey::Kind(kind);
+      need(kind <= 5, "front end select key kind");
+      key.kind = kind >= 2 ? FrontKey::Kind::plug : FrontKey::Kind(kind);
       if (key.kind == FrontKey::Kind::part) {
         key.slot = r.u();
         need(key.slot <= 5 && key.slot != 2, "front end select key slot");
@@ -3390,7 +3392,14 @@ FrontEnd load_front_end(const Release &release) {
         key.plug.joint = r.u();
         need(key.plug.joint < scene.model.joints.size(), "front end select key joint");
         key.plug.mesh = mesh();
-        if (kind == 3) plug_effect(key);
+        if (kind == 3 || kind == 5) plug_effect(key);
+        if (kind >= 4) {
+          auto &dust = key.dust.emplace();
+          for (auto &t : dust) {
+            t = r.u();
+            need(t < fe.textures.size(), "front end select key dust texture");
+          }
+        }
       }
       scene.keys.push_back(std::move(key));
     }

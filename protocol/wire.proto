@@ -37,7 +37,12 @@ message Characters { repeated Character characters = 1; }
 // slot, its nation, race, specialty (KO's class), face and hair as created (0 for
 // a character created without the package's create rules), and `appearance`,
 // the public keys of its committed equipment as Entity.appearance projects them.
-message Character { uint64 id = 1; string name = 2; uint32 level = 3; uint32 slot = 4; uint32 nation = 5; uint32 race = 6; uint32 specialty = 7; uint32 face = 8; uint32 hair = 9; repeated uint32 appearance = 10; }
+// RQ-201 (Q120): `appearance_durability`, one per `appearance` key in its order,
+// the worn item's durability as a whole percent of its definition's maximum
+// (durability x 100 / maximum, rounded down, as 1298's select 005fca40 takes it;
+// 100 for an item whose definition has none). Empty from a server before it,
+// which a client draws as 100. Additive: no wire version change.
+message Character { uint64 id = 1; string name = 2; uint32 level = 3; uint32 slot = 4; uint32 nation = 5; uint32 race = 6; uint32 specialty = 7; uint32 face = 8; uint32 hair = 9; repeated uint32 appearance = 10; repeated uint32 appearance_durability = 11; }
 // RQ-002: what KO's create packet carries (WIZ_NEW_CHAR: slot, name, race,
 // class, face, hair and the five stats), the stats in the package's order
 // (create.bin). The nation is the account's, never the client's. The server

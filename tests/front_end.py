@@ -1374,7 +1374,9 @@ def equipment_raw(looks=(), keys=(), count=None):
     may take, each (slot, part), then a key count (`count`, else the keys')
     and each key: () nothing, ("part", slot, robe, part), ("plug", joint)
     with the demo mesh or (RQ-200) ("effect", joint, geometry): a plug with
-    its weapon effect's geometry (plug_effect_raw)."""
+    its weapon effect's geometry (plug_effect_raw); RQ-201: ("dust", joint,
+    hard, soft) a plug with its dust overlay's textures, ("effect-dust",
+    joint, geometry, hard, soft) both."""
     out = u(len(looks)) + b"".join(u(slot) + part for slot, part in looks)
     out += u(len(keys) if count is None else count)
     for key in keys:
@@ -1384,6 +1386,10 @@ def equipment_raw(looks=(), keys=(), count=None):
             out += u(fe.KEY_PART) + u(key[1]) + u(key[2]) + key[3]
         elif key[0] == "effect":
             out += u(fe.KEY_PLUG_EFFECT) + u(key[1]) + MESH + key[2]
+        elif key[0] == "dust":
+            out += u(fe.KEY_PLUG_DUST) + u(key[1]) + MESH + u(key[2]) + u(key[3])
+        elif key[0] == "effect-dust":
+            out += u(fe.KEY_PLUG_EFFECT_DUST) + u(key[1]) + MESH + key[2] + u(key[3]) + u(key[4])
         else:
             out += u(fe.KEY_PLUG) + u(key[1]) + MESH
     return out
@@ -2041,6 +2047,40 @@ except ValueError as error:
     assert "out of bounds" in str(error), error
 print("PASS front-end select plug effect cook (RQ-200): a hall plug's FX mesh as its weapon effect's three copies, "
       "jitter axis, tail box and sort origin in its joint's space, none without an FX mesh, 1 refusal")
+
+
+# RQ-201 (Q120): every hall hand plug the cook writes carries its dust
+# overlay's textures, Misc/Dust_Hard.dxt then Misc/Dust_Soft.dxt from the
+# select model's tree (1298's 005fca40 -> 00414470): kind 4 after a plug
+# without an FX mesh, 5 after one with its effect's geometry. The plug record
+# and the effect geometry are stubbed (their own tests are above).
+class DustTextures:
+    def __init__(self):
+        self.added = []
+
+    def add(self, name, tree=None):
+        self.added.append((name, tree))
+        return 7 + len(self.added)
+
+
+saved = fe.plug_record, fe.plug_effect
+try:
+    fe.plug_record = lambda assets, textures, name, joint=None: b"P%d" % joint
+    fe.plug_effect = lambda assets, name: b"E" if name == "I/fx.n3cplug" else None
+    dusted = DustTextures()
+    raw, report = fe.hall_equipment(LOOKS_ROWS, dusted, LOOKS_ROWS, "j", "a", fe.looks(LOOKS_ROWS, 2),
+                                    [dict(kind=fe.KEY_PLUG, joint=0, source="I/b.n3cplug"), None,
+                                     dict(kind=fe.KEY_PLUG, joint=0, source="I/fx.n3cplug")],
+                                    SELECT_RECORD, pathlib.Path("/nonexistent/select"))
+finally:
+    fe.plug_record, fe.plug_effect = saved
+assert raw == (u(0) + u(3) + u(fe.KEY_PLUG_DUST) + b"P0" + u(8) + u(9) + u(fe.KEY_NONE) +
+               u(fe.KEY_PLUG_EFFECT_DUST) + b"P0" + b"E" + u(10) + u(11)), raw
+assert report == dict(looks=[], keys=[fe.KEY_PLUG_DUST, fe.KEY_NONE, fe.KEY_PLUG_EFFECT_DUST]), report
+assert dusted.added == [(name, LOOKS_ROWS) for name in fe.DUST * 2], dusted.added
+assert fe.DUST == ("Misc/Dust_Hard.dxt", "Misc/Dust_Soft.dxt")
+print("PASS front-end select plug dust cook (RQ-201): each hall hand plug with its dust overlay's hard and soft "
+      "textures from the select model's tree, kind 4 without and 5 with its weapon effect")
 
 
 # --- create's description text (version 28, RQ-175) ------------------------------
@@ -3264,7 +3304,16 @@ EQUIPMENT_CASES = {
     "bad-select-looks-parts-5": blob(select_equipment=equipment_raw([(0, PART), (1, PART), (3, PART), (4, PART),
                                                                       (4, PART)])),
     "bad-select-looks-part-skeleton": blob(select_equipment=equipment_raw([(0, BENT_PART)])),
-    "bad#1-select-key-kind-4": blob(select_equipment=u(0) + u(1) + u(4)),
+    "bad#1-select-key-kind-6": blob(select_equipment=u(0) + u(1) + u(6)),
+    # RQ-201: plug keys with their dust overlay's textures (kinds 4 and 5).
+    "ok#2-select-key-dust": blob(select_equipment=equipment_raw(keys=[("dust", 0, 0, 0),
+                                                                     ("effect-dust", 0, plug_effect_raw(), 0, 0)]),
+                                 selects=u(1) + select_entry(2, [102], equipment=equipment_raw(keys=[
+                                     ("dust", 0, 0, 0), ()]))),
+    "bad#1-select-key-dust-texture": blob(select_equipment=equipment_raw(keys=[("dust", 0, 0, 9999)])),
+    "bad#1-select-key-effect-dust-texture": blob(select_equipment=equipment_raw(keys=[
+        ("effect-dust", 0, plug_effect_raw(), 9999, 0)])),
+    "bad#1-select-key-dust-truncated": blob(select_equipment=equipment_raw(keys=[("dust", 0, 0, 0)])[:-1]),
     # RQ-200: a plug key with its weapon effect's geometry (kind 3).
     "ok#2-select-key-effect": blob(select_equipment=equipment_raw(keys=[("effect", 0, plug_effect_raw()), ("plug", 0)]),
                                    selects=u(1) + select_entry(2, [102], equipment=equipment_raw(keys=[
@@ -3309,7 +3358,9 @@ EQUIPMENT_REASONS = {
     "bad-select-looks-part-twice": "front end select looks part slot",
     "bad-select-looks-parts-5": "count",
     "bad-select-looks-part-skeleton": "front end create part skeleton",
-    "bad#1-select-key-kind-4": "front end select key kind",
+    "bad#1-select-key-kind-6": "front end select key kind",
+    "bad#1-select-key-dust-texture": "front end select key dust texture",
+    "bad#1-select-key-effect-dust-texture": "front end select key dust texture",
     "bad#1-select-key-effect-copies-0": "count", "bad#1-select-key-effect-copies-5": "count",
     "bad#1-select-key-effect-jitter": "front end select key effect jitter weight",
     "bad#1-select-key-effect-offset": "count",
@@ -3573,7 +3624,8 @@ try:
                        "ok-influences-select-looks": "2/102/3/-/1+0",
                        "ok#5-select-equipment": "2/102/3/-/0+0 4/104/3/-/0+0",
                        "ok#2-select-equipment-nothing": "2/102/3/-/0+0",
-                       "ok#2-select-key-effect": "2/102/3/-/0+0"}, selects
+                       "ok#2-select-key-effect": "2/102/3/-/0+0",
+                       "ok#2-select-key-dust": "2/102/3/-/0+0"}, selects
     names = {l.split(":")[0][len("class-names "):]: l.split(": ", 1)[1]
              for l in run.stdout.splitlines() if l.startswith("class-names ")}
     assert names == {"ok-select-models": "102=Rogue 104=Priest 112=Shadow Knight    ",
@@ -3601,17 +3653,23 @@ try:
     for name, reason in EQUIPMENT_REASONS.items():
         line = next(l for l in run.stdout.splitlines() if l.startswith("refused %s:" % name))
         assert reason in line, (name, line)
-    for name in ("bad#1-select-key-truncated", "bad#1-select-key-effect-truncated"):
+    for name in ("bad#1-select-key-truncated", "bad#1-select-key-effect-truncated", "bad#1-select-key-dust-truncated"):
         assert any(l.startswith("refused %s:" % name) for l in run.stdout.splitlines()), name
     equipped = {l.split(":")[0][len("select-equipment "):]: l.split(": ", 1)[1]
                 for l in run.stdout.splitlines() if l.startswith("select-equipment ")}
     assert equipped == {"ok#5-select-equipment": "0+1+4/-,p0r,p5,j0,p1 3/p3,-,-,j0,- -/-,-,-,-,-",
                         "ok#2-select-equipment-nothing": "-/-,- -/-,-",
                         "ok#2-select-key-effect": "-/j0f3,j0 -/-,j0f1",
+                        "ok#2-select-key-dust": "-/j0d0+0,j0f3d0+0 -/j0d0+0,-",
                         "ok#128-select-equipment-128": "-/" + ",".join(["-"] * 128)}, equipped
     worn = {l.split(":")[0][len("select-worn "):]: l.split(": ", 1)[1]
             for l in run.stdout.splitlines() if l.startswith("select-worn ")}
-    assert worn["ok#5-select-equipment"] == "1,-1,-1,-1,-1,2/3 -1,4,-1,-1,-1,-1/- -1,-1,-1,-1,-1,-1/-", worn
+    # RQ-201 (Q120): each plug with its first key's durability (100 past the
+    # list's, never above 100) and the dust 1298's 005fca40 picks by it: hard
+    # below 31, soft below 71, none at 71 and above.
+    none = "-1,-1,-1,-1,-1,-1"
+    assert worn["ok#5-select-equipment"] == ("1,-1,-1,-1,-1,2/3@30h -1,4,-1,-1,-1,-1/- %s/- %s/3@70s %s/3@71n "
+                                             "%s/3@100n" % ((none,) * 4)), worn
     print("PASS front-end loader: each select model's equipment (version 35), what a listed character wears, "
           "%d refusals checked for their reasons" % (len(EQUIPMENT_REASONS) + 2))
     # RQ-194: each mesh vertex float the cook refuses, refused by the loader as a cooked float.

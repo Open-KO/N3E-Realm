@@ -279,8 +279,11 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
                                    json.loads(pathlib.Path('games/moradon/ui.json').read_text())['equipment_slots'],
                                    player_race["race"])
         mappings=mappings+armour['rows']
+    # RQ-199: a robe row leaves the lower bare, as KO's world does (ko_appearance.cook),
+    # by the KO part position of each of the player model's parts.
     detail, detail_report = ko_detail.cook(characters,built,player["idle"]["character_metadata"],mappings,
-                                           world_root=assets)
+                                           world_root=assets,positions=ko_player.looks(
+                                               ko_character.Assets(characters),player_race)["positions"])
     if mappings:manifest['appearance']=[dict(item=r['item'],slot=r['slot']) for r in mappings]
     weapon_effects=detail_report.pop('weapon_effects')
     (root / "render-detail.bin").write_bytes(detail)

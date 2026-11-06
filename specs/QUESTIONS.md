@@ -2196,3 +2196,28 @@ Options:
 
 **Default taken:** (a). The realm creates only the player race's characters with
 items today (Moradon: the Tuarek), and per-race rows are a content change of their own.
+
+### Q123 — The world's lower under a robe: 1097's other players, and a worn lower
+
+RQ-199: KO's world releases the lower part while the upper item is a robe, so the
+character draws no lower (1298 `00467d50` and `0045cd90`, 1097 `00459c60`;
+`specs/KO-FINDINGS.md` §8.7). 1097's part set for other players (`00452fb0`, the
+source's `CPlayerBase::PartSet`) differs by order: a player coming into view in a robe
+draws no lower over a worn lower item but the looks lower without one, and one who
+puts a robe on in view draws the looks lower. n3e composes every player from its worn
+keys alone, the same for the player and for others, and N3D2 can suppress default-body
+parts but cannot hide one worn key behind another.
+
+Options:
+- (a) A robe row's N3D2 entry also replaces the lower body parts: no lower, for the
+  player and for others, as 1298's world and both local players draw it; a package
+  with a robe row and a row drawing on the lower is refused by the cook.
+- (b) As (a), and model 1097's other-player order (the looks lower when no lower
+  key is worn, for others only).
+- (c) A format that lets a worn key hide another (a lower key under a robe), so such
+  a package cooks.
+
+**Default taken:** (a). (b) depends on the order the look arrived in, which n3e's
+stateless composition does not keep; (c) waits for a package with a lower row (none
+today; proposed as its own item). No Moradon row is a robe, so the hosted package is
+unchanged.

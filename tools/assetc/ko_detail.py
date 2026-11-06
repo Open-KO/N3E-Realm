@@ -31,12 +31,14 @@ def influence_report(levels,appearances):
     return {'many_influences':dict(levels=found,appearances=keys,most=most)}
 
 
-def cook(assets_root,built,definition,mappings=(),world_root=None):
+def cook(assets_root,built,definition,mappings=(),world_root=None,positions=None):
     """Render detail (N3D1/N3D2/N3D3, or N3DI/N3DJ when a body or appearance
     part has a drawn vertex past four joint influences: RQ-164, engine 44,
     render_detail.serialize). An N3W2 build's world textures are its N3WT
     (`ko_scene.world_textures_bytes`), so its world subset is the transparent slot alone.
-    `world_root` is the map's client root when it is not the character's (PQ-274)."""
+    `world_root` is the map's client root when it is not the character's (PQ-274).
+    `positions` is the KO part position of each of the definition's parts
+    (ko_player.looks), which a robe row needs (RQ-199, ko_appearance.cook)."""
     assets=character.Assets(assets_root)
     import ko_scene
     if built['atlas'] is None:textures,sources=[ko_scene.CLEAR_TEXTURE],{}
@@ -76,7 +78,7 @@ def cook(assets_root,built,definition,mappings=(),world_root=None):
     # factor .5 times default ViewPort Distance 512 = 256 (clear-weather factor 1).
     view=[struct.unpack('<f',struct.pack('<I',0x3f91361e))[0],.5,256.]
     import ko_appearance
-    appearances,states,appearance_report,weapons=ko_appearance.cook(assets,mappings,world,textures,body_slots)
+    appearances,states,appearance_report,weapons=ko_appearance.cook(assets,mappings,world,textures,body_slots,positions)
     # PQ-348 (D-191): N3D3 only when a part's render state is not opaque.
     states=states if ko_appearance.needs_states(states) else None
     payload=render_detail.serialize(view,THRESHOLDS,[30,60,100],world_count,textures,radius,levels,appearances=appearances,

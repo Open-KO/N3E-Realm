@@ -30,14 +30,34 @@ The KO adapter explicitly maps local part/plug artwork in
 stay out of engine code. Plug positions use the selected bind joint and rigid
 skinning; armor retains authored skin weights and four levels. The demo supplies
 ordinary blades, shield and torso armor. Equipped-plug progressive LOD, weapon
-trails, special materials, robes and other races/items remain fidelity gaps.
+trails, special materials and other races/items remain fidelity gaps.
 Missing mappings fall back to the base body; a missing declared asset fails cook.
 
 RQ-197: the select hall draws the same keys (`content/front-end.md` item 7). A part
 row there takes the one KO part slot its `parts` map to, and an upper part row may
 say `"robe": true` (default false; refused on any other row), which draws the lower
-as the race's looks part while it is worn, as KO's AddChr does for a robe; the world
-does not read it yet.
+as the race's looks part while it is worn, as KO's AddChr does for a robe.
+
+RQ-199: the world reads the same flag as KO's world does, which differs from the
+hall: while the upper item is a robe, KO's world part set releases the lower part
+(1298 `00467d50` for the player, `0045cd90` for others; 1097 `00459c60` for the
+player; each sets part 1 to the empty name, which `CN3Chr::PartSet` takes as a
+release), so the character draws no lower at all, neither the looks lower nor a worn
+one (`specs/KO-FINDINGS.md` §8.7). The KO cook (`ko_appearance.cook`) writes a robe
+row's N3D2 entry with the player model's lower body parts among its replacements
+(those whose KO part position is the lower, through the looks row's positions; a race
+without a lower part, the Wrinkle Tuarek's, replaces the upper alone), so wearing it
+suppresses the looks lower in the world and the inventory preview, for the player and
+for others alike; the formats, the wire and the server are unchanged. A robe must be
+an ordinary part row whose `parts` are all the upper's; on a plug, a 2145 row, or any
+other part row it is refused, as the hall refuses it. N3D2 cannot hide one worn key
+behind another, so a package with a robe row and any row that draws on the lower is
+refused by the cook rather than drawing a lower KO would not. The flag is the
+author's statement of KO's robe test for the package's player race (1298: `Item_Org`
+`+0x41`, not at El Morad for an item / 10⁶ of 266 or 969 in the world, `00462bd0`,
+or of 266 for races 11–13 in the hall; 1097: `+0x39`). No Moradon row is a robe, so
+the hosted package is unchanged. 1097's part set for others (`00452fb0`) keeps the
+looks lower in some orders (Q123).
 
 Binary grounding and verification.
 

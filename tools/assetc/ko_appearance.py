@@ -244,16 +244,59 @@ def plug_levels(assets, name, joint, bind, height, slot):
         lod='highest refined plug mesh; progressive equipped-plug selection remains open')
 
 
-def cook(assets, mappings, world, textures, body_slots):
+# RQ-199: the KO part positions (ko_player.POSITIONS) a robe takes and leaves bare.
+ROBE_UPPER, ROBE_LOWER = 'upper', 'lower'
+
+
+def robe(row, what, positions):
+    """Whether appearance row `row` is a robe (`"robe": true`, default false):
+    an ordinary part row whose `parts` (indices into `positions`, the KO part
+    position of each of the player model's body parts, ko_player.looks) are
+    all the upper's. A robe on any other row, or without the positions, is
+    refused, as the hall refuses it (ko_front_end.hall_keys)."""
+    if 'robe' not in row:
+        return False
+    if type(row['robe']) is not bool:
+        raise ValueError('%s robe: true or false' % what)
+    if not row['robe']:
+        return False
+    if 'joint' in row or 'chrplug_2145' in row or 'part_2145' in row:
+        raise ValueError("%s: a robe is an upper part's" % what)
+    if positions is None:
+        raise ValueError("%s: a robe needs the player model's part positions" % what)
+    parts = row.get('parts')
+    if type(parts) is not list or not parts or any(
+            type(i) is not int or not 0 <= i < len(positions) or positions[i] != ROBE_UPPER for i in parts):
+        raise ValueError("%s: a robe is an upper part's (its parts all the upper)" % what)
+    return True
+
+
+def cook(assets, mappings, world, textures, body_slots, positions=None):
     """Appearance meshes, their N3D3 render states and reports; with them the
     weapon effects of rows that name a KO item number (`ko_item`, PQ-211) for
-    ko_fx_bake."""
+    ko_fx_bake.
+
+    `positions` (RQ-199) is the KO part position of each of `body_slots`'
+    body parts (ko_player.looks), which a robe row needs. A robe row also
+    replaces every lower body part: KO's world releases the lower part while
+    the upper item is a robe (1298 00467d50 for the player and 0045cd90 for
+    others, 1097 00459c60 for the player, each setting part 1 to the empty
+    name through CN3Chr::PartSet, 0041b6d0 / 00447a70), so it draws no lower,
+    neither the looks lower nor a worn one (1097's 00452fb0 for others keeps
+    the looks lower in some orders, Q123). n3e cannot yet hide another worn
+    key, so a robe row beside a row that draws on the lower is refused."""
     import ko_weapon_fx
     appearances, states, reports, weapons = [], [], [], []
+    if positions is not None and len(positions) != len(body_slots):
+        raise ValueError('appearance: %d part positions for %d body parts' % (len(positions), len(body_slots)))
+    lower = [body_slots[i] for i, p in enumerate(positions or ()) if p == ROBE_LOWER]
+    robes = set()
     # Binary Height() is maximum joint Y, not max-minus-min or mesh bounds.
     height = max(m[1][3] for m in world)
     for key, row in enumerate(mappings, 1):
         slot = len(textures)
+        if robe(row, 'appearance key %d (%s, slot %s)' % (key, row.get('item'), row.get('slot')), positions):
+            robes.add(key)
         if 'chrplug_2145' in row:
             # PQ-317 (D-187): a skeletal plug is an N3AT plug entry; its key
             # draws no rigid mesh (2233's CN3ChrTypePlug names none).
@@ -291,6 +334,10 @@ def cook(assets, mappings, world, textures, body_slots):
             replaces = [body_slots[i] for i in row['parts']]
             states.append(part_state(assets, row['source']))
             report = dict(parts=row['parts'], render_state=list(states[-1]))
+            if key in robes:
+                # RQ-199: the lower too, which KO's world leaves bare under a robe.
+                replaces += [s for s in lower if s not in replaces]
+                report['robe'] = dict(bare=[i for i, p in enumerate(positions) if p == ROBE_LOWER])
         textures.append(texture)
         appearances.append((replaces, levels))
         if 'ko_item' in row:
@@ -301,4 +348,10 @@ def cook(assets, mappings, world, textures, body_slots):
             if fx['main'] and geometry:
                 weapons.append(dict(fx, key=key, joint=joint, ko_item=row['ko_item'], geometry=geometry))
         reports.append(dict(item=row['item'], slot=row['slot'], source=row['source'], **report))
+    if robes:
+        for key, (replaces, _) in enumerate(appearances, 1):
+            if key not in robes and set(replaces) & set(lower):
+                raise ValueError('appearance key %d (%s) draws on the lower, which KO\'s world leaves bare under '
+                                 'a robe (key %d); n3e cannot hide a worn key yet'
+                                 % (key, mappings[key - 1].get('item'), min(robes)))
     return appearances, states, reports, weapons

@@ -525,6 +525,32 @@ plugs, source `PlugSet`; the setter dusts only those two plugs, never
 positions are all part slots 0, 1, 3, 4 or 5 (the face, 2, is no item's). Every
 Moradon row qualifies.
 
+### 8.7 The world's lower under a robe (RQ-199, 2026-11-06)
+
+Read statically in 1298's `KnightOnLine.exe` (sha256 `828ab0db…43a5e5`, n3e's
+`audit-2026-09-19` project, `-readOnly -noanalysis`) and the 1097 image
+(`ko1097-unpacked.exe`, sha256 `82abb582…febaf`, RQ-074's project), with RQ-159's
+decompiles of `00467d50` and `00462bd0`, RQ-201's of `0045cd90` and the later source's
+`CPlayerBase::PartSet`, `CPlayerMySelf::PartSet`, `CPlayerOther::Init` and
+`CN3Chr::PartSet`. Output under `build/ghidra/rq199/`, not committed. Not run.
+
+| Observation | Where | Label |
+|---|---|---|
+| **Which part set each player uses.** The four player vtables' entry `+0x2c` (the part set; `+0x34` is the durability setter `0045d5f0`, §8.6) is `0045cd90` in `006a4064`, `006a412c` and `006a4208` and `00467d50` in `006a4198`, the one whose destructor (`+0`) differs (`00465740`; the others `00455e40`): the local player's. 1097's four (`0058cf7c`, `0058d02c`, `0058d088`, `0058d0e4`) hold the part set at `+0x28`: `00452fb0` in three and `00459c60` in `0058d088`, the one with its own entries | 1298 `006a4090`, `006a4158`, `006a41c4`, `006a4234`; 1097 `0058cfa4`, `0058d054`, `0058d0b0`, `0058d10c` | binary |
+| **An empty name releases the part.** `CN3Chr::PartSet` returns the part unchanged when the name matches its file's; with a name of length 0 it calls the part's vtable `+0` (Release), else `+8` (LoadFromFile). The empty string the part sets pass is `""` (`006dfe28`, `005ab008` hold 0). So the empty name draws no part, unlike the hall's `AddChrPart`, whose own empty-name branch sets the looks row's part (§8.6) | 1298 `0041b6d0`; 1097 `00447a70`; `N3Chr.cpp` `CN3Chr::PartSet` | binary; source |
+| **1298's local player.** Upper (slot 0) with an item: when it is a robe (`00462bd0`) and the character holds a lower part it sets part 1 to `""`. Upper without an item: when the stored upper (`+0x278`) was a robe it sets the lower back, the stored lower item's file (`006157b0`) or, with none, the looks row's lower (row `+0x44`). Lower (slot 1), with or without an item: while the stored upper is a robe it stores the item and its extension (`+0x27c`, `+0x2a4`), sets part 1 to `""` and returns. So the player draws no lower while it wears a robe. A robe is `Item_Org` `+0x41`, except at nation 2 (`+0x490`) an item / 10⁶ of 266 or 969 | 1298 `00467d50`, `00462bd0` | binary |
+| **1298's other players.** `0045cd90` does the same with the robe test inline (`+0x490`, 266, 969, `+0x41`): dressing a robe upper sets part 1 to `""`; a lower item under a robe upper is stored and part 1 set to `""`; a named lower (the looks lower `CPlayerOther::Init` and the look change pass for an empty slot) is set only when the stored upper is not a robe. So another player in a robe draws no lower either. One order differs: it tests the stored upper after dressing the new one, so a robe put on over a robe sets the lower back (the lower item's file or the looks lower) | 1298 `0045cd90` | binary |
+| **1097's local player.** `00459c60` is 1298's `00467d50` with 1097's robe byte `+0x39` alone (no exemption): a robe upper sets part 1 to `""`, and a lower, with or without an item, under a robe is stored with part 1 `""` | 1097 `00459c60` | binary |
+| **1097's other players.** `00452fb0` follows the source's `CPlayerBase::PartSet`: a robe upper calls the part set again (vtable `+0x28`) for slot 1 with `""` and the stored lower item, and that call, with the stored upper not yet a robe, takes the empty name as "the looks part" and sets the looks lower; a lower item under a robe is stored with part 1 `""`; a named lower is set whatever the upper. As `CPlayerOther::Init` sets the upper before the lower, another player coming into view in a robe draws no lower over a lower item and the looks lower without one; one who puts on a robe in view draws the looks lower | 1097 `00452fb0`; `PlayerBase.cpp` `CPlayerBase::PartSet`, `PlayerOther.cpp` `CPlayerOther::Init` (the order) | binary; source |
+
+**Decides (RQ-199):** an `appearance.json` robe row (an ordinary upper part row, `"robe":
+true`) draws in the world as the 1298 world and both clients' local players do: its
+N3D2 entry also replaces the player model's lower body parts, so no lower is drawn
+while it is worn, for the player and for others, in the world and the inventory
+preview. The engine is unchanged. A package with a robe row and a row drawing on the
+lower is refused (N3D2 cannot hide a worn key). 1097's other-player order is not
+modelled (Q123). No Moradon row is a robe.
+
 ## 9. The front end per client (RQ-078, 2026-11-02)
 
 Which KO client a realm's front end looks and behaves like is the realm owner's

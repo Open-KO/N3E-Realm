@@ -1,10 +1,14 @@
 """Local KO detail data. Binary addresses and per-input hashes are in provenance."""
 from common import *
 import ko_character as character
+import ntpath
 import ko_tiles
 import render_detail
 
 THRESHOLDS=[[6,18,32,128],[4,12,21,85],[2.66,8,14.21,56.8],[1.77,5.33,9.48,37.9]]
+# RQ-221: the KO part positions (ko_player.POSITIONS) the world draws by
+# number apart from the body, in render detail's looks order.
+LOOKS_POSITIONS=('face','hair')
 
 def bind_world(assets,definition):
     """The player skeleton's joint matrices at frame 0, in engine space; their
@@ -31,14 +35,21 @@ def influence_report(levels,appearances):
     return {'many_influences':dict(levels=found,appearances=keys,most=most)}
 
 
-def cook(assets_root,built,definition,mappings=(),world_root=None,positions=None):
+def cook(assets_root,built,definition,mappings=(),world_root=None,positions=None,looks=None):
     """Render detail (N3D1/N3D2/N3D3, or N3DI/N3DJ when a body or appearance
     part has a drawn vertex past four joint influences: RQ-164, engine 44,
     render_detail.serialize; N3DH when a robe hides a worn lower, RQ-207). An N3W2 build's world textures are its N3WT
     (`ko_scene.world_textures_bytes`), so its world subset is the transparent slot alone.
     `world_root` is the map's client root when it is not the character's (PQ-274).
     `positions` is the KO part position of each of the definition's parts
-    (ko_player.looks), which a robe row needs (RQ-199, ko_appearance.cook)."""
+    (ko_player.looks), which a robe row needs (RQ-199, ko_appearance.cook).
+    `looks` (RQ-221), when given, is {'face': [file, ...], 'hair': [...]}
+    (ko_player.looks_parts): the body then draws neither the definition's
+    face nor its hair, whose textures keep their body slots (the slots an
+    appearance row's `parts` replace), and the file is N3DH with the looks
+    flag, carrying each numbered face and hair part (ko_appearance.part_levels)
+    for the client to draw on each player by its Entity numbers, as KO's
+    InitFace and InitHair set them (1298 005c87c0; source PlayerOther.cpp)."""
     assets=character.Assets(assets_root)
     import ko_scene
     if built['atlas'] is None:textures,sources=[ko_scene.CLEAR_TEXTURE],{}
@@ -50,10 +61,14 @@ def cook(assets_root,built,definition,mappings=(),world_root=None,positions=None
     # 0041c300: joint bounds, +/-.25 padding for each extent below .5.
     radius=math.sqrt(sum((v+.5 if v<.5 else v)**2 for v in spans))*.5
     body_slots=[];rebuilt=[]
-    for name in definition['parts']:
+    if looks is not None and (positions is None or len(positions)!=len(definition['parts'])):
+        raise ValueError('render detail looks parts need the part position of each body part')
+    for index,name in enumerate(definition['parts']):
         part=character.part(assets.get(name));slot=len(textures);body_slots.append(slot)
         # 0064b9b0 default LOD_Chr=0 is incremented and clamped to one.
         textures.append(ko_tiles.mip_chains(assets.get(part['texture']),skip=1)[0])
+        if looks is not None and positions[index] in LOOKS_POSITIONS:
+            continue  # RQ-221: drawn by number (the looks parts below)
         # RQ-164: every influence of a vertex, as KO's skinning 00419f00 sums
         # them (the Arch Tuarek's lower part has 49 with five).
         _,skins=character.skins(assets.get(part['skin']),influences=True)
@@ -79,15 +94,39 @@ def cook(assets_root,built,definition,mappings=(),world_root=None,positions=None
     view=[struct.unpack('<f',struct.pack('<I',0x3f91361e))[0],.5,256.]
     import ko_appearance
     appearances,states,appearance_report,weapons=ko_appearance.cook(assets,mappings,world,textures,body_slots,positions)
+    looks_sets=None
+    if looks is not None:
+        # RQ-221: each numbered face and hair part, on the body's skeleton,
+        # after the appearance textures; the part whose file is the body's
+        # own (face 0, hair 0) keeps its body slot. A position the race has
+        # no part for (the Wrinkle Tuarek's hair) carries none.
+        looks_sets=[]
+        for position in LOOKS_POSITIONS:
+            names=looks.get(position,[])
+            if names and position not in positions:
+                raise ValueError('render detail looks: %s parts for a body without one' % position)
+            index=positions.index(position) if position in positions else None
+            parts=[]
+            for name in names:
+                own=ntpath.normcase(name)==ntpath.normcase(definition['parts'][index])
+                slot=body_slots[index] if own else len(textures)
+                counts=[]
+                levels_,texture=ko_appearance.part_levels(assets,name,slot,counts,influences=True)
+                if not own:textures.append(texture)
+                if any(counts):rebuilt.append(dict(part=name,looks=position,vertices=counts))
+                parts.append(levels_)
+            looks_sets.append((body_slots[index] if names else None,parts))
     # PQ-348 (D-191): N3D3 only when a part's render state is not opaque.
     states=states if ko_appearance.needs_states(states) else None
     # RQ-207: a robe entry hides the worn lower keys (N3DH), as KO's world
     # releases the lower under a robe; without one the bytes are as before.
     hides=[r.get('robe',{}).get('hides',[]) for r in appearance_report]
     payload=render_detail.serialize(view,THRESHOLDS,[30,60,100],world_count,textures,radius,levels,appearances=appearances,
-                                    states=states,influences=True,hides=hides if any(hides) else None)
+                                    states=states,influences=True,hides=hides if any(hides) else None,looks=looks_sets)
     report=dict(view=view,character_radius=radius,character_triangles=[len(x[1])//3 for x in levels],
                 textures=len(textures),**influence_report(levels,appearances),
+                **(dict(looks={p:dict(slot=slot,parts=len(ms),triangles=[[len(g[1])//3 for g in m] for m in ms])
+                               for p,(slot,ms) in zip(LOOKS_POSITIONS,looks_sets)}) if looks_sets is not None else {}),
                 **(dict(rebuilt_normals=rebuilt) if rebuilt else {}),native_mip_levels=sum(len(c) for c in textures),
                 native_pixel_bytes=sum(len(p) for c in textures for _,_,p in c),
                 world_sources=sources,character_sources=assets.sources,

@@ -398,6 +398,33 @@ int main(int argc, char **argv) {
       require(drawn({2,3,1})==Drawn{{0,0},{1,9},{3,9}});    // a key it does not name still draws
       require(drawn({3,2})==Drawn{{0,3},{2,12},{3,9}});
     }
+    {
+      // RQ-221: a player's face and hair by its numbers after the body
+      // (key 0), the set's level falling back to level 0; a number past a
+      // set draws none; a worn key that replaces a set's slot (a helmet on
+      // the hair) hides that set; without looks parts nothing is added.
+      n3e::RenderDetail head;head.levels.resize(4);head.appearances.resize(2);
+      for(auto&base:head.levels){base.slots={1,1,1};base.scene.indices={0,1,2};}
+      head.appearances[0].replaces={3};head.appearances[1].replaces={1};
+      for(auto&part:head.appearances){part.levels.resize(4);part.levels[0].scene.indices={0,1,2,0,1,2,0,1,2};}
+      head.faces.slot=2;head.hairs.slot=3;
+      for(size_t n=0;n<4;++n){auto&face=head.faces.parts.emplace_back(4);face[0].scene.indices.assign(3*(n+1),0);}
+      for(size_t n=0;n<3;++n){auto&hair=head.hairs.parts.emplace_back(4);hair[0].scene.indices.assign(30+3*n,0);hair[2].scene.indices.assign(60,0);}
+      std::vector<n3e::AppearanceRule> worn={{"helmet",0},{"armor",1}};
+      using Drawn=std::vector<std::pair<uint32_t,size_t>>;
+      auto drawn=[&](std::vector<uint32_t>keys,n3e::Looks looks,unsigned level=0){Drawn out;
+        n3e::draw_appearance(head,worn,keys,level,[&](const auto&,auto indices,uint32_t key){out.push_back({key,indices.size()});},looks);return out;};
+      require(drawn({},{0,0})==Drawn{{0,3},{0,3},{0,30}});
+      require(drawn({},{3,2})==Drawn{{0,3},{0,12},{0,36}});
+      require(drawn({},{3,2},2)==Drawn{{0,3},{0,12},{0,60}});      // the hair's own level 2
+      require(drawn({},{4,3})==Drawn{{0,3}});                      // past both sets
+      require(drawn({1},{1,1})==Drawn{{0,3},{0,6},{1,9}});         // the helmet hides the hair
+      require(drawn({2},{1,1})==Drawn{{0,0},{0,6},{0,33},{2,9}});  // a key replacing the body keeps both
+      require(n3e::looks_drawn(head,n3e::select_appearance(head,worn,std::vector<uint32_t>{1}).hidden,{1,1})==std::array<bool,2>{true,false});
+      require(n3e::looks_drawn(head,{},{4,0})==std::array<bool,2>{false,true});
+      head.faces={};head.hairs={};
+      require(drawn({},{0,0})==Drawn{{0,3}});
+    }
     for(auto [x,y]:{std::pair{0.f,0.f},std::pair{1023.f,767.f},std::pair{1000.f,10.f}}){auto box=tooltip_rectangle(x,y,254,200,1024,768,26);require(box[0]>=0&&box[1]>=0&&box[2]<=1024&&box[3]<=768);}
     auto giant=tooltip_rectangle(100,100,2000,2000,1024,768,26);require(giant[2]==1024&&giant[3]==768);
     n3e::WorldState loot_world;loot_world.connected=true;
@@ -410,7 +437,7 @@ int main(int argc, char **argv) {
     pickup.down("loot:1");require(pickup.up("loot:1")->operation()==2);
     loot_world.predicted[0]=10;pickup.sync(loot_world,3);require(!pickup.encounter);
     require(!pickup.open(loot_world,3,0,0));
-    std::cout<<"PASS appearance restore/replacement/LOD/hidden keys, tooltip edge bounds and stable pickup slots/retry/range\n";
+    std::cout<<"PASS appearance restore/replacement/LOD/hidden keys/faces and hairs (RQ-221), tooltip edge bounds and stable pickup slots/retry/range\n";
     if (argc>=2) {
       auto release=n3e::load_release(argv[1]);
       HudLayout package(n3e::load_hud(release));

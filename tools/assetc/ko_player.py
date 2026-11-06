@@ -13,6 +13,14 @@ before the extension, and an empty name sets no part (source
 `GameProcCharacterCreate.cpp` `SetChr`, `PlayerMySelf.cpp` `InitFace` and
 `InitHair`; the 1298 build `005fd120` returns without a row, binary,
 content/character-create.md).
+
+RQ-221: a feature cook draws each player's own face and hair in the world.
+Its player scenes, combat and skill clips are then cooked `apart`, without
+the face and hair, and render detail carries the race's numbered face and
+hair parts (`looks_parts`, ko_detail), which the client draws on each player
+by the Entity's numbers on the body's skeleton, as KO's InitFace and
+InitHair set the numbered part on the player's own skeleton (1298
+`005c87c0`; source `PlayerMySelf.cpp`, `PlayerOther.cpp` Init).
 """
 import csv
 import io
@@ -83,12 +91,13 @@ def numbered(path, number):
     return '%s%02d%s' % (stem, number, ext)
 
 
-def looks(assets, entry, face=0, hair=0):
+def looks(assets, entry, face=0, hair=0, apart=False):
     """The race's UPC_DefaultLooks row as {row, definition, positions}: the
     definition `ko_character.convert` takes (its joint, animation and the parts
     KO sets, face `face` and hair `hair`) and the part position of each part
-    it keeps. Refuses a race the table lacks and a row whose parts are not the
-    race's `looks`."""
+    it keeps. `apart` (RQ-221) keeps neither the face nor the hair, which
+    render detail then carries by number (looks_parts). Refuses a race the
+    table lacks and a row whose parts are not the race's `looks`."""
     table = assets.get(SOURCE)
     rows = list(csv.reader(io.StringIO(table.decode('utf-8-sig'))))
     row = next((r for r in rows[1:] if r and r[KEY] == str(entry['race'])), None)
@@ -104,6 +113,8 @@ def looks(assets, entry, face=0, hair=0):
     for position, name in zip(POSITIONS, names):
         if not name:
             continue  # KO sets no part for an empty name
+        if apart and position in ('face', 'hair'):
+            continue  # RQ-221: drawn by number apart from the body
         if position == 'face':
             name = numbered(name, face)
         elif position == 'hair':
@@ -113,6 +124,20 @@ def looks(assets, entry, face=0, hair=0):
     definition = dict(name=entry['looks'], joint=row[JOINT], animation=row[ANIMATION], parts=parts,
                       collision=[], split=[-1]*4, extras=[])
     return dict(row=row, definition=definition, positions=positions)
+
+
+def looks_parts(row, faces, hairs):
+    """RQ-221: the numbered face and hair files of a looks `row` (looks()'
+    row) the world draws apart from the body, as {position: [file, ...]}:
+    `faces` faces and `hairs` hairs (create.bin's counts, KO's 4 and 3,
+    character-create.json `faces` and `hairs`), file i the row's name with i
+    as two digits before the extension (numbered), none for an empty name
+    (the Wrinkle Tuarek's hair: InitHair sets none)."""
+    out = {}
+    for position, count in (('face', faces), ('hair', hairs)):
+        name = row[PARTS][POSITIONS.index(position)]
+        out[position] = [numbered(name, i) for i in range(count)] if name else []
+    return out
 
 
 def hand_joints(row):
@@ -128,14 +153,16 @@ def hand_joints(row):
     return joints
 
 
-def cook(root, out, locomotion=False, ready=False, rest=False, combat=False, race_code=None, game=GAME):
+def cook(root, out, locomotion=False, ready=False, rest=False, combat=False, race_code=None, game=GAME, apart=False):
     """The player scenes of race `race_code` (default the package's player
     race), face 0 and hair 0, one per clip_indices state: out/player-<state>.bin,
     N3S1, or N3SI when a drawn vertex has more than four joint influences
-    (RQ-163; a package with them is engine 43, tools/assetc/main.py)."""
+    (RQ-163; a package with them is engine 43, tools/assetc/main.py).
+    `apart` (RQ-221) cooks them without the face and hair, which render
+    detail carries by number."""
     entry = race(race_code, game)
     assets=ko.Assets(root)
-    definition = looks(assets, entry)['definition']
+    definition = looks(assets, entry, apart=apart)['definition']
     reports={}
     for state,index in clip_indices(locomotion,ready,rest,combat):
         target=out/state
@@ -146,5 +173,5 @@ def cook(root, out, locomotion=False, ready=False, rest=False, combat=False, rac
         main.cook(target,cooked,influences=True)
         shutil.copyfile(cooked/'scene.bin',out/('player-'+state+'.bin'))
         reports[state]=report
-    (out/'player-provenance.json').write_text(json.dumps(dict(race=entry['race'],looks=entry['looks'],face=0,hair=0,states=reports),indent=2)+'\n')
+    (out/'player-provenance.json').write_text(json.dumps(dict(race=entry['race'],looks=entry['looks'],face=None if apart else 0,hair=None if apart else 0,states=reports),indent=2)+'\n')
     return reports

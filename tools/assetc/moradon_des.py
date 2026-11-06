@@ -159,10 +159,13 @@ def apply_player(root, manifest):
     # Render detail: Moradon's world textures, then the Demon's Souls character.
     data = (root / "render-detail.bin").read_bytes()
     view = list(struct.unpack_from("<3f", data, 4))
-    thresholds = [list(struct.unpack_from("<4f", data, 16 + 16 * r)) for r in range(4)]
-    workload = list(struct.unpack_from("<3I", data, 80))
-    world_count, _ = struct.unpack_from("<II", data, 92)
-    at, textures = 100, []
+    # RQ-221: a feature cook's detail is N3DH (its looks parts), whose layout
+    # flags follow the projection; the rest is laid out as before after them.
+    head = 4 if data[:4] == b"N3DH" else 0
+    thresholds = [list(struct.unpack_from("<4f", data, head + 16 + 16 * r)) for r in range(4)]
+    workload = list(struct.unpack_from("<3I", data, head + 80))
+    world_count, _ = struct.unpack_from("<II", data, head + 92)
+    at, textures = head + 100, []
     for _ in range(world_count):
         levels = struct.unpack_from("<I", data, at)[0]
         at += 4

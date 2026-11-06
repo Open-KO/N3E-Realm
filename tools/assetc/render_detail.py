@@ -23,13 +23,27 @@ MAX_FURTHER = 60
 # worn keys. The projection (the view floats) is followed by u32 layout
 # flags: HIDE_STATES the N3D3 render state per entry, HIDE_TABLES the N3DI
 # influence tables (engine 44), HIDE_KEYS the hidden keys, which every N3DH
-# sets (a file that hides nothing keeps N3D2, N3D3, N3DI or N3DJ). The rest is the layout those flags name,
+# sets unless it carries looks parts (RQ-221, LOOKS below; a file that hides
+# nothing and carries none keeps N3D2, N3D3, N3DI or N3DJ). The rest is the layout those flags name,
 # each appearance entry carrying, after its replacements, u32 count (0-16) and
 # that many N3V1 keys it hides while worn: such a key draws no mesh and hides
 # no default-body part. A key hides neither itself nor a key twice, and a key
 # that hides is hidden by none.
 HIDE_STATES, HIDE_TABLES, HIDE_KEYS = 1, 2, 4
 MAX_HIDDEN = 16
+# RQ-221 (content/appearance.md, "Faces and hairs"): N3DH layout flag 8, the
+# looks parts. After the appearance entries come two sets, the faces and then
+# the hairs, each u32 count (0-16) and, when not 0, u32 slot (the body texture
+# slot an appearance entry's replacements name for that part: a worn key that
+# replaces it hides the set, as a helmet hides KO's hair) and that many parts
+# of four ordinary detail geometries (level 0 not empty; an empty lower level
+# uses level 0). The body levels then carry neither part; the client draws
+# part n of each set on a player whose Entity face or hair is n, on the body's
+# skeleton, and none for a number past the set. An N3DH sets HIDE_KEYS, LOOKS
+# or both.
+LOOKS = 8
+MAX_LOOKS = 16
+LAYOUT_FLAGS = HIDE_STATES | HIDE_TABLES | HIDE_KEYS | LOOKS
 # RQ-191: the client's detail reader (client/assets/assets.cpp
 # load_render_detail) reads each vertex normal's components as cooked floats
 # (Reader::f: finite, magnitude at most COOKED_FLOAT_BOUND, common) and
@@ -93,6 +107,29 @@ def check_hides(hides, count):
 HEAD_BYTES = 20  # the magic, the projection and N3DH's layout flags
 
 
+def check_looks(looks, world_count, texture_count):
+    """`looks`, the faces and hairs as [(slot, parts), (slot, parts)] (slot
+    None for a set without parts; each part four geometries), within the
+    bounds both the cook and the client reader apply; returns it."""
+    if type(looks) not in (list, tuple) or len(looks) != 2:
+        raise ValueError('render detail looks sets')
+    for slot, parts in looks:
+        if type(parts) not in (list, tuple) or len(parts) > MAX_LOOKS:
+            raise ValueError('render detail looks part count')
+        if parts and not (type(slot) is int and world_count <= slot < texture_count):
+            raise ValueError('render detail looks slot')
+        for part in parts:
+            if len(part) != 4 or not part[0][1]:
+                raise ValueError('render detail looks part levels')
+    return looks
+
+
+def valid_layout(flags):
+    """Whether `flags` are N3DH layout flags the readers take: within
+    LAYOUT_FLAGS, with HIDE_KEYS or LOOKS."""
+    return type(flags) is int and 0 <= flags <= LAYOUT_FLAGS and bool(flags & (HIDE_KEYS | LOOKS))
+
+
 def layout(head):
     """N3DH's layout flags from render detail beginning with `head` (its
     first HEAD_BYTES bytes), or None for another magic or a short head."""
@@ -118,7 +155,7 @@ def further(vertex):
 
 
 def serialize(view, thresholds, workload, world_count, textures, radius, levels, attachments=(), appearances=(),
-              states=None, influences=False, hides=None):
+              states=None, influences=False, hides=None, looks=None):
     """`states`, when not None, is one render state per appearance entry and
     makes the file N3D3; without it the bytes are N3D2's (or N3D1's) as before.
     `influences` (ko_detail, RQ-164) admits vertices with more than four
@@ -130,13 +167,20 @@ def serialize(view, thresholds, workload, world_count, textures, radius, levels,
     is refused. `hides` (RQ-207), when not None, is one list of N3V1 keys per
     appearance entry that the entry hides while worn (check_hides); when one
     is not empty the file is N3DH, with the flags of the layout above, and
-    otherwise the bytes are as before."""
+    otherwise the bytes are as before. `looks` (RQ-221), when not None, is
+    the faces and hairs (check_looks), which make the file N3DH with LOOKS;
+    they need appearance entries."""
     if hides is not None:
         check_hides(hides, len(appearances))
     hiding = hides is not None and any(hides)
+    if looks is not None:
+        check_looks(looks, world_count, len(textures))
+        if not appearances:
+            raise ValueError('render detail looks parts need appearance entries (N3DH)')
     if states is not None and (not appearances or len(states) != len(appearances)):
         raise ValueError('appearance render state count')
-    meshes = list(levels) + [g for g, _ in attachments] + [m for _, ms in appearances for m in ms]
+    meshes = list(levels) + [g for g, _ in attachments] + [m for _, ms in appearances for m in ms] + \
+        [g for _, parts in looks or () for part in parts for g in part]
     extra = [further(v) for vertices, _ in meshes for v in vertices if len(v[3]) > 4]
     if extra and not influences:
         raise ValueError('detail vertex past four joint influences')
@@ -145,8 +189,9 @@ def serialize(view, thresholds, workload, world_count, textures, radius, levels,
         raise ValueError('detail influence tables need appearance entries (N3DI / N3DJ)')
     if any(len(x) > MAX_FURTHER for x in extra):
         raise ValueError('detail vertex past %d joint influences' % (4 + MAX_FURTHER))
-    if hiding:
-        magic, flags = b'N3DH', u(HIDE_KEYS | (HIDE_STATES if states is not None else 0) | (HIDE_TABLES if tables else 0))
+    if hiding or looks is not None:
+        magic, flags = b'N3DH', u((HIDE_KEYS if hiding else 0) | (LOOKS if looks is not None else 0) |
+                                  (HIDE_STATES if states is not None else 0) | (HIDE_TABLES if tables else 0))
     else:
         magic, flags = (b'N3DJ' if tables else b'N3D3') if states is not None else \
             (b'N3DI' if tables else b'N3D2') if appearances else b'N3D1', b''
@@ -191,5 +236,10 @@ def serialize(view, thresholds, workload, world_count, textures, radius, levels,
             if states is not None:
                 flags, reference, source, destination = check_state(states[index])
                 out+=u(flags)+f([float(reference)])+u(source)+u(destination)
+    if looks is not None:
+        for slot, parts in looks:
+            out+=u(len(parts))
+            if parts:
+                out+=u(slot)+b''.join(geometry(g) for part in parts for g in part)
     if len(out)>128*1024*1024:raise ValueError('render detail budget')
     return out

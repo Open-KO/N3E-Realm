@@ -33,6 +33,11 @@ stand-in (tests/discord_standin.py) and a disposable Postgres and Redis.
   RQ-077) -> start (the start clip blends in over
   1097's 0.6 s on its first frame under the full spot, then plays; RQ-076) ->
   loading -> the world.
+- RQ-221: another account's "Taken", set to face 3 and hair 2, stands at the
+  start (its World entity carries its race, specialty, face and hair); in the
+  world the client draws itself in the face and hair its arrows chose and
+  Taken in its own, each from render detail's looks parts (WORLD_LOOKS,
+  N3E_TEST_WORLD_LOOKS), before the kick.
 - An operator kick (admin API) returns the client to the login screen with the
   operator's wording in the message box.
 - The login bar and KO's copyright line (RQ-108, Q85, KO-FINDINGS 9.4: 1264's
@@ -225,6 +230,7 @@ def peer_login(who, source):
 
 discord = Discord(CLIENT_ID, SECRET, REDIRECT)
 containers, server, client, relay = [], None, None, None
+standing = threading.Event()
 try:
     for suffix, image, cp, extra in [
         ("", "postgres:17.4-bookworm@sha256:304ab813518754228f9f792f79d6da36359b82d8ecf418096c636725f8c930ad", 5432,
@@ -269,8 +275,25 @@ try:
     assert tag == 4 and (first(data, 1), first(data, 2, b"").decode(), first(data, 3), first(data, 4)) == \
         (8, LIMIT, 7, 1), (tag, data)
     assert [n for _, n in holder.characters] == ["Taken", "Second", "Third"], holder.characters
-    holder.s.close()
     print(f"PASS character_slots 3: a fourth character refused ({LIMIT!r}, result 1)")
+    # RQ-221: "Taken" stands at the start in face 3 and hair 2 while the client
+    # plays; its entity carries its race, specialty, face and hair, as KO's
+    # user-in packet does, and the client draws it with them.
+    sql("UPDATE characters SET face=3, hair=2 WHERE name='Taken'")
+    tag, data = holder.select(next(i for i, n in holder.characters if n == "Taken"))
+    assert tag == 10, (tag, data)
+    taken = holder.entities[holder.id]
+    TAKEN_LOOKS = (FIXED["race"], FIXED["specialty"], 3, 2)
+    assert tuple(first(taken, k) for k in (35, 36, 37, 38)) == TAKEN_LOOKS, taken
+
+    def stand():
+        while not standing.is_set():
+            try:
+                holder.pump(.2)
+            except Exception:  # the server closed it at the end
+                return
+    threading.Thread(target=stand, daemon=True).start()
+    print(f"PASS Taken enters the world with race, specialty, face and hair {TAKEN_LOOKS} (RQ-221)")
 
     # The client through the KO screens.
     player = user("90351110224678002", "Wanderer")
@@ -286,9 +309,9 @@ try:
     client = subprocess.Popen(
         ["build/client/n3e-test-client", str(package), "--realm", str(realm_json), "--ca", "deploy/local/ca.pem"],
         env={**env, "XDG_CONFIG_HOME": str(home / "config"), "N3E_TEST_NO_BROWSER": "1",
-             "N3E_TEST_FRONT_FLOW": "Bad-Name,Taken,Fresh"},
+             "N3E_TEST_FRONT_FLOW": "Bad-Name,Taken,Fresh", "N3E_TEST_WORLD_LOOKS": "1"},
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    lines, flow, kicked, denied, held = [], [], False, False, None
+    lines, flow, kicked, denied, held, looks = [], [], False, False, None, []
     deadline = time.monotonic() + 240
     for line in client.stdout:
         lines.append(line)
@@ -311,11 +334,15 @@ try:
                 # The client connects from the login (RQ-101, Q82), so the
                 # hold is a frame or two, far inside its 3 s receive timeout.
                 assert held is None or held < 2, ("the realm connection was held %.2f s" % held, flow)
-            if flow[-1].startswith("screen=world") and not kicked:
-                account = sql(f"SELECT id FROM accounts WHERE discord_id='{player['id']}'")
-                status, body = call("POST", f"/v1/accounts/{account}/kick", ops, {"reason": "flow test"})
-                assert status == 200, (status, body)
-                kicked = True
+        if line.startswith("WORLD_LOOKS "):
+            looks.append(dict(kv.split("=") for kv in line.split()[1:]))
+        # RQ-221: the kick waits until the client has drawn itself and Taken.
+        if (any(f.startswith("screen=world") for f in flow) and not kicked
+                and {x["self"] for x in looks} >= {"0", "1"}):
+            account = sql(f"SELECT id FROM accounts WHERE discord_id='{player['id']}'")
+            status, body = call("POST", f"/v1/accounts/{account}/kick", ops, {"reason": "flow test"})
+            assert status == 200, (status, body)
+            kicked = True
     code = client.wait(timeout=60)
     text = "".join(lines)
     (out / "client.log").write_text(text)
@@ -460,6 +487,19 @@ try:
                  "FROM characters WHERE name='Fresh'")
     assert chosen == "|".join(map(str, [0, manifest["create"]["nation"], FIXED["race"], FIXED["specialty"],
                                         1, 1, ",".join(map(str, FIXED["stats"]))])), chosen
+    # RQ-221: the client draws itself in the face and hair the arrows chose
+    # and Taken in its own, each face and hair part drawn by its number from
+    # render detail's looks parts (create.bin's four faces and three hairs).
+    counts = (str(manifest["create"]["races"][0]["faces"]), str(manifest["create"]["races"][0]["hairs"]))
+    want = {"1": (str(FIXED["race"]), str(FIXED["specialty"]), "1", "1"),
+            "0": tuple(map(str, TAKEN_LOOKS))}
+    for who, (race, specialty, face, hair) in want.items():
+        seen = [x for x in looks if x["self"] == who]
+        assert seen and all((x["race"], x["specialty"], x["face"], x["hair"], x["faces"], x["hairs"], x["face_drawn"],
+                             x["hair_drawn"]) == (race, specialty, face, hair, *counts, "1", "1") for x in seen), \
+            (who, looks)
+    print("PASS world faces and hairs (RQ-221): the client draws itself in face 1, hair 1 and Taken in face 3, hair 2, "
+          "of %s faces and %s hairs" % counts)
     assert sql("SELECT count(*) FROM characters WHERE name ILIKE 'bad%'") == "0"
     assert sql("SELECT count(*) FROM characters WHERE name='Taken'") == "1"
     print(f"PASS front-end flow: the logo (its music 1 s in, the cursor hidden, a click ignored, SPACE skips it) -> "
@@ -474,6 +514,7 @@ try:
     print("PASS KO front-end flow (%s)" % ("the realm connection held %.2f s before ENTER" % held if held is not None
                                            else "the realm connection not yet opened at ENTER"))
 finally:
+    standing.set()
     if client is not None and client.poll() is None:
         client.kill()
     if relay is not None:

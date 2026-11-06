@@ -43,6 +43,13 @@ int main(int argc, char **argv) {
         for (size_t j = 0; j < detail.appearances[k].hides.size(); ++j) std::cout << (j ? "," : "") << detail.appearances[k].hides[j];
         std::cout << "\n";
       }
+      // RQ-221: the looks parts, each set's slot and its parts' level-0 index counts.
+      for (const auto &[name, set] : {std::pair{"faces", &detail.faces}, std::pair{"hairs", &detail.hairs}}) {
+        if (set->parts.empty()) continue;
+        std::cout << name << " slot=" << set->slot << " parts=";
+        for (size_t j = 0; j < set->parts.size(); ++j) std::cout << (j ? "," : "") << set->parts[j][0].scene.indices.size();
+        std::cout << "\n";
+      }
       return 0;
     }
     if (argc >= 4 && std::string(argv[2]) == "--looks") {
@@ -358,6 +365,10 @@ int main(int argc, char **argv) {
         for(size_t j=0;j<detail.appearances[k].hides.size();++j)std::cout<<(j?",":"")<<detail.appearances[k].hides[j];
         std::cout<<"\n";
       }
+      // RQ-221: the faces and hairs the body leaves out.
+      if(!detail.faces.parts.empty()||!detail.hairs.parts.empty())
+        std::cout<<"detail looks faces="<<detail.faces.parts.size()<<" face_slot="<<detail.faces.slot
+                 <<" hairs="<<detail.hairs.parts.size()<<" hair_slot="<<detail.hairs.slot<<"\n";
     }
     if (r.world) {
       auto w = n3e::load_world(r);

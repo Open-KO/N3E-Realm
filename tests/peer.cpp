@@ -70,6 +70,8 @@ int main(int argc, char **argv) {
       {Envelope e;auto*w=e.mutable_world();w->set_self(7);auto*a=w->add_entities();a->set_id(7);a->set_strike_tick(100);a->set_strike_sequence(129);auto*v=w->add_events();v->set_sequence(1);v->set_tick(100);v->set_actor(7);v->set_target(8);v->set_kind(2);v->set_style(2);v->set_request_sequence(129);auto b=e.SerializeAsString();std::ofstream(std::string(argv[2])+"-strike.bin",std::ios::binary).write(b.data(),b.size());}
       // Wire30 (PQ-249): a templated NPC's looks key and maximum health.
       {Envelope e;auto*w=e.mutable_world();w->set_self(7);auto*a=w->add_entities();a->set_id(129);a->set_name("demo:creature/brute");a->set_health(6);a->set_npc(true);a->set_looks("demo:looks/brute");a->set_max_health(100000);auto b=e.SerializeAsString();std::ofstream(std::string(argv[2])+"-template.bin",std::ios::binary).write(b.data(),b.size());}
+      // RQ-221: a player's race, specialty, face and hair.
+      {Envelope e;auto*w=e.mutable_world();w->set_self(7);auto*a=w->add_entities();a->set_id(7);a->set_name("Nelly");a->set_race(2);a->set_specialty(111);a->set_face(3);a->set_hair(2);auto b=e.SerializeAsString();std::ofstream(std::string(argv[2])+"-looks.bin",std::ios::binary).write(b.data(),b.size());}
       Envelope movement;
       auto *m = movement.mutable_move();
       m->set_session(63);

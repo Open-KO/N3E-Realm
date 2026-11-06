@@ -521,7 +521,8 @@ def cook(root, out, materials=False, influences=False):
         # after the projection say, whose appearance entries name the keys
         # they hide.
         if data[:4] not in ((b"N3D2",b"N3D3",DETAIL_HIDE_MAGIC)+DETAIL_INFLUENCE_MAGICS if "appearance" in manifest else (b"N3D1",)):raise ValueError("render detail magic")
-        if data[:4]==DETAIL_HIDE_MAGIC and render_detail.layout(data[:render_detail.HEAD_BYTES]) not in range(render_detail.HIDE_KEYS,2*render_detail.HIDE_KEYS):
+        # RQ-221: or carry the looks parts (layout flag 8), or both.
+        if data[:4]==DETAIL_HIDE_MAGIC and not render_detail.valid_layout(render_detail.layout(data[:render_detail.HEAD_BYTES])):
             raise ValueError("render detail layout flags")
         extras["render-detail.bin"]=data
         deps[manifest["render_detail"]]=digest(data).hex()

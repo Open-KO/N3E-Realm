@@ -1863,6 +1863,25 @@ priest group's six codes. The server refuses another class's character
 `wrong_class`, and the client shows such a character no skills in its window or on
 its hotbar. A rogue so has no skills until the realm runs types 1, 2 and 4 (Q125).
 
+### 10.10 Each player's face and hair in the world (RQ-221, 2026-11-06)
+
+Read statically in n3e's 1298 project (`audit-2026-09-19`, `KnightOnLine.exe`,
+`-readOnly -noanalysis`, `decompile 005c87c0`; output under `build/ghidra/rq221/`,
+not committed), with the source's player classes. Not run.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The local player's face and hair come from the server.** MyInfo stores a packet byte as the face (`+0x7d8`, `005c8ba3`) and another as the hair (`+0x7dc`, `005c8bda`); at its end it sets each empty body part to the looks row's (parts 0, 1, 3, 4 through vtable `+0x2c`), then calls vtable `+0x28` (InitFace) when part 2 is empty and vtable `+0x24` (InitHair) when part 5 is empty | 1298 `005c87c0` | binary |
+| **InitFace and InitHair set the numbered part on the player's own skeleton.** The looks row's face or hair name with the number as two digits before the extension, set as part 2 or 5 (the local player's on its world and inventory models); a row with no hair sets an empty part | source `PlayerMySelf.cpp` `InitFace`, `InitHair` | source |
+| **Another player's are its user-in's.** `CPlayerOther::Init` sets its items' parts, then InitFace, and InitHair only when the hair-or-helmet part holds no file (no helmet), each from the race, face and hair the user-in carried | source `PlayerOther.cpp` 163-205 | source |
+
+**Decides (RQ-221):** `Entity` carries the race, specialty, face and hair; render
+detail carries the race's numbered faces and hairs apart from the body (N3DH flag 8,
+`content/appearance.md` "Faces and hairs"), and the client draws each player's by its
+numbers, none under a worn key that replaces the hair's slot. Other players' path in
+the 1298 binary (its user-in and `CPlayerOther` init) is not read; the source's is
+taken.
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

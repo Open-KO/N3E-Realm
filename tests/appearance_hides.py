@@ -10,14 +10,15 @@ original synthetic bytes, with no KO data:
 - render_detail.serialize writes N3DH only when an entry hides a key (flags 4,
   or 5 with render states): N3D2's bytes plus the flags and each entry's list;
 - the client's reader (build/client/n3e-asset-check --hidden-detail) takes it
-  and refuses layout flags without 4 or past 7, tables before engine 44, a
+  and refuses layout flags without 4 or 8 or past 15 (RQ-221's 8, the looks
+  parts, is tests/detail_looks.py's), tables before engine 44, a
   hidden key of 0, past the keys, itself or twice, more than 16, a key that
   hides and is hidden, an N3DH that hides nothing, a hidden key with an
   appearance effect or an attached character, and truncated or trailing bytes;
 - a cooked engine 29 package with two keys, key 1 hiding key 2, is taken by
   both readers (n3e-asset-check, n3e-server --check-content) with the same
   projection, and the client reports the hidden key; the cook refuses N3DH
-  layout flags without 4, and the server an unknown magic.
+  layout flags without 4 or 8, and the server an unknown magic.
 
 The composition (draws neither the hidden key's mesh nor its replacements, in
 either order) is build/client/n3e-hud-check's (tests/hud.cpp).
@@ -104,8 +105,8 @@ def client_reader(hidden):
     cases = [
         ("flags 0", flags(hidden, 0), "render detail layout flags"),
         ("flags 3 (no hidden keys)", flags(hidden, 3), "render detail layout flags"),
-        ("flags 8", flags(hidden, 8), "render detail layout flags"),
-        ("flags 12", flags(hidden, 12), "render detail layout flags"),
+        ("flags 16", flags(hidden, 16), "render detail layout flags"),
+        ("flags 20", flags(hidden, 20), "render detail layout flags"),
         ("states the file lacks", flags(hidden, 5), ""),
         ("tables before engine 44", flags(hidden, 6), "render detail layout flags"),
         ("key 0", forge([[0], []]), "appearance hidden key"),
@@ -208,7 +209,7 @@ def package(hidden):
             raise AssertionError("cooked N3DH without the hidden-key flag")
     print("PASS N3DH package: both readers take an engine 29 package whose key 1 hides key 2 (the client reports "
           "it), the client refuses bad flags the server does not read, both refuse an unknown magic, the cook "
-          "refuses flags without 4", flush=True)
+          "refuses flags without 4 or 8", flush=True)
 
 
 hidden = serializer()

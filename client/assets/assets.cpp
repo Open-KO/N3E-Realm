@@ -2364,17 +2364,19 @@ RenderDetail load_render_detail(const Release &release, const Scene &skeleton) {
   // for a body or appearance part past four joint influences; Scene::skin
   // sums every one, as KO's 00419f00 does.
   // RQ-207: N3DH has, after the projection, layout flags (1 the N3D3 states,
-  // 2 the N3DI tables, 4 the hidden keys, which it always sets) and, after
-  // each appearance entry's replacements, the keys that entry hides.
-  const auto magic=r.raw(4);const bool hiding=magic=="N3DH";
+  // 2 the N3DI tables, 4 the hidden keys) and, after each appearance entry's
+  // replacements, the keys that entry hides. RQ-221: flag 8, the looks parts
+  // (the faces and hairs) after the appearance entries; an N3DH sets 4, 8
+  // or both.
+  const auto magic=r.raw(4);bool hiding=magic=="N3DH",looks=false;
   bool states=magic=="N3D3"||magic=="N3DJ";
   bool tables=(magic=="N3DI"||magic=="N3DJ")&&release.engine>=44;
   need(release.appearance.empty()?magic=="N3D1":magic=="N3D2"||magic=="N3D3"||tables||hiding,"cooked magic/version");
   r.floats<3>(); RenderDetail d;
   if(hiding){
     const auto flags=r.u();
-    need(flags>=4&&flags<=7&&(!(flags&2)||release.engine>=44),"render detail layout flags");
-    states=flags&1;tables=flags&2;
+    need(flags<=15&&(flags&12)&&(!(flags&2)||release.engine>=44),"render detail layout flags");
+    states=flags&1;tables=flags&2;looks=flags&8;hiding=flags&4;
   }
   for(auto &row:d.thresholds) {
     float last=0;
@@ -2502,6 +2504,20 @@ RenderDetail load_render_detail(const Release &release, const Scene &skeleton) {
       for(uint32_t k=0;k<d.appearances.size();++k)need(d.appearances[k].hides.empty()||!hidden.contains(k+1),"appearance hidden key");
       if(release.effects)for(const auto&e:release.effects->appearance)need(!hidden.contains(e.key),"appearance hidden key");
       if(release.attachments)for(const auto&e:release.attachments->entries)need(!hidden.contains(e.key),"appearance hidden key");
+    }
+    // RQ-221: the faces, then the hairs: a count (0-16) and, when not 0,
+    // the body slot a worn key replaces to hide the set and each part's four
+    // levels (level 0 not empty).
+    if(looks)for(auto *set:{&d.faces,&d.hairs}){
+      auto count=r.count(16,0);
+      if(!count)continue;
+      set->slot=r.u();need(set->slot>=d.world_textures&&set->slot<nt,"looks slot");
+      for(uint32_t i=0;i<count;++i){
+        std::vector<DetailMesh> part;
+        for(unsigned j=0;j<4;++j)part.push_back(mesh());
+        need(!part[0].scene.indices.empty(),"empty looks part");
+        set->parts.push_back(std::move(part));
+      }
     }
   }
   r.end();

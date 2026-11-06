@@ -36,12 +36,14 @@ REFUSALS=(('wrong_class','any',4003,0xffffff00),('insufficient_resource','any',3
           ('weapon_required','any',4005,0xffffff00),('level_required','any',4002,0xffff3b3b),
           ('target_dead','npc',4002,0xffff3b3b))
 
-def cook(assets,root,manifest):
+def cook(assets,root,manifest,apart=False):
+    """The skills and their clips; `apart` (RQ-221) cooks the clips without the
+    face and hair, as the feature cook's player scenes (ko_player.cook)."""
     spec=json.loads(Path('games/moradon/skills.json').read_text())
     rows={int(r[0]):r for r in csv.reader(io.StringIO(assets.get('Data/Skill_Magic_Main_us.tbl.csv').decode('utf-8-sig'))) if r[0].isdigit()}
     type3={int(r[0]):r for r in csv.reader(io.StringIO(assets.get('Data/skill_magic_3.tbl.csv').decode('utf-8-sig'))) if r[0].isdigit()}
     # The skills' clips are the package's player race's (ko_player, RQ-003).
-    definition=ko_player.looks(assets,ko_player.race())['definition']
+    definition=ko_player.looks(assets,ko_player.race(),apart=apart)['definition']
     texts={r[0]:r for r in csv.reader(io.StringIO(assets.get('Data/Texts_us.tbl.csv').decode('utf-8-sig'))) if r and r[0].isdigit()}
     notice=texts.get(str(TOO_FAR))
     if notice is None or len(notice)<2:raise ValueError('1298 Texts_us.tbl has no text %d'%TOO_FAR)

@@ -222,6 +222,11 @@ mod tests {
             // and RQ-203's durability percent for each.
             appearance: vec![128; 16],
             appearance_durability: vec![100; 16],
+            // RQ-221: the race, specialty, face and hair, at KO's widest codes.
+            race: 65535,
+            specialty: 65535,
+            face: 255,
+            hair: 255,
             health: 9999,
             behavior: "idle".into(),
             ..Default::default()
@@ -229,7 +234,9 @@ mod tests {
         let mut w = world(&viewer, &others);
         let before = w.clone();
         let size = frame_len(&mut w);
-        assert!(size < LIMIT / 2, "{size}");
+        // Under half the frame until RQ-221's race, specialty, face and hair
+        // (at their widest, 18 bytes a player): 33,340 bytes, still whole.
+        assert!(size < LIMIT * 9 / 16, "{size}");
         assert_eq!(fit(&mut w, &viewer), Fit::Whole);
         assert_eq!(w, before);
     }

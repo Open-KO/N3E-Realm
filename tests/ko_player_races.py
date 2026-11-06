@@ -16,6 +16,11 @@ With the pinned client tree (assets/ko; SKIP without it), for every race:
   player does: N3S1, or N3SI (engine 43, RQ-163) for a race with a drawn
   vertex past four joint influences, which keeps every influence as KO's
   skinning sums them (the Arch Tuarek: 49 lower-part vertices with five);
+- RQ-221: cooked apart (ko_player.looks(apart=True)) its parts lose the face
+  and hair, and its render detail with looks parts (ko_player.looks_parts,
+  the rules' faces and hairs) is N3DH with flag 8: the body fewer by face 0's
+  and hair 0's triangles at each level, then every face and hair by number
+  (none for a race without hair);
 - its render detail (tools/assetc/ko_detail.py, face 0 and hair 0, no world)
   cooks with each of its parts also worn as a 1298 appearance part
   (ko_appearance.part_levels): N3D2, or N3DI (engine 44, RQ-164) when a drawn
@@ -79,6 +84,7 @@ import ko_detail  # noqa: E402
 import ko_front_end  # noqa: E402
 import ko_player  # noqa: E402
 import main  # noqa: E402
+import render_detail  # noqa: E402
 
 TREE = pathlib.Path("assets/ko")
 OUT = pathlib.Path("build/ko-player-races")
@@ -170,6 +176,26 @@ for entry in rules["races"]:
             assert tables["levels"] == [sum(p[k] for p in past) for k in range(4)], (race, tables, past)
             assert tables["appearances"] == {i + 1: p for i, p in enumerate(past) if any(p)}, (race, tables, past)
             assert tables["most"] == many["most"], (race, tables, many)
+        # RQ-221: the world's looks parts. The player scenes cooked apart lose
+        # the face and hair; render detail's body then leaves them out (each
+        # level fewer by face 0's and hair 0's triangles) and carries the
+        # rules' faces and hairs by number (N3DH flag 8; none for a race
+        # without hair), each on its body slot.
+        apart = ko_player.looks(assets, entry, apart=True)
+        assert apart["definition"]["parts"] == [p for p, at in zip(definition["parts"], positions)
+                                                if at not in ("face", "hair")], (race, apart["definition"]["parts"])
+        assert apart["positions"] == [at for at in positions if at not in ("face", "hair")], (race, apart["positions"])
+        sets = ko_player.looks_parts(looks["row"], rules["faces"], rules["hairs"])
+        assert len(sets["face"]) == rules["faces"] and len(sets["hair"]) == (rules["hairs"] if "hair" in positions else 0)
+        assert sets["face"][0].lower() == definition["parts"][positions.index("face")].lower(), (race, sets)
+        looked, looked_report = ko_detail.cook(TREE, dict(atlas=None), definition, rows, positions=positions, looks=sets)
+        assert looked[:4] == b"N3DH" and render_detail.layout(looked[:render_detail.HEAD_BYTES]) & render_detail.LOOKS
+        own = looked_report["looks"]
+        assert [own[p]["parts"] for p in ("face", "hair")] == [len(sets["face"]), len(sets["hair"])], (race, own)
+        removed = [detail_report["character_triangles"][k] - looked_report["character_triangles"][k] for k in range(4)]
+        assert removed == [sum(own[p]["triangles"][0][k] for p in ("face", "hair") if own[p]["parts"])
+                           for k in range(4)], (race, removed, own)
+        assert own["face"]["slot"] is not None and (own["hair"]["slot"] is None) == ("hair" not in positions)
     except ValueError as error:
         assert race in OPEN, (race, str(error))
         assert OPEN[race][0] in str(error), (race, str(error), OPEN[race])
@@ -228,6 +254,8 @@ for entry in rules["races"]:
         ", %d of its scenes with influence tables (%s, %d bytes)" % (made[0]["tables"], create_magic.decode(),
                                                                      len(record)) if made and made[0].get("tables")
         else ""))
+    print("PASS race %d (%s): looks parts (RQ-221): %d faces, %d hairs apart from the body, %s triangles fewer"
+          % (race, entry["looks"], own["face"]["parts"], own["hair"]["parts"], removed))
     print("PASS race %d (%s): %d parts, %d part files over its faces and hairs, %d clips, idle cooks (%s%s), "
           "render detail with its parts worn cooks (%s%s)"
           % (race, entry["looks"], len(positions), len(names), len(clips), magic.decode(),

@@ -824,6 +824,11 @@ struct AppearanceState {uint32_t flags=0;float alpha_reference=0;uint32_t source
 // N3DH (RQ-207): `hides`, the appearance keys this entry hides while worn.
 struct AppearanceMesh {std::vector<uint32_t> replaces;std::vector<DetailMesh> levels;std::optional<AppearanceState> state;
                       std::vector<uint32_t> hides;};
+// N3DH looks parts (RQ-221, content/appearance.md "Faces and hairs"): one
+// set, the race's faces or hairs by number, each part's four levels; `slot`
+// is the body texture slot a worn key's replacements name for the set (one
+// that replaces it hides the set, as a helmet hides KO's hair).
+struct LooksParts {uint32_t slot=0;std::vector<std::vector<DetailMesh>> parts;};
 struct RenderDetail {
   std::array<std::array<float,4>,4> thresholds;
   std::array<uint32_t,3> workload;
@@ -833,6 +838,9 @@ struct RenderDetail {
   std::vector<DetailMesh> levels;
   std::vector<DetailAttachment> attachments;
   std::vector<AppearanceMesh> appearances;
+  // RQ-221: the faces and hairs the body leaves out (none without N3DH's
+  // looks flag), drawn on each player by its Entity face and hair.
+  LooksParts faces, hairs;
 };
 RenderDetail load_render_detail(const Release &release, const Scene &skeleton);
 struct HudTexture {

@@ -393,6 +393,9 @@ async fn main() -> Result<()> {
         // Wire30 (PQ-249): a templated NPC's looks key and maximum health.
         let template=wire::Envelope{body:Some(wire::envelope::Body::World(wire::World{self_:7,entities:vec![wire::Entity{id:129,name:"demo:creature/brute".into(),health:6,npc:true,looks:"demo:looks/brute".into(),max_health:100000,..Default::default()}],..Default::default()}))};
         std::fs::write(format!("{}-template.bin",args[2]),template.encode_to_vec())?;
+        // RQ-221: a player's race, specialty, face and hair.
+        let looks=wire::Envelope{body:Some(wire::envelope::Body::World(wire::World{self_:7,entities:vec![wire::Entity{id:7,name:"Nelly".into(),race:2,specialty:111,face:3,hair:2,..Default::default()}],..Default::default()}))};
+        std::fs::write(format!("{}-looks.bin",args[2]),looks.encode_to_vec())?;
         let stats=wire::Envelope{body:Some(wire::envelope::Body::World(wire::World{stats:Some(wire::DerivedStats{attack:129,defense:17,accuracy:1.625,evasion:2.25,max_health:32767,max_resource:1024,carry_limit:3050,attributes:vec![60,70,80,90,100],equipment_revision:129}),..Default::default()}))};
         std::fs::write(format!("{}-stats.bin",args[2]),stats.encode_to_vec())?;
         let private_request = wire::Envelope {

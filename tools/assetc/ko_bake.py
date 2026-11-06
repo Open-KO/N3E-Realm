@@ -197,7 +197,10 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
     # source entry/loop timing and enabling the existing smooth-stop path.
     # The package's player race (games/moradon/character-create.json `player`, RQ-003).
     player_race = ko_player.race()
-    player = ko_player.cook(characters, root / "player", locomotion=True, ready=True, rest=features,combat=features)
+    # RQ-221: a feature cook's player scenes leave the face and hair out; render
+    # detail carries them by number for the client to draw each player's own.
+    player = ko_player.cook(characters, root / "player", locomotion=True, ready=True, rest=features,combat=features,
+                            apart=features)
     manifest["animation"] = [ko_character.animation_metadata(player[state]) for state in animation.STATES]
     for index in (2, 3):
         manifest["animation"][index]["loop_blend"] = False # Existing once-only action subset.
@@ -281,9 +284,18 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
         mappings=mappings+armour['rows']
     # RQ-199: a robe row leaves the lower bare, as KO's world does (ko_appearance.cook),
     # by the KO part position of each of the player model's parts.
-    detail, detail_report = ko_detail.cook(characters,built,player["idle"]["character_metadata"],mappings,
-                                           world_root=assets,positions=ko_player.looks(
-                                               ko_character.Assets(characters),player_race)["positions"])
+    # RQ-221: a feature cook's body is the whole looks row (the appearance rows'
+    # `parts` index it), its face and hair drawn by number (ko_player.looks_parts,
+    # create.bin's counts: character-create.json `faces` and `hairs`).
+    player_looks = ko_player.looks(ko_character.Assets(characters), player_race)
+    looks_parts = None
+    if features:
+        player_rules = ko_player.rules()
+        looks_parts = ko_player.looks_parts(player_looks["row"], player_rules["faces"], player_rules["hairs"])
+    detail, detail_report = ko_detail.cook(characters,built,
+                                           player_looks["definition"] if features else player["idle"]["character_metadata"],
+                                           mappings,world_root=assets,positions=player_looks["positions"],
+                                           looks=looks_parts)
     if mappings:manifest['appearance']=[dict(item=r['item'],slot=r['slot']) for r in mappings]
     weapon_effects=detail_report.pop('weapon_effects')
     (root / "render-detail.bin").write_bytes(detail)
@@ -474,7 +486,7 @@ def package(source, zone, out, spawn=None, features=False, des=False, overview=F
                     minimap_assets=minimap_assets,npc_scale=moradon_features.drawn_scale(),item_icons=item_icons,
                     equipment_slots=armour['areas'] if glow else None)
         import ko_audio, ko_skills
-        report['skills']=ko_skills.cook(source_assets,root,manifest)
+        report['skills']=ko_skills.cook(source_assets,root,manifest,apart=True)  # RQ-221, as the player scenes
         if manifest.get('npc',{}).get('model')=='reference_melee_v2':
             # Reference NPC slots require the engine 36 / wire 29 readers.
             manifest.update(engine_version=36,protocol_version=29)

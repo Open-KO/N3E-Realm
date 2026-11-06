@@ -93,6 +93,57 @@ beside a robe, whose part set under a robe (2233's) is unread. No hosted package
 has a robe or hides a key, so every pin keeps its bytes.
 Evidence: `tests/world_robe.py`, `tests/appearance_hides.py`, `build/client/n3e-hud-check`.
 
+### Faces and hairs (N3DH looks parts, RQ-221)
+
+Each player in the world draws its own face and hair, itself and others alike, as the
+select hall does (RQ-198): KO's world sets the numbered face and hair parts on the
+player's skeleton, the local player's from the server's MyInfo (1298 `005c87c0`
+stores the face at `+0x7d8` and the hair at `+0x7dc`, then calls InitFace and
+InitHair when those parts are empty) and another player's from its user-in (source
+`PlayerOther.cpp`: InitFace, and InitHair only when no helmet holds the hair part);
+`specs/KO-FINDINGS.md` §10.10.
+
+- **Wire and server.** `Entity` carries the player's `race` (35), `specialty` (36),
+  `face` (37) and `hair` (38), as KO's user-in packet does: the server reads them
+  from the character's create columns when it enters the world (0 for a character
+  created without the package's create rules, and for an NPC). Output-only and
+  additive: no wire version change.
+- **Render detail.** N3DH layout flag 8 carries the looks parts after the
+  appearance entries: the faces and then the hairs, each a u32 count (0-16) and,
+  when not 0, a u32 slot (the body texture slot an appearance entry's
+  replacements name for that part position) and that many parts of four ordinary
+  detail geometries (level 0 not empty; an empty lower level uses level 0). An
+  N3DH sets flag 4 (hidden keys), flag 8 or both; the readers refuse other flags
+  past 15. The body levels then hold neither part. No engine version is added: the
+  flag fails older readers closed, as N3DH's magic did.
+- **Client.** `draw_appearance` draws, after the default body, part `face` of the
+  faces and part `hair` of the hairs (as key 0: no dust, glow or render state of
+  their own), in the world, in the pick and in the inventory portrait (whose frame
+  stays the whole model's: the player scene with face 0 and hair 0). A number past a
+  set draws none (as Q119 takes it for the hall), and a set whose slot a worn key
+  replaces draws none, as KO sets no hair under a helmet. The race is carried but
+  not yet drawn: every player is the package's player race until RQ-007's per-race
+  models.
+- **KO cook.** A feature cook (`ko_bake --features`) cooks the player scenes,
+  combat clips and skill clips apart (`ko_player.cook(apart=True)`,
+  `ko_skills.cook(apart=True)`): without the face and hair, so every clip still
+  shares `player-idle.bin`'s mesh (RQ-189). `ko_detail.cook(looks=...)` keeps the
+  whole looks row's textures on their body slots (so an appearance row's `parts`
+  still index the row) and writes the race's numbered faces and hairs
+  (`ko_player.looks_parts`: create.bin's counts, character-create.json `faces` and
+  `hairs`, KO's 4 and 3; none for a race without hair), face 0 and hair 0 on their
+  body slots and every other on a texture of its own. The plain cooks keep their
+  bytes.
+
+Moradon's render detail: the Tuarek's body is 236, 165, 88 and 52 triangles fewer at
+its four levels; four faces on slot 3 and three hairs on slot 6, 17 textures
+(local-asset, `tests/ko_player_races.py`, which checks every race). Evidence:
+`tests/detail_looks.py` (format, both readers), `build/client/n3e-hud-check`
+(composition), `tests/ko_player_races.py` (the KO cook), `tests/front_end_flow_live.py`
+(the client draws itself and another player each in its own face and hair,
+`N3E_TEST_WORLD_LOOKS`), `server/src/accounts.rs` (the entity's fields at world
+entry).
+
 Binary grounding and verification.
 
 

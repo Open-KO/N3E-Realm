@@ -461,6 +461,9 @@ int viewer(const n3e::Release &release, int argc, char **argv) {
     const char*dust_test=std::getenv("N3E_TEST_WORLD_DUST");
     std::map<std::pair<uint64_t,uint32_t>,int> dust_seen;
     std::vector<GlowBox> dust_boxes;
+    // RQ-221: N3E_TEST_WORLD_LOOKS=1 reports each player's face and hair (WORLD_LOOKS).
+    const bool looks_test=std::getenv("N3E_TEST_WORLD_LOOKS");
+    std::map<uint64_t,std::array<uint32_t,6>> looks_seen;
 #endif
     // RQ-203: whether the world's dust is drawn (always, but for the harness's
     // comparison captures).
@@ -3660,7 +3663,24 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
                       (void)started;
 #endif
                     }
-                  });
+                  },n3e::Looks{entity.face(),entity.hair()});
+#if N3E_HARNESS
+                // RQ-221: N3E_TEST_WORLD_LOOKS=1 reports each player's race,
+                // specialty, face and hair and whether its face and hair
+                // parts draw, when first drawn and whenever they change.
+                if(looks_test){
+                  const auto drawn=n3e::looks_drawn(*detail,n3e::select_appearance(*detail,release.appearance,entity.appearance()).hidden,
+                                                    n3e::Looks{entity.face(),entity.hair()});
+                  const std::array<uint32_t,6> shown{entity.race(),entity.specialty(),entity.face(),entity.hair(),drawn[0],drawn[1]};
+                  if(auto [seen,made]=looks_seen.try_emplace(entity.id(),shown);made||seen->second!=shown){
+                    seen->second=shown;
+                    std::cout<<"WORLD_LOOKS entity="<<entity.id()<<" self="<<(entity.id()==world.world.self())<<" race="<<entity.race()
+                             <<" specialty="<<entity.specialty()<<" face="<<entity.face()<<" hair="<<entity.hair()
+                             <<" faces="<<detail->faces.parts.size()<<" hairs="<<detail->hairs.parts.size()
+                             <<" face_drawn="<<drawn[0]<<" hair_drawn="<<drawn[1]<<std::endl;
+                  }
+                }
+#endif
                 if(!appearance_effects.models.empty()){
                   size_t first_mesh=appearance_meshes.size();
                   auto started=appearance_effects.draw(entity.id(),release.appearance,entity.appearance(),node_pose,pos,pose.heading,
@@ -5100,14 +5120,23 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
                 vertices.clear();const auto& model=player_scenes.front();float duration=0;
                 for(const auto&t:model.tracks)duration=std::max(duration,t.keys.back().time);
                 auto pose=model.sample(duration>0?std::fmod(time,duration):0);
-                std::vector<uint32_t> keys;
-                for(const auto&e:world.world.entities())if(e.id()==world.world.self())keys.assign(e.appearance().begin(),e.appearance().end());
+                std::vector<uint32_t> keys;n3e::Looks looks;
+                for(const auto&e:world.world.entities())if(e.id()==world.world.self()){
+                  keys.assign(e.appearance().begin(),e.appearance().end());looks={e.face(),e.hair()};}
+                // RQ-221: the player's own face and hair, as KO's MyInfo sets
+                // them on the inventory model too (source PlayerMySelf.cpp).
                 n3e::draw_appearance(*detail,release.appearance,keys,0,[&](const n3e::DetailMesh&mesh,std::span<const uint32_t> indices){
                   auto posed=mesh.scene.skin(pose,indices);
                   for(size_t i=0;i<indices.size();++i){vertices.insert(vertices.end(),posed.begin()+i*8,posed.begin()+i*8+8);
                     vertices.insert(vertices.end(),{.5f,.5f,native_textures.slots.at(mesh.slots.at(indices[i])),native_textures.slots[0]});}
-                });
+                },looks);
                 auto base=model.skin(model.sample(0));base.resize(model.indices.size()*8);
+                // RQ-221: the frame is the whole model's, the player scene
+                // (without a face and hair when the detail carries them) with
+                // face 0 and hair 0, so it is the same for every face.
+                for(const auto*set:{&detail->faces,&detail->hairs})if(!set->parts.empty()){
+                  const auto&part=set->parts[0][0];auto posed=part.scene.skin(model.sample(0),part.scene.indices);
+                  base.insert(base.end(),posed.begin(),posed.begin()+part.scene.indices.size()*8);}
                 vertices=project_portrait(std::move(vertices),base,view,rect,width,height,12);
               }
               if(vertices.empty())return;

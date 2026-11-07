@@ -67,7 +67,8 @@ its `REALM_ADMIN_TOKEN` (`/kit` answers that the bot's token is not allowed unti
 
 A new internal broadcast: `Chat{ text, notice: 1|2 }` to every in-world session, drawn
 by the client as a yellow notice line (1) or a bold centre banner (2) (new `Chat.notice`
-uint32; additive wire field, 0 = ordinary chat). Used by `realm/notice` and by the server itself for preset start/stop and
+uint32; additive wire field, 0 = ordinary chat; 3 is the answer to a game master's own
+command, below, sent to that session alone). Used by `realm/notice` and by the server itself for preset start/stop and
 drain. World-entry notice: a new `Notice { repeated string lines }` message sent after
 `SelectCharacter` succeeds, drawn in a dismissible panel top-right (KO placement).
 
@@ -103,15 +104,30 @@ Arguments are split on whitespace; `NAME` is a character of this realm, exact or
 else without regard to case and unambiguous (≤ 24 characters), as a whisper's
 recipient. Commands share the chat rate bound (one line per 20 ticks).
 
+Settled in RQ-228: the command line is an ordinary chat line; a whisper whose text
+begins with `+` is a whisper. A **muted** holder's lines are dropped before they are
+read, commands included (with the once-a-session mute line of spec 02), as KO drops a
+muted sender's lines first (`004989a8`, `KO-FINDINGS.md` §11); an unmute restores its
+commands. A holder whose lease is **unread** (from select until the first authority
+read, normally under 500 ms, or after a stalled read lapses it) holds none, so its `+`
+line is relayed as chat; a holder whose capability was just revoked may have one more
+`+` line taken as a command within the lease, and that command is refused by its own
+check. At most 16 commands await the database at once; a further one is answered "The
+realm is busy; try again." and not run.
+
 **Replies.** KO answers its game master nothing (§11); the realm answers the issuer
 alone with one line in its own chat: `Chat{notice: 3}`, drawn as a yellow line like
 notice 1 but never framed or broadcast (KO's `MsgOutput` yellow, the colour of its own
 command answers; an older client draws it as a notice line). A success names what
-changed ("Gave Aria 5 × Healing potion.", "Aria is now level 9."); a refusal says why
-in one line: `Usage: +give_item NAME ITEM [COUNT]`, `No character named Aria.`,
-`No item ITEM.`, `Aria's bag is full.`, `You may not use +give_item.`,
-`Unknown command +verb.` The target is told nothing beyond what it sees (its bag, its level, its
-position), as KO.
+changed ("Gave Aria 5 x Healing potion.", "Aria is now level 9."; ASCII, for the chat
+font); a refusal says why in one line: `Usage: +give_item NAME ITEM [COUNT]`,
+`No character named Aria.`, `No item ITEM.`, `COUNT for Healing potion is 1 to 20.`,
+`Aria has no bag yet.` (a character with neither a bag nor the progression row a first
+bag is made from; a character that has not yet entered the world but has that row gets
+its bag made, as the tester kit does), `Aria's bag is
+full.`, `You may not use +give_item.`, `Unknown command +verb.` (a verb or name repeated
+in a reply is cut to 32 characters). The target is told nothing beyond what it sees (its
+bag, its level, its position), as KO.
 
 **Audit.** A command that passes its capability check writes, in the transaction that
 applies it, an `admin_audit` row: the issuer's `account_id` and `character_id`, a
@@ -121,11 +137,16 @@ to 160 characters), the before and after state where there is one (the bag, the
 progress) and outcome `gm_<verb>`; one log line `gm by=<character> verb=<verb>
 target=<…> result=<…>`; and a `gm.command` event. A refused capability check writes no
 audit row (as a denied `kill`), only the log line. Moderation commands also emit the
-`account.*` event the admin route emits, `by` the character's name.
+`account.*` event the admin route emits, `by` the character's name. The `gm.command`
+event follows every command that passed its capability check, whether or not it
+changed anything: `target` the named character's name (empty when none was resolved),
+`result` one word (`given`; else why nothing changed: `usage`, `no_character`,
+`no_item`, `bad_count`, `no_bag`, `bag_full`), `detail` the issuer's reply line. An
+unknown verb or a refused capability emits none.
 
 | Command | KO origin (§11) | Capability | Effect | Item |
 |---|---|---|---|---|
-| `+give_item NAME ITEM [COUNT]` | none (the realm's) | `gm.item` | A new record of the package item `ITEM` (its id, `game:` prefix optional) in the named character's bag: `COUNT` 1 to the item's stack limit (1 for one that does not stack), default 1; a full bag refuses with nothing changed | gm-chat-give-item |
+| `+give_item NAME ITEM [COUNT]` | none (the realm's) | `gm.item` | A new record of the package item `ITEM` (its id, `game:` prefix optional; not the package's reward token, whose count is the progression's) in the named character's bag, at the item's full durability: `COUNT` 1 to the item's stack limit (1 for one that does not stack), default 1; a full bag refuses with nothing changed | gm-chat-give-item (RQ-228, landed) |
 | `+level NAME LEVEL` | none (the realm's) | `gm.character` | Curve XP to `LEVEL`'s threshold, lifetime XP up by the same amount, as the tester kit does; `LEVEL` above the character's own, at most the curve's cap (a lower one refuses) | gm-chat-level-gold |
 | `+gold NAME AMOUNT` | none (the realm's) | `gm.character` | `AMOUNT` coins (≥ 1) into the named character's bag, the balance within the bag's coin limit (refused otherwise) | gm-chat-level-gold |
 | `/goto X Z` | 1097 `0x1e` | `gm.move` | The issuer moves to (X, Z) in its zone when standable there | gm-chat-move |
@@ -144,7 +165,9 @@ audit row (as a denied `kill`), only the log line. Moderation commands also emit
 
 A character named by `+give_item`, `+level` or `+gold` that is in the world gets the
 change through its own session, as a claim's bag result or a settlement's progress
-reaches it (the live path RQ-226 also needs); one that is not gets it committed for
+reaches it (the live path RQ-226 also needs; for a bag, RQ-228: the committed bag
+becomes the session's when its revision is not older, and the client is sent it as
+an unrequested `BagResult{request: "", status: "ok"}`, as a listing); one that is not gets it committed for
 its next entry (one transaction with the audit, as the tester kit). Not offered, for
 want of the feature (each is its own item when the realm gains it): KO's weather and
 time (`CLEAN`, `RAINING`, `SNOWING`, `TIME`), `+zonechange` (one zone), the war, siege,
@@ -439,7 +462,8 @@ bounded queue (256); overflow drops with a counter, never blocks a tick.
    (outcome `gm_<verb>`), the `gm.command` event and the issuer's `Chat{notice: 3}`
    line. A revoked capability refuses the next command. `+give_item` to a character in
    the world shows in its bag without leaving; to one not in the world, at its next
-   entry; a full bag refuses with nothing changed.
+   entry; a full bag refuses with nothing changed; a muted holder's command is dropped
+   unread. `+give_item`: `tests/gm_commands_live.py` (RQ-228).
 
 ## Open questions
 

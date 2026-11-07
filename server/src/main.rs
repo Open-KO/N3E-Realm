@@ -58,6 +58,7 @@ mod sessions;
 mod settlements;
 mod simulation;
 mod tester_kit;
+mod gm;
 mod turbo;
 mod view_frame;
 mod wire {
@@ -839,6 +840,7 @@ async fn main() -> Result<()> {
         owner.clone(),
         revision,
         rx,
+        admin_realm.clone(),
     ));
     let world = network::WorldService {
         db: database.clone(),

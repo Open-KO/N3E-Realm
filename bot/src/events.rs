@@ -24,6 +24,7 @@ pub const TYPES: &[&str] = &[
     "world.event.started",
     "world.event.stopped",
     "character.kitted",
+    "gm.command",
 ];
 
 /// Which Discord channel an event goes to.
@@ -180,6 +181,23 @@ impl Relay {
                         "{who} gave {} the tester kit: {level}; {gear}. Reason: {}",
                         field(data, "character"),
                         field(data, "reason")
+                    ),
+                )]
+            }
+            // RQ-213: an in-game GM command (spec 03); the bot made no call, so
+            // `character` names the game master. `detail` is the line it was answered.
+            "gm.command" => {
+                let on = match data["target"].as_str() {
+                    Some(t) if !t.is_empty() => format!(" on {}", escape(t)),
+                    _ => String::new(),
+                };
+                vec![post(
+                    Channel::Ops,
+                    format!(
+                        "{} (in game) used +{}{on}: {}",
+                        field(data, "character"),
+                        field(data, "verb"),
+                        field(data, "detail")
                     ),
                 )]
             }
@@ -361,6 +379,21 @@ mod tests {
         assert_eq!(
             texts(&mut r, "character.kitted", bare)[0].1,
             "ops gave A the tester kit: level unchanged; no gear. Reason: x"
+        );
+        let gm = serde_json::json!({"character_id": 3, "character": "G_M", "account_id": 2, "verb": "give_item",
+            "target": "Aria", "result": "given", "detail": "Gave Aria 5 x Practice potion."});
+        assert_eq!(
+            texts(&mut r, "gm.command", gm),
+            vec![(
+                Channel::Ops,
+                r"G\_M (in game) used +give\_item on Aria: Gave Aria 5 x Practice potion.".into()
+            )]
+        );
+        let untargeted = serde_json::json!({"character": "Gm", "verb": "give_item", "target": "", "result": "usage",
+            "detail": "Usage: +give_item NAME ITEM [COUNT]"});
+        assert_eq!(
+            texts(&mut r, "gm.command", untargeted)[0].1,
+            r"Gm (in game) used +give\_item: Usage\: +give\_item NAME ITEM \[COUNT\]"
         );
         let spawn = serde_json::json!({"request_id": "r1", "status": "spawn_authorized", "announce": "Ironfang has appeared!"});
         assert_eq!(

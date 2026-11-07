@@ -2,7 +2,9 @@
 //! The same read also leases `server.inspect` for the NPC state trace (PQ-186):
 //! reports reach a session only while its lease is current. It also decides
 //! operator visibility (PQ-184, D-152): `hidden` and `sees` below, and the
-//! holder's own show switch (PQ-192, D-153): `show`.
+//! holder's own show switch (PQ-192, D-153): `show`. And it leases whether the
+//! character holds any in-game GM capability (RQ-213, `gm::HOLDER`), so the
+//! tick reads a `+` chat line as a command (`commanding`) without database I/O.
 use crate::{
     accounts::Owner,
     content::{bad, Result},
@@ -19,11 +21,13 @@ pub struct Authority {
     pub allowed: bool,
     /// The character holds `server.inspect` (PQ-186).
     pub inspect: bool,
+    /// The character holds a capability of `gm::HOLDER` (RQ-213).
+    pub gm: bool,
 }
 pub fn read(c: &mut Client, o: &Owner, ids: &[i64]) -> Result<Vec<Authority>> {
     let mut t = c.transaction()?;
     persistence::fence(&mut t, &o.realm, &o.owner, o.generation)?;
-    let rows=t.query("SELECT c.id,c.session_generation,COALESCE(a.generation,0),EXISTS(SELECT 1 FROM character_roles r WHERE r.character_id=c.id AND r.realm=c.realm AND r.zone='*' AND r.capability='movement.turbo'),EXISTS(SELECT 1 FROM character_roles r WHERE r.character_id=c.id AND r.realm=c.realm AND r.zone='*' AND r.capability='server.inspect') FROM characters c LEFT JOIN admin_authority a ON a.character_id=c.id WHERE c.realm=$1 AND c.realm_generation=$2 AND c.online AND c.id=ANY($3)",&[&o.realm,&o.generation,&ids])?;
+    let rows=t.query("SELECT c.id,c.session_generation,COALESCE(a.generation,0),EXISTS(SELECT 1 FROM character_roles r WHERE r.character_id=c.id AND r.realm=c.realm AND r.zone='*' AND r.capability='movement.turbo'),EXISTS(SELECT 1 FROM character_roles r WHERE r.character_id=c.id AND r.realm=c.realm AND r.zone='*' AND r.capability='server.inspect'),EXISTS(SELECT 1 FROM character_roles r WHERE r.character_id=c.id AND r.realm=c.realm AND r.zone='*' AND r.capability=ANY($4)) FROM characters c LEFT JOIN admin_authority a ON a.character_id=c.id WHERE c.realm=$1 AND c.realm_generation=$2 AND c.online AND c.id=ANY($3)",&[&o.realm,&o.generation,&ids,&&crate::gm::HOLDER[..]])?;
     Ok(rows
         .iter()
         .map(|r| Authority {
@@ -32,6 +36,7 @@ pub fn read(c: &mut Client, o: &Owner, ids: &[i64]) -> Result<Vec<Authority>> {
             generation: r.get::<_, i64>(2) as u64,
             allowed: r.get(3),
             inspect: r.get(4),
+            gm: r.get(5),
         })
         .collect())
 }
@@ -72,6 +77,9 @@ pub struct State {
     /// `VIEW`). Per session and in memory only: a session starts hidden, and a
     /// read that finds no `server.inspect` clears it.
     pub shown: bool,
+    /// The last read found a capability of `gm::HOLDER`; honoured only within
+    /// the lease (RQ-213).
+    pub gm: bool,
 }
 impl State {
     pub fn permitted(&self) -> bool {
@@ -82,6 +90,13 @@ impl State {
     /// role or a stalled database read stops the reports within one lease.
     pub fn inspecting(&self) -> bool {
         self.inspect && self.expires.is_some_and(|t| Instant::now() < t)
+    }
+    /// RQ-213: the session's `+` chat line is a GM command, never relayed: the
+    /// last authority read found a GM capability and its lease is current. A
+    /// session before its first read, or whose read stalled, holds none, so its
+    /// `+` line is ordinary chat (fail-closed, as `permitted`).
+    pub fn commanding(&self) -> bool {
+        self.gm && self.expires.is_some_and(|t| Instant::now() < t)
     }
     /// PQ-184 (D-152): the session is withheld from observers that may not see
     /// hidden actors while its `server.inspect` lease is current, and before its
@@ -112,6 +127,7 @@ impl State {
         self.generation = a.generation;
         self.allowed = a.allowed;
         self.inspect = a.inspect;
+        self.gm = a.gm;
         // PQ-192: a revocation resets the switch, so a regrant hides again.
         if !a.inspect {
             self.shown = false;
@@ -129,7 +145,23 @@ pub fn sees(observer: &State, itself: bool, actor: &State) -> bool {
 mod tests {
     use super::*;
     fn read(generation: u64, inspect: bool) -> Authority {
-        Authority { id: 1, session: 1, generation, allowed: false, inspect }
+        Authority { id: 1, session: 1, generation, allowed: false, inspect, gm: inspect }
+    }
+    #[test]
+    fn gm_lease_fails_closed() {
+        // RQ-213: a `+` line is a command only within a current lease that
+        // found a GM capability.
+        let mut s = State::default();
+        assert!(!s.commanding(), "no read yet: the line is chat");
+        let holder = |generation| Authority { id: 1, session: 1, generation, allowed: false, inspect: false, gm: true };
+        s.apply(&holder(1), Instant::now());
+        assert!(s.commanding() && !s.inspecting());
+        s.apply(&read(2, false), Instant::now());
+        assert!(!s.commanding(), "revoked");
+        s.apply(&holder(1), Instant::now());
+        assert!(!s.commanding(), "an older read never restores it");
+        s.apply(&holder(3), Instant::now() - LEASE);
+        assert!(!s.commanding(), "a lapsed lease");
     }
     #[test]
     fn inspect_lease_fails_closed() {

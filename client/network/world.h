@@ -78,7 +78,8 @@ struct WorldState {
   std::string notice;
   uint64_t notices = 0;
   // Spec 03: the last operator notice (Chat.notice 1, a notice line; 2, also a
-  // centre banner) and how many have arrived.
+  // centre banner; 3, RQ-213, the answer to this player's own GM command, drawn
+  // as the line of 1 and never a banner) and how many have arrived.
   std::string operator_notice;
   uint32_t operator_notice_level = 0;
   uint64_t operator_notices = 0;

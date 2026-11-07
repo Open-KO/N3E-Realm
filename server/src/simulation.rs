@@ -214,7 +214,7 @@ impl Player {
     pub(crate) fn test_lease(&mut self, inspect: bool) {
         let generation = self.turbo.generation + 1;
         self.turbo.apply(
-            &crate::turbo::Authority { id: self.s.id, session: self.s.generation, generation, allowed: false, inspect },
+            &crate::turbo::Authority { id: self.s.id, session: self.s.generation, generation, allowed: false, inspect, gm: inspect },
             Instant::now() + std::time::Duration::from_secs(3600),
         );
     }
@@ -315,6 +315,14 @@ impl Player {
         self.s.entity.health = self.stats.as_ref().map_or(r.health, |p| p.max_health);
         self.s.entity.resource = self.stats.as_ref().map_or(r.resource, |p| p.max_resource);
     }
+}
+/// RQ-213: GM commands awaiting the database at once; a further one is answered
+/// that the realm is busy.
+const GM_JOBS: usize = 16;
+/// RQ-213: the realm's answer to its game master's own command, a yellow line in
+/// the issuer's chat only (spec 03, `Chat.notice` 3).
+fn gm_reply(text: String) -> Envelope {
+    Envelope { body: Some(Body::Chat(wire::Chat { text, notice: 3, ..Default::default() })) }
 }
 fn near(a: &wire::Entity, b: &wire::Entity, cell: f32) -> bool {
     ((a.x / cell).floor() as i32 - (b.x / cell).floor() as i32).abs() <= 1
@@ -648,6 +656,7 @@ pub async fn run(
     owner: Arc<Owner>,
     mut revision: wire::Revision,
     mut rx: mpsc::Receiver<Command>,
+    realm: Arc<crate::admin_api::Realm>,
 ) {
     let mut authority_job: Option<(
         Instant,
@@ -671,6 +680,9 @@ pub async fn run(
     )> = VecDeque::new();
     let mut temporary_results: BTreeMap<(i64, String), (Vec<u8>, wire::AdminResult)> =
         BTreeMap::new();
+    // RQ-213: in-game GM commands on the database worker, answered in order.
+    let mut gm_jobs: VecDeque<(i64, i64, tokio::task::JoinHandle<crate::content::Result<crate::gm::Outcome>>)> =
+        VecDeque::new();
     // PQ-186: NPCs an operator traced; reports follow each session's inspect lease.
     let mut traces = crate::npc_trace::Marks::default();
     let claim_slots = Arc::new(tokio::sync::Semaphore::new(64));
@@ -1903,6 +1915,27 @@ pub async fn run(
                         // Every admitted attempt spends the shared rate budget, including
                         // nonexistent recipients. Identity and realm come from the session.
                         p.last_chat = tick;
+                        // RQ-213 (spec 03 "In-game GM commands"): a `+` line from a
+                        // session whose GM lease is current is a command and is never
+                        // relayed; it is authorised again for its own capability and
+                        // applied off the tick. Any other `+` line (a player's, or a
+                        // holder's before its first authority read or after a stalled
+                        // one) is ordinary chat, as KO's chat handler `004989a8` reads it.
+                        if recipient.is_none() && crate::gm::is_command(&text) && p.turbo.commanding() {
+                            if gm_jobs.len() >= GM_JOBS {
+                                deliver(p, gm_reply("The realm is busy; try again.".into()));
+                            } else {
+                                let (db, owner, release, selected) = (db.clone(), owner.clone(), r.clone(), p.s.clone());
+                                gm_jobs.push_back((
+                                    id,
+                                    g,
+                                    tokio::spawn(async move {
+                                        db.call(move |c| crate::gm::execute(c, &owner, &selected, &release, &text)).await
+                                    }),
+                                ));
+                            }
+                            continue;
+                        }
                         let actor = p.s.entity.clone();
                         let inspecting = p.turbo.inspecting();
                         let destination = if let Some(name) = &recipient {
@@ -2430,6 +2463,52 @@ pub async fn run(
                 }
             }
         }
+        // RQ-213: GM command answers. A give's bag reaches its character's own
+        // session as a bag listing would, when that character is in the world
+        // (one not in the world loads it at its next entry); the issuer gets its
+        // one line, Chat{notice: 3}.
+        for _ in 0..8 {
+            if !gm_jobs.front().is_some_and(|(_, _, j)| j.is_finished()) {
+                break;
+            }
+            let (id, g, job) = gm_jobs.pop_front().unwrap();
+            match job.await {
+                Ok(Ok(outcome)) => {
+                    if let Some((target, bag)) = outcome.bag {
+                        if let Some(p) = players.get_mut(&target).filter(|p| !p.failed) {
+                            if p.bag.as_ref().is_none_or(|v| bag.revision >= v.revision) {
+                                p.bag = Some(bag);
+                            }
+                            let state = p.bag.clone();
+                            deliver(p, Envelope { body: Some(Body::BagResult(wire::BagResult { request: String::new(), status: "ok".into(), state })) });
+                        }
+                    }
+                    if let Some(e) = outcome.event {
+                        realm.events.emit(
+                            "gm.command",
+                            serde_json::json!({
+                                "character_id": e.character_id,
+                                "character": e.character,
+                                "account_id": e.account_id,
+                                "verb": e.verb,
+                                "target": e.target,
+                                "result": e.result,
+                                "detail": outcome.reply,
+                            }),
+                        );
+                    }
+                    if !outcome.reply.is_empty() {
+                        if let Some(p) = players.get_mut(&id).filter(|p| p.s.generation == g) {
+                            deliver(p, gm_reply(outcome.reply));
+                        }
+                    }
+                }
+                _ => {
+                    health.invalidate();
+                    break;
+                }
+            }
+        }
         npcs.retain(|n| {
             n.pending.is_some()
                 || n.expires == 0
@@ -2832,6 +2911,7 @@ mod tests {
             generation,
             allowed: false,
             inspect,
+            gm: inspect,
         };
         let sender = wire::Entity::default();
         let beside = sender.clone();
@@ -2860,7 +2940,7 @@ mod tests {
     #[test]
     fn hidden_operator_is_concealed_from_ordinary_observers() {
         // PQ-184: the World an observer gets, built from the authority leases.
-        let read = |id, inspect| crate::turbo::Authority { id, session: 1, generation: 1, allowed: false, inspect };
+        let read = |id, inspect| crate::turbo::Authority { id, session: 1, generation: 1, allowed: false, inspect, gm: inspect };
         let player = |id: i64, inspect: Option<bool>| {
             let mut p = test_player();
             p.s.id = id;
@@ -2944,7 +3024,7 @@ mod tests {
         // After it leaves, takes a new entity id, or is revealed, an ordinary
         // observer's next view must still name none of its withheld ids.
         use crate::presentation::Events;
-        let read = |id, generation, inspect| crate::turbo::Authority { id, session: 1, generation, allowed: false, inspect };
+        let read = |id, generation, inspect| crate::turbo::Authority { id, session: 1, generation, allowed: false, inspect, gm: inspect };
         let player = |id: i64, inspect: bool| {
             let mut p = test_player();
             p.s.id = id;
@@ -3079,7 +3159,7 @@ mod tests {
         // PQ-184: a non-leader's removal of a hidden operator's name must answer
         // as for an absent name (not_member), not not_leader; a leader still
         // removes a hidden member; a hidden namesake makes no name ambiguous.
-        let read = |id, inspect| crate::turbo::Authority { id, session: 1, generation: 1, allowed: false, inspect };
+        let read = |id, inspect| crate::turbo::Authority { id, session: 1, generation: 1, allowed: false, inspect, gm: inspect };
         let mut players = BTreeMap::new();
         for (id, name, inspect) in [(1, "Op", true), (2, "Lead", false), (3, "Mem", false), (4, "mem", true), (5, "Hid", true), (6, "Vis", false)] {
             let mut p = test_player();
@@ -3342,7 +3422,7 @@ pub(crate) fn test_player() -> Player {
         // targetable by NPCs (PQ-193). Its lease lapses, which keeps it visible.
         turbo: {
             let mut lease = crate::turbo::State::default();
-            lease.apply(&crate::turbo::Authority { id: 1, session: 1, generation: 0, allowed: false, inspect: false }, Instant::now());
+            lease.apply(&crate::turbo::Authority { id: 1, session: 1, generation: 0, allowed: false, inspect: false, gm: false }, Instant::now());
             lease
         },
         last_chat: 0, last_record: 0, last_kill: 0,

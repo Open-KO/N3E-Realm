@@ -8,7 +8,7 @@ use crate::{
 use postgres::Client;
 use prost::Message;
 use std::{collections::BTreeSet, path::Path};
-pub const CAPS: [&str; 6] = [
+pub const CAPS: [&str; 11] = [
     "world.edit",
     "config.edit",
     "entity.spawn",
@@ -16,6 +16,13 @@ pub const CAPS: [&str; 6] = [
     "movement.turbo",
     // PQ-194 (D-157): the operator `kill` of a named NPC.
     "entity.kill",
+    // RQ-213 (Q128, D-154): the in-game GM command groups (gm.rs), each
+    // granted alone, none implying another.
+    "gm.item",
+    "gm.character",
+    "gm.move",
+    "gm.moderate",
+    "gm.notice",
 ];
 pub fn load(path: &Path, game: &str) -> Result<Vec<wire::Property>> {
     let mut r = Reader::open(path)?;
@@ -225,7 +232,7 @@ pub fn startup(c: &mut Client, o: &Owner, r: &Release) -> Result<wire::Revision>
     t.commit()?;
     Ok(state)
 }
-fn lock_role(t: &mut postgres::Transaction<'_>, id: i64) -> Result<i64> {
+pub(crate) fn lock_role(t: &mut postgres::Transaction<'_>, id: i64) -> Result<i64> {
     t.execute(
         "INSERT INTO admin_authority(character_id) VALUES($1) ON CONFLICT DO NOTHING",
         &[&id],

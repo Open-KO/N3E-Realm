@@ -306,6 +306,8 @@ SUITES = [
     suite("readiness_live", "python", "tests/readiness_live.py"),
     # specs/03-admin-api.md (M1): tokens, bearer auth, drain/notice/deploy-pending, realm:events.
     suite("admin_api_live", "python", "tests/admin_api_live.py"),
+    # RQ-228 (spec 03 test 12): in-game GM commands, the + command path and +give_item.
+    suite("gm_commands_live", "python", "tests/gm_commands_live.py", covers=["tests/inventory_live.py"]),
     # specs/01-connection-hardening.md (M2): admission limits, idle, drain, PROXY v2, cost.
     suite("connections_live", "python", "tests/connections_live.py"),
     # Spec 02 (M3): Discord login against a loopback stand-in, sessions, kick, ban, mute.

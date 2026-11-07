@@ -219,6 +219,7 @@ database and printed once:
 
 ```sh
 n3e-server admin mint --name ops --perm 'realm.*' --perm character.kit  # prints the token; keep it
+n3e-server admin grant --name bot --perm character.kit  # adds to the same token; revoke-perm removes
 n3e-server admin list                                 # names and permissions, never secrets
 n3e-server admin revoke --name ops                    # bites within 10 s
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7780/v1/realm/status

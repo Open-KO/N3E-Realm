@@ -1,11 +1,11 @@
 """Admin API, admin tokens and the event stream (specs/03-admin-api.md, roadmap M1).
 
 Starts the native server against a disposable Postgres and Redis and drives the
-loopback admin listener the way the Bot and CD will: token mint/revoke/list,
+loopback admin listener the way the Bot and CD will: token mint/grant/revoke-perm/revoke/list,
 bearer auth and per-route permissions, drain/resume, deploy-pending, in-game
 notices to a logged-in peer, the `realm:events` stream, a public listen address
 refused at start, Redis and Postgres down, and the tick under status polling. Acceptance
-tests 1-5, 6b (notice), 8, 9 and 10 of spec 03; the motd and world routes answer 501
+tests 1-5, 3b, 6b (notice), 8, 9 and 10 of spec 03; the motd and world routes answer 501
 until their milestones (account routes: tests/discord_login_live.py).
 """
 import concurrent.futures
@@ -150,8 +150,33 @@ try:
     wait_for("revocation", lambda: call(admin, "GET", "/v1/realm/status", status_token)[0] == 401, seconds=12)
     took = time.monotonic() - revoked
     assert took <= 11, took
-    assert mint("t", "realm.status")[0] == 0
+    code, status_token = mint("t", "realm.status")
+    assert code == 0
     print(f"PASS revoke bites in {took:.1f} s (<= 10 s cache), repeat revoke exits 0, re-mint after revoke ok")
+
+    # RQ-227: grant and revoke-perm change a token's permissions in place; the token
+    # itself keeps working and is never printed again.
+    def token_cli(*cmd):
+        p = run(server_binary, "admin", *cmd, env=env, good=False)
+        return p.returncode, p.stdout
+    assert call(admin, "GET", "/v1/realm/deploy-pending", status_token)[0] == 403
+    assert token_cli("grant", "--name", "t", "--perm", "realm.deploy", "--perm", "realm.status") == (0, "")
+    assert "t\trealm.status,realm.deploy\t" in run(server_binary, "admin", "list", env=env).stdout
+    granted_at = time.monotonic()
+    wait_for("grant", lambda: call(admin, "GET", "/v1/realm/deploy-pending", status_token)[0] == 204, seconds=12)
+    assert time.monotonic() - granted_at <= 11
+    assert token_cli("revoke-perm", "--name", "t", "--perm", "realm.deploy") == (0, "")
+    wait_for("revoke-perm", lambda: call(admin, "GET", "/v1/realm/deploy-pending", status_token)[0] == 403,
+             seconds=12)
+    assert call(admin, "GET", "/v1/realm/status", status_token)[0] == 200
+    assert token_cli("revoke-perm", "--name", "t", "--perm", "realm.status")[0] == 2
+    assert token_cli("revoke-perm", "--name", "t", "--perm", "realm.*")[0] == 2
+    assert token_cli("grant", "--name", "absent", "--perm", "realm.status")[0] == 2
+    assert token_cli("revoke-perm", "--name", "absent", "--perm", "realm.status")[0] == 2
+    assert token_cli("grant", "--name", "t", "--perm", "realm.restart")[0] not in (0, 2)
+    assert "t\trealm.status\t" in run(server_binary, "admin", "list", env=env).stdout
+    print("PASS admin grant/revoke-perm: same token gains and loses a permission within 10 s; "
+          "the last permission, an absent token and an unknown permission are refused")
 
     # 6b. An in-game notice reaches a logged-in, in-world peer as Chat.notice.
     run(server_binary, "account-create", "listener", env=env, stdin="listener-password\n")

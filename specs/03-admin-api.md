@@ -32,8 +32,9 @@ acting identity recorded in `admin_audit` as the token name (see "Audit identity
 
 ### Permissions
 
-Flat strings. Each route requires exactly one. Globs are accepted **only** by `mint` and
-expanded there; a stored token holds concrete permissions.
+Flat strings. Each route requires exactly one. Globs are accepted **only** by the CLI
+(`mint`, `grant`, `revoke-perm`) and expanded there; a stored token holds concrete
+permissions.
 
 | Permission | Route(s) |
 |---|---|
@@ -58,8 +59,9 @@ over ssh.
 
 Today's tokens: `bot` = `world.catalog`, `world.spawn`, `world.kill`, `world.event`,
 `account.*`, `realm.status`, `realm.notice`, `character.kit` (not `world.set`); `ops` =
-`realm.*`, `character.kit`. A token minted before `character.kit` existed lacks it: revoke
-and mint it again with it (`/kit` answers that the bot's token is not allowed until then).
+`realm.*`, `character.kit`. A token minted before `character.kit` existed lacks it:
+`admin grant --name bot --perm character.kit` adds it to the same token, so `.env` keeps
+its `REALM_ADMIN_TOKEN` (`/kit` answers that the bot's token is not allowed until then).
 
 ### In-game notice (engine side)
 
@@ -84,14 +86,24 @@ CREATE TABLE admin_tokens (
 ### CLI (subcommands of `n3e-server`, like `migrate` / `account-create`)
 
 ```
-n3e-server admin mint   --name NAME --perm PERM [--perm PERM ...]   # prints the token once
-n3e-server admin revoke --name NAME                                  # exit 0 even if absent
-n3e-server admin list                                                # name, perms, created, last_used; never hashes
+n3e-server admin mint        --name NAME --perm PERM [--perm PERM ...]   # prints the token once
+n3e-server admin grant       --name NAME --perm PERM [--perm PERM ...]   # adds to an existing token
+n3e-server admin revoke-perm --name NAME --perm PERM [--perm PERM ...]   # removes from an existing token
+n3e-server admin revoke      --name NAME                                  # exit 0 even if absent
+n3e-server admin list                                                     # name, perms, created, last_used; never hashes
 ```
 
 Talks to Postgres directly; needs no token. `mint` on an existing name → exit 2
 ("exists; revoke first"). Token: 32 CSPRNG bytes → base64url, no padding. Stored:
 `sha256(raw bytes)`.
+
+`grant` and `revoke-perm` change an existing token's permissions in place (RQ-227): its
+hash, `created_at` and `last_used_at` stay and nothing is printed on stdout, so the
+caller's copy of the token keeps working. Granting a held permission or removing one not
+held is a no-op (exit 0); the resulting set goes to stderr. An absent name → exit 2 ("no
+admin token; mint first"); a `revoke-perm` that would leave no permission → exit 2
+("revoke the token instead"); an unknown permission → exit 1, nothing changed. Like
+`revoke`, a change takes ≤ 10 s to reach a cached token.
 
 ### HTTP conventions
 
@@ -309,6 +321,9 @@ bounded queue (256); overflow drops with a counter, never blocks a tick.
    `realm.drain`.
 2. Unknown / missing token → 401. Revoked → 401 within 10 s.
 3. `mint` twice → exit 2; `revoke` then `mint` → ok. `list` shows no hash/token.
+3b. `grant` a permission to a minted token → the same token is allowed that route within
+   10 s; `revoke-perm` it → `403` again within 10 s. `revoke-perm` of the last permission,
+   `grant`/`revoke-perm` on an absent name → exit 2; an unknown permission → exit 1.
 4. Drain → `status.draining`, `realm.draining{reason}`; resume → `realm.resumed`.
 5. `deploy-pending` PUT/GET/DELETE round-trip; same-head PUT emits nothing.
 6. Kick/ban/unban/mute/unmute with a live client (shared with spec 02 tests 5–6);

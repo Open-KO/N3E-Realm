@@ -414,10 +414,34 @@ fn valid_name(name: &str) -> bool {
             .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'-')
 }
 
-/// `n3e-server admin mint|revoke|list` (spec 03 CLI). Talks to Postgres directly.
-/// Returns the process exit status: 2 for `mint` on an existing name.
+/// `held` with `added` appended where missing, in order (`admin grant`).
+fn granted(held: &[String], added: &[String]) -> Vec<String> {
+    let mut out = held.to_vec();
+    for p in added {
+        if !out.contains(p) {
+            out.push(p.clone());
+        }
+    }
+    out
+}
+
+/// `held` without `removed` (`admin revoke-perm`).
+fn withdrawn(held: &[String], removed: &[String]) -> Vec<String> {
+    held.iter()
+        .filter(|p| !removed.contains(p))
+        .cloned()
+        .collect()
+}
+
+/// `n3e-server admin mint|grant|revoke-perm|revoke|list` (spec 03 CLI). Talks to
+/// Postgres directly. Returns the process exit status: 2 for `mint` on an existing
+/// name, for `grant`/`revoke-perm` on an absent one, and for a `revoke-perm` that
+/// would leave the token no permission.
 pub fn cli(db: &str, args: &[String]) -> Result<i32> {
-    let usage = "admin mint --name NAME --perm PERM [--perm PERM ...] | admin revoke --name NAME | admin list";
+    let usage = "admin mint --name NAME --perm PERM [--perm PERM ...] \
+                 | admin grant --name NAME --perm PERM [--perm PERM ...] \
+                 | admin revoke-perm --name NAME --perm PERM [--perm PERM ...] \
+                 | admin revoke --name NAME | admin list";
     let flag = |name: &str| -> Vec<String> {
         args.windows(2)
             .filter(|w| w[0] == name)
@@ -446,6 +470,38 @@ pub fn cli(db: &str, args: &[String]) -> Result<i32> {
             }
             println!("{}", base64url(&raw));
             eprintln!("minted {name}: {}", permissions.join(","));
+            Ok(0)
+        }
+        Some(verb @ ("grant" | "revoke-perm")) => {
+            let name = flag("--name").pop().ok_or_else(|| bad(usage))?;
+            let changed = expand(&flag("--perm"))?;
+            // The token's hash and timestamps stay; only its permission set changes,
+            // under a row lock so two changes to one token do not lose either.
+            let mut t = c.transaction()?;
+            let Some(row) = t.query_opt(
+                "SELECT permissions FROM admin_tokens WHERE name=$1 FOR UPDATE",
+                &[&name],
+            )?
+            else {
+                eprintln!("no admin token {name}; mint first");
+                return Ok(2);
+            };
+            let held: Vec<String> = row.get(0);
+            let permissions = if verb == "grant" {
+                granted(&held, &changed)
+            } else {
+                withdrawn(&held, &changed)
+            };
+            if permissions.is_empty() {
+                eprintln!("that would leave {name} no permission; revoke the token instead");
+                return Ok(2);
+            }
+            t.execute(
+                "UPDATE admin_tokens SET permissions=$2 WHERE name=$1",
+                &[&name, &permissions],
+            )?;
+            t.commit()?;
+            eprintln!("{name}: {}", permissions.join(","));
             Ok(0)
         }
         Some("revoke") => {
@@ -1311,6 +1367,22 @@ mod tests {
         assert!(expand(&s(&["realm.restart"])).is_err());
         assert!(expand(&s(&["*"])).is_err());
         assert!(expand(&[]).is_err());
+    }
+
+    #[test]
+    fn grant_appends_missing_and_revoke_perm_removes_held() {
+        let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        let held = s(&["world.catalog", "realm.status"]);
+        assert_eq!(
+            granted(&held, &s(&["character.kit", "realm.status"])),
+            s(&["world.catalog", "realm.status", "character.kit"])
+        );
+        assert_eq!(granted(&held, &s(&["realm.status"])), held);
+        assert_eq!(
+            withdrawn(&held, &s(&["realm.status", "world.set"])),
+            s(&["world.catalog"])
+        );
+        assert!(withdrawn(&held, &held).is_empty());
     }
 
     #[test]

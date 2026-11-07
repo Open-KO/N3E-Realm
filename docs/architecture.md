@@ -182,6 +182,7 @@ flowchart LR
 | Today's tokens | `bot`: `world.catalog`, `world.spawn`, `world.kill`, `world.event`, `account.*`, `realm.status`, `realm.notice`, `character.kit` — deliberately **not** `world.set` (direct revision patching is an operator-on-the-box action). `ops`: `realm.*`, `character.kit`. Neither has `token.*` — minting stays a human-on-the-box action. |
 | Transport | API binds loopback / compose network only (unchanged). Token is a `Bearer` header. CD never holds the ops token in GitHub Secrets; it ssh-es in and reads it from a root-only file on the VPS. |
 | Not doing | JWTs, expiry, per-token rate limits, audit log beyond `last_used_at`. Add if a third caller appears. |
+| In-game GMs | Not admin-API callers. A game master's chat commands (KO's `+` verbs and client commands, plus the realm's own give-item, level and gold, RQ-213) are authorised by the typing character's individually granted capabilities in `character_roles` (`gm.item`, `gm.character`, `gm.move`, `gm.moderate`, `gm.notice`, and the existing `server.inspect`, `entity.spawn`, `entity.kill`), read by the server, never by the client; audited in `admin_audit` under the character. Spec 03 "In-game GM commands". |
 
 ### Sessions
 

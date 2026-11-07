@@ -100,6 +100,7 @@ in `by` (Q38).
 | `world.spawn.result` | announce on `spawn_authorized` with the event's `announce` text; ops on failure | |
 | `world.event.started` / `stopped` | announce: `announce` text or "`title` has started/ended" | |
 | `character.kitted` | ops | "`by` gave `character` the tester kit: level `level`; `gear labels`. Reason: `reason`" (`by` names the moderator when the bot made the call, as for `account.*`) |
+| `gm.command` | ops | "`character` (in game) used `verb` on `target`: `result`" (RQ-213: the in-game GM commands of spec 03; the bot made no call, so `character` names the game master) |
 | `player.joined/left` | **nowhere** by default. Optional ops-channel counter edit later. Consume and ack. |
 
 ### Daily reminder

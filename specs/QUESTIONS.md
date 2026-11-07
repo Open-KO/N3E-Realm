@@ -2317,3 +2317,52 @@ kept and repaired), so a repeated kit changes nothing, and gear it takes off goe
 bag (a full bag refuses). When the engine gains allocated points or class item
 restrictions, the kit should spend and honour them; (d) or (e) is its own item if the
 maintainer wants the kit without leaving the world.
+
+### Q128 — Game-master commands in game chat that KO does not have
+
+RQ-213 (maintainer request 2026-11-06): the commands KO itself gives game masters in
+game chat, "giving items first (and the others KO has: level, gold, summon, teleport,
+and so on)". KO has no give-item, level or gold command: not in 1097's 29 chat command
+names, not in the later source's game-master names, not among the server's 68 `+`
+verbs (`KO-FINDINGS.md` §11, binary). KO's game masters have teleport (`/goto X Z`,
+`ARREST`, `+monpursue`, `+zonechange`), summon (`SUMMONUSER`, opcode `0x40` sub 7, no
+1097 name), moderation (`FORBIDCHAT`, `PERMITCHAT`, `CUTOFF`, `FORBIDCONNECT`), notice,
+count, visibility, NPC summon and kill, and features the realm lacks (weather, wars,
+sieges, discounts, rate events). KO answers its game master nothing.
+
+Options for give-item, level and gold:
+- (a) The realm's own commands in KO's `+` form (`+give_item NAME ITEM [COUNT]`,
+  `+level NAME LEVEL`, `+gold NAME AMOUNT`), read by the server only from a character
+  holding the capability, a line typed in KO's chat with no added UI.
+- (b) Only KO's commands; giving items stays the Discord `/kit` and later admin routes.
+
+Options for who may:
+- (c) Individually granted per-character capabilities by group (`gm.item`,
+  `gm.character`, `gm.move`, `gm.moderate`, `gm.notice`, and the existing
+  `server.inspect`, `entity.spawn`, `entity.kill`), any mix per person (D-154).
+- (d) One `gm` capability for all of them, as KO's authority 0.
+
+Options for answers:
+- (e) One yellow line to the issuer in its own chat (`Chat.notice` 3) for each
+  command, success or refusal, since a silent grant cannot be told from a refused one.
+- (f) As KO: nothing.
+
+And a character in the world named by a give, level or gold:
+- (g) The change reaches it live through its own session (new engine path, shared
+  with RQ-226's option (d)).
+- (h) Refused as the tester kit refuses (`character_online`), applied after it leaves.
+
+**Default taken:** (a), (c), (e) and (g). The maintainer asked for item giving in game
+first; (a) gives it in KO's own command form without a screen KO lacks (Q61). (c)
+follows D-154 and lets a game master hold moderation without item giving. (e) is the
+message box of Q61, and KO's own client answers its few answered commands (`COUNT`,
+`SAVE`) with such yellow lines. (g) is what a game master giving an item to a player in
+front of them expects; (h) would make the command useless in play. KO's own commands
+keep their names (1097's, else the later source's) where the realm has the feature;
+the rest are listed as not offered in spec 03. Granting stays the CLI `role grant` on
+the realm host until an ops-only Discord route exists. Spec 03 "In-game GM commands"
+holds the table.
+
+**Decided (maintainer, 2026-11-06), RQ-213:** the issuing GM gets the one-line reply in its
+chat ("Yes, a reply line"), and GM powers are granted by capability group on the realm
+host only (`n3e-server role grant`), with no Discord route for now ("By group, host only").

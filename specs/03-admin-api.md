@@ -71,6 +71,92 @@ uint32; additive wire field, 0 = ordinary chat). Used by `realm/notice` and by t
 drain. World-entry notice: a new `Notice { repeated string lines }` message sent after
 `SelectCharacter` succeeds, drawn in a dismissible panel top-right (KO placement).
 
+### In-game GM commands (engine side, RQ-213)
+
+Commands a game master types in game chat. They are not admin-API calls and need no
+admin token: the server authorises each one against the typing character's
+**capabilities** in `character_roles` (Postgres; granted and revoked with
+`n3e-server role grant|revoke ACCOUNT CHARACTER_ID REALM CAPABILITY`). The client
+never decides who is a game master, and a tools build grants nothing. KO's own command
+set, read in `KO-FINDINGS.md` §11, has no item, level or gold command; those three are
+the realm's own, in KO's `+` form (Q128). The status of each row is its queue item;
+nothing here is implemented until that item lands.
+
+**Capabilities.** Individually granted, none implying another (D-154: KO's authority
+0 is roughly all of them, its limited manager 250 roughly `gm.move` and
+`gm.moderate`). New: `gm.item`, `gm.character`, `gm.move`, `gm.moderate`,
+`gm.notice` (added to `administration::CAPS`). Reused: `server.inspect`,
+`entity.spawn`, `entity.kill`.
+
+**Which lines are commands.** As KO's chat handler (`004989a8`): a chat line whose
+first byte is `+`, from a character that holds any capability in the table below, is
+a command and is never relayed; from anyone else it is ordinary chat. KO's client
+commands (the `/` names in the table, matched without regard to case as 1097 does)
+are sent by the client as the chat line typed; the server takes such a line as a
+command from a holder and drops it from anyone else (KO's server ignores the packet).
+Whether the sender holds a capability is the server's read of `character_roles`,
+fail-closed as the movement lease is (`turbo.rs`: a lapsed or unread lease holds
+none). Each command is then authorised again for its own capability, off the tick,
+against the authenticated, session-fenced character under the role lock, as
+`administration::execute` does; a revoked capability refuses the next command.
+Arguments are split on whitespace; `NAME` is a character of this realm, exact or
+else without regard to case and unambiguous (≤ 24 characters), as a whisper's
+recipient. Commands share the chat rate bound (one line per 20 ticks).
+
+**Replies.** KO answers its game master nothing (§11); the realm answers the issuer
+alone with one line in its own chat: `Chat{notice: 3}`, drawn as a yellow line like
+notice 1 but never framed or broadcast (KO's `MsgOutput` yellow, the colour of its own
+command answers; an older client draws it as a notice line). A success names what
+changed ("Gave Aria 5 × Healing potion.", "Aria is now level 9."); a refusal says why
+in one line: `Usage: +give_item NAME ITEM [COUNT]`, `No character named Aria.`,
+`No item ITEM.`, `Aria's bag is full.`, `You may not use +give_item.`,
+`Unknown command +verb.` The target is told nothing beyond what it sees (its bag, its level, its
+position), as KO.
+
+**Audit.** A command that passes its capability check writes, in the transaction that
+applies it, an `admin_audit` row: the issuer's `account_id` and `character_id`, a
+server-made `request` (`gm-…`), the current world revision, `target`
+(`character:<id>`, `account:<id>` or `entity:<id>`), `reason` the line as typed (cut
+to 160 characters), the before and after state where there is one (the bag, the
+progress) and outcome `gm_<verb>`; one log line `gm by=<character> verb=<verb>
+target=<…> result=<…>`; and a `gm.command` event. A refused capability check writes no
+audit row (as a denied `kill`), only the log line. Moderation commands also emit the
+`account.*` event the admin route emits, `by` the character's name.
+
+| Command | KO origin (§11) | Capability | Effect | Item |
+|---|---|---|---|---|
+| `+give_item NAME ITEM [COUNT]` | none (the realm's) | `gm.item` | A new record of the package item `ITEM` (its id, `game:` prefix optional) in the named character's bag: `COUNT` 1 to the item's stack limit (1 for one that does not stack), default 1; a full bag refuses with nothing changed | gm-chat-give-item |
+| `+level NAME LEVEL` | none (the realm's) | `gm.character` | Curve XP to `LEVEL`'s threshold, lifetime XP up by the same amount, as the tester kit does; `LEVEL` above the character's own, at most the curve's cap (a lower one refuses) | gm-chat-level-gold |
+| `+gold NAME AMOUNT` | none (the realm's) | `gm.character` | `AMOUNT` coins (≥ 1) into the named character's bag, the balance within the bag's coin limit (refused otherwise) | gm-chat-level-gold |
+| `/goto X Z` | 1097 `0x1e` | `gm.move` | The issuer moves to (X, Z) in its zone when standable there | gm-chat-move |
+| `/ARREST NAME` | 1097 `0x40`/1 | `gm.move` | The issuer moves to the named character in the world | gm-chat-move |
+| `/SUMMONUSER NAME` | later source `0x40`/7 | `gm.move` | The named character in the world moves to the issuer | gm-chat-move |
+| `+monpursue ID` | server `0042c1ba` | `gm.move` | The issuer moves to the NPC entity `ID` | gm-chat-move |
+| `/FORBIDCHAT NAME` | 1097 `0x40`/3 | `gm.moderate` | The account's mute (as `account.mute`), permanent; reason "in game by <issuer>" | gm-chat-moderation |
+| `/PERMITCHAT NAME` | 1097 `0x40`/4 | `gm.moderate` | Unmute (as `account.unmute`) | gm-chat-moderation |
+| `/CUTOFF NAME` | later source `0x40`/5 | `gm.moderate` | Kick (as `account.kick`) | gm-chat-moderation |
+| `/FORBIDCONNECT NAME` | 1097 `0x40`/2 | `gm.moderate` | Permanent ban and kick (as `account.ban`) | gm-chat-moderation |
+| `/NOTICE TEXT` | 1097 chat type 7 | `gm.notice` | The realm notice, `level` `info` (the yellow line to every session in the world, and the `notice` event) | gm-chat-world |
+| `/COUNT` | 1097 `0x36` | `server.inspect` | Answers "\*\*\* Current concurrent user : N \*\*\*" (text 2101), N the characters in the world | gm-chat-world |
+| `/VISIBLE`, `/INVISIBLE` | 1097 state change | `server.inspect` | The issuer's show switch, the operations `show` and `hide` (PQ-192, KO's later `VIEW`/`UNVIEW`) | gm-chat-world |
+| `+monsummon INDEX` | server `0042c1ba` | `entity.spawn` | The `spawn` operation for the package's spawn `INDEX`; reason the line | gm-chat-world |
+| `+monkill ID` | server `0042c1ba` | `entity.kill` | The `kill` operation on NPC entity `ID`; reason the line | gm-chat-world |
+
+A character named by `+give_item`, `+level` or `+gold` that is in the world gets the
+change through its own session, as a claim's bag result or a settlement's progress
+reaches it (the live path RQ-226 also needs); one that is not gets it committed for
+its next entry (one transaction with the audit, as the tester kit). Not offered, for
+want of the feature (each is its own item when the realm gains it): KO's weather and
+time (`CLEAN`, `RAINING`, `SNOWING`, `TIME`), `+zonechange` (one zone), the war, siege,
+discount, santa, rental, king, challenge and battle verbs, `+money_add`/`+exp_add`
+(the realm's rate events are presets, Discord `/event`), `+down` (CD restarts),
+`FORBIDUSER` (Discord `/ban` with a duration), `ATTACKDISABLE`/`ATTACKENABLE`
+(deferred with PvP), and `+pursue`/`+actpursue` (the tools terminal's `record` and
+`trace`).
+
+A Discord route to grant these capabilities (an ops-only `character.role` permission)
+does not exist yet; until it does, granting is the CLI above on the realm host.
+
 ### Postgres (new migration)
 
 ```sql
@@ -288,6 +374,7 @@ Redis Stream `realm:events`, `MAXLEN ~ 10000`. Fields: `type`, `ts` (RFC 3339), 
 | `world.spawn.result` / `world.kill.result` | `{request_id, status, detail, by, announce?}` |
 | `world.event.started` / `world.event.stopped` | `{preset, title, until?, announce?, by}` |
 | `character.kitted` | `{character_id, character, account_id, level, equipped, reason, by}` |
+| `gm.command` | `{character_id, character, account_id, verb, target, result, detail}` — an in-game GM command that passed its capability check (RQ-213; `character` is the issuer) |
 
 `by` is the token **name**. Emission is fire-and-forget from a dedicated task with a
 bounded queue (256); overflow drops with a counter, never blocks a tick.
@@ -345,7 +432,15 @@ bounded queue (256); overflow drops with a counter, never blocks a tick.
    at the curve's cap and `character.kitted` on the stream (`tests/admin_api_live.py`).
    Against PostgreSQL and the stats fixture (`tests/tester_kit_db.py`): the fixture's
    best arrangement, a second kit keeps it, a full bag refuses and rolls back.
+12. In-game GM commands (RQ-213; each command's test lands with its item): a `+` line
+   from a character without any GM capability reaches nearby players as chat; from a
+   holder it is never relayed. A command without its own capability answers "You may
+   not use …" and writes no audit row; with it, the effect, one `admin_audit` row
+   (outcome `gm_<verb>`), the `gm.command` event and the issuer's `Chat{notice: 3}`
+   line. A revoked capability refuses the next command. `+give_item` to a character in
+   the world shows in its bag without leaving; to one not in the world, at its next
+   entry; a full bag refuses with nothing changed.
 
 ## Open questions
 
-Q21, Q127.
+Q21, Q127, Q128.

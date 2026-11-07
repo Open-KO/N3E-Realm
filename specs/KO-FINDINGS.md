@@ -1959,6 +1959,44 @@ KO, it holds while the inventory is closed and goes on from there when it opens;
 starts at the clip's first frame. KO's first tick after an open adds one frame time;
 the realm's adds none (one frame, not visible).
 
+## 11. Game-master commands in game chat (RQ-213, 2026-11-06)
+
+Maintainer request: the commands KO itself gives its game masters in game chat, giving
+items first, then level, gold, summon, teleport and the rest. Read statically:
+the 1097 client in the project of §8.1 (`build/ghidra/rq074/proj`,
+`ko1097-unpacked.exe`; `strings`, `refs 006ded5c`, `decompile 00515ce0`), the server in
+n3e's audit project (`Ebenezer-official.exe`; `decompile 0042c1ba 004989a8 004b1022`),
+`-readOnly -noanalysis`, output under `build/rq213/`, not committed. The 1097 string
+table was read from the rebuilt image's `RT_STRING` resources with a throwaway reader.
+n3e's `docs/ko/domains/operations-persistence.md` ("Operator surfaces", "Operator
+command mapping") and PQ-179, PQ-182, PQ-197 (`docs/history/GAPS.md`, "GM command
+parity") already catalogued the server side; this section re-reads what the request
+needs. Not run in KO.
+
+| Observation | Where | Label |
+|---|---|---|
+| **1097's chat commands are a table of 29 names.** At world entry `00507b58`–`00507bd9` loads string ids 6200–6228 (`0x1838` up) into 16-byte strings at `006ded5c`–`006def1c`. The names (the image's English rows, langs 1028 and 2052; the Korean rows are translations): `WHISPER TOWN TRADE EXIT PARTY LEAVE INVITE JOINCLAN DISCLAN FIRECLAN APPOINT_VC HELLO EXCITE VISIBLE INVISIBLE CLEAN RAINING SNOWING TIME COUNT NOTICE ARREST FORBIDCONNECT FORBIDCHAT PERMITCHAT SAVE ORDER CLANWAR SURRENDER` | 1097 `00507b58`; its `RT_STRING` 6200–6228 | binary, local-asset |
+| **The parser.** `00515ce0` (the later source's `ParseChattingCommand`) splits the line with `"/%s %s %s %s"` (`005a48cc`), sends `/goto X Z` (`"goto"`, `005a48c4`, compared through the kernel32 slot `0058c18c`) as opcode `0x1e` with X×10 and Z×10 as two shorts, then compares the first word with each table name, case-insensitively (slot `0058c204`; the later source's `lstrcmp`/`lstrcmpi`: §8.1's stub names are one late), and switches on the index | 1097 `00515ce0` | binary |
+| **What its game-master names send** (no authority test in the client): `VISIBLE`/`INVISIBLE` a 3-byte state change; `CLEAN`/`RAINING`/`SNOWING N` (0–100) opcode `0x14` sub 1/2/3; `TIME` opcode `0x13`; `COUNT` opcode `0x36`; `NOTICE text` a chat line of type 7 (public notice) with the text after the name; `ARREST`/`FORBIDCONNECT`/`FORBIDCHAT`/`PERMITCHAT NAME` (1–19 bytes) opcode `0x40` sub 1/2/3/4. The rest are player commands (whisper, town, trade, party, clan, emotes, `SAVE`) | 1097 `00515ce0` cases 13–24 | binary |
+| **No give-item, level or gold command anywhere.** The 1097 table has none; the later source's adds `NOTICEALL CUTOFF VIEW UNVIEW FORBIDUSER SUMMONUSER ATTACKDISABLE ATTACKENABLE PROGRAMLISTCHECK` (ids 9000–9020) and nothing that grants; its `Prize` and `Reward` (9401, 9407) are among the elected king's names (9400–9407, the king system, KOF-0044), not a game master's, and its `ParseChattingCommand` handles none of them. The server's 68 chat verbs (every `+` string in the image: `+pursue +actpursue +monpursue +moncatch +assault +monsummon +monsummonall +unikmonster +user_seek_report +monkill +open +open2 +open3 +mopen +forbiduser +forbidconnect +snowopen +close +captain +tiebreak +auto +auto_off +down +discount +freediscount +alldiscount +undiscount +santa +angel +offsanta +limitbattle +onsummonblock +offsummonblock +zonechange`, siege, rental, king, challenge, battle and discount variants, `+server_testmode +server_normalmode +merchant_money +money_add +exp_add +user_bonus`) have none either; `+money_add`/`+exp_add` are the realm-wide rate events of §2, not a grant | 1097 table; source `text_resources.h` 9000–9020; `Ebenezer-official.exe` strings, `0042c1ba` | binary, source |
+| **Who may.** The server sends a chat line to the `+` parser only when its first byte is `+` and the sender's authority is 0 (or the server is in test mode 2); anyone else's `+` line is ordinary chat. A notice (types 7, 17) from anyone but authority 0 is dropped; a muted (11) sender's lines are dropped first | `004989a8` | binary |
+| **The `+` parser** compares the first word with each verb in turn (`thunk_FUN_004263d6`) and parses one argument with `atoi`; `+monpursue ID` (NPC id ≥ 10000) and `+zonechange ZONE` warp the issuer (`0049a477`) to the NPC's zone and position or to the zone at the issuer's own x and z (the source's optional x and z are its own addition); `+monsummon`, `+monkill` and the traces go to the AI server. No branch answers the issuer; an unknown verb does nothing | `0042c1ba` | binary |
+| **Opcode `0x40`** (authority 0 or 250 only; the name at most 20 bytes; a name not in the world ends it silently): 1 the operator warps to the named user's zone and position; 2 authority 255 and close; 3 authority 11 (mute); 4 authority 1; 5 close (cut off); 6 timed forbid (one regional configuration) and close; 7 the named user warps to the operator (summon); 8 authority 12, 9 authority 1. Nothing is sent to the operator; 2, 5, 6, 8 and 9 write a server log line | `004b1022` | binary |
+| **Warp and count** are refused to anyone but authority 0: `0x1e` (`/goto`) and `0x36` (`COUNT`), whose answer the client shows as text 2101, "\*\*\* Current concurrent user : %d \*\*\*" (1097's row 2101 is its translation) | source `User.cpp` 574–577, 7398–7417; `GameProcMain.cpp` 1017–1023; 1097 `RT_STRING` 2101 | source, local-asset |
+
+**Decides (RQ-213, Q128):** KO gives its game masters no item, level or gold command;
+those three are the realm's own, in KO's `+` form (the server reads a `+` line only
+from a sender it authorises and answers nothing else; a `+` line from anyone else is
+ordinary chat, as KO). KO's commands that the realm has the features for keep KO's
+names and syntax: 1097's `/goto X Z`, `/ARREST`, `/FORBIDCHAT`, `/PERMITCHAT`,
+`/FORBIDCONNECT`, `/NOTICE`, `/COUNT`, `/VISIBLE`, `/INVISIBLE`, the later source's
+`/SUMMONUSER` and `/CUTOFF` (1097 has no name for opcode `0x40` subs 5 and 7), and the
+server's `+monpursue`, `+monsummon`, `+monkill`. KO's authority byte becomes
+individually granted capabilities (D-154). Where KO answers nothing, the realm answers
+the issuer with one line in its own chat (the message box of Q61), since a silent
+grant cannot be told from a refused one. The command table, roles and replies are
+`specs/03-admin-api.md` "In-game GM commands".
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool
@@ -1974,6 +2012,7 @@ notes.
 | Q14 | **Add `mute` (timed) in v1**; defer attack-disable. |
 | Q10 | Wording fixed (above). |
 | Q21 | Unchanged (KO's `+monsummon` is untimed; ours gets a bounded duration). |
+| Q128 | §11 (RQ-213): KO has no give-item, level or gold command for its game masters; the realm's are its own `+` verbs, and KO's own commands keep their names where the realm has the feature. |
 | Q71 | §8.1: 1097, the client whose files the package cooks, plays the hall as (a) does, so (a) is KO's behaviour; its three remaining details aligned (RQ-075). §8.3 (RQ-086): 1298's (b) read further (its default looks, every character ticked, the spot and info without the pointer) and carried as data, the loop front-clip mode. |
 | Q70 | §8.2 (RQ-077): 1097's select arrows play sound 2501 (`char_select_turn.wav`) for each turn they start; the realm plays it. 1097's Karus front-end layouts name no button sounds; its sound switch is `[Sound] Enable`. |
 | Q57 | §9 (RQ-078): 1097's login plays sound 35, `bgm_login.wav` (21.67 s), restarted every 21.66 s; 1298's plays `Intro_Sound.mp3`. RQ-083: 1097's game-server login answer replaces it with sound 20003, `bgm_el_battle.wav`, looping, before select; create leaves it; the 1097 choice plays both (N3FE version 5). |

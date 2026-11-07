@@ -683,6 +683,9 @@ pub async fn run(
     // RQ-213: in-game GM commands on the database worker, answered in order.
     let mut gm_jobs: VecDeque<(i64, i64, tokio::task::JoinHandle<crate::content::Result<crate::gm::Outcome>>)> =
         VecDeque::new();
+    // RQ-233: bags a give committed while its character had no admitted session
+    // (one that loaded its bag at selection but is not yet admitted, among others).
+    let mut gm_unclaimed = crate::gm::Unclaimed::default();
     // PQ-186: NPCs an operator traced; reports follow each session's inspect lease.
     let mut traces = crate::npc_trace::Marks::default();
     let claim_slots = Arc::new(tokio::sync::Semaphore::new(64));
@@ -1021,6 +1024,11 @@ pub async fn run(
                         };
                         let id = s.id;
                         let generation = s.generation;
+                        // RQ-233: a give that committed after this session loaded its
+                        // bag at selection, but was answered before this admission,
+                        // reached no session; its newer bag becomes this one's.
+                        let given = gm_unclaimed.take(id, bag.as_ref(), Instant::now());
+                        let (given, bag) = (given.is_some(), given.or(bag));
                         if r.rules.skills.is_some(){skill_runtime.join(&s,&db,&owner);}
                         players.insert(
                             s.id,
@@ -1076,6 +1084,11 @@ pub async fn run(
                         // PQ-184: marked from admission, before the tick's withhold.
                         if p.turbo.hidden() {
                             presentation.hide(p.s.entity.id);
+                        }
+                        // RQ-233: sent as a listing once the session is admitted.
+                        if given {
+                            let state = p.bag.clone();
+                            deliver(p, Envelope { body: Some(Body::BagResult(wire::BagResult { request: String::new(), status: "ok".into(), state })) });
                         }
                     }
                     let _ = reply.send(ok);
@@ -2465,8 +2478,9 @@ pub async fn run(
         }
         // RQ-213: GM command answers. A give's bag reaches its character's own
         // session as a bag listing would, when that character is in the world
-        // (one not in the world loads it at its next entry); the issuer gets its
-        // one line, Chat{notice: 3}.
+        // (one not in the world loads it at its next entry, or is handed it at
+        // admission when it loaded its bag before the give committed, RQ-233);
+        // the issuer gets its one line, Chat{notice: 3}.
         for _ in 0..8 {
             if !gm_jobs.front().is_some_and(|(_, _, j)| j.is_finished()) {
                 break;
@@ -2481,6 +2495,10 @@ pub async fn run(
                             }
                             let state = p.bag.clone();
                             deliver(p, Envelope { body: Some(Body::BagResult(wire::BagResult { request: String::new(), status: "ok".into(), state })) });
+                        } else {
+                            // RQ-233: kept for a session admitted after this answer
+                            // whose bag was loaded before the give committed.
+                            gm_unclaimed.keep(target, bag, Instant::now());
                         }
                     }
                     if let Some(e) = outcome.event {

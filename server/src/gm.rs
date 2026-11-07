@@ -77,6 +77,66 @@ impl Outcome {
     }
 }
 
+/// RQ-233: how many committed bags wait for a session admitted after their give
+/// was answered, and for how long. A session loads its bag at selection, before
+/// the simulation admits it; a give that commits in between reaches no session.
+/// Revisions only grow, so a kept bag is never handed over an equal or newer one.
+const UNCLAIMED: usize = 64;
+const UNCLAIMED_FOR: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// RQ-233: the bags gives committed for characters with no admitted session when
+/// the answer came, by character id, each with when it was kept.
+#[derive(Debug, Default)]
+pub struct Unclaimed {
+    bags: std::collections::BTreeMap<i64, (std::time::Instant, wire::BagState)>,
+}
+
+impl Unclaimed {
+    /// Keeps `bag` for `target`'s next admission: the newer of it and one already
+    /// kept; the oldest kept bag gives way when the bound is reached.
+    pub fn keep(&mut self, target: i64, bag: wire::BagState, now: std::time::Instant) {
+        self.bags
+            .retain(|_, (at, _)| now.saturating_duration_since(*at) < UNCLAIMED_FOR);
+        if let Some(kept) = self.bags.get_mut(&target) {
+            if bag.revision > kept.1.revision {
+                *kept = (now, bag);
+            }
+            return;
+        }
+        if self.bags.len() >= UNCLAIMED {
+            if let Some(oldest) = self
+                .bags
+                .iter()
+                .min_by_key(|(_, (at, _))| *at)
+                .map(|(id, _)| *id)
+            {
+                self.bags.remove(&oldest);
+            }
+        }
+        self.bags.insert(target, (now, bag));
+    }
+
+    /// At `id`'s admission with the bag it loaded (`joined`): the kept bag when it
+    /// is newer than that one (or the session loaded none), else nothing. Either
+    /// way the character's kept bag is spent.
+    pub fn take(
+        &mut self,
+        id: i64,
+        joined: Option<&wire::BagState>,
+        now: std::time::Instant,
+    ) -> Option<wire::BagState> {
+        let (at, bag) = self.bags.remove(&id)?;
+        (now.saturating_duration_since(at) < UNCLAIMED_FOR
+            && joined.is_none_or(|j| bag.revision > j.revision))
+        .then_some(bag)
+    }
+
+    #[cfg(test)]
+    fn len(&self) -> usize {
+        self.bags.len()
+    }
+}
+
 /// `+give_item NAME ITEM [COUNT]`, parsed; or the usage line.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Give<'a> {
@@ -419,5 +479,66 @@ mod tests {
             item(&p, "test", "test:token", "test:token").is_none(),
             "the reward token"
         );
+    }
+
+    #[test]
+    fn a_bag_given_before_admission_reaches_the_session_admitted_after() {
+        // RQ-233: a bag a give committed while its character had no admitted
+        // session is handed to the next admission when newer than the one loaded.
+        let bag = |revision| wire::BagState {
+            revision,
+            ..Default::default()
+        };
+        let start = std::time::Instant::now();
+        let mut kept = Unclaimed::default();
+        kept.keep(7, bag(3), start);
+        assert_eq!(
+            kept.take(7, Some(&bag(2)), start).map(|b| b.revision),
+            Some(3)
+        );
+        assert_eq!(
+            kept.take(7, Some(&bag(2)), start),
+            None,
+            "spent at admission"
+        );
+        // A session that loaded the give's revision, or a newer one, keeps its own.
+        kept.keep(7, bag(3), start);
+        assert_eq!(kept.take(7, Some(&bag(3)), start), None);
+        kept.keep(7, bag(3), start);
+        assert_eq!(kept.take(7, Some(&bag(4)), start), None);
+        // A session that loaded no bag takes the given one.
+        kept.keep(7, bag(3), start);
+        assert_eq!(kept.take(7, None, start).map(|b| b.revision), Some(3));
+        // Two gives before the admission: the newer bag is kept, whatever the order.
+        kept.keep(7, bag(5), start);
+        kept.keep(7, bag(4), start);
+        assert_eq!(
+            kept.take(7, Some(&bag(3)), start).map(|b| b.revision),
+            Some(5)
+        );
+        // Another character's admission takes nothing.
+        kept.keep(7, bag(3), start);
+        assert_eq!(kept.take(8, None, start), None);
+        // Past its time a kept bag is dropped, at admission or by a later keep.
+        let late = start + UNCLAIMED_FOR;
+        assert_eq!(kept.take(7, Some(&bag(2)), late), None);
+        kept.keep(7, bag(3), start);
+        kept.keep(9, bag(1), late);
+        assert_eq!(kept.len(), 1);
+        // Bounded: the oldest gives way.
+        let mut kept = Unclaimed::default();
+        for id in 0..UNCLAIMED as i64 {
+            kept.keep(
+                id,
+                bag(1),
+                start + std::time::Duration::from_millis(id as u64),
+            );
+        }
+        kept.keep(1000, bag(1), start + std::time::Duration::from_secs(1));
+        assert_eq!(kept.len(), UNCLAIMED);
+        assert_eq!(kept.take(0, None, start), None, "the oldest was dropped");
+        assert!(kept
+            .take(1000, None, start + std::time::Duration::from_secs(1))
+            .is_some());
     }
 }

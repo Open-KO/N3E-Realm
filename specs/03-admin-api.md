@@ -168,7 +168,11 @@ change through its own session, as a claim's bag result or a settlement's progre
 reaches it (the live path RQ-226 also needs; for a bag, RQ-228: the committed bag
 becomes the session's when its revision is not older, and the client is sent it as
 an unrequested `BagResult{request: "", status: "ok"}`, as a listing); one that is not gets it committed for
-its next entry (one transaction with the audit, as the tester kit). Not offered, for
+its next entry (one transaction with the audit, as the tester kit). A session loads its
+bag when its character is selected, before the simulation admits it; a give answered in
+between (RQ-233) keeps its committed bag in the simulation (at most 64 characters, each
+for 60 s), and the session admitted next for that character takes it, as that same
+unrequested listing, when its loaded bag's revision is older or it loaded none. Not offered, for
 want of the feature (each is its own item when the realm gains it): KO's weather and
 time (`CLEAN`, `RAINING`, `SNOWING`, `TIME`), `+zonechange` (one zone), the war, siege,
 discount, santa, rental, king, challenge and battle verbs, `+money_add`/`+exp_add`

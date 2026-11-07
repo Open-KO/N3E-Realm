@@ -1927,6 +1927,38 @@ of the weapon effect (no FX-mesh copies, no tail) or the durability dust, in 109
 in 1298, so the realm's paperdoll, which draws neither, already matches KO and stays
 as it is. Drawing them there would be a look KO does not have (Q126).
 
+### 10.13 The inventory model's breath loops as the world's idle (RQ-208, 2026-11-06)
+
+Maintainer playtest (hosted 1097): the paperdoll's idle seemed to pop at the end of
+its loop. Read statically in the 1097 project of §8.1 (`build/ghidra/rq074/proj`,
+`ko1097-unpacked.exe`, `-readOnly -noanalysis`; `refs 004457d0 00447e30`,
+`decompile 00459a70 00459a20 00445bb0`, `floats 0058d074 0058cef8`), output under
+`build/ghidra/rq208/`, not committed; the cooked package read with a throwaway
+reader of `client/assets` `read_scene_head`/`read_scene_tracks`. Not run in KO.
+
+| Observation | Where | Label |
+|---|---|---|
+| **The inventory model is ticked as the world model is.** `00459a20` (the source's `InventoryChrTick`) sets `+0x718`'s position from the world model's (`+0x98`) and calls its vtable `+0x1c` with `FLT_MIN` (`0058d074` = `00800000`, the source's `FRAME_SELFPLAY`); the CN3Chr vtable `0058cedc` holds `CN3Chr::Tick` `004457d0` there (`0058cef8`), whose only frame tick is `00445bb0` (§8.1) | 1097 `00459a20`, `0058cef8`, `0058d074` | binary |
+| **It plays clip 0 with no blend.** `00459a70` (`InventoryChrAnimationInitialize`) sets on `+0x718` the last clip, then clip 0 (`ANI_BREATH`), each `00447e30(i, 0, 0, 0, 1)`, and ticks once | 1097 `00459a70` | binary |
+| **The frame tick runs at the clip's rate and wraps at its end.** `00445bb0` adds the clip's frames per second (record `+0x18`) times the frame time (`005a1594`) and the speed (`+0x20c`); past the end (`+0x14`), without flag bit 0 (`+0x30`) it subtracts end − start, with it it holds the end and next tick blends from the end to the start over the clip's blend (`+0x2c`) | 1097 `00445bb0` | binary |
+| **It is ticked only while the inventory is shown, and initialised once at entry.** `CUIInventory::Tick` returns while `!m_bVisible` (lines 204–207), before its `InventoryChrTick` call (line 260), so the breath's frame holds while the window is closed and goes on from it when it opens; `InventoryChrAnimationInitialize` is called from `CGameProcMain::MsgRecv_MyInfo_All` (line 2157, game entry) and the create procedure. The 1097 callers (`00459a20` from `004850c8` and `00435cf5`; `00459a70` from `0050bb41` and `00435b6c`) were listed, not read | source `Client/WarFare/UIInventory.cpp`, `GameProcMain.cpp`, `GameProcCharacterCreate.cpp:121` | source |
+| **The cooked breath clip closes on itself.** `player-idle.bin` (the hosted 1097 package's, `0f5e3c36…`, and the local bake's) is 1.667 s, its first and last keys within 0.04° on every track, and its `animation.bin` record has no loop flag, so KO's wrap shows no pop | hosted package; `build/packages/moradon` | local-asset |
+
+The realm's paperdoll did not loop as KO's: it sampled the idle at
+`fmod(time, idle)`, where `time` is the viewer's scene clock, half speed (`/2000`)
+and wrapped at `scene.bin`'s 2.667 s (the hosted package's `scene.bin` is the local
+one). So the idle played at half rate and every 5.33 s snapped from its 1.0 s pose
+to its first frame (`client/render/viewer.cpp` before RQ-208).
+
+**Decides (RQ-208):** the pop was the realm's, not KO's. The paperdoll now samples
+the idle on its own clock at the clip's own rate, wrapping at its own end and
+honouring its loop flag and blend as `AnimationPlayer` does for the world's idle
+(`client/render/portrait.h` `paperdoll_pose`). The clock (`PaperdollClock`) advances
+by the frame time only between consecutive frames that draw the paperdoll, so, as in
+KO, it holds while the inventory is closed and goes on from there when it opens; it
+starts at the clip's first frame. KO's first tick after an open adds one frame time;
+the realm's adds none (one frame, not visible).
+
 ## Not re-derived here
 
 Scheduled events (national war, monster challenge), launcher/patcher UX, hack-tool

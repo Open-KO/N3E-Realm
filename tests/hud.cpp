@@ -24,6 +24,28 @@ int main(int argc, char **argv) {
       require(target_health_fraction(5,0,0.f)==0.f);
       std::cout<<"PASS target bar: templated maximum 3/6, package maximum 150/300\n";
     }
+    {
+      // RQ-208: the paperdoll's idle runs in real seconds and wraps at its own
+      // end, as KO's inventory model (CN3Chr::Tick) and the world's idle do;
+      // with the loop flag it holds the end and blends back to the start.
+      n3e::Scene idle;idle.nodes={n3e::Node{-1,{0,0,0},{1,1,1},{0,0,0,1}}};
+      idle.tracks={n3e::Track{0,0,{n3e::Key{0,{0,0,0,0}},n3e::Key{1,{1,0,0,0}}}}};
+      auto x=[&](const n3e::Clip*clip,double seconds){return paperdoll_pose(idle,clip,seconds)[0].t[0];};
+      auto near=[](float a,float b){return std::abs(a-b)<1e-4f;};
+      require(near(x(nullptr,.25),.25f)&&near(x(nullptr,.75),.75f));       // the clip's own rate
+      require(near(x(nullptr,1.25),.25f)&&near(x(nullptr,1000.5),.5f));    // its own end, any clock
+      n3e::Clip plain{1,.3f,false};require(near(x(&plain,1.1),.1f));       // no flag: a plain wrap
+      n3e::Clip held{1,.5f,true};
+      require(near(x(&held,.5),.5f)&&near(x(&held,1.25),.5f)&&near(x(&held,1.5),0)&&near(x(&held,1.75),.25f));
+      require(x(nullptr,-1)==0.f);
+      // The clock runs only across consecutive drawn frames: held, not reset,
+      // while the inventory is closed; several previews in a frame tick once.
+      PaperdollClock clock;const uint64_t sec=1000000000;
+      require(clock.tick(10,5*sec)==0&&clock.tick(11,5*sec+sec/4)==.25&&clock.tick(11,5*sec+sec/2)==.25);
+      require(clock.tick(12,5*sec+sec/2)==.5);
+      require(clock.tick(40,60*sec)==.5&&clock.tick(41,60*sec+sec/4)==.75);   // closed for frames 13-39
+      std::cout<<"PASS paperdoll idle clock: own rate and end, loop-flag blend, held while closed (RQ-208)\n";
+    }
     n3e::WorldState item_world;item_world.connected=true;item_world.world.set_session(4);item_world.world.set_self(9);
     n3e::Envelope swap;auto*q=swap.mutable_bag_request();q->set_request("swap-1");q->set_operation(1);q->set_expected_revision(7);q->set_instance(123);q->set_destination(2);
     ItemWait wait;require(wait.begin(swap,item_world,0));
@@ -446,14 +468,14 @@ int main(int argc, char **argv) {
         if(!package.data.portraits.empty()){
           auto model=n3e::load_scene(release,"player-idle.bin");
           const auto&view=package.data.portraits.begin()->second;
-          auto vertices=portrait_vertices(model,0,view,{100,100,274,358},1024,768);
+          auto vertices=portrait_vertices(model,nullptr,0,view,{100,100,274,358},1024,768);
           require(!vertices.empty()&&vertices.size()==model.indices.size()*8);
           for(size_t i=0;i<vertices.size();i+=8){
             require(std::isfinite(vertices[i])&&vertices[i]>=100*2/1024.f-1&&vertices[i]<=274*2/1024.f-1);
             require(vertices[i+1]>=1-358*2/768.f&&vertices[i+1]<=1-100*2/768.f&&std::abs(vertices[i+2])<=1);
           }
           model.collision=n3e::Collision(std::vector<n3e::V>{{-10000,-10000,-10000},{10000,10000,10000},{0,10000,0}});
-          require(vertices==portrait_vertices(model,0,view,{100,100,274,358},1024,768));
+          require(vertices==portrait_vertices(model,nullptr,0,view,{100,100,274,358},1024,768));
           std::cout<<"PASS paperdoll mesh/depth/rectangle bounds exclude world collision and debug attachments\n";
         }
         for(auto size:{std::pair{1024,768},std::pair{1280,1024},std::pair{1600,1200}}){

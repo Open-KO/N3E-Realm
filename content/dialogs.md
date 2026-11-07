@@ -111,7 +111,11 @@ bytes are rejected. H1–H5 retain their prior interpretation.
 
 The renderer poses the package's player idle mesh independently inside the
 record's rectangle. Orthographic framing fits its rest-pose rendered vertices;
-collision/debug geometry is excluded. The idle animation loops, alpha cutouts and
+collision/debug geometry is excluded. The idle animation loops at the clip's own
+rate and wraps at the clip's own end, honouring its `animation.bin` loop flag and
+blend as the world's idle does, on a clock that runs only while the preview is drawn
+(held, not reset, while the inventory is closed), because KO ticks the inventory model
+with the world model's `CN3Chr::Tick`, and only while the inventory is shown (RQ-208, [KO-FINDINGS §10.13](../specs/KO-FINDINGS.md#1013-the-inventory-models-breath-loops-as-the-worlds-idle-rq-208-2026-11-06)); alpha cutouts and
 local depth are retained, and drawing is clipped to the authored area. HUD record
 order allows later controls and modal dialogs to cover it. This does not introduce
 character customization or equipment-dependent meshes.

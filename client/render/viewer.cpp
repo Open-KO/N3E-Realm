@@ -1290,6 +1290,7 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
     n3e::Editor editor;
 #endif
     int frame = 0;
+    PaperdollClock paperdoll_clock; // RQ-208: held while the inventory is closed
     auto start = SDL_GetTicks();
     auto input_last = start;
     auto fps_start = SDL_GetTicksNS();
@@ -5128,12 +5129,19 @@ color.rgb=mix(color.rgb,fogcolor,fogamount);
           hud->render(world, target, (bank_secret||feature_ui.prompt)?4:entry, (bank_secret||feature_ui.prompt)?std::string():text_entry, width, height,
             [&](const n3e::HudPortrait&view,const std::array<float,4>&rect){
               if(player_scenes.empty())return;
-              auto vertices=portrait_vertices(player_scenes.front(),time,view,rect,width,height);
+              // RQ-208: the idle on its own clock, in real seconds while it is
+              // drawn, as KO's inventory model ticks (portrait.h
+              // paperdoll_pose); the scene clock `time` runs at half speed and
+              // wraps at scene.bin's duration, which cut the idle short and
+              // snapped it to its first frame. A harness --time still fixes
+              // the pose.
+              const double paperdoll_time=fixed>=0?double(fixed):paperdoll_clock.tick(frame,SDL_GetTicksNS());
+              const n3e::Clip*idle_clip=player_clips.empty()?nullptr:&player_clips.front();
+              auto vertices=portrait_vertices(player_scenes.front(),idle_clip,paperdoll_time,view,rect,width,height);
               bool native=detail&&!detail->appearances.empty();
               if(native){
-                vertices.clear();const auto& model=player_scenes.front();float duration=0;
-                for(const auto&t:model.tracks)duration=std::max(duration,t.keys.back().time);
-                auto pose=model.sample(duration>0?std::fmod(time,duration):0);
+                vertices.clear();const auto& model=player_scenes.front();
+                auto pose=paperdoll_pose(model,idle_clip,paperdoll_time);
                 std::vector<uint32_t> keys;n3e::Looks looks;
                 for(const auto&e:world.world.entities())if(e.id()==world.world.self()){
                   keys.assign(e.appearance().begin(),e.appearance().end());looks={e.face(),e.hair()};}

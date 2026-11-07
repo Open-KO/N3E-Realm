@@ -36,7 +36,7 @@ mint-bot)
   # The bot's permissions as in README, "Discord bot".
   token="$(compose exec -T server n3e-server admin mint --name bot --perm world.catalog \
     --perm world.spawn --perm world.kill --perm world.event --perm 'account.*' \
-    --perm realm.status --perm realm.notice)"
+    --perm realm.status --perm realm.notice --perm character.kit)"
   [[ "$token" =~ ^[A-Za-z0-9_-]+$ ]] || { echo "host-realm: mint printed no token" >&2; exit 1; }
   printf 'REALM_ADMIN_TOKEN=%s\n' "$token" >> .env
   echo "host-realm: REALM_ADMIN_TOKEN written to .env"

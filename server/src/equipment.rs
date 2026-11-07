@@ -93,10 +93,10 @@ impl Policy {
             items,
         })
     }
-    fn item(&self, id: &str) -> Option<&Item> {
+    pub(crate) fn item(&self, id: &str) -> Option<&Item> {
         self.items.iter().find(|i| i.id == id)
     }
-    fn eligible(&self, i: &Item) -> bool {
+    pub(crate) fn eligible(&self, i: &Item) -> bool {
         i.title <= self.title
             && (i.race == 0 || i.race == self.race)
             && i.attributes

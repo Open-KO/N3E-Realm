@@ -48,7 +48,7 @@ first time: mint its admin token, add it to `.env`, and run `tools/local-realm` 
 ```sh
 docker compose exec server n3e-server admin mint --name bot --perm world.catalog \
   --perm world.spawn --perm world.kill --perm world.event --perm 'account.*' \
-  --perm realm.status --perm realm.notice
+  --perm realm.status --perm realm.notice --perm character.kit
 # .env: REALM_ADMIN_TOKEN=<the printed token>
 tools/local-realm 192.168.1.20           # now also "bot started"
 ```

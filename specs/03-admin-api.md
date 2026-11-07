@@ -50,13 +50,16 @@ expanded there; a stored token holds concrete permissions.
 | `world.kill` | `POST /v1/world/kill` |
 | `world.event` | `POST /v1/world/event`, `POST /v1/world/event/stop` |
 | `world.set` | `POST /v1/world/set` — direct revision patch (power-user; the Bot does not expose it in v1) |
+| `character.kit` | `POST /v1/characters/kit` — the tester kit (RQ-212) |
 | `token.mint`, `token.revoke` | Reserved; no routes in this version. Minting is CLI-only. |
 
 There is deliberately no `realm.restart`: restarting is a compose action CD performs
 over ssh.
 
 Today's tokens: `bot` = `world.catalog`, `world.spawn`, `world.kill`, `world.event`,
-`account.*`, `realm.status`, `realm.notice` (not `world.set`); `ops` = `realm.*`.
+`account.*`, `realm.status`, `realm.notice`, `character.kit` (not `world.set`); `ops` =
+`realm.*`, `character.kit`. A token minted before `character.kit` existed lacks it: revoke
+and mint it again with it (`/kit` answers that the bot's token is not allowed until then).
 
 ### In-game notice (engine side)
 
@@ -209,6 +212,42 @@ active at a time; a second → `409 {"error":"event_active"}`. Emits `world.even
 revision publish, bounds-checked by the registry. Exists so an operator can act without
 a preset; not exposed by the Bot in v1.
 
+**`POST /v1/characters/kit`** `{"character": "Name", "reason": "PvP test"}` → `200`
+```json
+{
+  "character_id": 42, "character": "Name", "account_id": 7, "level": 10,
+  "equipped": [ { "slot": "Right hand", "item": "demo:item/blade", "label": "Practice blade" } ],
+  "unequipped": 0, "request_id": "kit-…"
+}
+```
+The tester kit (RQ-212), for testers: it maxes one character of this realm, named
+exactly or else without regard to case (≤ 24 characters), in one transaction:
+
+- **Level:** curve XP to the package's last progression threshold (its level cap),
+  lifetime XP up by the same amount, the progress revision up by one, as a settlement
+  would. Class skills open by level, so the cap opens every skill the character's
+  class policy holds (RQ-211). `level` is `null` for a character without
+  progression rows (a realm without a curve).
+- **Gear:** the package's best arrangement for damage, chosen once at start-up from
+  the items its equipment policy holds and the package may wear (title, race and
+  attribute requirements, as equip checks them): the highest attack the package's
+  stats give at the cap, then defense, health and resource. Each slot gets a new
+  record at full durability, or keeps a record of the same item it already wears
+  (repaired), so a second kit changes nothing; gear it takes off goes to free bag
+  slots. `equipped` is empty when the package has no equipment or no stats.
+- **Stat and skill points:** none; the engine has no allocated points yet (Q127).
+
+Refusals change nothing: an unknown name → `404`; a character in the world
+(`characters.online` in this realm generation) → `409 {"error":"character_online"}`,
+since a session's bag and progress are its own until it leaves (the kit applies to
+the character's next entry when called after it leaves); gear to take off with too
+few free bag slots → `409 {"error":"bag_full"}`; `reason` (≤ 160 characters, the
+audit's bound) and `character` are required (`400`). A database that does not answer
+within 5 s → `503`; as with the account routes' bound, the transaction may still commit
+after that answer (then `character.kitted` is not emitted, but the audit row stands). Audited in `admin_audit` (`token_name`, `target`
+`character:<id>`, the bag before and after, outcome `kit_applied`) and emitted as
+`character.kitted`.
+
 ### Audit identity
 
 `administration::execute` today authorises against an authenticated **character**'s
@@ -236,6 +275,7 @@ Redis Stream `realm:events`, `MAXLEN ~ 10000`. Fields: `type`, `ts` (RFC 3339), 
 | `deploy.pending` | `{since, commits_behind, head}` |
 | `world.spawn.result` / `world.kill.result` | `{request_id, status, detail, by, announce?}` |
 | `world.event.started` / `world.event.stopped` | `{preset, title, until?, announce?, by}` |
+| `character.kitted` | `{character_id, character, account_id, level, equipped, reason, by}` |
 
 `by` is the token **name**. Emission is fire-and-forget from a dedicated task with a
 bounded queue (256); overflow drops with a counter, never blocks a tick.
@@ -285,7 +325,12 @@ bounded queue (256); overflow drops with a counter, never blocks a tick.
 9. Stop Postgres → an uncached token gets 401 within the lookup bound; the realm fences
    and exits without a panic. Stop Redis → 200 with `redis:false`.
 10. Tick time under 1,000 `status` calls/s is unchanged (admin listener is off-tick).
+11. `characters/kit` (RQ-212): `403` without `character.kit`; `404` for an unknown
+   name; `409 character_online` for a character in the world; after it leaves, `200`
+   at the curve's cap and `character.kitted` on the stream (`tests/admin_api_live.py`).
+   Against PostgreSQL and the stats fixture (`tests/tester_kit_db.py`): the fixture's
+   best arrangement, a second kit keeps it, a full bag refuses and rolls back.
 
 ## Open questions
 
-Q21.
+Q21, Q127.

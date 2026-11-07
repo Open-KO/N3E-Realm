@@ -131,6 +131,11 @@ pub const ROUTES: &[Route] = &[
         path: "/v1/world/set",
         permission: "world.set",
     },
+    Route {
+        method: Method::Post,
+        path: "/v1/characters/kit",
+        permission: "character.kit",
+    },
 ];
 
 /// Permissions the `bot` token is minted with (spec 03 "Today's tokens").
@@ -145,6 +150,7 @@ pub const BOT_PERMISSIONS: &[&str] = &[
     "account.mute",
     "realm.status",
     "realm.notice",
+    "character.kit",
 ];
 
 /// `GET /v1/realm/status` response (subset the bot renders).

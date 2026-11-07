@@ -174,7 +174,7 @@ against your own Discord server:
    ```sh
    docker compose exec server n3e-server admin mint --name bot --perm world.catalog \
      --perm world.spawn --perm world.kill --perm world.event --perm 'account.*' \
-     --perm realm.status --perm realm.notice
+     --perm realm.status --perm realm.notice --perm character.kit
    docker compose --profile bot up -d bot
    ```
 
@@ -218,7 +218,7 @@ RFC 1918 only) for the Bot and CD (spec 03). Tokens are minted against the realm
 database and printed once:
 
 ```sh
-n3e-server admin mint --name ops --perm 'realm.*'    # prints the token; keep it
+n3e-server admin mint --name ops --perm 'realm.*' --perm character.kit  # prints the token; keep it
 n3e-server admin list                                 # names and permissions, never secrets
 n3e-server admin revoke --name ops                    # bites within 10 s
 curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:7780/v1/realm/status

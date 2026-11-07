@@ -60,6 +60,7 @@ does not expose.
 | `/kill <entity id> <reason>` | MOD | `POST /v1/world/kill`. | Ops channel |
 | `/event <preset> [reason]` | MOD | `preset` autocompletes from the catalog; `POST /v1/world/event {preset, reason}`. 409 → "an event is already running: …". | Announce (via stream) |
 | `/event-stop [reason]` | MOD | `POST /v1/world/event/stop`. | Announce (via stream) |
+| `/kit <character> [reason]` | MOD | `POST /v1/characters/kit {character, reason}` (RQ-212; `reason` defaults to "tester kit via Discord by <moderator>"). Replies with the level and gear; a character in the world → "ask them to leave the world, then run `/kit` again"; unknown → "No character named …". | Ops channel (via stream) |
 | `/deploy [reason] [force]` | OPS | If `status.deploy_pending` is null and the user didn't pass `force: True`: reply "nothing pending". Otherwise `POST /repos/{repo}/actions/workflows/{wf}/dispatches {ref: "master", inputs: {force: "true", reason}}`. Reply with the Actions run URL once it appears (poll `GET …/runs?event=workflow_dispatch` for ≤ 30 s). | Ops channel |
 
 **Catalog.** The Bot fetches `GET /v1/world/catalog` on startup and whenever it sees
@@ -82,8 +83,10 @@ is acceptable; a rare duplicate announcement is fine.
 Every relayed text that is not the bot's own (reasons, names, notice text, announce
 texts) has its Discord markdown escaped, and every message the bot sends — channel
 posts and replies — goes out with no allowed mentions, so nothing it relays can ping.
-`account.*` messages name the moderator when the bot made the call (remembered in
-memory for 2 minutes), else the token name in `by` (Q38).
+`account.*` and `character.kitted` messages name the moderator when the bot made the
+call (remembered in memory for 2 minutes, by account id or by the character's name in
+lower case, and forgotten at once when the realm refuses the call), else the token name
+in `by` (Q38).
 
 | Event | Channel | Message |
 |---|---|---|
@@ -96,6 +99,7 @@ memory for 2 minutes), else the token name in `by` (Q38).
 | `account.*` | ops | "`by` kicked/banned `discord_name`: `reason`" |
 | `world.spawn.result` | announce on `spawn_authorized` with the event's `announce` text; ops on failure | |
 | `world.event.started` / `stopped` | announce: `announce` text or "`title` has started/ended" | |
+| `character.kitted` | ops | "`by` gave `character` the tester kit: level `level`; `gear labels`. Reason: `reason`" (`by` names the moderator when the bot made the call, as for `account.*`) |
 | `player.joined/left` | **nowhere** by default. Optional ops-channel counter edit later. Consume and ack. |
 
 ### Daily reminder

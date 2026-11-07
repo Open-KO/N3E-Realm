@@ -57,6 +57,7 @@ mod rules;
 mod sessions;
 mod settlements;
 mod simulation;
+mod tester_kit;
 mod turbo;
 mod view_frame;
 mod wire {
@@ -857,6 +858,12 @@ async fn main() -> Result<()> {
         r.hash.clone(),
         database.clone(),
         owner.realm.clone(),
+        Arc::new(tester_kit::Context::new(
+            owner.clone(),
+            r.rules.progression.clone(),
+            r.rules.inventory.clone(),
+            r.rules.item.clone(),
+        )),
     ));
     let admin_listener = TcpListener::bind(&admin_address).await?;
     tokio::spawn(admin_api::watch_readiness(admin.clone()));

@@ -23,6 +23,7 @@ pub const TYPES: &[&str] = &[
     "world.kill.result",
     "world.event.started",
     "world.event.stopped",
+    "character.kitted",
 ];
 
 /// Which Discord channel an event goes to.
@@ -151,6 +152,36 @@ impl Relay {
                     _ => return vec![],
                 };
                 vec![post(Channel::Ops, text)]
+            }
+            "character.kitted" => {
+                let who = by(kind, data);
+                let level = match data["level"].as_u64() {
+                    Some(level) => format!("level {level}"),
+                    None => "level unchanged".into(),
+                };
+                let gear: Vec<String> = data["equipped"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .map(|e| {
+                                escape(e["label"].as_str().or(e["item"].as_str()).unwrap_or("?"))
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let gear = if gear.is_empty() {
+                    "no gear".into()
+                } else {
+                    gear.join(", ")
+                };
+                vec![post(
+                    Channel::Ops,
+                    format!(
+                        "{who} gave {} the tester kit: {level}; {gear}. Reason: {}",
+                        field(data, "character"),
+                        field(data, "reason")
+                    ),
+                )]
             }
             "world.spawn.result" => {
                 let (status, detail) = (field(data, "status"), field(data, "detail"));
@@ -314,6 +345,22 @@ mod tests {
         assert_eq!(
             texts(&mut r, "account.muted", perm)[0].1,
             "bot muted N permanently: x"
+        );
+        let kitted = serde_json::json!({"character_id": 9, "character": "Tes_ter", "account_id": 7, "level": 10,
+            "equipped": [{"slot": "Right hand", "item": "demo:item/twohand", "label": "Two hand blade"},
+                         {"slot": "Right ring", "item": "demo:item/ring"}],
+            "reason": "PvP test", "by": "bot"});
+        assert_eq!(
+            texts(&mut r, "character.kitted", kitted),
+            vec![(
+                Channel::Ops,
+                r"bot gave Tes\_ter the tester kit: level 10; Two hand blade, demo\:item/ring. Reason: PvP test".into()
+            )]
+        );
+        let bare = serde_json::json!({"character": "A", "level": null, "equipped": [], "reason": "x", "by": "ops"});
+        assert_eq!(
+            texts(&mut r, "character.kitted", bare)[0].1,
+            "ops gave A the tester kit: level unchanged; no gear. Reason: x"
         );
         let spawn = serde_json::json!({"request_id": "r1", "status": "spawn_authorized", "announce": "Ironfang has appeared!"});
         assert_eq!(

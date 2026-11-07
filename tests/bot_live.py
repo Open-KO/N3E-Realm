@@ -397,7 +397,7 @@ try:
     # Spec 03's `bot` token: everything the bot exposes, not world.set.
     bot_admin = run(server_binary, "admin", "mint", "--name", "bot", "--perm", "world.catalog", "--perm", "world.spawn",
                     "--perm", "world.kill", "--perm", "world.event", "--perm", "account.*", "--perm", "realm.status",
-                    "--perm", "realm.notice", env=env).stdout.strip()
+                    "--perm", "realm.notice", "--perm", "character.kit", env=env).stdout.strip()
     def ready():
         assert server.poll() is None, (out / "server.log").read_text()
         try:
@@ -442,11 +442,11 @@ try:
     assert registered["auth"] == "Bot " + BOT_TOKEN
     names = [c["name"] for c in registered["body"]]
     assert names == ["status", "whois", "kick", "ban", "unban", "mute", "unmute", "motd", "notice", "boss", "kill",
-                     "event", "event-stop", "deploy"], names
+                     "event", "event-stop", "kit", "deploy"], names
     kick = next(c for c in registered["body"] if c["name"] == "kick")
     assert [(o["name"], o["type"], o.get("required")) for o in kick["options"]] == [
         ("user", 6, True), ("reason", 3, True)], kick
-    print("PASS start-up: IDENTIFY with no intents; 14 guild commands registered in one bulk overwrite")
+    print("PASS start-up: IDENTIFY with no intents; 15 guild commands registered in one bulk overwrite")
 
     # 1. /status renders players, version, draining, pending; anyone may run it.
     text = command("status", NOBODY)
@@ -516,6 +516,15 @@ try:
     for c, options in [("boss", {"name": "ironfang"}), ("event", {"preset": "weekend-exp"}), ("event-stop", {}),
                        ("kill", {"entity": 12345, "reason": "stuck"}), ("motd", {"lines": "Welcome | Be nice"})]:
         assert command(c, MOD, **options) == NOT_YET, c
+    # RQ-212: /kit is a MOD command; the ops channel hears it from the stream, naming the moderator.
+    assert command("kit", NOBODY, character="Tester") == "You don't have permission"
+    assert command("kit", MOD, character="Nobody") == "No character named Nobody on this realm."
+    sql(f"INSERT INTO characters (account_id, realm, name) VALUES ({nelly}, 'test-{name}', 'Tester')")
+    text = command("kit", MOD, character="tester", reason="PvP test")
+    assert text.startswith("Kitted **Tester**: "), text
+    wait(lambda: any(p.startswith("Alice gave Tester the tester kit: ") and p.endswith("Reason: PvP test")
+                     for p in rest.posts(OPS_CHANNEL)), 10, "character.kitted not relayed")
+    print("PASS /kit: non-MOD refused, unknown name answered, the kit applied and relayed to ops naming the moderator")
     print("PASS world commands: /boss /event /event-stop /kill /motd reach their routes (501 until M5/M5b); "
           "autocomplete says the catalog is unavailable (tests 5, 5b partial)")
 
@@ -574,7 +583,8 @@ try:
     print("PASS revoked admin token: \"bot token rejected\" reply, one ops-channel alert")
     bot_admin = run(server_binary, "admin", "mint", "--name", "bot-2", "--perm", "world.catalog", "--perm",
                     "world.spawn", "--perm", "world.kill", "--perm", "world.event", "--perm", "account.*",
-                    "--perm", "realm.status", "--perm", "realm.notice", env=env).stdout.strip()
+                    "--perm", "realm.status", "--perm", "realm.notice", "--perm", "character.kit",
+                    env=env).stdout.strip()
     secrets_used.append(bot_admin)
     stop(bot)
     bot_env["REALM_ADMIN_TOKEN"] = bot_admin

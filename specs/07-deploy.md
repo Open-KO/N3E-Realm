@@ -173,10 +173,10 @@ pinned message.
    every deploy afterwards).
 7. First deploy by hand: `IMAGE_TAG=<latest deploy tag's sha> … ./deploy/remote.sh`
    with `FORCE=true` (there are no players).
-8. Mint tokens: `docker compose exec server n3e-server admin mint --name ops --perm 'realm.*'`
-   → `/etc/n3e-realm/ops.token`; `… --name bot --perm world.catalog --perm world.spawn
-   --perm world.kill --perm world.event --perm 'account.*' --perm realm.status --perm
-   realm.notice` (not `world.*`: that would include `world.set`, which spec 03 keeps from
+8. Mint tokens: `docker compose exec server n3e-server admin mint --name ops --perm 'realm.*'
+   --perm character.kit` → `/etc/n3e-realm/ops.token`; `… --name bot --perm world.catalog
+   --perm world.spawn --perm world.kill --perm world.event --perm 'account.*' --perm
+   realm.status --perm realm.notice --perm character.kit` (not `world.*`: that would include `world.set`, which spec 03 keeps from
    the bot) → `.env` `REALM_ADMIN_TOKEN`; `docker compose
    up -d bot`.
 9. (reserved)

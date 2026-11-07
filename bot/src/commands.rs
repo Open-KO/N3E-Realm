@@ -138,6 +138,23 @@ pub fn definitions() -> Vec<Command> {
             .option(reason(false))
             .build(),
         command(
+            "kit",
+            "Max a character for testing: level cap, best gear (it must be out of the world)",
+        )
+        .option(
+            StringBuilder::new("character", "The character's name on this realm")
+                .max_length(24)
+                .required(true),
+        )
+        .option(
+            StringBuilder::new(
+                "reason",
+                "Why; kept in the realm's audit and the ops channel",
+            )
+            .max_length(160),
+        )
+        .build(),
+        command(
             "deploy",
             "Run the CD workflow now (drains and restarts the realm)",
         )
@@ -198,11 +215,12 @@ impl From<&str> for Reply {
     }
 }
 
-/// A moderator's account call, remembered until its stream entry is rendered so the ops
-/// channel names the person rather than the bot's token.
+/// A moderator's account or character call, remembered until its stream entry is
+/// rendered so the ops channel names the person rather than the bot's token. `key` is
+/// the account id, or the character's name in lower case.
 struct Attribution {
     kind: &'static str,
-    account: i64,
+    key: String,
     moderator: String,
     at: Instant,
 }
@@ -233,30 +251,48 @@ impl Bot {
         }
     }
 
-    /// Who acted on an `account.*` stream entry, for the ops channel.
+    /// Who acted on an `account.*` or `character.*` stream entry, for the ops channel.
     pub fn by(&self, kind: &str, data: &Value) -> String {
-        let account = data["account_id"].as_i64().unwrap_or(-1);
+        let key = attribution_key(kind, data);
         let mut list = self.attributions.lock().unwrap();
         list.retain(|a| a.at.elapsed() < ATTRIBUTION_TTL);
-        if let Some(i) = list
-            .iter()
-            .position(|a| a.kind == kind && a.account == account)
-        {
+        if let Some(i) = list.iter().position(|a| a.kind == kind && a.key == key) {
             return list.remove(i).moderator;
         }
         escape(data["by"].as_str().unwrap_or("?"))
     }
 
-    fn attribute(&self, kind: &'static str, account: i64, moderator: &str) {
+    fn attribute(&self, kind: &'static str, key: String, moderator: &str) {
         let mut list = self.attributions.lock().unwrap();
         list.retain(|a| a.at.elapsed() < ATTRIBUTION_TTL);
         if list.len() < 256 {
             list.push(Attribution {
                 kind,
-                account,
+                key,
                 moderator: escape(moderator),
                 at: Instant::now(),
             });
+        }
+    }
+
+    /// Forgets the attribution `attribute` just recorded when the realm answered
+    /// definitely without acting (a refusal, a rejected token, a route not served):
+    /// no stream entry follows, and a later call's entry must not name this moderator.
+    /// Kept when the realm may have committed (unavailable, timed out).
+    fn settle(&self, kind: &'static str, key: &str, moderator: &str, outcome: &Outcome) {
+        if !matches!(
+            outcome,
+            Outcome::Refused(..) | Outcome::Rejected | Outcome::NotImplemented
+        ) {
+            return;
+        }
+        let moderator = escape(moderator);
+        let mut list = self.attributions.lock().unwrap();
+        if let Some(i) = list
+            .iter()
+            .rposition(|a| a.kind == kind && a.key == key && a.moderator == moderator)
+        {
+            list.remove(i);
         }
     }
 
@@ -327,6 +363,7 @@ impl Bot {
                     "Event stop requested; the announcements channel will say when it has ended.",
                 )
             }
+            "kit" => self.kit(inv).await,
             "deploy" => self.deploy(inv).await,
             other => format!("Unknown command `{}`", escape(other)).into(),
         }
@@ -482,11 +519,12 @@ impl Bot {
             _ => ("account.unmuted", json!({})),
         };
         // Before the call: the stream entry can be rendered before the reply arrives.
-        self.attribute(kind, id, &inv.user_name);
+        self.attribute(kind, id.to_string(), &inv.user_name);
         let outcome = self
             .admin
             .post(&format!("/v1/accounts/{id}/{command}"), body)
             .await;
+        self.settle(kind, &id.to_string(), &inv.user_name, &outcome);
         if let Some(r) = self.trouble(&outcome) {
             return r;
         }
@@ -590,6 +628,77 @@ impl Bot {
         )
     }
 
+    /// `/kit` (RQ-212): the tester kit on one character, out of the world.
+    async fn kit(&self, inv: &Invocation) -> Reply {
+        // `text` trims, as the realm does before it looks the name up.
+        let Some(character) = inv.text("character") else {
+            return "Which character?".into();
+        };
+        let reason = match inv.text("reason") {
+            Some(r) => r.to_string(),
+            None => format!("tester kit via Discord by {}", inv.user_name),
+        };
+        let reason: String = reason.chars().take(160).collect();
+        // Before the call: the stream entry can be rendered before the reply arrives.
+        let key = character.to_lowercase();
+        self.attribute("character.kitted", key.clone(), &inv.user_name);
+        let outcome = self
+            .admin
+            .post(
+                "/v1/characters/kit",
+                json!({"character": character, "reason": reason}),
+            )
+            .await;
+        self.settle("character.kitted", &key, &inv.user_name, &outcome);
+        if let Some(r) = self.trouble(&outcome) {
+            return r;
+        }
+        let name = escape(character);
+        let v = match outcome {
+            Outcome::Ok(_, v) => v,
+            Outcome::Refused(404, ..) => {
+                return format!("No character named {name} on this realm.").into()
+            }
+            Outcome::Refused(409, error, _) if error == "character_online" => {
+                return format!(
+                    "{name} is in the world. The kit applies to a character out of it: ask them to leave the world (character select or log out), then run `/kit` again."
+                )
+                .into()
+            }
+            other => return self.refused(&other),
+        };
+        let name = escape(v["character"].as_str().unwrap_or(character));
+        let level = match v["level"].as_u64() {
+            Some(l) => format!("level {l}"),
+            None => "level unchanged (the realm has no level curve)".into(),
+        };
+        let gear: Vec<String> = v["equipped"]
+            .as_array()
+            .map(|a| {
+                a.iter()
+                    .map(|e| {
+                        format!(
+                            "{}: {}",
+                            escape(e["slot"].as_str().unwrap_or("?")),
+                            escape(e["label"].as_str().or(e["item"].as_str()).unwrap_or("?"))
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut lines = vec![format!("Kitted **{name}**: {level}.")];
+        lines.push(if gear.is_empty() {
+            "No gear: the realm's package has none to judge.".into()
+        } else {
+            format!("Equipped: {}.", gear.join(", "))
+        });
+        match v["unequipped"].as_u64() {
+            Some(n) if n > 0 => lines.push(format!("{n} item(s) it wore went to its bag.")),
+            _ => {}
+        }
+        lines.join("\n").into()
+    }
+
     async fn deploy(&self, inv: &Invocation) -> Reply {
         let Some(github) = &self.github else {
             return "Deploy is not configured on this bot (GITHUB_DISPATCH_TOKEN is unset).".into();
@@ -686,6 +795,16 @@ impl Bot {
     }
 }
 
+/// What an attribution is keyed by for a stream entry: the character's name in lower
+/// case for `character.*`, else the account id.
+fn attribution_key(kind: &str, data: &Value) -> String {
+    if kind.starts_with("character.") {
+        data["character"].as_str().unwrap_or("").to_lowercase()
+    } else {
+        data["account_id"].as_i64().unwrap_or(-1).to_string()
+    }
+}
+
 fn capitalised(word: &str) -> String {
     let mut c = word.chars();
     c.next()
@@ -730,6 +849,7 @@ mod tests {
             "whois",
             "motd",
             "kill",
+            "kit",
         ] {
             assert!(!allowed(command, &none, &c), "{command}");
             assert!(allowed(command, &moderator, &c), "{command}");
@@ -761,6 +881,7 @@ mod tests {
                 "kill",
                 "event",
                 "event-stop",
+                "kit",
                 "deploy"
             ]
         );
@@ -772,11 +893,61 @@ mod tests {
     #[test]
     fn attribution_names_the_moderator_once() {
         let bot = Bot::new(config());
-        bot.attribute("account.kicked", 7, "mod_alice");
+        bot.attribute("account.kicked", "7".into(), "mod_alice");
         let data = json!({"account_id": 7, "by": "bot"});
         assert_eq!(bot.by("account.banned", &data), "bot");
         assert_eq!(bot.by("account.kicked", &data), r"mod\_alice");
         assert_eq!(bot.by("account.kicked", &data), "bot");
+        // A kit is keyed by the character's name, whatever its case.
+        bot.attribute("character.kitted", "tester".into(), "gm_bob");
+        let kitted = json!({"character": "Tester", "account_id": 7, "by": "bot"});
+        assert_eq!(bot.by("account.kicked", &kitted), "bot");
+        assert_eq!(bot.by("character.kitted", &kitted), r"gm\_bob");
+        assert_eq!(bot.by("character.kitted", &kitted), "bot");
+    }
+
+    #[test]
+    fn a_refused_call_names_nobody() {
+        let bot = Bot::new(config());
+        let kitted = json!({"character": "Tester", "account_id": 7, "by": "bot"});
+        // A refused /kit by one moderator, then another's that succeeds: the stream
+        // entry names the second.
+        bot.attribute("character.kitted", "tester".into(), "gm_ann");
+        let online = Outcome::Refused(409, "character_online".into(), None);
+        bot.settle("character.kitted", "tester", "gm_ann", &online);
+        bot.attribute("character.kitted", "tester".into(), "gm_bob");
+        bot.settle(
+            "character.kitted",
+            "tester",
+            "gm_bob",
+            &Outcome::Ok(200, Value::Null),
+        );
+        assert_eq!(bot.by("character.kitted", &kitted), r"gm\_bob");
+        assert_eq!(bot.by("character.kitted", &kitted), "bot");
+        // Refused by the token or a route not served: forgotten too; a refusal
+        // forgets only its own entry.
+        for outcome in [
+            Outcome::Rejected,
+            Outcome::NotImplemented,
+            Outcome::Refused(404, "not_found".into(), None),
+        ] {
+            bot.attribute("character.kitted", "tester".into(), "gm_ann");
+            bot.settle("character.kitted", "tester", "gm_ann", &outcome);
+        }
+        bot.attribute("account.kicked", "7".into(), "gm_ann");
+        bot.attribute("account.kicked", "7".into(), "gm_bob");
+        bot.settle(
+            "account.kicked",
+            "7",
+            "gm_bob",
+            &Outcome::Refused(400, "bad_request".into(), None),
+        );
+        assert_eq!(bot.by("account.kicked", &kitted), r"gm\_ann");
+        assert_eq!(bot.by("character.kitted", &kitted), "bot");
+        // Unavailable: the realm may have committed, so the moderator is kept.
+        bot.attribute("character.kitted", "tester".into(), "gm_cy");
+        bot.settle("character.kitted", "tester", "gm_cy", &Outcome::Unavailable);
+        assert_eq!(bot.by("character.kitted", &kitted), r"gm\_cy");
     }
 
     #[test]

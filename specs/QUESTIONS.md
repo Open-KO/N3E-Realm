@@ -2276,3 +2276,44 @@ agree. (b) is the maintainer's to choose; it would be its own item.
 
 **Decided (maintainer, 2026-11-06), RQ-209:** (a), "Keep KO's look": the paperdoll draws
 no weapon effect and no dust, as KO 1097 and 1298.
+
+### Q127 — What the tester kit maxes, and when it reaches a character in the world
+
+RQ-212 (maintainer request 2026-11-06): a moderator command that maxes one named
+character for testers: the package's level cap, its stat and skill points spent for
+its class's damage build, its class skills, and the package's best gear for PvP
+damage. What the engine holds today bounds what "maxed" can mean:
+
+- Level: the progression curve's last threshold (`progression.bin`, ten levels).
+- Class skills: a skill opens by level within the character's class policy (RQ-211),
+  so the cap opens them all; nothing is learned or stored per character.
+- Stat and skill points: none exist. Derived stats come from the package-wide base
+  attributes and the equipment (`content/stats.md`: "allocated points ... remain
+  open"); the create's `characters.stats` are stored and read by nothing.
+- Gear: the equipment policy's items and the package-wide requirements (title, race,
+  attributes) equip checks; items carry no class restriction.
+- A character in the world: its session owns its bag and progress revisions until it
+  leaves (the simulation applies newer committed snapshots it is sent, but the admin
+  API has no path to send them).
+
+Options for points:
+- (a) Grant none until the engine allocates points; the kit sets the level and gear.
+- (b) Rewrite the create's stored stats into a "damage build" (the class's damage
+  stat would be new package data), though nothing reads them.
+
+Options for a character in the world:
+- (c) Refuse it (`409 character_online`); the moderator runs the kit again once the
+  player has left the world, and its next entry loads what the kit committed.
+- (d) Apply it live: queue the committed bag and progress to the simulation as
+  settlements and bag results are.
+- (e) Record it as pending and apply it in the next `select` transaction.
+
+**Default taken:** (a) and (c). (b) changes a stored choice for no effect; (c) is the
+only one of (c)-(e) the server supports safely today, and a tester can leave to the
+character select and back in seconds. The arrangement is the highest attack the
+package's own stats give at the cap, then defense, health and resource; each slot gets
+a fresh record at full durability unless the character already wears that item (then
+kept and repaired), so a repeated kit changes nothing, and gear it takes off goes to the
+bag (a full bag refuses). When the engine gains allocated points or class item
+restrictions, the kit should spend and honour them; (d) or (e) is its own item if the
+maintainer wants the kit without leaving the world.

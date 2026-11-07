@@ -38,6 +38,7 @@ pub const PERMISSIONS: &[&str] = &[
     "world.kill",
     "world.event",
     "world.set",
+    "character.kit",
     "token.mint",
     "token.revoke",
 ];
@@ -66,6 +67,7 @@ enum Handler {
     Unban,
     Mute,
     Unmute,
+    Kit,
     /// In the contract, not served yet: answers 501 after the permission check.
     Later,
 }
@@ -194,6 +196,12 @@ const ROUTES: &[(Method, &str, &str, Handler)] = &[
         Handler::Later,
     ),
     (Method::Post, "/v1/world/set", "world.set", Handler::Later),
+    (
+        Method::Post,
+        "/v1/characters/kit",
+        "character.kit",
+        Handler::Kit,
+    ),
 ];
 
 pub const DEFAULT_LISTEN: &str = "127.0.0.1:7780";
@@ -218,6 +226,12 @@ const NOTICE_IN_GAME: usize = 256;
 const DEPLOY_PENDING_BYTES: usize = 4096;
 /// An account route's database call; past it the route answers 503.
 const ACCOUNT_CALL: Duration = Duration::from_secs(2);
+/// The tester kit's transaction (RQ-212); past it the route answers 503.
+const KIT_CALL: Duration = Duration::from_secs(5);
+/// The longest character name (`characters.name`, deploy/002-multiplayer.sql).
+const CHARACTER_NAME: usize = 24;
+/// The longest audit reason (`admin_audit.reason`, deploy/006-administration.sql).
+const AUDIT_REASON: usize = 160;
 
 /// The realm-wide state the admin API reads and changes. Drain is memory-only:
 /// a restart clears it, which is what CD wants.
@@ -588,6 +602,8 @@ pub struct Service {
     pub db: crate::accounts::Database,
     /// This realm's name: characters are listed per realm.
     pub realm_name: String,
+    /// The tester kit (RQ-212): the realm's owner and the package's policies.
+    pub kit: Arc<crate::tester_kit::Context>,
 }
 impl Service {
     #[allow(clippy::too_many_arguments)]
@@ -600,6 +616,7 @@ impl Service {
         content_hash: String,
         accounts: crate::accounts::Database,
         realm_name: String,
+        kit: Arc<crate::tester_kit::Context>,
     ) -> Self {
         let tokens = Tokens {
             db,
@@ -616,6 +633,7 @@ impl Service {
             tokens,
             db: accounts,
             realm_name,
+            kit,
         }
     }
 }
@@ -893,6 +911,7 @@ async fn handle(service: &Service, handler: Handler, by: &str, path: &str, body:
         Handler::Kick | Handler::Ban | Handler::Unban | Handler::Mute | Handler::Unmute => {
             account_change(service, handler, by, path, body).await
         }
+        Handler::Kit => kit(service, by, body).await,
         Handler::Status => (200, status(service).await),
         Handler::Drain => {
             let reason = match text_field(body, "reason", 160) {
@@ -1161,6 +1180,75 @@ async fn account_change(service: &Service, handler: Handler, by: &str, path: &st
     }
     service.realm.events.emit(kind, event);
     (200, out)
+}
+
+/// The tester kit (RQ-212): the character named in the body at the package's
+/// level cap with its best gear for damage, once it is out of the world; then
+/// `character.kitted` for the ops channel.
+async fn kit(service: &Service, by: &str, body: &Value) -> (u16, Value) {
+    use crate::tester_kit::Refusal;
+    let name = match text_field(body, "character", CHARACTER_NAME) {
+        Ok(Some(n)) if !n.trim().is_empty() => n.trim().to_string(),
+        Ok(_) => return (400, json!({"error": "bad_request", "detail": "character is required"})),
+        Err(e) => return e,
+    };
+    let reason = match text_field(body, "reason", AUDIT_REASON) {
+        Ok(Some(r)) if !r.trim().is_empty() => r,
+        Ok(_) => return (400, json!({"error": "bad_request", "detail": "reason is required"})),
+        Err(e) => return e,
+    };
+    let (context, token, why) = (service.kit.clone(), by.to_string(), reason.clone());
+    let applied = timeout(KIT_CALL, service.db.call(move |c| context.apply(c, &name, &token, &why))).await;
+    let outcome = match applied {
+        Ok(Ok(Ok(outcome))) => outcome,
+        Ok(Ok(Err(Refusal::NotFound))) => return (404, json!({"error": "not_found"})),
+        Ok(Ok(Err(Refusal::Online))) => {
+            return (
+                409,
+                json!({"error": "character_online", "detail": "the character is in the world; it takes the kit once it has left"}),
+            )
+        }
+        Ok(Ok(Err(Refusal::BagFull { needed, free }))) => {
+            return (
+                409,
+                json!({"error": "bag_full", "detail": format!("the gear taken off needs {needed} free bag slots; {free} are free")}),
+            )
+        }
+        Ok(Err(e)) => {
+            eprintln!("admin kit failed: {e}");
+            return (503, json!({"error": "unavailable", "detail": "database"}));
+        }
+        Err(_) => return (503, json!({"error": "unavailable", "detail": "database"})),
+    };
+    let equipped: Vec<Value> = outcome
+        .equipped
+        .iter()
+        .map(|(slot, item, label)| json!({"slot": slot, "item": item, "label": label}))
+        .collect();
+    service.realm.events.emit(
+        "character.kitted",
+        json!({
+            "character_id": outcome.character_id,
+            "character": outcome.character,
+            "account_id": outcome.account_id,
+            "level": outcome.level,
+            "equipped": equipped,
+            "reason": reason,
+            "by": by,
+        }),
+    );
+    (
+        200,
+        json!({
+            "character_id": outcome.character_id,
+            "character": outcome.character,
+            "account_id": outcome.account_id,
+            "level": outcome.level,
+            "equipped": equipped,
+            "unequipped": outcome.unequipped,
+            "request_id": outcome.request,
+        }),
+    )
 }
 
 async fn status(service: &Service) -> Value {

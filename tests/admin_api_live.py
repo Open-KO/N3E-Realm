@@ -219,6 +219,20 @@ try:
     assert call(admin, "POST", "/v1/accounts/999999/kick", bot_token, {"reason": "x"}) == (404, {"error": "not_found"})
     print("PASS routes of later milestones answer 501 after the permission check; account routes are served")
 
+    # RQ-212: the tester kit needs character.kit; a character in the world is refused.
+    assert call(admin, "POST", "/v1/characters/kit", bot_token, {"character": "Listener", "reason": "x"}) == (
+        403, {"error": "forbidden", "detail": "needs character.kit"})
+    code, kit_token = mint("kit", "character.kit")
+    assert code == 0
+    assert call(admin, "POST", "/v1/characters/kit", kit_token, {"character": "Listener"})[0] == 400
+    assert call(admin, "POST", "/v1/characters/kit", kit_token, {"reason": "x"})[0] == 400
+    assert call(admin, "POST", "/v1/characters/kit", kit_token, {"character": "Nobody", "reason": "x"}) == (
+        404, {"error": "not_found"})
+    code, body = call(admin, "POST", "/v1/characters/kit", kit_token, {"character": "listener", "reason": "PvP test"})
+    assert code == 409 and body["error"] == "character_online", (code, body)
+    print("PASS characters/kit: 403 without character.kit, 400 without a name or reason, 404 unknown, "
+          "409 character_online while in the world")
+
     # 10. The tick is unaffected by status polling (the listener is off-tick).
     def metric(key):
         with urllib.request.urlopen(f"http://127.0.0.1:{health}/live", timeout=2) as r:
@@ -252,6 +266,20 @@ try:
     wait_for("redis back", lambda: call(admin, "GET", "/v1/realm/status", ops_token)[1]["redis"] is True)
     print("PASS Redis down: status 200 with redis:false, deploy-pending 503, drain still succeeds")
     peer.s.close()
+
+    # RQ-212: once the character has left the world the kit raises it to the curve's cap
+    # (the demo package has no equipment, so no gear), and the stream carries it.
+    def kitted():
+        got = call(admin, "POST", "/v1/characters/kit", kit_token, {"character": "listener", "reason": "PvP test"})
+        assert got[0] in (200, 409), got
+        return got[1] if got[0] == 200 else None
+    body = wait_for("the kit once Listener has left", kitted)
+    assert body["character"] == "Listener" and body["level"] == 10 and body["equipped"] == [], body
+    assert body["request_id"].startswith("kit-") and body["unequipped"] == 0, body
+    kit_events = wait_for("character.kitted", lambda: [d for t, d in events(name + "-redis") if t == "character.kitted"])
+    assert kit_events[0]["by"] == "kit" and kit_events[0]["reason"] == "PvP test" and kit_events[0]["level"] == 10, \
+        kit_events
+    print("PASS characters/kit after leaving the world: level 10, character.kitted{character,level,by,reason}")
 
     # 9. Postgres down: a token outside the cache is refused within the 2 s lookup
     # bound (docker's proxy keeps a paused database's socket open, so only that bound
